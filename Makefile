@@ -1,6 +1,6 @@
 IDIRS = -I .
 LIBS = -lGLFW
-TARGET = artmetis
+TARGET = artemis
 
 artmes:
 	g++ main.cpp glad.c $(IDIRS) $(LIBS) -o $(TARGET)
