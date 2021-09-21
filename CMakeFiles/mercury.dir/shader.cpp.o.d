@@ -1,5 +1,7 @@
-CMakeFiles/mercury.dir/main.cpp.o: /home/venki/mercury/main.cpp \
- /usr/include/stdc-predef.h /usr/include/c++/8/iostream \
+CMakeFiles/mercury.dir/shader.cpp.o: /home/venki/mercury/shader.cpp \
+ /usr/include/stdc-predef.h /home/venki/mercury/shader.hpp \
+ /usr/include/c++/8/fstream /usr/include/c++/8/istream \
+ /usr/include/c++/8/ios /usr/include/c++/8/iosfwd \
  /usr/include/x86_64-linux-gnu/c++/8/bits/c++config.h \
  /usr/include/x86_64-linux-gnu/c++/8/bits/os_defines.h \
  /usr/include/features.h /usr/include/x86_64-linux-gnu/sys/cdefs.h \
@@ -8,10 +10,9 @@ CMakeFiles/mercury.dir/main.cpp.o: /home/venki/mercury/main.cpp \
  /usr/include/x86_64-linux-gnu/gnu/stubs.h \
  /usr/include/x86_64-linux-gnu/gnu/stubs-64.h \
  /usr/include/x86_64-linux-gnu/c++/8/bits/cpu_defines.h \
- /usr/include/c++/8/ostream /usr/include/c++/8/ios \
- /usr/include/c++/8/iosfwd /usr/include/c++/8/bits/stringfwd.h \
- /usr/include/c++/8/bits/memoryfwd.h /usr/include/c++/8/bits/postypes.h \
- /usr/include/c++/8/cwchar /usr/include/wchar.h \
+ /usr/include/c++/8/bits/stringfwd.h /usr/include/c++/8/bits/memoryfwd.h \
+ /usr/include/c++/8/bits/postypes.h /usr/include/c++/8/cwchar \
+ /usr/include/wchar.h \
  /usr/include/x86_64-linux-gnu/bits/libc-header-start.h \
  /usr/include/x86_64-linux-gnu/bits/floatn.h \
  /usr/include/x86_64-linux-gnu/bits/floatn-common.h \
@@ -132,32 +133,13 @@ CMakeFiles/mercury.dir/main.cpp.o: /home/venki/mercury/main.cpp \
  /usr/include/c++/8/bits/streambuf_iterator.h \
  /usr/include/x86_64-linux-gnu/c++/8/bits/ctype_inline.h \
  /usr/include/c++/8/bits/locale_facets.tcc \
- /usr/include/c++/8/bits/basic_ios.tcc \
- /usr/include/c++/8/bits/ostream.tcc /usr/include/c++/8/istream \
- /usr/include/c++/8/bits/istream.tcc /home/venki/mercury/glad/glad.h \
- /home/venki/mercury/./KHR/khrplatform.h /usr/include/GLFW/glfw3.h \
- /usr/include/GL/gl.h /home/venki/mercury/stb/stb_image.h \
- /usr/include/c++/8/stdlib.h /usr/include/string.h /usr/include/strings.h \
- /usr/lib/gcc/x86_64-linux-gnu/8/include/limits.h \
- /usr/lib/gcc/x86_64-linux-gnu/8/include/syslimits.h \
- /usr/include/limits.h /usr/include/x86_64-linux-gnu/bits/posix1_lim.h \
- /usr/include/x86_64-linux-gnu/bits/local_lim.h \
- /usr/include/linux/limits.h \
- /usr/include/x86_64-linux-gnu/bits/posix2_lim.h \
- /usr/include/x86_64-linux-gnu/bits/xopen_lim.h \
- /usr/include/x86_64-linux-gnu/bits/uio_lim.h /usr/include/c++/8/math.h \
- /usr/include/c++/8/cmath /usr/include/math.h \
- /usr/include/x86_64-linux-gnu/bits/math-vector.h \
- /usr/include/x86_64-linux-gnu/bits/libm-simd-decl-stubs.h \
- /usr/include/x86_64-linux-gnu/bits/flt-eval-method.h \
- /usr/include/x86_64-linux-gnu/bits/fp-logb.h \
- /usr/include/x86_64-linux-gnu/bits/fp-fast.h \
- /usr/include/x86_64-linux-gnu/bits/mathcalls-helper-functions.h \
- /usr/include/x86_64-linux-gnu/bits/mathcalls.h \
- /usr/include/x86_64-linux-gnu/bits/mathcalls-narrow.h \
- /usr/include/x86_64-linux-gnu/bits/iscanonical.h /usr/include/assert.h \
- /usr/lib/gcc/x86_64-linux-gnu/8/include/emmintrin.h \
- /usr/lib/gcc/x86_64-linux-gnu/8/include/xmmintrin.h \
- /usr/lib/gcc/x86_64-linux-gnu/8/include/mmintrin.h \
- /usr/lib/gcc/x86_64-linux-gnu/8/include/mm_malloc.h \
- /home/venki/mercury/shader.hpp
+ /usr/include/c++/8/bits/basic_ios.tcc /usr/include/c++/8/ostream \
+ /usr/include/c++/8/bits/ostream.tcc /usr/include/c++/8/bits/istream.tcc \
+ /usr/include/c++/8/bits/codecvt.h \
+ /usr/include/x86_64-linux-gnu/c++/8/bits/basic_file.h \
+ /usr/include/x86_64-linux-gnu/c++/8/bits/c++io.h \
+ /usr/include/c++/8/bits/fstream.tcc /usr/include/c++/8/sstream \
+ /usr/include/c++/8/bits/sstream.tcc /usr/include/c++/8/iostream \
+ /usr/include/c++/8/utility /usr/include/c++/8/bits/stl_relops.h \
+ /home/venki/mercury/glad/glad.h /home/venki/mercury/./KHR/khrplatform.h \
+ /usr/include/GLFW/glfw3.h /usr/include/GL/gl.h

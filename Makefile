@@ -177,6 +177,54 @@ main.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/main.cpp.s
 .PHONY : main.cpp.s
 
+shader.o: shader.cpp.o
+.PHONY : shader.o
+
+# target to build an object file
+shader.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/shader.cpp.o
+.PHONY : shader.cpp.o
+
+shader.i: shader.cpp.i
+.PHONY : shader.i
+
+# target to preprocess a source file
+shader.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/shader.cpp.i
+.PHONY : shader.cpp.i
+
+shader.s: shader.cpp.s
+.PHONY : shader.s
+
+# target to generate assembly for a file
+shader.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/shader.cpp.s
+.PHONY : shader.cpp.s
+
+stb/stb_vorbis.o: stb/stb_vorbis.c.o
+.PHONY : stb/stb_vorbis.o
+
+# target to build an object file
+stb/stb_vorbis.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/stb/stb_vorbis.c.o
+.PHONY : stb/stb_vorbis.c.o
+
+stb/stb_vorbis.i: stb/stb_vorbis.c.i
+.PHONY : stb/stb_vorbis.i
+
+# target to preprocess a source file
+stb/stb_vorbis.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/stb/stb_vorbis.c.i
+.PHONY : stb/stb_vorbis.c.i
+
+stb/stb_vorbis.s: stb/stb_vorbis.c.s
+.PHONY : stb/stb_vorbis.s
+
+# target to generate assembly for a file
+stb/stb_vorbis.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/stb/stb_vorbis.c.s
+.PHONY : stb/stb_vorbis.c.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -192,6 +240,12 @@ help:
 	@echo "... main.o"
 	@echo "... main.i"
 	@echo "... main.s"
+	@echo "... shader.o"
+	@echo "... shader.i"
+	@echo "... shader.s"
+	@echo "... stb/stb_vorbis.o"
+	@echo "... stb/stb_vorbis.i"
+	@echo "... stb/stb_vorbis.s"
 .PHONY : help
 
 

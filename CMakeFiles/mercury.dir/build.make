@@ -83,10 +83,24 @@ CMakeFiles/mercury.dir/main.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/mercury.dir/main.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/venki/mercury/main.cpp -o CMakeFiles/mercury.dir/main.cpp.s
 
+CMakeFiles/mercury.dir/shader.cpp.o: CMakeFiles/mercury.dir/flags.make
+CMakeFiles/mercury.dir/shader.cpp.o: shader.cpp
+CMakeFiles/mercury.dir/shader.cpp.o: CMakeFiles/mercury.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/venki/mercury/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building CXX object CMakeFiles/mercury.dir/shader.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/mercury.dir/shader.cpp.o -MF CMakeFiles/mercury.dir/shader.cpp.o.d -o CMakeFiles/mercury.dir/shader.cpp.o -c /home/venki/mercury/shader.cpp
+
+CMakeFiles/mercury.dir/shader.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/mercury.dir/shader.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/venki/mercury/shader.cpp > CMakeFiles/mercury.dir/shader.cpp.i
+
+CMakeFiles/mercury.dir/shader.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/mercury.dir/shader.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/venki/mercury/shader.cpp -o CMakeFiles/mercury.dir/shader.cpp.s
+
 CMakeFiles/mercury.dir/glad.c.o: CMakeFiles/mercury.dir/flags.make
 CMakeFiles/mercury.dir/glad.c.o: glad.c
 CMakeFiles/mercury.dir/glad.c.o: CMakeFiles/mercury.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/venki/mercury/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building C object CMakeFiles/mercury.dir/glad.c.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/venki/mercury/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building C object CMakeFiles/mercury.dir/glad.c.o"
 	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -MD -MT CMakeFiles/mercury.dir/glad.c.o -MF CMakeFiles/mercury.dir/glad.c.o.d -o CMakeFiles/mercury.dir/glad.c.o -c /home/venki/mercury/glad.c
 
 CMakeFiles/mercury.dir/glad.c.i: cmake_force
@@ -97,22 +111,40 @@ CMakeFiles/mercury.dir/glad.c.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling C source to assembly CMakeFiles/mercury.dir/glad.c.s"
 	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /home/venki/mercury/glad.c -o CMakeFiles/mercury.dir/glad.c.s
 
+CMakeFiles/mercury.dir/stb/stb_vorbis.c.o: CMakeFiles/mercury.dir/flags.make
+CMakeFiles/mercury.dir/stb/stb_vorbis.c.o: stb/stb_vorbis.c
+CMakeFiles/mercury.dir/stb/stb_vorbis.c.o: CMakeFiles/mercury.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/venki/mercury/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building C object CMakeFiles/mercury.dir/stb/stb_vorbis.c.o"
+	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -MD -MT CMakeFiles/mercury.dir/stb/stb_vorbis.c.o -MF CMakeFiles/mercury.dir/stb/stb_vorbis.c.o.d -o CMakeFiles/mercury.dir/stb/stb_vorbis.c.o -c /home/venki/mercury/stb/stb_vorbis.c
+
+CMakeFiles/mercury.dir/stb/stb_vorbis.c.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing C source to CMakeFiles/mercury.dir/stb/stb_vorbis.c.i"
+	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -E /home/venki/mercury/stb/stb_vorbis.c > CMakeFiles/mercury.dir/stb/stb_vorbis.c.i
+
+CMakeFiles/mercury.dir/stb/stb_vorbis.c.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling C source to assembly CMakeFiles/mercury.dir/stb/stb_vorbis.c.s"
+	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /home/venki/mercury/stb/stb_vorbis.c -o CMakeFiles/mercury.dir/stb/stb_vorbis.c.s
+
 # Object files for target mercury
 mercury_OBJECTS = \
 "CMakeFiles/mercury.dir/main.cpp.o" \
-"CMakeFiles/mercury.dir/glad.c.o"
+"CMakeFiles/mercury.dir/shader.cpp.o" \
+"CMakeFiles/mercury.dir/glad.c.o" \
+"CMakeFiles/mercury.dir/stb/stb_vorbis.c.o"
 
 # External object files for target mercury
 mercury_EXTERNAL_OBJECTS =
 
 mercury: CMakeFiles/mercury.dir/main.cpp.o
+mercury: CMakeFiles/mercury.dir/shader.cpp.o
 mercury: CMakeFiles/mercury.dir/glad.c.o
+mercury: CMakeFiles/mercury.dir/stb/stb_vorbis.c.o
 mercury: CMakeFiles/mercury.dir/build.make
 mercury: /usr/lib/x86_64-linux-gnu/libglfw.so.3.3
 mercury: /usr/lib/x86_64-linux-gnu/libGLX.so
 mercury: /usr/lib/x86_64-linux-gnu/libOpenGL.so
 mercury: CMakeFiles/mercury.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/venki/mercury/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Linking CXX executable mercury"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/venki/mercury/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Linking CXX executable mercury"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/mercury.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.

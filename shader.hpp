@@ -5,8 +5,12 @@ namespace mercury {
 
 class Shader {
 public:
-	Shader(const 
-	Shader(const std::string &, const std::string &);
+	Shader(const char *, const char *);
+
+	void use();
+
+	// Variables
+	unsigned int id;
 };
 
 }
