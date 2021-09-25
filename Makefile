@@ -153,77 +153,77 @@ glad.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/glad.c.s
 .PHONY : glad.c.s
 
-main.o: main.cpp.o
-.PHONY : main.o
+source/main.o: source/main.cpp.o
+.PHONY : source/main.o
 
 # target to build an object file
-main.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/main.cpp.o
-.PHONY : main.cpp.o
+source/main.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/source/main.cpp.o
+.PHONY : source/main.cpp.o
 
-main.i: main.cpp.i
-.PHONY : main.i
+source/main.i: source/main.cpp.i
+.PHONY : source/main.i
 
 # target to preprocess a source file
-main.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/main.cpp.i
-.PHONY : main.cpp.i
+source/main.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/source/main.cpp.i
+.PHONY : source/main.cpp.i
 
-main.s: main.cpp.s
-.PHONY : main.s
+source/main.s: source/main.cpp.s
+.PHONY : source/main.s
 
 # target to generate assembly for a file
-main.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/main.cpp.s
-.PHONY : main.cpp.s
+source/main.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/source/main.cpp.s
+.PHONY : source/main.cpp.s
 
-model.o: model.cpp.o
-.PHONY : model.o
+source/model.o: source/model.cpp.o
+.PHONY : source/model.o
 
 # target to build an object file
-model.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/model.cpp.o
-.PHONY : model.cpp.o
+source/model.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/source/model.cpp.o
+.PHONY : source/model.cpp.o
 
-model.i: model.cpp.i
-.PHONY : model.i
+source/model.i: source/model.cpp.i
+.PHONY : source/model.i
 
 # target to preprocess a source file
-model.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/model.cpp.i
-.PHONY : model.cpp.i
+source/model.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/source/model.cpp.i
+.PHONY : source/model.cpp.i
 
-model.s: model.cpp.s
-.PHONY : model.s
+source/model.s: source/model.cpp.s
+.PHONY : source/model.s
 
 # target to generate assembly for a file
-model.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/model.cpp.s
-.PHONY : model.cpp.s
+source/model.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/source/model.cpp.s
+.PHONY : source/model.cpp.s
 
-shader.o: shader.cpp.o
-.PHONY : shader.o
+source/shader.o: source/shader.cpp.o
+.PHONY : source/shader.o
 
 # target to build an object file
-shader.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/shader.cpp.o
-.PHONY : shader.cpp.o
+source/shader.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/source/shader.cpp.o
+.PHONY : source/shader.cpp.o
 
-shader.i: shader.cpp.i
-.PHONY : shader.i
+source/shader.i: source/shader.cpp.i
+.PHONY : source/shader.i
 
 # target to preprocess a source file
-shader.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/shader.cpp.i
-.PHONY : shader.cpp.i
+source/shader.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/source/shader.cpp.i
+.PHONY : source/shader.cpp.i
 
-shader.s: shader.cpp.s
-.PHONY : shader.s
+source/shader.s: source/shader.cpp.s
+.PHONY : source/shader.s
 
 # target to generate assembly for a file
-shader.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/shader.cpp.s
-.PHONY : shader.cpp.s
+source/shader.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/source/shader.cpp.s
+.PHONY : source/shader.cpp.s
 
 # Help Target
 help:
@@ -237,15 +237,15 @@ help:
 	@echo "... glad.o"
 	@echo "... glad.i"
 	@echo "... glad.s"
-	@echo "... main.o"
-	@echo "... main.i"
-	@echo "... main.s"
-	@echo "... model.o"
-	@echo "... model.i"
-	@echo "... model.s"
-	@echo "... shader.o"
-	@echo "... shader.i"
-	@echo "... shader.s"
+	@echo "... source/main.o"
+	@echo "... source/main.i"
+	@echo "... source/main.s"
+	@echo "... source/model.o"
+	@echo "... source/model.i"
+	@echo "... source/model.s"
+	@echo "... source/shader.o"
+	@echo "... source/shader.i"
+	@echo "... source/shader.s"
 .PHONY : help
 
 

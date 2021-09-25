@@ -5,9 +5,9 @@ cmake_minimum_required(VERSION 3.14)
 project(mercury)
 
 add_executable(mercury
-	main.cpp
-	shader.cpp
-	model.cpp
+	source/main.cpp
+	source/shader.cpp
+	source/model.cpp
 
 	glad.c
 

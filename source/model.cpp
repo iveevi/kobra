@@ -1,4 +1,4 @@
-#include "model.hpp"
+#include "../include/model.hpp"
 
 // Standard headers
 #include <iostream>

@@ -6,12 +6,11 @@
 #include <vector>
 
 // GLFW
-#include "glad/glad.h"
+#include "../glad/glad.h"
 #include <GLFW/glfw3.h>
 
 // GLM headers
-#include "glm/glm/ext/vector_float3.hpp"
-#include "glm/glm/ext/vector_float2.hpp"
+#include <glm/glm.hpp>
 
 // Assimp
 #include <assimp/Importer.hpp>
@@ -19,7 +18,7 @@
 #include <assimp/postprocess.h>
 
 // STB headers
-#include "stb/stb_image.h"
+#include "../stb/stb_image.h"
 
 // Engine headers
 #include "shader.hpp"

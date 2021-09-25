@@ -1,4 +1,4 @@
-#include "shader.hpp"
+#include "../include/shader.hpp"
 
 // Standard headers
 #include <fstream>

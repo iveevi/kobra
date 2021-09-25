@@ -5,7 +5,7 @@
 #include <string>
 
 // GLM
-#include "glm/glm/glm.hpp"
+#include <glm/glm.hpp>
 
 namespace mercury {
 
