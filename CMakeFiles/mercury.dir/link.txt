@@ -1,1 +1,1 @@
-/usr/bin/c++ CMakeFiles/mercury.dir/main.cpp.o CMakeFiles/mercury.dir/shader.cpp.o CMakeFiles/mercury.dir/glad.c.o CMakeFiles/mercury.dir/stb/stb_vorbis.c.o -o mercury  /usr/lib/x86_64-linux-gnu/libglfw.so.3.3 -ldl /usr/lib/x86_64-linux-gnu/libGLX.so /usr/lib/x86_64-linux-gnu/libOpenGL.so 
+/usr/bin/c++ CMakeFiles/mercury.dir/main.cpp.o CMakeFiles/mercury.dir/shader.cpp.o CMakeFiles/mercury.dir/model.cpp.o CMakeFiles/mercury.dir/glad.c.o -o mercury  -lglfw -ldl -lassimp /usr/lib/x86_64-linux-gnu/libGLX.so /usr/lib/x86_64-linux-gnu/libOpenGL.so 

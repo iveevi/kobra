@@ -1,5 +1,5 @@
-CMakeFiles/mercury.dir/shader.cpp.o: /home/venki/mercury/shader.cpp \
- /usr/include/stdc-predef.h /home/venki/mercury/shader.hpp \
+CMakeFiles/mercury.dir/model.cpp.o: /home/venki/mercury/model.cpp \
+ /usr/include/stdc-predef.h /home/venki/mercury/model.hpp \
  /usr/include/c++/8/string \
  /usr/include/x86_64-linux-gnu/c++/8/bits/c++config.h \
  /usr/include/x86_64-linux-gnu/c++/8/bits/os_defines.h \
@@ -120,10 +120,39 @@ CMakeFiles/mercury.dir/shader.cpp.o: /home/venki/mercury/shader.cpp \
  /usr/include/asm-generic/errno.h /usr/include/asm-generic/errno-base.h \
  /usr/include/x86_64-linux-gnu/bits/types/error_t.h \
  /usr/include/c++/8/bits/functional_hash.h \
- /usr/include/c++/8/bits/basic_string.tcc \
- /home/venki/mercury/glm/glm/glm.hpp \
- /home/venki/mercury/glm/glm/detail/_fixes.hpp /usr/include/c++/8/cmath \
- /usr/include/math.h /usr/include/x86_64-linux-gnu/bits/math-vector.h \
+ /usr/include/c++/8/bits/basic_string.tcc /usr/include/c++/8/vector \
+ /usr/include/c++/8/bits/stl_construct.h \
+ /usr/include/c++/8/bits/stl_uninitialized.h \
+ /usr/include/c++/8/bits/stl_vector.h \
+ /usr/include/c++/8/bits/stl_bvector.h /usr/include/c++/8/bits/vector.tcc \
+ /home/venki/mercury/glad/glad.h /home/venki/mercury/./KHR/khrplatform.h \
+ /usr/include/GLFW/glfw3.h /usr/include/GL/gl.h \
+ /home/venki/mercury/glm/glm/ext/vector_float3.hpp \
+ /home/venki/mercury/glm/glm/ext/../detail/type_vec3.hpp \
+ /home/venki/mercury/glm/glm/ext/../detail/qualifier.hpp \
+ /home/venki/mercury/glm/glm/ext/../detail/setup.hpp \
+ /usr/include/c++/8/cassert /usr/include/assert.h \
+ /usr/include/c++/8/cstddef \
+ /home/venki/mercury/glm/glm/ext/../detail/../simd/platform.h \
+ /home/venki/mercury/glm/glm/ext/../detail/type_vec3.inl \
+ /home/venki/mercury/glm/glm/ext/../detail/compute_vector_relational.hpp \
+ /usr/include/c++/8/limits \
+ /home/venki/mercury/glm/glm/ext/vector_float2.hpp \
+ /home/venki/mercury/glm/glm/ext/../detail/type_vec2.hpp \
+ /home/venki/mercury/glm/glm/ext/../detail/type_vec2.inl \
+ /usr/include/assimp/Importer.hpp /usr/include/assimp/types.h \
+ /usr/include/string.h /usr/include/strings.h \
+ /usr/lib/gcc/x86_64-linux-gnu/8/include/limits.h \
+ /usr/lib/gcc/x86_64-linux-gnu/8/include/syslimits.h \
+ /usr/include/limits.h /usr/include/x86_64-linux-gnu/bits/posix1_lim.h \
+ /usr/include/x86_64-linux-gnu/bits/local_lim.h \
+ /usr/include/linux/limits.h \
+ /usr/include/x86_64-linux-gnu/bits/posix2_lim.h \
+ /usr/include/x86_64-linux-gnu/bits/xopen_lim.h \
+ /usr/include/x86_64-linux-gnu/bits/uio_lim.h /usr/include/assimp/defs.h \
+ /usr/include/assimp/config.h /usr/include/assimp/vector3.h \
+ /usr/include/c++/8/cmath /usr/include/math.h \
+ /usr/include/x86_64-linux-gnu/bits/math-vector.h \
  /usr/include/x86_64-linux-gnu/bits/libm-simd-decl-stubs.h \
  /usr/include/x86_64-linux-gnu/bits/flt-eval-method.h \
  /usr/include/x86_64-linux-gnu/bits/fp-logb.h \
@@ -132,30 +161,34 @@ CMakeFiles/mercury.dir/shader.cpp.o: /home/venki/mercury/shader.cpp \
  /usr/include/x86_64-linux-gnu/bits/mathcalls.h \
  /usr/include/x86_64-linux-gnu/bits/mathcalls-narrow.h \
  /usr/include/x86_64-linux-gnu/bits/iscanonical.h \
- /home/venki/mercury/glm/glm/detail/setup.hpp /usr/include/c++/8/cassert \
- /usr/include/assert.h /usr/include/c++/8/cstddef \
- /home/venki/mercury/glm/glm/detail/../simd/platform.h \
- /usr/include/c++/8/climits \
- /usr/lib/gcc/x86_64-linux-gnu/8/include/limits.h \
- /usr/lib/gcc/x86_64-linux-gnu/8/include/syslimits.h \
- /usr/include/limits.h /usr/include/x86_64-linux-gnu/bits/posix1_lim.h \
- /usr/include/x86_64-linux-gnu/bits/local_lim.h \
- /usr/include/linux/limits.h \
- /usr/include/x86_64-linux-gnu/bits/posix2_lim.h \
- /usr/include/x86_64-linux-gnu/bits/xopen_lim.h \
- /usr/include/x86_64-linux-gnu/bits/uio_lim.h /usr/include/c++/8/cfloat \
+ /usr/include/assimp/vector2.h /usr/include/assimp/color4.h \
+ /usr/include/assimp/matrix3x3.h /usr/include/assimp/matrix4x4.h \
+ /usr/include/assimp/quaternion.h /usr/include/c++/8/cstring \
+ /usr/include/assimp/vector2.inl /usr/include/assimp/vector3.inl \
+ /usr/include/assimp/color4.inl /usr/include/assimp/quaternion.inl \
+ /usr/include/assimp/matrix3x3.inl /usr/include/c++/8/algorithm \
+ /usr/include/c++/8/utility /usr/include/c++/8/bits/stl_relops.h \
+ /usr/include/c++/8/bits/stl_algo.h \
+ /usr/include/c++/8/bits/algorithmfwd.h \
+ /usr/include/c++/8/bits/stl_heap.h /usr/include/c++/8/bits/stl_tempbuf.h \
+ /usr/include/c++/8/bits/uniform_int_dist.h \
+ /usr/include/assimp/matrix4x4.inl /usr/include/assimp/MathFunctions.h \
+ /usr/include/assimp/scene.h /usr/include/assimp/texture.h \
+ /usr/include/assimp/Compiler/pushpack1.h \
+ /usr/include/assimp/Compiler/poppack1.h /usr/include/assimp/mesh.h \
+ /usr/include/assimp/aabb.h /usr/include/assimp/light.h \
+ /usr/include/assimp/camera.h /usr/include/assimp/material.h \
+ /usr/include/assimp/material.inl /usr/include/assimp/anim.h \
+ /usr/include/assimp/metadata.h /usr/include/assimp/postprocess.h \
+ /home/venki/mercury/stb/stb_image.h /usr/include/c++/8/stdlib.h \
+ /home/venki/mercury/shader.hpp /home/venki/mercury/glm/glm/glm.hpp \
+ /home/venki/mercury/glm/glm/detail/_fixes.hpp \
+ /home/venki/mercury/glm/glm/detail/setup.hpp /usr/include/c++/8/climits \
+ /usr/include/c++/8/cfloat \
  /usr/lib/gcc/x86_64-linux-gnu/8/include/float.h \
- /usr/include/c++/8/limits /home/venki/mercury/glm/glm/fwd.hpp \
- /home/venki/mercury/glm/glm/detail/qualifier.hpp \
- /home/venki/mercury/glm/glm/detail/setup.hpp \
- /home/venki/mercury/glm/glm/vec2.hpp \
+ /home/venki/mercury/glm/glm/fwd.hpp /home/venki/mercury/glm/glm/vec2.hpp \
  /home/venki/mercury/glm/glm/./ext/vector_bool2.hpp \
- /home/venki/mercury/glm/glm/./ext/../detail/type_vec2.hpp \
- /home/venki/mercury/glm/glm/./ext/../detail/type_vec2.inl \
- /home/venki/mercury/glm/glm/./ext/../detail/./compute_vector_relational.hpp \
- /home/venki/mercury/glm/glm/./ext/../detail/./setup.hpp \
  /home/venki/mercury/glm/glm/./ext/vector_bool2_precision.hpp \
- /home/venki/mercury/glm/glm/./ext/vector_float2.hpp \
  /home/venki/mercury/glm/glm/./ext/vector_float2_precision.hpp \
  /home/venki/mercury/glm/glm/./ext/vector_double2.hpp \
  /home/venki/mercury/glm/glm/./ext/vector_double2_precision.hpp \
@@ -168,10 +201,7 @@ CMakeFiles/mercury.dir/shader.cpp.o: /home/venki/mercury/shader.cpp \
  /home/venki/mercury/glm/glm/./ext/../ext/scalar_uint_sized.hpp \
  /home/venki/mercury/glm/glm/vec3.hpp \
  /home/venki/mercury/glm/glm/./ext/vector_bool3.hpp \
- /home/venki/mercury/glm/glm/./ext/../detail/type_vec3.hpp \
- /home/venki/mercury/glm/glm/./ext/../detail/type_vec3.inl \
  /home/venki/mercury/glm/glm/./ext/vector_bool3_precision.hpp \
- /home/venki/mercury/glm/glm/./ext/vector_float3.hpp \
  /home/venki/mercury/glm/glm/./ext/vector_float3_precision.hpp \
  /home/venki/mercury/glm/glm/./ext/vector_double3.hpp \
  /home/venki/mercury/glm/glm/./ext/vector_double3_precision.hpp \
@@ -279,10 +309,11 @@ CMakeFiles/mercury.dir/shader.cpp.o: /home/venki/mercury/shader.cpp \
  /home/venki/mercury/glm/glm/packing.hpp \
  /home/venki/mercury/glm/glm/detail/func_packing.inl \
  /home/venki/mercury/glm/glm/detail/type_half.hpp \
+ /home/venki/mercury/glm/glm/detail/setup.hpp \
  /home/venki/mercury/glm/glm/detail/type_half.inl \
  /home/venki/mercury/glm/glm/integer.hpp \
  /home/venki/mercury/glm/glm/detail/func_integer.inl \
- /usr/include/c++/8/fstream /usr/include/c++/8/istream \
+ /usr/include/c++/8/iostream /usr/include/c++/8/ostream \
  /usr/include/c++/8/ios /usr/include/c++/8/bits/ios_base.h \
  /usr/include/c++/8/bits/locale_classes.h \
  /usr/include/c++/8/bits/locale_classes.tcc \
@@ -297,13 +328,6 @@ CMakeFiles/mercury.dir/shader.cpp.o: /home/venki/mercury/shader.cpp \
  /usr/include/c++/8/bits/streambuf_iterator.h \
  /usr/include/x86_64-linux-gnu/c++/8/bits/ctype_inline.h \
  /usr/include/c++/8/bits/locale_facets.tcc \
- /usr/include/c++/8/bits/basic_ios.tcc /usr/include/c++/8/ostream \
- /usr/include/c++/8/bits/ostream.tcc /usr/include/c++/8/bits/istream.tcc \
- /usr/include/c++/8/bits/codecvt.h \
- /usr/include/x86_64-linux-gnu/c++/8/bits/basic_file.h \
- /usr/include/x86_64-linux-gnu/c++/8/bits/c++io.h \
- /usr/include/c++/8/bits/fstream.tcc /usr/include/c++/8/sstream \
- /usr/include/c++/8/bits/sstream.tcc /usr/include/c++/8/iostream \
- /usr/include/c++/8/utility /usr/include/c++/8/bits/stl_relops.h \
- /home/venki/mercury/glad/glad.h /home/venki/mercury/./KHR/khrplatform.h \
- /usr/include/GLFW/glfw3.h /usr/include/GL/gl.h
+ /usr/include/c++/8/bits/basic_ios.tcc \
+ /usr/include/c++/8/bits/ostream.tcc /usr/include/c++/8/istream \
+ /usr/include/c++/8/bits/istream.tcc

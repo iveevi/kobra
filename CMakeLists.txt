@@ -1,13 +1,29 @@
 # Set CMake version
 cmake_minimum_required(VERSION 3.14)
 
+# Projects
 project(mercury)
 
-add_executable(mercury main.cpp shader.cpp glad.c stb/stb_vorbis.c)
+add_executable(mercury
+	main.cpp
+	shader.cpp
+	model.cpp
+
+	glad.c
+
+	# stb/stb_vorbis.c
+)
 
 include_directories(mercury .)
 
+# Import CMake modules
 find_package(OpenGL REQUIRED)
-find_package(glfw3 REQUIRED)
+find_package(ASSIMP REQUIRED)
 
-target_link_libraries(mercury glfw OpenGL::GL ${CMAKE_DL_LIBS})
+# Link libraries
+target_link_libraries(mercury
+	glfw
+	OpenGL::GL
+	${CMAKE_DL_LIBS}
+	${ASSIMP_LIBRARIES}
+)
