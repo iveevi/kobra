@@ -9,9 +9,7 @@ add_executable(mercury
 	source/shader.cpp
 	source/model.cpp
 
-	glad.c
-
-	# stb/stb_vorbis.c
+	glad/glad.c
 )
 
 include_directories(mercury .)

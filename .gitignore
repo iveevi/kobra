@@ -1,3 +1,5 @@
-mercury
-assimp/bin
+CMakeCache.txt
 CMakeFiles
+assimp/bin
+cmake_install.cmake
+mercury

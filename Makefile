@@ -129,29 +129,29 @@ mercury/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/build
 .PHONY : mercury/fast
 
-glad.o: glad.c.o
-.PHONY : glad.o
+glad/glad.o: glad/glad.c.o
+.PHONY : glad/glad.o
 
 # target to build an object file
-glad.c.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/glad.c.o
-.PHONY : glad.c.o
+glad/glad.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/glad/glad.c.o
+.PHONY : glad/glad.c.o
 
-glad.i: glad.c.i
-.PHONY : glad.i
+glad/glad.i: glad/glad.c.i
+.PHONY : glad/glad.i
 
 # target to preprocess a source file
-glad.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/glad.c.i
-.PHONY : glad.c.i
+glad/glad.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/glad/glad.c.i
+.PHONY : glad/glad.c.i
 
-glad.s: glad.c.s
-.PHONY : glad.s
+glad/glad.s: glad/glad.c.s
+.PHONY : glad/glad.s
 
 # target to generate assembly for a file
-glad.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/glad.c.s
-.PHONY : glad.c.s
+glad/glad.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/glad/glad.c.s
+.PHONY : glad/glad.c.s
 
 source/main.o: source/main.cpp.o
 .PHONY : source/main.o
@@ -234,9 +234,9 @@ help:
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
 	@echo "... mercury"
-	@echo "... glad.o"
-	@echo "... glad.i"
-	@echo "... glad.s"
+	@echo "... glad/glad.o"
+	@echo "... glad/glad.i"
+	@echo "... glad/glad.s"
 	@echo "... source/main.o"
 	@echo "... source/main.i"
 	@echo "... source/main.s"
