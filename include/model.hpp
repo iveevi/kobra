@@ -18,7 +18,7 @@
 #include <assimp/postprocess.h>
 
 // STB headers
-#include "../stb/stb_image.h"
+#include <stb/stb_image.h>
 
 // Engine headers
 #include "shader.hpp"

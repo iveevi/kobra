@@ -4,13 +4,23 @@
 #include <fstream>
 #include <sstream>
 #include <iostream>
+#include <stdexcept>
 #include <utility>
 
 // GLFW
-#include "glad/glad.h"
+#include "../glad/glad.h"
 #include <GLFW/glfw3.h>
 
 namespace mercury {
+
+void error_file(const char *path)
+{
+	std::cerr << "Could not load file \"" << path << "\"\n";
+	exit(-1);
+
+	// TODO: should throw a retrievable exception later
+	// a vector of potential files...?
+}
 
 // Helper functions (TODO: different headers?)
 std::string read_code(const char *path)
@@ -18,20 +28,13 @@ std::string read_code(const char *path)
 	std::ifstream file;
 	std::string out;
 
-	file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-	try {
-		file.open(path);
+	file.open(path);
+	if (!file)
+		error_file(path);
 
-		std::stringstream ss;
-		ss << file.rdbuf();
-		out = ss.str();
-	} catch (const std::ifstream::failure &e) {
-		// TODO: modify error message:
-		// 	include line no propagated from
-		// 	include file name
-		std::cerr << "Failure loading shader: "
-			<< e.what() << std::endl;
-	}
+	std::stringstream ss;
+	ss << file.rdbuf();
+	out = ss.str();
 
 	return out;
 }
@@ -110,6 +113,7 @@ void Shader::use()
 }
 
 // Setters
+// TODO: erroor handling for these attribues
 void Shader::set_bool(const std::string &name, bool value) const
 {
 	glUniform1i(glGetUniformLocation(id, name.c_str()), (int)value);

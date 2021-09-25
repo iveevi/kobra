@@ -153,6 +153,30 @@ glad/glad.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/glad/glad.c.s
 .PHONY : glad/glad.c.s
 
+source/camera.o: source/camera.cpp.o
+.PHONY : source/camera.o
+
+# target to build an object file
+source/camera.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/source/camera.cpp.o
+.PHONY : source/camera.cpp.o
+
+source/camera.i: source/camera.cpp.i
+.PHONY : source/camera.i
+
+# target to preprocess a source file
+source/camera.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/source/camera.cpp.i
+.PHONY : source/camera.cpp.i
+
+source/camera.s: source/camera.cpp.s
+.PHONY : source/camera.s
+
+# target to generate assembly for a file
+source/camera.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/source/camera.cpp.s
+.PHONY : source/camera.cpp.s
+
 source/main.o: source/main.cpp.o
 .PHONY : source/main.o
 
@@ -237,6 +261,9 @@ help:
 	@echo "... glad/glad.o"
 	@echo "... glad/glad.i"
 	@echo "... glad/glad.s"
+	@echo "... source/camera.o"
+	@echo "... source/camera.i"
+	@echo "... source/camera.s"
 	@echo "... source/main.o"
 	@echo "... source/main.i"
 	@echo "... source/main.s"
