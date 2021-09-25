@@ -1,3 +1,0 @@
-/home/venki/mercury/CMakeFiles/rebuild_cache.dir
-/home/venki/mercury/CMakeFiles/edit_cache.dir
-/home/venki/mercury/CMakeFiles/mercury.dir
