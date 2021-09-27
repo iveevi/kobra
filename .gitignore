@@ -1,3 +1,4 @@
+.cache/
 CMakeCache.txt
 CMakeFiles
 assimp/bin

@@ -177,6 +177,30 @@ source/camera.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/source/camera.cpp.s
 .PHONY : source/camera.cpp.s
 
+source/init.o: source/init.cpp.o
+.PHONY : source/init.o
+
+# target to build an object file
+source/init.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/source/init.cpp.o
+.PHONY : source/init.cpp.o
+
+source/init.i: source/init.cpp.i
+.PHONY : source/init.i
+
+# target to preprocess a source file
+source/init.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/source/init.cpp.i
+.PHONY : source/init.cpp.i
+
+source/init.s: source/init.cpp.s
+.PHONY : source/init.s
+
+# target to generate assembly for a file
+source/init.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/mercury.dir/build.make CMakeFiles/mercury.dir/source/init.cpp.s
+.PHONY : source/init.cpp.s
+
 source/main.o: source/main.cpp.o
 .PHONY : source/main.o
 
@@ -264,6 +288,9 @@ help:
 	@echo "... source/camera.o"
 	@echo "... source/camera.i"
 	@echo "... source/camera.s"
+	@echo "... source/init.o"
+	@echo "... source/init.i"
+	@echo "... source/init.s"
 	@echo "... source/main.o"
 	@echo "... source/main.i"
 	@echo "... source/main.s"

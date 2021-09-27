@@ -10,10 +10,19 @@
 namespace mercury {
 
 class Shader {
+	unsigned int _vertex;
+	unsigned int _fragment;
 public:
+	Shader();
 	Shader(const char *, const char *);
 
+	// TODO: destructor?
+
+	// Methods
 	void use();
+	void set_vertex_shader(const char *);
+	void set_fragment_shader(const char *);
+	void compile();
 
 	// Variables
 	unsigned int id;
@@ -35,6 +44,9 @@ public:
 	void set_mat2(const std::string &, const glm::mat2 &) const;
 	void set_mat3(const std::string &, const glm::mat3 &) const;
 	void set_mat4(const std::string &, const glm::mat4 &) const;
+
+	// Static methods
+	static Shader from_source(const char *, const char *);
 };
 
 }

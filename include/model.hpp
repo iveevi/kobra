@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-// GLFW
+// GLFW headers
 #include "../glad/glad.h"
 #include <GLFW/glfw3.h>
 
@@ -18,6 +18,8 @@
 #include <assimp/postprocess.h>
 
 // STB headers
+#define STB_IMAGE_IMPLEMENTATION
+
 #include <stb/stb_image.h>
 
 // Engine headers

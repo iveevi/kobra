@@ -18,10 +18,10 @@ const float Camera::DEFAULT_ZOOM = 45.0f;
 // Constructors
 Camera::Camera(const glm::vec3 &pos,
 		const glm::vec3 &up,
-		float eyaw,
-		float epitch)
+		float yaw,
+		float pitch)
 		: position(pos), world_up(up),
-		yaw(eyaw), pitch(epitch),
+		_yaw(yaw), _pitch(pitch),
 		zoom(DEFAULT_ZOOM)
 {
 	_update_vecs();
@@ -32,9 +32,9 @@ void Camera::_update_vecs()
 {
 	front = glm::normalize(
 		glm::vec3 {
-			cos(glm::radians(yaw)) * cos(glm::radians(pitch)),
-			sin(glm::radians(pitch)),
-			sin(glm::radians(yaw)) * cos(glm::radians(pitch)),
+			cos(glm::radians(_yaw)) * cos(glm::radians(_pitch)),
+			sin(glm::radians(_pitch)),
+			sin(glm::radians(_yaw)) * cos(glm::radians(_pitch)),
 		}
 	);
 
@@ -46,6 +46,33 @@ void Camera::_update_vecs()
 glm::mat4 Camera::get_view() const
 {
 	return glm::lookAt(position, position + front, up);
+}
+
+void Camera::set_yaw(float yaw)
+{
+	_yaw = yaw;
+	_update_vecs();
+}
+
+void Camera::set_pitch(float pitch, bool constrain)
+{
+	_pitch = pitch;
+
+	// Clamp the pitch
+	if (constrain)
+		_pitch = std::fmax(-89.0f, std::fmin(89.0, _pitch));
+
+	_update_vecs();
+}
+
+void Camera::add_yaw(float dyaw)
+{
+	set_yaw(_yaw + dyaw);
+}
+
+void Camera::add_pitch(float dpitch, bool constrain)
+{
+	set_pitch(_pitch + dpitch);
 }
 
 void Camera::move(const glm::vec3 &delta)

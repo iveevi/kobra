@@ -64,6 +64,8 @@ void check_program_errors(unsigned int shader, const std::string &type)
 	}
 }
 
+Shader::Shader() {}
+
 Shader::Shader(const char *vpath, const char *fpath)
 {
 	// TODO: separate into functions
@@ -76,40 +78,63 @@ Shader::Shader(const char *vpath, const char *fpath)
 	const char *vcode = vcode_str.c_str();
 	const char *fcode = fcode_str.c_str();
 
-	// Compiling the shaders
-	unsigned int vertex;
-	unsigned int fragment;
-
-	int ret;
-	char info[512];	// TODO: macro/static const for size
-
 	// vertex shader
-	vertex = glCreateShader(GL_VERTEX_SHADER);
-	glShaderSource(vertex, 1, &vcode, NULL);
-	glCompileShader(vertex);
-	check_program_errors(vertex, "VERTEX");
+	_vertex = glCreateShader(GL_VERTEX_SHADER);
+	glShaderSource(_vertex, 1, &vcode, NULL);
+	glCompileShader(_vertex);
+	check_program_errors(_vertex, "VERTEX");
 
 	// similiar for Fragment Shader TODO in function
-	fragment = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderSource(fragment, 1, &fcode, NULL);
-	glCompileShader(fragment);
-	check_program_errors(fragment, "FRAGMENT");
+	_fragment = glCreateShader(GL_FRAGMENT_SHADER);
+	glShaderSource(_fragment, 1, &fcode, NULL);
+	glCompileShader(_fragment);
+	check_program_errors(_fragment, "FRAGMENT");
 
-	// shader Program
+	// Shader program
 	id = glCreateProgram();
-	glAttachShader(id, vertex);
-	glAttachShader(id, fragment);
+	glAttachShader(id, _vertex);
+	glAttachShader(id, _fragment);
 	glLinkProgram(id);
 	check_program_errors(id, "PROGRAM");
 
-	// delete the shaders as they're linked into our program now and no longer necessary
-	glDeleteShader(vertex);
-	glDeleteShader(fragment);
+	// Free other programs
+	glDeleteShader(_vertex);
+	glDeleteShader(_fragment);
 }
 
 void Shader::use()
 {
 	glUseProgram(id);
+}
+
+void Shader::set_vertex_shader(const char *code)
+{
+	_vertex = glCreateShader(GL_VERTEX_SHADER);
+	glShaderSource(_vertex, 1, &code, NULL);
+	glCompileShader(_vertex);
+	check_program_errors(_vertex, "VERTEX");
+}
+
+void Shader::set_fragment_shader(const char *code)
+{
+	_fragment = glCreateShader(GL_FRAGMENT_SHADER);
+	glShaderSource(_fragment, 1, &code, NULL);
+	glCompileShader(_fragment);
+	check_program_errors(_fragment, "FRAGMENT");
+}
+
+void Shader::compile()
+{
+	// Shader program
+	id = glCreateProgram();
+	glAttachShader(id, _vertex);
+	glAttachShader(id, _fragment);
+	glLinkProgram(id);
+	check_program_errors(id, "PROGRAM");
+
+	// Free other programs
+	glDeleteShader(_vertex);
+	glDeleteShader(_fragment);
 }
 
 // Setters
@@ -176,6 +201,16 @@ void Shader::set_mat4(const std::string &name, const glm::mat4 &mat) const
 {
 	glUniformMatrix4fv(glGetUniformLocation(id, name.c_str()), 1, GL_FALSE,
 			&mat[0][0]);
+}
+
+// Static methods
+Shader Shader::from_source(const char *vcode, const char *fcode)
+{
+	Shader shader;
+	shader.set_vertex_shader(vcode);
+	shader.set_fragment_shader(fcode);
+	shader.compile();
+	return shader;
 }
 
 }

@@ -9,6 +9,10 @@ namespace mercury {
 
 class Camera {
 	void _update_vecs();
+
+	// Camera rotation
+	float _yaw;
+	float _pitch;
 public:
 	// TODO: private any attributes?
 	// Camera position and orientation
@@ -22,10 +26,6 @@ public:
 
 	glm::vec3 world_up;
 
-	// Camera rotation
-	float yaw;
-	float pitch;
-
 	// Other options
 	float zoom;
 
@@ -37,6 +37,13 @@ public:
 
 	// Getters
 	glm::mat4 get_view() const;
+
+	// Setters
+	void set_yaw(float);
+	void set_pitch(float, bool = true);
+
+	void add_yaw(float);
+	void add_pitch(float, bool = true);
 
 	// Methods
 	void move(const glm::vec3 &);
