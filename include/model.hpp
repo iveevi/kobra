@@ -20,7 +20,7 @@
 // STB headers
 #define STB_IMAGE_IMPLEMENTATION
 
-#include <stb/stb_image.h>
+#include "../thirdparty/stb/stb_image.h"
 
 // Engine headers
 #include "shader.hpp"

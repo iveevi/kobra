@@ -31,11 +31,11 @@ Camera::Camera(const glm::vec3 &pos,
 void Camera::_update_vecs()
 {
 	front = glm::normalize(
-		glm::vec3 {
+		glm::vec3(
 			cos(glm::radians(_yaw)) * cos(glm::radians(_pitch)),
 			sin(glm::radians(_pitch)),
-			sin(glm::radians(_yaw)) * cos(glm::radians(_pitch)),
-		}
+			sin(glm::radians(_yaw)) * cos(glm::radians(_pitch))
+			)
 	);
 
 	right = glm::normalize(glm::cross(front, world_up));

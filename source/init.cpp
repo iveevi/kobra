@@ -1,6 +1,13 @@
 #include "../include/init.hpp"
 #include <GLFW/glfw3.h>
 
+// TODO: do a ifndef mercury source dir
+#ifndef MERCURY_SOURCE_DIR
+
+#error MERCURY_SOURCE_DIR not defined
+
+#endif
+
 namespace mercury {
 
 // Character static variables
@@ -71,8 +78,9 @@ GLFWwindow *init()
 	}
 
 	FT_Face face;
-	if (FT_New_Face(ft, "resources/fonts/arial.ttf", 0, &face)) {
-		std::cout << "ERROR::FREETYPE: Failed to load font" << std::endl;
+	int ret;
+	if ((ret = FT_New_Face(ft, "/Library/Fonts/Arial.ttf", 0, &face))) {
+		std::cout << "ERROR::FREETYPE: Failed to load font (" << ret << ")" << std::endl;
 		exit(-1);
 	}
 
@@ -123,8 +131,8 @@ GLFWwindow *init()
 
 	// Create the text shader
 	Char::shader = Shader(
-		"resources/shaders/font_shader.vs",
-		"resources/shaders/font_shader.fs"
+		"/Users/venki/mercury/resources/shaders/font_shader.vs",
+		MERCURY_SOURCE_DIR "/resources/shaders/font_shader.fs"
 	);
 
 	// Return the window on success
