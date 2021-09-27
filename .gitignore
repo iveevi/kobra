@@ -1,6 +1,7 @@
 .cache/
 CMakeCache.txt
 CMakeFiles
+Makefile
 assimp/bin
 cmake_install.cmake
 mercury

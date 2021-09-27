@@ -26,6 +26,11 @@
 },
 {
   "directory": "/home/venki/mercury",
+  "command": "/usr/bin/c++  -I/home/venki/mercury/mercury -I/home/venki/mercury/. -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -g -o CMakeFiles/mercury.dir/source/text.cpp.o -c /home/venki/mercury/source/text.cpp",
+  "file": "/home/venki/mercury/source/text.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
   "command": "/usr/bin/cc  -I/home/venki/mercury/mercury -I/home/venki/mercury/. -I/home/venki/mercury/thirdparty/freetype2/include -g -o CMakeFiles/mercury.dir/glad/glad.c.o -c /home/venki/mercury/glad/glad.c",
   "file": "/home/venki/mercury/glad/glad.c"
 }

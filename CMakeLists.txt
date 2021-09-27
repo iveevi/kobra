@@ -15,6 +15,7 @@ add_executable(mercury
 	source/main.cpp
 	source/model.cpp
 	source/shader.cpp
+	source/text.cpp
 
 	glad/glad.c
 )
