@@ -1,5 +1,8 @@
 #include "../include/text.hpp"
 
+// Standard headers
+#include <stdexcept>
+
 namespace mercury {
 
 Text::Text(const std::string &str, float x, float y,
@@ -43,6 +46,7 @@ void Text::set_color(const glm::vec3 &color)
 	_color = color;
 }
 
+// TODO: fix position from top left down rightwards
 void Text::set_position(float x, float y)
 {
 	_xpos = x;
@@ -59,6 +63,9 @@ void Text::draw()
 	// Construct the text
 	float cxpos = _xpos;
 	for (const auto &c : _str) {
+		if (cmap.find(c) == cmap.end())
+			throw std::runtime_error("No character " + std::string(1, c) + " in map...");
+
 		Char ch = cmap[c];
 
 		float xpos = cxpos + ch.bearing.x * _scale;

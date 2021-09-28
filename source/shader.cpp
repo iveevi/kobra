@@ -138,7 +138,8 @@ void Shader::compile()
 }
 
 // Setters
-// TODO: erroor handling for these attribues
+// TODO: erroor handling for these attributes
+// TODO: print a possbility of not doing .use() before
 void Shader::set_bool(const std::string &name, bool value) const
 {
 	glUniform1i(glGetUniformLocation(id, name.c_str()), (int)value);

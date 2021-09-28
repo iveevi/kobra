@@ -21,6 +21,11 @@
 
 namespace mercury {
 
+// Dimensions of current window
+// TODO: wrap in nameless struct later?
+extern float win_width;
+extern float win_height;
+
 // Character struct and map
 struct Char {
 	unsigned int tid;
@@ -35,6 +40,9 @@ struct Char {
 // TODO: need to consider loading multiple font packs
 // 	make functions for these
 extern std::unordered_map <char, Char> cmap;
+
+// Parts of initialization
+void load_fonts();
 
 // First function that should run
 // TODO: should take some kind of configuration file?

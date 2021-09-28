@@ -10,6 +10,10 @@
 
 namespace mercury {
 
+// Initial window dimensions
+float win_width = 800.0;
+float win_height = 600.0;
+
 // Character static variables
 Shader Char::shader;
 
@@ -35,11 +39,7 @@ static GLFWwindow *_init_glfw()
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
 
-	// Hard code only for now
-	const unsigned int SCR_WIDTH = 800;
-	const unsigned int SCR_HEIGHT = 600;
-
-	GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Mercury", NULL, NULL);
+	GLFWwindow* window = glfwCreateWindow(win_width, win_height, "Mercury", NULL, NULL);
 	if (window == NULL) {
 		std::cout << "Failed to create GLFW window" << std::endl;
 		glfwTerminate();
@@ -56,20 +56,18 @@ static GLFWwindow *_init_glfw()
 	}
 
 	// OpenGL options
-	glEnable(GL_CULL_FACE);
+	// TODO: disable only in debug mode
+	// glEnable(GL_CULL_FACE);
+
+
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 	return window;
 }
 
-// TODO: should return error code
-// TODO: split into separate functions
-GLFWwindow *init()
+void load_fonts()
 {
-	// Very first thing
-	GLFWwindow *window = _init_glfw();
-
 	// Load default font
 	FT_Library ft;
 	if (FT_Init_FreeType(&ft)) {
@@ -79,7 +77,7 @@ GLFWwindow *init()
 
 	FT_Face face;
 	int ret;
-	if ((ret = FT_New_Face(ft, "/Library/Fonts/Arial.ttf", 0, &face))) {
+	if ((ret = FT_New_Face(ft, MERCURY_SOURCE_DIR "/resources/fonts/arial.ttf", 0, &face))) {
 		std::cout << "ERROR::FREETYPE: Failed to load font (" << ret << ")" << std::endl;
 		exit(-1);
 	}
@@ -131,9 +129,19 @@ GLFWwindow *init()
 
 	// Create the text shader
 	Char::shader = Shader(
-		"/Users/venki/mercury/resources/shaders/font_shader.vs",
+		MERCURY_SOURCE_DIR "/resources/shaders/font_shader.vs",
 		MERCURY_SOURCE_DIR "/resources/shaders/font_shader.fs"
 	);
+}
+
+// TODO: should return error code
+// TODO: split into separate functions
+GLFWwindow *init()
+{
+	// Very first thing
+	GLFWwindow *window = _init_glfw();
+
+	load_fonts();
 
 	// Return the window on success
 	return window;
