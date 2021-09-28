@@ -5,6 +5,7 @@
 
 namespace mercury {
 
+// TODO: move inside ui namespace
 Text::Text(const std::string &str, float x, float y,
 		float scale, const glm::vec3 &color)
 		: _xpos(x), _ypos(y),

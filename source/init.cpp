@@ -14,6 +14,14 @@ namespace mercury {
 float win_width = 800.0;
 float win_height = 600.0;
 
+glm::vec2 transform(const glm::vec2 &in)
+{
+	return glm::vec2 {
+		(in.x - win_width/2)/(win_width/2),
+		-(in.y - win_height/2)/(win_height/2)
+	};
+}
+
 // Character static variables
 Shader Char::shader;
 

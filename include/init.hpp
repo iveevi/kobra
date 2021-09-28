@@ -26,6 +26,8 @@ namespace mercury {
 extern float win_width;
 extern float win_height;
 
+glm::vec2 transform(const glm::vec2 &);
+
 // Character struct and map
 struct Char {
 	unsigned int tid;
