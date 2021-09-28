@@ -12,8 +12,8 @@ Rect::Rect(const glm::vec2 &p1, const glm::vec2 &p2,
 {
 	if (border != 0) {
 		_border = PureRect(
-			p1 + glm::vec2 {-10, -10},
-			p2 + glm::vec2 {10, 10}
+			p1 + glm::vec2 {-border, -border},
+			p2 + glm::vec2 {border, border}
 		);
 
 		_border.set_color(bcolor);
