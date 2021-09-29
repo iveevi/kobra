@@ -16,6 +16,9 @@ class PureRect : public Shape {
 
 	Shader		_shader;
 
+	glm::vec2	_tl;
+	glm::vec2	_br;
+
 	static const char *default_vs;
 	static const char *default_fs;
 
@@ -28,6 +31,7 @@ public:
 
 	void draw() const override;
 	bool contains(const glm::vec2 &) const override;
+	void set_position(const glm::vec2 &) override;
 };
 
 }

@@ -22,10 +22,11 @@ add_executable(mercury
 	source/model.cpp
 	source/mouse_bus.cpp
 	source/shader.cpp
-	source/text.cpp
 	source/ui/button.cpp
 	source/ui/pure_rect.cpp
 	source/ui/rect.cpp
+	source/ui/text.cpp
+	source/ui/ui_layer.cpp
 
 	glad/glad.c
 )

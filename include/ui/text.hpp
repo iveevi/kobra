@@ -12,11 +12,14 @@
 #include <glm/glm.hpp>
 
 // Engine headers
-#include "init.hpp"
+#include "../init.hpp"
+#include "ui_element.hpp"
 
 namespace mercury {
 
-class Text {
+namespace ui {
+
+class Text : public UIElement {
 	// Each Text object has its own buffer indices
 	// to potentially allow multithreaded drawing
 	// TODO: should this be made static?
@@ -43,8 +46,10 @@ public:
 	void set_color(const glm::vec3 &);
 	void set_position(float = 0.0, float = 0.0);
 
-	void draw();
+	void draw() const override;
 };
+
+}
 
 }
 

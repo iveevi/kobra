@@ -1,9 +1,11 @@
-#include "../include/text.hpp"
+#include "include/ui/text.hpp"
 
 // Standard headers
 #include <stdexcept>
 
 namespace mercury {
+
+namespace ui {
 
 // TODO: move inside ui namespace
 Text::Text(const std::string &str, float x, float y,
@@ -54,7 +56,7 @@ void Text::set_position(float x, float y)
 	_ypos = y;
 }
 
-void Text::draw()
+void Text::draw() const
 {
 	// Set current things
 	Char::shader.use();
@@ -102,6 +104,8 @@ void Text::draw()
 
 	glBindVertexArray(0);
 	glBindTexture(GL_TEXTURE_2D, 0);
+}
+
 }
 
 }

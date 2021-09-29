@@ -29,6 +29,7 @@ void main()
 )";
 
 PureRect::PureRect(const glm::vec2 &p1, const glm::vec2 &p2)
+		: _tl(p1), _br(p2)
 {
 	_genbufs(
 		transform(p1),
@@ -44,6 +45,7 @@ PureRect::PureRect(const glm::vec2 &p1, const glm::vec2 &p2)
 }
 
 PureRect::PureRect(float x1, float y1, float x2, float y2)
+		: _tl(x1, y1), _br(x2, y2)
 {
 	_genbufs(
 		transform({x1, y1}),
@@ -102,7 +104,15 @@ void PureRect::draw() const
 
 bool PureRect::contains(const glm::vec2 &mpos) const
 {
-	return false;
+	return (mpos.x >= _tl.x && mpos.x <= _br.x)
+		&& (mpos.y >= _tl.y && mpos.y <= _br.y);
+}
+
+void PureRect::set_position(const glm::vec2 &pos)
+{
+	glm::vec2 diag = _br - _tl;
+	_tl = pos;
+	_br = _tl + diag;
 }
 
 }

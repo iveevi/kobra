@@ -13,6 +13,7 @@ class Rect : public Shape {
 	PureRect	_fill;
 	PureRect	_border;
 	bool		_border_on;
+	float		_border_width;
 
 	// TODO: add curvature later
 public:
@@ -26,6 +27,7 @@ public:
 
 	void draw() const override;
 	bool contains(const glm::vec2 &) const override;
+	void set_position(const glm::vec2 &) override;
 };
 
 }

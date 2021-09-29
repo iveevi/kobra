@@ -11,14 +11,17 @@ namespace mercury {
 namespace ui {
 
 // TODO: derive from mousehandler?
-class Button {
+// TODO: derive from UIElement
+class Button : public UIElement {
 	Shape *		_shape;
+	Handler *	_handler;
 public:
-	Button(Shape *);
+	Button(Shape *, Handler * = nullptr);
 
-	void draw();
-
+	void draw() const override;
 	void handler(size_t *);
+
+	virtual void on_pressed(const glm::vec2 &) const;
 };
 
 }

@@ -1,8 +1,9 @@
-#include "../include/init.hpp"
-#include "../include/text.hpp"
-#include "../include/ui/rect.hpp"
-#include "../include/ui/pure_rect.hpp"
+#include "include/init.hpp"
+#include "include/ui/text.hpp"
+#include "include/ui/rect.hpp"
+#include "include/ui/pure_rect.hpp"
 #include "include/ui/button.hpp"
+#include "include/ui/ui_layer.hpp"
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -17,14 +18,24 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 {
 	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
 		double xpos, ypos;
-		//getting cursor position
+
 		glfwGetCursorPos(window, &xpos, &ypos);
-		std::cout << "Cursor Position at (" << xpos << " : " << ypos << std::endl;
 		mercury::win_mhandler.publish(
 			{mercury::MouseBus::MOUSE_PRESSED, {xpos, ypos}}
 		);
 	}
 }
+
+// Handlers
+class MyHandler : public mercury::Handler {
+public:
+	virtual void call(size_t *data) const override {
+		std::cout << "MyHandler ftn..." << std::endl;
+
+		glm::vec2 mpos = *((glm::vec2 *) data);
+		std::cout << "\tposition = " << mpos.x << ", " << mpos.y << std::endl;
+	}
+};
 
 int main()
 {
@@ -39,7 +50,7 @@ int main()
 	mercury::Char::shader.set_mat4("projection", projection);
 
 	// Texts
-	mercury::Text title("Mercury Engine", 25.0,
+	mercury::ui::Text title("Mercury Engine", 25.0,
 		mercury::win_height - 50.0, 1.0,
 		glm::vec3(0.5, 0.5, 0.5));
 
@@ -61,7 +72,12 @@ int main()
 	);
 
 	// TODO: new UI layer
-	mercury::ui::Button button(rect_button);
+	mercury::ui::Button button(rect_button, new MyHandler());
+
+	mercury::ui::UILayer ui_layer;
+	ui_layer.add_element(&title);
+	ui_layer.add_element(&rect_files);
+	ui_layer.add_element(&button);
 
 	while (!glfwWindowShouldClose(window)) {
 		process_input(window);
@@ -69,9 +85,8 @@ int main()
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
-		title.draw();
-		rect_files.draw();
-		button.draw();
+		// NOTE: UI Layer is always drawn last
+		ui_layer.draw();
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();

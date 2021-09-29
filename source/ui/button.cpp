@@ -7,26 +7,29 @@ namespace mercury {
 
 namespace ui {
 
-Button::Button(Shape *shape)
-		: _shape(shape)
+Button::Button(Shape *shape, Handler *handler)
+		: _shape(shape), _handler(handler)
 {
 	// TODO: store returned index
-	/* win_mhandler.subscribe(
-		new MemFtnHandler <Button> (this, &Button::handler)
-	); */
 	win_mhandler.subscribe(this, &Button::handler);
 }
 
-void Button::draw()
+void Button::draw() const
 {
 	_shape->draw();
 }
 
 void Button::handler(size_t *data)
 {
-	std::cout << "BUTTON (" << this << ") HANDLER!" << std::endl;
-	if (*data == MouseBus::MOUSE_PRESSED)
-		std::cout << "\tPRESS!" << std::endl;
+	glm::vec2 mpos = ((MouseBus::Data *) data)->pos;
+	if (_shape->contains(mpos))
+		on_pressed(mpos);
+}
+
+void Button::on_pressed(const glm::vec2 &mpos) const
+{
+	if (_handler)
+		_handler->run((size_t *) &mpos);
 }
 
 }
