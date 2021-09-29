@@ -3,21 +3,22 @@
 
 // Engine headers
 #include "../event_handler.hpp"
+#include "../mouse_bus.hpp"
 #include "shape.hpp"
 
 namespace mercury {
 
 namespace ui {
 
+// TODO: derive from mousehandler?
 class Button {
 	Shape *		_shape;
-	// EventQueue *	_queue;
 public:
-	Button(const Shape *, const EventQueue *);
+	Button(Shape *);
 
 	void draw();
 
-	void process(const glm::vec2 &);
+	void handler(size_t *);
 };
 
 }

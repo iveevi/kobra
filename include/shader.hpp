@@ -19,7 +19,7 @@ public:
 	// TODO: destructor?
 
 	// Methods
-	void use();
+	void use() const;
 	void set_vertex_shader(const char *);
 	void set_fragment_shader(const char *);
 	void compile();

@@ -92,11 +92,17 @@ void PureRect::set_color(const glm::vec4 &color)
 	_shader.set_vec4("rect_color", color);
 }
 
-void PureRect::draw() {
+void PureRect::draw() const
+{
 	_shader.use();
 
 	glBindVertexArray(_vao);
 	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+}
+
+bool PureRect::contains(const glm::vec2 &mpos) const
+{
+	return false;
 }
 
 }

@@ -1,5 +1,4 @@
 #include "../include/init.hpp"
-#include <GLFW/glfw3.h>
 
 // TODO: do a ifndef mercury source dir
 #ifndef MERCURY_SOURCE_DIR
@@ -13,6 +12,8 @@ namespace mercury {
 // Initial window dimensions
 float win_width = 800.0;
 float win_height = 600.0;
+
+MouseBus win_mhandler;
 
 glm::vec2 transform(const glm::vec2 &in)
 {

@@ -9,7 +9,7 @@ namespace mercury {
 
 namespace ui {
 
-class Rect {
+class Rect : public Shape {
 	PureRect	_fill;
 	PureRect	_border;
 	bool		_border_on;
@@ -24,7 +24,8 @@ public:
 	void set_fill_color(const glm::vec4 &);
 	void set_border_color(const glm::vec4 &);
 
-	void draw();
+	void draw() const override;
+	bool contains(const glm::vec2 &) const override;
 };
 
 }

@@ -102,7 +102,7 @@ Shader::Shader(const char *vpath, const char *fpath)
 	glDeleteShader(_fragment);
 }
 
-void Shader::use()
+void Shader::use() const
 {
 	glUseProgram(id);
 }

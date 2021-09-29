@@ -8,7 +8,7 @@ namespace ui {
 Rect::Rect(const glm::vec2 &p1, const glm::vec2 &p2,
 		const glm::vec4 &fcolor, float border,
 		const glm::vec4 &bcolor)
-		: _fill(p1, p2), _border(p1, p2), _border_on(border != 0)
+		: _fill(p1, p2), _border(p1, p2), _border_on(border > 0)
 {
 	if (border != 0) {
 		_border = PureRect(
@@ -32,11 +32,16 @@ void Rect::set_border_color(const glm::vec4 &color)
 	_border.set_color(color);
 }
 
-void Rect::draw()
+void Rect::draw() const
 {
 	if (_border_on)
 		_border.draw();
 	_fill.draw();
+}
+
+bool Rect::contains(const glm::vec2 &mpos) const
+{
+	return false;
 }
 
 }

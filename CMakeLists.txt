@@ -20,6 +20,7 @@ add_executable(mercury
 	source/init.cpp
 	source/main.cpp
 	source/model.cpp
+	source/mouse_bus.cpp
 	source/shader.cpp
 	source/text.cpp
 	source/ui/button.cpp

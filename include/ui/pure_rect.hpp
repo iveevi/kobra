@@ -3,12 +3,13 @@
 
 // Engine headers
 #include "../init.hpp"
+#include "shape.hpp"
 
 namespace mercury {
 
 namespace ui {
 
-class PureRect {
+class PureRect : public Shape {
 	unsigned int 	_vao;
 	unsigned int 	_vbo;
 	unsigned int 	_ebo;
@@ -25,7 +26,8 @@ public:
 
 	void set_color(const glm::vec4 &);
 
-	void draw();
+	void draw() const override;
+	bool contains(const glm::vec2 &) const override;
 };
 
 }

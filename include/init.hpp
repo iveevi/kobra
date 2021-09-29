@@ -18,6 +18,7 @@
 
 // Engine headers
 #include "shader.hpp"
+#include "mouse_bus.hpp"
 
 namespace mercury {
 
@@ -25,6 +26,7 @@ namespace mercury {
 // TODO: wrap in nameless struct later?
 extern float win_width;
 extern float win_height;
+extern MouseBus win_mhandler;
 
 glm::vec2 transform(const glm::vec2 &);
 

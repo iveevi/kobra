@@ -21,6 +21,11 @@
 },
 {
   "directory": "/home/venki/mercury",
+  "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/mercury -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -g -std=gnu++14 -o CMakeFiles/mercury.dir/source/mouse_bus.cpp.o -c /home/venki/mercury/source/mouse_bus.cpp",
+  "file": "/home/venki/mercury/source/mouse_bus.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
   "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/mercury -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -g -std=gnu++14 -o CMakeFiles/mercury.dir/source/shader.cpp.o -c /home/venki/mercury/source/shader.cpp",
   "file": "/home/venki/mercury/source/shader.cpp"
 },
@@ -28,6 +33,21 @@
   "directory": "/home/venki/mercury",
   "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/mercury -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -g -std=gnu++14 -o CMakeFiles/mercury.dir/source/text.cpp.o -c /home/venki/mercury/source/text.cpp",
   "file": "/home/venki/mercury/source/text.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/mercury -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -g -std=gnu++14 -o CMakeFiles/mercury.dir/source/ui/button.cpp.o -c /home/venki/mercury/source/ui/button.cpp",
+  "file": "/home/venki/mercury/source/ui/button.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/mercury -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -g -std=gnu++14 -o CMakeFiles/mercury.dir/source/ui/pure_rect.cpp.o -c /home/venki/mercury/source/ui/pure_rect.cpp",
+  "file": "/home/venki/mercury/source/ui/pure_rect.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/mercury -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -g -std=gnu++14 -o CMakeFiles/mercury.dir/source/ui/rect.cpp.o -c /home/venki/mercury/source/ui/rect.cpp",
+  "file": "/home/venki/mercury/source/ui/rect.cpp"
 },
 {
   "directory": "/home/venki/mercury",
