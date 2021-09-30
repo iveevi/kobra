@@ -33,16 +33,16 @@ void Rect::set_border_color(const glm::vec4 &color)
 	_border.set_color(color);
 }
 
-void Rect::draw() const
+void Rect::draw()
 {
 	if (_border_on)
 		_border.draw();
 	_fill.draw();
 }
 
-bool Rect::contains(const glm::vec2 &mpos) const
+glm::vec2 Rect::get_position() const
 {
-	return _fill.contains(mpos);
+	return _fill.get_position();
 }
 
 void Rect::set_position(const glm::vec2 &pos)
@@ -55,6 +55,11 @@ void Rect::set_position(const glm::vec2 &pos)
 			-_border_width
 		});
 	}
+}
+
+bool Rect::contains(const glm::vec2 &mpos) const
+{
+	return _fill.contains(mpos);
 }
 
 }

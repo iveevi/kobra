@@ -29,9 +29,10 @@ public:
 
 	void set_color(const glm::vec4 &);
 
-	void draw() const override;
-	bool contains(const glm::vec2 &) const override;
+	void draw() override;
+	glm::vec2 get_position() const override;
 	void set_position(const glm::vec2 &) override;
+	bool contains(const glm::vec2 &) const override;
 };
 
 }

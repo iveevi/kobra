@@ -56,7 +56,7 @@ void Text::set_position(float x, float y)
 	_ypos = y;
 }
 
-void Text::draw() const
+void Text::draw()
 {
 	// Set current things
 	Char::shader.use();
@@ -104,6 +104,17 @@ void Text::draw() const
 
 	glBindVertexArray(0);
 	glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void Text::set_position(const glm::vec2 &pos)
+{
+	_xpos = pos.x;
+	_ypos = pos.y;
+}
+
+glm::vec2 Text::get_position() const
+{
+	return {_xpos, _ypos};
 }
 
 }

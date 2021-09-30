@@ -46,7 +46,9 @@ public:
 	void set_color(const glm::vec3 &);
 	void set_position(float = 0.0, float = 0.0);
 
-	void draw() const override;
+	void draw() override;
+	glm::vec2 get_position() const override;
+	void set_position(const glm::vec2 &) override;
 };
 
 }

@@ -94,7 +94,7 @@ void PureRect::set_color(const glm::vec4 &color)
 	_shader.set_vec4("rect_color", color);
 }
 
-void PureRect::draw() const
+void PureRect::draw()
 {
 	_shader.use();
 
@@ -102,10 +102,9 @@ void PureRect::draw() const
 	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 }
 
-bool PureRect::contains(const glm::vec2 &mpos) const
+glm::vec2 PureRect::get_position() const
 {
-	return (mpos.x >= _tl.x && mpos.x <= _br.x)
-		&& (mpos.y >= _tl.y && mpos.y <= _br.y);
+	return _tl;
 }
 
 void PureRect::set_position(const glm::vec2 &pos)
@@ -113,6 +112,17 @@ void PureRect::set_position(const glm::vec2 &pos)
 	glm::vec2 diag = _br - _tl;
 	_tl = pos;
 	_br = _tl + diag;
+
+	_genbufs(
+		transform(_tl),
+		transform(_br)
+	);
+}
+
+bool PureRect::contains(const glm::vec2 &mpos) const
+{
+	return (mpos.x >= _tl.x && mpos.x <= _br.x)
+		&& (mpos.y >= _tl.y && mpos.y <= _br.y);
 }
 
 }

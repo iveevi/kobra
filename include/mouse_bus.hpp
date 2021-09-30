@@ -20,8 +20,9 @@ namespace mercury {
 class MouseBus {
 public:
 	enum Type : size_t {
+		MOUSE_RELEASED,
 		MOUSE_PRESSED,
-		MOUSE_RELEASED
+		MOUSE_REPEATED
 	};
 
 	// Input data expectation

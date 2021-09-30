@@ -11,12 +11,17 @@ namespace mercury {
 
 namespace ui {
 
-class UILayer {
-	std::vector <UIElement *> _elements;
+// UILayer is a subclass of UIElement
+// to allow for nested of layers...
+class UILayer : public UIElement {
+	std::vector <UIElement *> 	_elements;
+	glm::vec2			_pos;
 public:
 	void add_element(UIElement *);
 
-	void draw() const;
+	void draw() override;
+	glm::vec2 get_position() const override;
+	void set_position(const glm::vec2 &) override;
 };
 
 }

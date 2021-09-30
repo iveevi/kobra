@@ -14,7 +14,6 @@ namespace ui {
 class Shape : public UIElement {
 public:
 	virtual bool contains(const glm::vec2 &) const = 0;
-	virtual void set_position(const glm::vec2 &) = 0;
 };
 
 }

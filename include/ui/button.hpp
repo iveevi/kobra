@@ -13,15 +13,22 @@ namespace ui {
 // TODO: derive from mousehandler?
 // TODO: derive from UIElement
 class Button : public UIElement {
+protected:
 	Shape *		_shape;
-	Handler *	_handler;
+	Handler *	_press_handler;
+	Handler *	_release_handler;
 public:
-	Button(Shape *, Handler * = nullptr);
+	Button(Shape *, Handler * = nullptr, Handler * = nullptr);
 
-	void draw() const override;
 	void handler(size_t *);
 
-	virtual void on_pressed(const glm::vec2 &) const;
+	virtual void on_pressed(const glm::vec2 &);
+	virtual void on_released(const glm::vec2 &);
+
+	void draw() override;
+	glm::vec2 get_position() const override;
+	void set_position(const glm::vec2 &) override;
+	void move(const glm::vec2 &) override;
 };
 
 }
