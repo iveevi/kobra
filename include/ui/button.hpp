@@ -4,7 +4,8 @@
 // Engine headers
 #include "../event_handler.hpp"
 #include "../mouse_bus.hpp"
-#include "shape.hpp"
+#include "include/ui/ui_layer.hpp"
+#include "include/ui/shape.hpp"
 
 namespace mercury {
 
@@ -14,11 +15,13 @@ namespace ui {
 // TODO: derive from UIElement
 class Button : public UIElement {
 protected:
-	Shape *		_shape;
+	Shape *		_cbox;
 	Handler *	_press_handler;
 	Handler *	_release_handler;
+	UILayer *	_layer;
 public:
-	Button(Shape *, Handler * = nullptr, Handler * = nullptr);
+	Button(Shape *, Handler * = nullptr,
+		Handler * = nullptr, UILayer * = nullptr);
 
 	void handler(size_t *);
 

@@ -14,11 +14,12 @@ add_compile_definitions(MERCURY_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
 # Projects
 project(mercury)
+project(ui_designer)
 
-add_executable(mercury
+# Source variables
+set(MERCURY_SOURCE
 	source/camera.cpp
 	source/init.cpp
-	source/main.cpp
 	source/model.cpp
 	source/mouse_bus.cpp
 	source/shader.cpp
@@ -31,16 +32,35 @@ add_executable(mercury
 	glad/glad.c
 )
 
+set(MERCURY_LIBS
+	glfw
+	freetype
+	OpenGL::GL
+	${CMAKE_DL_LIBS}
+	${ASSIMP_LIBRARY}
+)
+
+# Adding sources
+add_executable(mercury
+	source/main.cpp
+	${MERCURY_SOURCE}
+)
+
+add_executable(ui_designer
+	source/bootstrap/ui_designer.cpp
+	${MERCURY_SOURCE}
+)
+
 # Include directories
-include_directories(mercury .)
-include_directories(mercury glad)
-include_directories(mercury thirdparty/glm)
-include_directories(mercury thirdparty/assimp/include)
-include_directories(mercury thirdparty/freetype2/include)
+include_directories(.
+	glad
+	thirdparty/glm
+	thirdparty/assimp/include
+	thirdparty/freetype2/include
+)
 
 # Import CMake modules
 find_package(OpenGL REQUIRED)
-#find_package(ASSIMP REQUIRED)
 
 # Import libraries
 find_library(ASSIMP_LIBRARY
@@ -51,9 +71,9 @@ find_library(ASSIMP_LIBRARY
 
 # Link libraries
 target_link_libraries(mercury
-	glfw
-	freetype
-	OpenGL::GL
-	${CMAKE_DL_LIBS}
-	${ASSIMP_LIBRARY}
+	${MERCURY_LIBS}
+)
+
+target_link_libraries(ui_designer
+	${MERCURY_LIBS}
 )

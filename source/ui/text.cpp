@@ -14,6 +14,7 @@ Text::Text(const std::string &str, float x, float y,
 		_scale(scale), _color(color), _str(str)
 {
 	_alloc();
+	_get_maxy();
 }
 
 // Private methods
@@ -33,6 +34,16 @@ void Text::_alloc()
 	glBindVertexArray(0);
 }
 
+void Text::_get_maxy()
+{
+	_maxy = 0.0;
+	for (const auto &c : _str) {
+		Char ch = cmap[c];
+
+		_maxy = std::fmax(_maxy, ch.size.y);
+	}
+}
+
 // Public methods
 void Text::set_scale(float scale)
 {
@@ -42,6 +53,7 @@ void Text::set_scale(float scale)
 void Text::set_str(const std::string &str)
 {
 	_str = str;
+	_get_maxy();
 }
 
 void Text::set_color(const glm::vec3 &color)
@@ -72,7 +84,8 @@ void Text::draw()
 		Char ch = cmap[c];
 
 		float xpos = cxpos + ch.bearing.x * _scale;
-		float ypos = _ypos - (ch.size.y - ch.bearing.y) * _scale;
+		float ypos = (cwin.height - _ypos)
+			- (ch.size.y - ch.bearing.y) * _scale - _maxy;
 
 		float w = ch.size.x * _scale;
 		float h = ch.size.y * _scale;

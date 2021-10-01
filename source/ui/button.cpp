@@ -2,23 +2,29 @@
 
 // Engine headers
 #include "include/init.hpp"
+#include "include/ui/ui_layer.hpp"
 
 namespace mercury {
 
 namespace ui {
 
-Button::Button(Shape *shape, Handler *handler1, Handler *handler2)
-		: _shape(shape), _press_handler(handler1),
-		_release_handler(handler2)
+// cbox is collision region
+Button::Button(Shape *cbox, Handler *handler1,
+		Handler *handler2, UILayer *layer)
+		: _cbox(cbox), _press_handler(handler1),
+		_release_handler(handler2), _layer(layer)
 {
 	// TODO: store returned index
-	win_mhandler.subscribe(this, &Button::handler);
+	cwin.mouse_handler.subscribe(this, &Button::handler);
+
+	// Localize the ui_layer
+	layer->set_position(cbox->get_position());
 }
 
 void Button::handler(size_t *data)
 {
 	MouseBus::Data *mdata = ((MouseBus::Data *) data);
-	if (!_shape->contains(mdata->pos))
+	if (!_cbox->contains(mdata->pos))
 		return;
 
 	if (mdata->type == MouseBus::MOUSE_PRESSED)
@@ -41,23 +47,32 @@ void Button::on_released(const glm::vec2 &mpos)
 
 void Button::draw()
 {
-	_shape->draw();
+	_cbox->draw();
+
+	if (_layer)
+		_layer->draw();
 }
 
 glm::vec2 Button::get_position() const
 {
-	return _shape->get_position();
+	return _cbox->get_position();
 }
 
 
 void Button::set_position(const glm::vec2 &pos)
 {
-	_shape->set_position(pos);
+	_cbox->set_position(pos);
+
+	if (_layer)
+		_layer->set_position(pos);
 }
 
 void Button::move(const glm::vec2 &dpos)
 {
-	_shape->move(dpos);
+	_cbox->move(dpos);
+
+	if (_layer)
+		_layer->move(dpos);
 }
 
 }

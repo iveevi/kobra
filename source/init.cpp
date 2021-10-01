@@ -10,16 +10,14 @@
 namespace mercury {
 
 // Initial window dimensions
-float win_width = 800.0;
-float win_height = 600.0;
-
-MouseBus win_mhandler;
+Window cwin;
 
 glm::vec2 transform(const glm::vec2 &in)
 {
+	// TODO: this should not be using the global cwin
 	return glm::vec2 {
-		(in.x - win_width/2)/(win_width/2),
-		-(in.y - win_height/2)/(win_height/2)
+		(in.x - cwin.width/2)/(cwin.width/2),
+		-(in.y - cwin.height/2)/(cwin.height/2)
 	};
 }
 
@@ -36,8 +34,12 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 }
 
 // Private static methods
-static GLFWwindow *_init_glfw()
+static void _init_glfw()
 {
+	// Static variables
+	static const float DEFAULT_WINDOW_WIDTH = 800.0;
+	static const float DEFAULT_WINDOW_HEIGHT = 600.0;
+
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -48,15 +50,16 @@ static GLFWwindow *_init_glfw()
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
 
-	GLFWwindow* window = glfwCreateWindow(win_width, win_height, "Mercury", NULL, NULL);
-	if (window == NULL) {
+	cwin.window = glfwCreateWindow(DEFAULT_WINDOW_WIDTH,
+		DEFAULT_WINDOW_HEIGHT, "Mercury", NULL, NULL);
+	if (cwin.window == NULL) {
 		std::cout << "Failed to create GLFW window" << std::endl;
 		glfwTerminate();
 		exit(-1);
 	}
 
-	glfwMakeContextCurrent(window);
-	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+	glfwMakeContextCurrent(cwin.window);
+	glfwSetFramebufferSizeCallback(cwin.window, framebuffer_size_callback);
 
 	// Now initialize glad
 	if (!gladLoadGLLoader((GLADloadproc) glfwGetProcAddress)) {
@@ -68,11 +71,12 @@ static GLFWwindow *_init_glfw()
 	// TODO: disable only in debug mode
 	// glEnable(GL_CULL_FACE);
 
-
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	return window;
+	// Set other attributes
+	cwin.width = DEFAULT_WINDOW_WIDTH;
+	cwin.height = DEFAULT_WINDOW_HEIGHT;
 }
 
 void load_fonts()
@@ -143,17 +147,12 @@ void load_fonts()
 	);
 }
 
-// TODO: should return error code
-// TODO: split into separate functions
-GLFWwindow *init()
+void init()
 {
 	// Very first thing
-	GLFWwindow *window = _init_glfw();
+	_init_glfw();
 
 	load_fonts();
-
-	// Return the window on success
-	return window;
 }
 
 }

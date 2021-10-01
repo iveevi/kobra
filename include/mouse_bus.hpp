@@ -6,6 +6,10 @@
 #include <unordered_map>
 #include <vector>
 
+// GLFW headers
+#include "../glad/glad.h"
+#include <GLFW/glfw3.h>
+
 // GLM
 #include <glm/glm.hpp>
 

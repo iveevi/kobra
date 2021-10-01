@@ -30,11 +30,14 @@ class Text : public UIElement {
 	float		_ypos;
 	float		_scale;
 
+	float		_maxy;
+
 	glm::vec3	_color;
 
 	std::string	_str;
 
 	void _alloc();
+	void _get_maxy();
 public:
 	Text(const std::string &,
 		float = 0.0f, float = 0.0f, float = 1.0f,

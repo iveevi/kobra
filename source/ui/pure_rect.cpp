@@ -24,7 +24,7 @@ uniform vec4 rect_color;
 
 void main()
 {
-	fragment_color = rect_color; // vec4(1.0);
+	fragment_color = rect_color;
 }
 )";
 

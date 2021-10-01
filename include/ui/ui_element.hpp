@@ -4,6 +4,9 @@
 // GLM
 #include <glm/glm.hpp>
 
+// Engine headers
+#include "include/init.hpp"
+
 namespace mercury {
 
 namespace ui {

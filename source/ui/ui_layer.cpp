@@ -29,6 +29,13 @@ void UILayer::set_position(const glm::vec2 &pos)
 		uie->move(dpos);
 }
 
+void UILayer::move(const glm::vec2 &dpos)
+{
+	_pos += dpos;
+	for (UIElement *uie : _elements)
+		uie->move(dpos);
+}
+
 }
 
 }

@@ -22,11 +22,13 @@
 
 namespace mercury {
 
-// Dimensions of current window
-// TODO: wrap in nameless struct later?
-extern float win_width;
-extern float win_height;
-extern MouseBus win_mhandler;
+// Wrapped struct
+struct Window {
+	GLFWwindow *window;
+	float width;
+	float height;
+	MouseBus mouse_handler;
+} extern cwin;
 
 glm::vec2 transform(const glm::vec2 &);
 
@@ -50,7 +52,7 @@ void load_fonts();
 
 // First function that should run
 // TODO: should take some kind of configuration file?
-GLFWwindow *init();
+void init();
 
 }
 
