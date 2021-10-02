@@ -94,6 +94,21 @@ void PureRect::set_color(const glm::vec4 &color)
 	_shader.set_vec4("rect_color", color);
 }
 
+float PureRect::get_width() const
+{
+	return _br.x - _tl.x;
+}
+
+float PureRect::get_height() const
+{
+	return _br.y - _tl.y;
+}
+
+const glm::vec2 &PureRect::get_tl() const
+{
+	return _tl;
+}
+
 void PureRect::draw()
 {
 	_shader.use();

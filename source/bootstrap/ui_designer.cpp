@@ -57,67 +57,95 @@ public:
 	}
 };
 
-int main()
-{
-	// Initialize mercury
-	mercury::init();
-
-	// TODO: do in init
-	glfwSetMouseButtonCallback(mercury::cwin.window, mouse_button_callback);
-
-	// Setup the shader
-	// TODO: put 2d project into win struct...
-	glm::mat4 projection = glm::ortho(0.0f, mercury::cwin.width,
-			0.0f, mercury::cwin.height);
-	mercury::Char::shader.use();
-	mercury::Char::shader.set_mat4("projection", projection);
-
-	// Texts
-	mercury::ui::Text title("UI Designer",
-		10.0, 10.0, 1.0,
-		glm::vec3(0.5, 0.5, 0.5)
-	);
-
-	mercury::ui::Text button_text("Save",
-		10.0, 10.0, 0.5,
-		glm::vec3(0.5, 0.5, 0.5)
-	);
+class UIDesigner {
+	// Text
+	mercury::ui::Text title;
+	mercury::ui::Text button_text;
 
 	// Shapes
-	mercury::ui::Rect rect_dragb(
-		{100.0, 100.0},
-		{200.0, 200.0},
-		{1.0, 0.1, 0.1, 1.0},
-		5.0,
-		{0.5, 1.0, 0.5, 1.0}
-	);
+	mercury::ui::Rect rect_dragb;
 
-	// Building UI layers
-	mercury::ui::UILayer dnode_layer;
-	dnode_layer.add_element(&button_text);
-
-	DragNode dnode(&rect_dragb, &dnode_layer);
-
+	// UILayer
 	mercury::ui::UILayer ui_layer;
-	ui_layer.add_element(&title);
-	ui_layer.add_element(&dnode);
 
-	// TODO: loop function in cwin?
-	while (!glfwWindowShouldClose(mercury::cwin.window)) {
-		// std::cout << "----------------------> " << i++ << std::endl;
+	void _init() {
+		// Initialize mercury
+		mercury::init();
 
-		process_input(mercury::cwin.window);
+		// TODO: do in init
+		glfwSetMouseButtonCallback(mercury::cwin.window, mouse_button_callback);
 
-		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT);
+		// Setup the shader
+		// TODO: put 2d project into win struct...
+		glm::mat4 projection = glm::ortho(0.0f, mercury::cwin.width,
+				0.0f, mercury::cwin.height);
+		mercury::Char::shader.use();
+		mercury::Char::shader.set_mat4("projection", projection);
+	}
+public:
+	UIDesigner() :
+		// Texts
+		title("UI Designer",
+			10.0, 10.0, 1.0,
+			glm::vec3(0.5, 0.5, 0.5)
+		),
 
-		// NOTE: UI Layer is always drawn last
-		ui_layer.draw();
+		button_text("Save",
+			10.0, 10.0, 0.75,
+			glm::vec3(0.5, 0.5, 0.5)
+		),
 
-		glfwSwapBuffers(mercury::cwin.window);
-		glfwPollEvents();
+		// Shapes
+		rect_dragb(
+			{100.0, 100.0},
+			{200.0, 200.0},
+			{1.0, 0.1, 0.1, 1.0},
+			5.0,
+			{0.5, 1.0, 0.5, 1.0}
+		)
+	{
+		_init();
 	}
 
-	glfwTerminate();
-	return 0;
+	void build() {
+		// Building UI layers
+		button_text.center_within(rect_dragb.get_bounds(), true);
+
+		mercury::ui::UILayer dnode_layer;
+		dnode_layer.add_element(&button_text);
+
+		DragNode dnode(&rect_dragb, &dnode_layer);
+
+		mercury::ui::UILayer ui_layer;
+		ui_layer.add_element(&title);
+		ui_layer.add_element(&dnode);
+	}
+
+	int run() {
+		// TODO: loop function in cwin?
+		while (!glfwWindowShouldClose(mercury::cwin.window)) {
+			// std::cout << "----------------------> " << i++ << std::endl;
+
+			process_input(mercury::cwin.window);
+
+			glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+			glClear(GL_COLOR_BUFFER_BIT);
+
+			// NOTE: UI Layer is always drawn last
+			ui_layer.draw();
+
+			glfwSwapBuffers(mercury::cwin.window);
+			glfwPollEvents();
+		}
+
+		glfwTerminate();
+		return 0;
+	};
+};
+
+int main()
+{
+	UIDesigner UID;
+	UID.build();
+	return UID.run();
 }

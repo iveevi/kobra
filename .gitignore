@@ -1,4 +1,5 @@
 .cache/
+.DS_Store
 bin/
 CMakeCache.txt
 CMakeFiles

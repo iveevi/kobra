@@ -29,6 +29,11 @@ public:
 
 	void set_color(const glm::vec4 &);
 
+	// Getters
+	float get_width() const;
+	float get_height() const;
+	const glm::vec2 &get_tl() const;
+
 	void draw() override;
 	glm::vec2 get_position() const override;
 	void set_position(const glm::vec2 &) override;

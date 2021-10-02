@@ -40,7 +40,7 @@ void Text::_get_maxy()
 	for (const auto &c : _str) {
 		Char ch = cmap[c];
 
-		_maxy = std::fmax(_maxy, ch.size.y);
+		_maxy = std::fmax(_maxy, ch.size.y * _scale);
 	}
 }
 
@@ -66,6 +66,43 @@ void Text::set_position(float x, float y)
 {
 	_xpos = x;
 	_ypos = y;
+}
+
+float Text::get_width() const
+{
+	float w = 0;
+	for (size_t i = 0; i < _str.length(); i++) {
+		Char ch = cmap[_str[i]];
+
+		w += (ch.size.x + ch.bearing.x) * _scale;
+
+		if (i == 0)
+			w -= ch.bearing.x * _scale;
+	}
+
+	return w;
+}
+
+// NOTE: sets coordinates local to the pr if local = true
+// assuming that it will be part of a ui_layer
+void Text::center_within(const PureRect &pr, bool local)
+{
+	float w = get_width();
+	float h = _maxy;
+
+	float pr_w = pr.get_width();
+	float pr_h = pr.get_height();
+
+	float woff = (pr_w - w)/2;
+	float hoff = (pr_h - h)/2;
+
+	_xpos = woff;
+	_ypos = hoff;
+
+	if (!local) {
+		_xpos += pr.get_tl().x;
+		_ypos += pr.get_tl().y;
+	}
 }
 
 void Text::draw()

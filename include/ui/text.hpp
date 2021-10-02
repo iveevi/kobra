@@ -14,6 +14,7 @@
 // Engine headers
 #include "../init.hpp"
 #include "ui_element.hpp"
+#include "include/ui/pure_rect.hpp"
 
 namespace mercury {
 
@@ -49,6 +50,13 @@ public:
 	void set_color(const glm::vec3 &);
 	void set_position(float = 0.0, float = 0.0);
 
+	// Getters
+	float get_width() const;
+
+	// Alignment
+	void center_within(const PureRect &, bool = false);
+
+	// Virtual overrides
 	void draw() override;
 	glm::vec2 get_position() const override;
 	void set_position(const glm::vec2 &) override;

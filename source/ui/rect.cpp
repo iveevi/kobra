@@ -33,6 +33,11 @@ void Rect::set_border_color(const glm::vec4 &color)
 	_border.set_color(color);
 }
 
+const PureRect &Rect::get_bounds() const
+{
+	return _fill;
+}
+
 void Rect::draw()
 {
 	if (_border_on)
