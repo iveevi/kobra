@@ -4,6 +4,8 @@ namespace mercury {
 
 namespace ui {
 
+Rect::Rect() {}
+
 // TODO: add Default Constructor for purerect
 Rect::Rect(const glm::vec2 &p1, const glm::vec2 &p2,
 		const glm::vec4 &fcolor, float border,

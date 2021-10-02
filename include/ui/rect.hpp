@@ -17,6 +17,7 @@ class Rect : public Shape {
 
 	// TODO: add curvature later
 public:
+	Rect();
 	Rect(const glm::vec2 &, const glm::vec2 &,
 		const glm::vec4 & = glm::vec4(1.0),
 		float = 0.0,

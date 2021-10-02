@@ -8,6 +8,8 @@ namespace mercury {
 
 namespace ui {
 
+Button::Button() {}
+
 // cbox is collision region
 Button::Button(Shape *cbox, Handler *handler1,
 		Handler *handler2, UILayer *layer)

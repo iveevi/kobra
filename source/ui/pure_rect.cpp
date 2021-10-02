@@ -28,6 +28,8 @@ void main()
 }
 )";
 
+PureRect::PureRect() {}
+
 PureRect::PureRect(const glm::vec2 &p1, const glm::vec2 &p2)
 		: _tl(p1), _br(p2)
 {

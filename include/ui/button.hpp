@@ -20,6 +20,7 @@ protected:
 	Handler *	_release_handler;
 	UILayer *	_layer;
 public:
+	Button();
 	Button(Shape *, Handler * = nullptr,
 		Handler * = nullptr, UILayer * = nullptr);
 

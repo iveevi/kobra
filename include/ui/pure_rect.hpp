@@ -24,6 +24,7 @@ class PureRect : public Shape {
 
 	void _genbufs(const glm::vec2 &, const glm::vec2 &);
 public:
+	PureRect();
 	PureRect(const glm::vec2 &, const glm::vec2 &);
 	PureRect(float, float, float, float);
 

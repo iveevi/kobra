@@ -7,6 +7,8 @@ namespace mercury {
 
 namespace ui {
 
+Text::Text() {}
+
 // TODO: move inside ui namespace
 Text::Text(const std::string &str, float x, float y,
 		float scale, const glm::vec3 &color)

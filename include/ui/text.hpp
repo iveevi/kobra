@@ -40,6 +40,7 @@ class Text : public UIElement {
 	void _alloc();
 	void _get_maxy();
 public:
+	Text();
 	Text(const std::string &,
 		float = 0.0f, float = 0.0f, float = 1.0f,
 		const glm::vec3 & = {1.0, 1.0, 1.0});
