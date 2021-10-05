@@ -1,4 +1,5 @@
 #include "include/init.hpp"
+#include "include/common.hpp"
 #include "include/ui/text.hpp"
 #include "include/ui/rect.hpp"
 #include "include/ui/pure_rect.hpp"
@@ -82,10 +83,20 @@ class UIDesigner {
 
 		// Setup the shader
 		// TODO: put 2d project into win struct...
+
+		// TODO: char should be part of text class...
 		glm::mat4 projection = glm::ortho(0.0f, mercury::cwin.width,
 				0.0f, mercury::cwin.height);
 		mercury::Char::shader.use();
 		mercury::Char::shader.set_mat4("projection", projection);
+
+		mercury::ui::UIElement::projection = glm::ortho(0.0f, mercury::cwin.width,
+				0.0f, mercury::cwin.height);
+
+		// TODO: add a use projection static method
+		// mercury::ui::UIElement::shader.use();
+		mercury::ui::UIElement::shader.set_mat4("projection", mercury::ui::UIElement::projection);
+		std::cout << "Err? " << glGetError() << std::endl;
 	}
 public:
 	UIDesigner() {

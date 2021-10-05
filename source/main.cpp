@@ -1,146 +1,182 @@
-#include "include/init.hpp"
-#include "include/ui/text.hpp"
-#include "include/ui/rect.hpp"
-#include "include/ui/pure_rect.hpp"
-#include "include/ui/button.hpp"
-#include "include/ui/ui_layer.hpp"
+#include <iostream>
+
+#include <glad/glad.h>
+#include <GLFW/glfw3.h>
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-void process_input(GLFWwindow *window)
+#include "include/shader.hpp"
+#include "include/init.hpp"
+
+// Using declarations
+using namespace mercury;
+
+void framebuffer_size_callback(GLFWwindow* window, int width, int height);
+void processInput(GLFWwindow *window);
+
+// settings
+const unsigned int SCR_WIDTH = 800;
+const unsigned int SCR_HEIGHT = 600;
+
+const char *vertexShaderSource = R"(
+#version 330 core
+
+layout (location = 0) in vec3 aPos;
+
+uniform mat4 projection;
+
+void main()
+{
+	gl_Position = projection * vec4(aPos.x, aPos.y, aPos.z, 1.0);
+}
+)";
+
+const char *fragmentShaderSource = R"(
+#version 330 core
+
+out vec4 FragColor;
+
+void main()
+{
+	FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);
+}
+)";
+
+int main()
+{
+	// glfw: initialize and configure
+	// ------------------------------
+	glfwInit();
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+#ifdef __APPLE__
+	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+#endif
+
+	// glfw window creation
+	// --------------------
+	GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "LearnOpenGL", NULL, NULL);
+	if (window == NULL)
+	{
+		std::cout << "Failed to create GLFW window" << std::endl;
+		glfwTerminate();
+		return -1;
+	}
+	glfwMakeContextCurrent(window);
+	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+
+	// glad: load all OpenGL function pointers
+	// ---------------------------------------
+	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+	{
+		std::cout << "Failed to initialize GLAD" << std::endl;
+		return -1;
+	}
+
+	Shader shader = Shader::from_source(vertexShaderSource, fragmentShaderSource);
+
+	// set up vertex data (and buffer(s)) and configure vertex attributes
+	// ------------------------------------------------------------------
+	float vertices[] = {
+		0.5f,  0.5f, 0.0f,  // top right
+		0.5f, -0.5f, 0.0f,  // bottom right
+		-0.5f, -0.5f, 0.0f,  // bottom left
+		-0.5f,  0.5f, 0.0f   // top left
+	};
+	unsigned int indices[] = {  // note that we start from 0!
+		0, 1, 3,  // first Triangle
+		1, 2, 3   // second Triangle
+	};
+	unsigned int VBO, VAO, EBO;
+	glGenVertexArrays(1, &VAO);
+	glGenBuffers(1, &VBO);
+	glGenBuffers(1, &EBO);
+	// bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
+	glBindVertexArray(VAO);
+
+	glBindBuffer(GL_ARRAY_BUFFER, VBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+
+	// note that this is allowed, the call to glVertexAttribPointer registered VBO as the vertex attribute's bound vertex buffer object so afterwards we can safely unbind
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+	// remember: do NOT unbind the EBO while a VAO is active as the bound element buffer object IS stored in the VAO; keep the EBO bound.
+	//glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+	// You can unbind the VAO afterwards so other VAO calls won't accidentally modify this VAO, but this rarely happens. Modifying other
+	// VAOs requires a call to glBindVertexArray anyways so we generally don't unbind VAOs (nor VBOs) when it's not directly necessary.
+	glBindVertexArray(0);
+
+	// uncomment this call to draw in wireframe polygons.
+	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+	shader.use();
+	shader.set_mat4("projection", glm::ortho(-2.0f, 2.0f,
+		-2.0f, 2.0f));
+
+	// render loop
+	// -----------
+	while (!glfwWindowShouldClose(window))
+	{
+		// input
+		// -----
+		processInput(window);
+
+		// render
+		// ------
+		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT);
+
+		// draw our first triangle
+		// glUseProgram(shaderProgram);
+		shader.use();
+
+		glBindVertexArray(VAO); // seeing as we only have a single VAO there's no need to bind it every time, but we'll do so to keep things a bit more organized
+		//glDrawArrays(GL_TRIANGLES, 0, 6);
+		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+		// glBindVertexArray(0); // no need to unbind it every time
+
+		// glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
+		// -------------------------------------------------------------------------------
+		glfwSwapBuffers(window);
+		glfwPollEvents();
+	}
+
+	// optional: de-allocate all resources once they've outlived their purpose:
+	// ------------------------------------------------------------------------
+	glDeleteVertexArrays(1, &VAO);
+	glDeleteBuffers(1, &VBO);
+	glDeleteBuffers(1, &EBO);
+	// glDeleteProgram(shaderProgram);
+
+	// glfw: terminate, clearing all previously allocated GLFW resources.
+	// ------------------------------------------------------------------
+	glfwTerminate();
+	return 0;
+}
+
+// process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
+// ---------------------------------------------------------------------------------------------------------
+void processInput(GLFWwindow *window)
 {
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, true);
 }
 
-void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
+// glfw: whenever the window size changed (by OS or user resize) this callback function executes
+// ---------------------------------------------------------------------------------------------
+void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
-	if (button == GLFW_MOUSE_BUTTON_LEFT) {
-		// TODO: put into function in init.hpp
-		double xpos, ypos;
-
-		glfwGetCursorPos(window, &xpos, &ypos);
-		mercury::cwin.mouse_handler.publish(
-			{(mercury::MouseBus::Type) action, {xpos, ypos}}
-		);
-	}
-}
-
-// Handlers
-class MyHandler : public mercury::Handler {
-public:
-	virtual void call(size_t *data) const override {
-		std::cout << "MyHandler ftn..." << std::endl;
-
-		glm::vec2 mpos = *((glm::vec2 *) data);
-		std::cout << "\tposition = " << mpos.x << ", " << mpos.y << std::endl;
-	}
-};
-
-GLFWwindow *window;
-
-class DragNode : public mercury::ui::Button {
-	glm::vec2	_ppos;
-	bool		_drag = false;
-public:
-	DragNode(mercury::ui::Shape *shape) : mercury::ui::Button(shape) {}
-
-	void on_pressed(const glm::vec2 &mpos) override {
-		_ppos = mpos;
-		_drag = true;
-	}
-
-	void on_released(const glm::vec2 &mpos) override {
-		_drag = false;
-	}
-
-	void draw() override {
-		Button::draw();
-
-		if (_drag) {
-			double xpos, ypos;
-			glfwGetCursorPos(window, &xpos, &ypos);
-
-			glm::vec2 dpos = glm::vec2 {xpos, ypos} - _ppos;
-			_ppos = {xpos, ypos};
-			move(dpos);
-		}
-	}
-};
-
-int main()
-{
-	// Initialize mercury
-	mercury::init();
-
-	// TODO: do this in init
-	glfwSetMouseButtonCallback(mercury::cwin.window, mouse_button_callback);
-
-	// Setup the shader
-	// TODO: put 2d project into win struct...
-	glm::mat4 projection = glm::ortho(0.0f, mercury::cwin.width,
-			0.0f, mercury::cwin.height);
-	mercury::Char::shader.use();
-	mercury::Char::shader.set_mat4("projection", projection);
-
-	// Texts
-	mercury::ui::Text title("Mercury Engine", 25.0,
-		mercury::cwin.height - 50.0, 1.0,
-		glm::vec3(0.5, 0.5, 0.5));
-
-	// Shapes
-	mercury::ui::Rect rect_files(
-		{25.0, 75.0},
-		{575.0, 575.0},
-		{0.1, 0.1, 0.1, 1.0},
-		5.0,
-		{0.5, 0.5, 0.5, 1.0}
-	);
-
-	mercury::ui::Rect *rect_button = new mercury::ui::Rect(
-		{600.0, 100.0},
-		{700.0, 200.0},
-		{1.0, 0.1, 0.1, 1.0},
-		5.0,
-		{0.5, 1.0, 0.5, 1.0}
-	);
-
-	mercury::ui::Rect *rect_dragb = new mercury::ui::Rect(
-		{600.0, 400.0},
-		{700.0, 500.0},
-		{1.0, 0.1, 0.1, 1.0},
-		5.0,
-		{0.5, 1.0, 0.5, 1.0}
-	);
-
-	mercury::ui::Button button(rect_button, new MyHandler());
-	DragNode dnode(rect_dragb);
-
-	mercury::ui::UILayer ui_layer;
-	ui_layer.add_element(&title);
-	ui_layer.add_element(&rect_files);
-	ui_layer.add_element(&button);
-	ui_layer.add_element(&dnode);
-
-	while (!glfwWindowShouldClose(window)) {
-		// std::cout << "----------------------> " << i++ << std::endl;
-
-		process_input(window);
-
-		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT);
-
-		// NOTE: UI Layer is always drawn last
-		ui_layer.draw();
-		// rect_dragb->draw();
-		// rect_dragb->set_position({50 * cos(time) + 200, 50 * sin(time) + 200});
-
-
-		glfwSwapBuffers(window);
-		glfwPollEvents();
-	}
-
-	glfwTerminate();
-	return 0;
+	// make sure the viewport matches the new window dimensions; note that width and
+	// height will be significantly larger than specified on retina displays.
+	glViewport(0, 0, width, height);
 }

@@ -6,6 +6,7 @@
 
 // Engine headers
 #include "include/init.hpp"
+#include "include/shader.hpp"
 
 namespace mercury {
 
@@ -22,6 +23,9 @@ public:
 		glm::vec2 pos = get_position();
 		set_position(pos + dpos);
 	}
+
+	static Shader shader;
+	static glm::mat4 projection;
 };
 
 }

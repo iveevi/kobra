@@ -5,7 +5,8 @@ import os
 # Execution modes
 modes = {
     '': './',
-    'gdb': 'gdb '
+    'gdb': 'gdb ',
+    'mdb': './'
 }
 
 parser = argparse.ArgumentParser()
@@ -18,7 +19,7 @@ parser.add_argument("-j", "--threads",
 
 args = parser.parse_args()
 
-if args.mode == 'gdb':
+if args.mode in ['gdb', 'mdb']:
     os.system('cmake -DCMAKE_BUILD_TYPE=Debug .')
 elif args.mode == '':
     os.system('cmake .')

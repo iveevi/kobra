@@ -1,67 +1,29 @@
-#include "../../include/ui/pure_rect.hpp"
+#include "include/ui/pure_rect.hpp"
+#include "include/common.hpp"
 
 namespace mercury {
 
 namespace ui {
 
-const char *PureRect::default_vs = R"(
-#version 330 core
-
-layout (location = 0) in vec3 apos;
-
-void main()
-{
-	gl_Position = vec4(apos.x, apos.y, apos.z, 1.0);
-}
-)";
-
-const char *PureRect::default_fs = R"(
-#version 330 core
-
-out vec4 fragment_color;
-
-uniform vec4 rect_color;
-
-void main()
-{
-	fragment_color = rect_color;
-}
-)";
-
 PureRect::PureRect() {}
 
 PureRect::PureRect(const glm::vec2 &p1, const glm::vec2 &p2)
-		: _tl(p1), _br(p2)
+		: _tl(p1), _br(p2), _color(1.0f)
 {
-	_genbufs(
-		transform(p1),
-		transform(p2)
-	);
-
-	_shader = Shader::from_source(
-		default_vs,
-		default_fs
-	);
-
-	set_color(glm::vec4(1.0));
+	_genbufs(p1, p2);
 }
 
 PureRect::PureRect(float x1, float y1, float x2, float y2)
 		: _tl(x1, y1), _br(x2, y2)
 {
-	_genbufs(
-		transform({x1, y1}),
-		transform({x2, y2})
-	);
-
-	_shader = Shader::from_source(
-		default_vs,
-		default_fs
-	);
+	_genbufs({x1, y1}, {x2, y2});
 }
 
 void PureRect::_genbufs(const glm::vec2 &p1, const glm::vec2 &p2)
 {
+	std::cout << "p1: " << p1.x << ", "<< p1.y << std::endl;
+	std::cout << "p2: " << p2.x << ", "<< p2.y << std::endl;
+
 	float vertices[] = {
 		p2.x, p1.y, 0.0f,
 		p2.x, p2.y, 0.0f,
@@ -90,10 +52,9 @@ void PureRect::_genbufs(const glm::vec2 &p1, const glm::vec2 &p2)
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
-void PureRect::set_color(const glm::vec4 &color)
+void PureRect::set_color(const glm::vec3 &color)
 {
-	_shader.use();
-	_shader.set_vec4("rect_color", color);
+	_color = color;
 }
 
 float PureRect::get_width() const
@@ -113,7 +74,10 @@ const glm::vec2 &PureRect::get_tl() const
 
 void PureRect::draw()
 {
-	_shader.use();
+	// Use and set shader properties
+	UIElement::shader.use();
+	UIElement::shader.set_vec3("shape_color", _color);
+	glCheckError();
 
 	glBindVertexArray(_vao);
 	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);

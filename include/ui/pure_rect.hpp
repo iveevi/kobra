@@ -14,13 +14,10 @@ class PureRect : public Shape {
 	unsigned int 	_vbo;
 	unsigned int 	_ebo;
 
-	Shader		_shader;
-
 	glm::vec2	_tl;
 	glm::vec2	_br;
 
-	static const char *default_vs;
-	static const char *default_fs;
+	glm::vec3	_color;
 
 	void _genbufs(const glm::vec2 &, const glm::vec2 &);
 public:
@@ -28,7 +25,7 @@ public:
 	PureRect(const glm::vec2 &, const glm::vec2 &);
 	PureRect(float, float, float, float);
 
-	void set_color(const glm::vec4 &);
+	void set_color(const glm::vec3 &);
 
 	// Getters
 	float get_width() const;

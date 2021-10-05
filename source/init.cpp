@@ -1,4 +1,5 @@
-#include "../include/init.hpp"
+#include "include/init.hpp"
+#include "include/ui/ui_element.hpp"
 
 // TODO: do a ifndef mercury source dir
 #ifndef MERCURY_SOURCE_DIR
@@ -23,6 +24,8 @@ glm::vec2 transform(const glm::vec2 &in)
 
 // Character static variables
 Shader Char::shader;
+Shader ui::UIElement::shader;
+glm::mat4 ui::UIElement::projection;
 
 // Character map
 std::unordered_map <char, Char> cmap;
@@ -144,6 +147,12 @@ void load_fonts()
 	Char::shader = Shader(
 		MERCURY_SOURCE_DIR "/resources/shaders/font_shader.vs",
 		MERCURY_SOURCE_DIR "/resources/shaders/font_shader.fs"
+	);
+
+	// Create the default shader
+	ui::UIElement::shader = Shader(
+		MERCURY_SOURCE_DIR "/resources/shaders/shape_shader.vs",
+		MERCURY_SOURCE_DIR "/resources/shaders/shape_shader.fs"
 	);
 }
 

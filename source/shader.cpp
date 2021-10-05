@@ -1,4 +1,5 @@
-#include "../include/shader.hpp"
+#include "include/shader.hpp"
+#include "include/common.hpp"
 
 // Standard headers
 #include <fstream>
@@ -8,10 +9,16 @@
 #include <utility>
 
 // GLFW
-#include "../glad/glad.h"
+#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
 namespace mercury {
+
+#ifdef MERCURY_DEBUG
+
+int Shader::_current = -1;
+
+#endif
 
 void error_file(const char *path)
 {
@@ -50,7 +57,9 @@ void check_program_errors(unsigned int shader, const std::string &type)
 		if(!success)
 		{
 			glGetShaderInfoLog(shader, 1024, NULL, infoLog);
-			std::cout << "ERROR::SHADER_COMPILATION_ERROR of type: " << type << "\n" << infoLog << "\n -- --------------------------------------------------- -- " << std::endl;
+			std::cout << "ERROR::SHADER_COMPILATION_ERROR of type: "
+				<< type << "\n" << infoLog
+				<< "\n -- --------------------------------------------------- -- " << std::endl;
 		}
 	}
 	else
@@ -59,7 +68,9 @@ void check_program_errors(unsigned int shader, const std::string &type)
 		if(!success)
 		{
 			glGetProgramInfoLog(shader, 1024, NULL, infoLog);
-			std::cout << "ERROR::PROGRAM_LINKING_ERROR of type: " << type << "\n" << infoLog << "\n -- --------------------------------------------------- -- " << std::endl;
+			std::cout << "ERROR::PROGRAM_LINKING_ERROR of type: "
+				<< type << "\n" << infoLog
+				<< "\n -- --------------------------------------------------- -- " << std::endl;
 		}
 	}
 }
@@ -100,11 +111,26 @@ Shader::Shader(const char *vpath, const char *fpath)
 	// Free other programs
 	glDeleteShader(_vertex);
 	glDeleteShader(_fragment);
+
+#ifdef MERCURY_DEBUG
+
+	// TODO: do we need to worry about mutexes/concurrency?
+	_id = get_nid();
+
+#endif
+
 }
 
 void Shader::use() const
 {
 	glUseProgram(id);
+
+#ifdef MERCURY_DEBUG
+
+	_current = _id;
+
+#endif
+
 }
 
 void Shader::set_vertex_shader(const char *code)
@@ -142,66 +168,174 @@ void Shader::compile()
 // TODO: print a possbility of not doing .use() before
 void Shader::set_bool(const std::string &name, bool value) const
 {
-	glUniform1i(glGetUniformLocation(id, name.c_str()), (int)value);
+	glUniform1i(glGetUniformLocation(id, name.c_str()), (int) value);
+
+#ifdef MERCURY_DEBUG
+
+	// TODO: color message and engine startup time!!
+	if (_current != _id)
+		std::cerr << "Not using current shader to set!!" << std::endl;
+
+#endif
+
 }
 
 void Shader::set_int(const std::string &name, int value) const
 {
 	glUniform1i(glGetUniformLocation(id, name.c_str()), value);
+
+#ifdef MERCURY_DEBUG
+
+	// TODO: color message and engine startup time!!
+	if (_current != _id)
+		std::cerr << "Not using current shader to set!!" << std::endl;
+
+#endif
+
 }
 
 void Shader::set_float(const std::string &name, float value) const
 {
 	glUniform1f(glGetUniformLocation(id, name.c_str()), value);
+
+#ifdef MERCURY_DEBUG
+
+	// TODO: color message and engine startup time!!
+	if (_current != _id)
+		std::cerr << "Not using current shader to set!!" << std::endl;
+
+#endif
+
 }
 
 void Shader::set_vec2(const std::string &name, const glm::vec2 &value) const
 {
 	glUniform2fv(glGetUniformLocation(id, name.c_str()), 1, &value[0]);
+
+#ifdef MERCURY_DEBUG
+
+	// TODO: color message and engine startup time!!
+	if (_current != _id)
+		std::cerr << "Not using current shader to set!!" << std::endl;
+
+#endif
+
 }
 
 void Shader::set_vec2(const std::string &name, float x, float y) const
 {
 	glUniform2f(glGetUniformLocation(id, name.c_str()), x, y);
+
+#ifdef MERCURY_DEBUG
+
+	// TODO: color message and engine startup time!!
+	if (_current != _id)
+		std::cerr << "Not using current shader to set!!" << std::endl;
+
+#endif
+
 }
 
 void Shader::set_vec3(const std::string &name, const glm::vec3 &value) const
 {
 	glUniform3fv(glGetUniformLocation(id, name.c_str()), 1, &value[0]);
+
+#ifdef MERCURY_DEBUG
+
+	// TODO: color message and engine startup time!!
+	if (_current != _id)
+		std::cerr << "Not using current shader to set!!" << std::endl;
+
+#endif
+
 }
 
 void Shader::set_vec3(const std::string &name, float x, float y, float z) const
 {
 	glUniform3f(glGetUniformLocation(id, name.c_str()), x, y, z);
+
+#ifdef MERCURY_DEBUG
+
+	// TODO: color message and engine startup time!!
+	if (_current != _id)
+		std::cerr << "Not using current shader to set!!" << std::endl;
+
+#endif
+
 }
 
 void Shader::set_vec4(const std::string &name, const glm::vec4 &value) const
 {
 	glUniform4fv(glGetUniformLocation(id, name.c_str()), 1, &value[0]);
+
+#ifdef MERCURY_DEBUG
+
+	// TODO: color message and engine startup time!!
+	if (_current != _id)
+		std::cerr << "Not using current shader to set!!" << std::endl;
+
+#endif
+
 }
 
 void Shader::set_vec4(const std::string &name,
 		float x, float y, float z, float w) const
 {
 	glUniform4f(glGetUniformLocation(id, name.c_str()), x, y, z, w);
+
+#ifdef MERCURY_DEBUG
+
+	// TODO: color message and engine startup time!!
+	if (_current != _id)
+		std::cerr << "Not using current shader to set!!" << std::endl;
+
+#endif
+
 }
 
 void Shader::set_mat2(const std::string &name, const glm::mat2 &mat) const
 {
 	glUniformMatrix2fv(glGetUniformLocation(id, name.c_str()), 1, GL_FALSE,
 			&mat[0][0]);
+
+#ifdef MERCURY_DEBUG
+
+	// TODO: color message and engine startup time!!
+	if (_current != _id)
+		std::cerr << "Not using current shader to set!!" << std::endl;
+
+#endif
+
 }
 
 void Shader::set_mat3(const std::string &name, const glm::mat3 &mat) const
 {
 	glUniformMatrix3fv(glGetUniformLocation(id, name.c_str()), 1, GL_FALSE,
 			&mat[0][0]);
+
+#ifdef MERCURY_DEBUG
+
+	// TODO: color message and engine startup time!!
+	if (_current != _id)
+		std::cerr << "Not using current shader to set!!" << std::endl;
+
+#endif
+
 }
 
 void Shader::set_mat4(const std::string &name, const glm::mat4 &mat) const
 {
 	glUniformMatrix4fv(glGetUniformLocation(id, name.c_str()), 1, GL_FALSE,
 			&mat[0][0]);
+
+#ifdef MERCURY_DEBUG
+
+	// TODO: color message and engine startup time!!
+	if (_current != _id)
+		std::cerr << "Not using current shader to set!!" << std::endl;
+
+#endif
+
 }
 
 // Static methods
