@@ -21,14 +21,12 @@ PureRect::PureRect(float x1, float y1, float x2, float y2)
 
 void PureRect::_genbufs(const glm::vec2 &p1, const glm::vec2 &p2)
 {
-	std::cout << "p1: " << p1.x << ", "<< p1.y << std::endl;
-	std::cout << "p2: " << p2.x << ", "<< p2.y << std::endl;
-
+	float h = cwin.height;
 	float vertices[] = {
-		p2.x, p1.y, 0.0f,
-		p2.x, p2.y, 0.0f,
-		p1.x, p2.y, 0.0f,
-		p1.x, p1.y, 0.0f,
+		p2.x, h - p1.y, 0.0f,
+		p2.x, h - p2.y, 0.0f,
+		p1.x, h - p2.y, 0.0f,
+		p1.x, h - p1.y, 0.0f,
 	};
 
 	unsigned int indices[] = {
@@ -94,10 +92,7 @@ void PureRect::set_position(const glm::vec2 &pos)
 	_tl = pos;
 	_br = _tl + diag;
 
-	_genbufs(
-		transform(_tl),
-		transform(_br)
-	);
+	_genbufs(_tl, _br);
 }
 
 bool PureRect::contains(const glm::vec2 &mpos) const

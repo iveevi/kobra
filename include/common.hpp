@@ -8,13 +8,15 @@
 #include "../glad/glad.h"
 #include <GLFW/glfw3.h>
 
-inline GLenum glCheckError_(const char *file, int line)
+// Engine headers
+#include "include/logger.hpp"
+
+inline GLenum __glCheckError(const char *file, int line)
 {
-        GLenum errorCode;
-        while ((errorCode = glGetError()) != GL_NO_ERROR)
-        {
+        GLenum err;
+        while ((err = glGetError()) != GL_NO_ERROR) {
                 std::string error;
-                switch (errorCode) {
+                switch (err) {
                 case GL_INVALID_ENUM:
                         error = "INVALID_ENUM";
                         break;
@@ -38,13 +40,13 @@ inline GLenum glCheckError_(const char *file, int line)
                         break;
                 }
 
-                std::cout << error << " | " << file
-                        << " (" << line << ")" << std::endl;
+		mercury::Logger::error("OpenGL error: " + error
+			+ " at " + file + " (" + std::to_string(line) + ")");
         }
 
-        return errorCode;
+        return err;
 }
 
-#define glCheckError() glCheckError_(__FILE__, __LINE__)
+#define glCheckError() __glCheckError(__FILE__, __LINE__)
 
 #endif

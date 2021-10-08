@@ -1,18 +1,29 @@
 #include "include/init.hpp"
+#include "include/logger.hpp"
+#include "include/common.hpp"
 #include "include/ui/ui_element.hpp"
 
-// TODO: do a ifndef mercury source dir
+// Extra GLM headers
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
+// Make sure that relative path is defined
 #ifndef MERCURY_SOURCE_DIR
 
 #error MERCURY_SOURCE_DIR not defined
 
 #endif
 
+// Defined constants
+#define DEFAULT_WINDOW_WIDTH	800.0
+#define DEFAULT_WINDOW_HEIGHT	600.0
+
 namespace mercury {
 
 // Initial window dimensions
 Window cwin;
 
+// TODO: this is no longer necessary
 glm::vec2 transform(const glm::vec2 &in)
 {
 	// TODO: this should not be using the global cwin
@@ -24,25 +35,67 @@ glm::vec2 transform(const glm::vec2 &in)
 
 // Character static variables
 Shader Char::shader;
-Shader ui::UIElement::shader;
-glm::mat4 ui::UIElement::projection;
 
 // Character map
 std::unordered_map <char, Char> cmap;
 
+// UI Element static variables
+Shader ui::UIElement::shader;
+glm::mat4 ui::UIElement::projection;
+
+// Logger static variables
+Logger::tclk Logger::clk;
+Logger::tpoint Logger::epoch;
+
+// Reassign orthos
+void update_screen_size(float width, float height)
+{
+	// Logger::ok(std::string("width = ") + std::to_string(width) + ", height = " + std::to_string(height));
+	// TODO: use gl get dims or smthing?
+	cwin.width = width;
+	cwin.height = height;
+
+	glm::mat4 projection = glm::ortho(0.0f, width,
+			0.0f, height);
+	ui::UIElement::set_projection(projection);
+}
+
 // Window size change callback
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
+	Logger::ok(std::string("width = ") + std::to_string(width) + ", height = " + std::to_string(height));
 	glViewport(0, 0, width, height);
+	Logger::ok("again: " + std::string("width = ") + std::to_string(width) + ", height = " + std::to_string(height));
+	update_screen_size(width, height);
+
+#ifdef MERCURY_DEBUG
+
+	// TODO: update all orthos
+	Logger::ok("Resized window to " + std::to_string(width)
+		+ " x " + std::to_string(height));
+
+#endif
+
+}
+
+// Mouse interrupt callback
+void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
+{
+	// TODO: send change in mouse position anyways
+	if (button == GLFW_MOUSE_BUTTON_LEFT) {
+		// TODO: put into function in init.hpp
+		double xpos, ypos;
+
+		glfwGetCursorPos(window, &xpos, &ypos);
+		mercury::cwin.mouse_handler.publish(
+			{(mercury::MouseBus::Type) action, {xpos, ypos}}
+		);
+	}
 }
 
 // Private static methods
-static void _init_glfw()
+static void init_glfw()
 {
-	// Static variables
-	static const float DEFAULT_WINDOW_WIDTH = 800.0;
-	static const float DEFAULT_WINDOW_HEIGHT = 600.0;
-
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -54,8 +107,8 @@ static void _init_glfw()
 #endif
 
 	cwin.window = glfwCreateWindow(DEFAULT_WINDOW_WIDTH,
-		DEFAULT_WINDOW_HEIGHT, "Mercury", NULL, NULL);
-	if (cwin.window == NULL) {
+		DEFAULT_WINDOW_HEIGHT, "Mercury", nullptr, nullptr);
+	if (cwin.window == nullptr) {
 		std::cout << "Failed to create GLFW window" << std::endl;
 		glfwTerminate();
 		exit(-1);
@@ -63,6 +116,7 @@ static void _init_glfw()
 
 	glfwMakeContextCurrent(cwin.window);
 	glfwSetFramebufferSizeCallback(cwin.window, framebuffer_size_callback);
+	glfwSetMouseButtonCallback(cwin.window, mouse_button_callback);
 
 	// Now initialize glad
 	if (!gladLoadGLLoader((GLADloadproc) glfwGetProcAddress)) {
@@ -70,16 +124,15 @@ static void _init_glfw()
 		exit(-1);
 	}
 
-	// OpenGL options
-	// TODO: disable only in debug mode
-	// glEnable(GL_CULL_FACE);
+#ifndef MERCURY_DEBUG
 
+	glEnable(GL_CULL_FACE);
+
+#endif
+
+	// For text rendering
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-	// Set other attributes
-	cwin.width = DEFAULT_WINDOW_WIDTH;
-	cwin.height = DEFAULT_WINDOW_HEIGHT;
 }
 
 void load_fonts()
@@ -158,10 +211,33 @@ void load_fonts()
 
 void init()
 {
+	// Start the logger
+	Logger::start();
+
+	// TODO: need to check error codes
+	Logger::ok("Started Mercury Engine.");
+
 	// Very first thing
-	_init_glfw();
+	init_glfw();
+
+	// TODO: need to check error codes
+	Logger::ok("Successfully initialized GLFW.");
 
 	load_fonts();
+
+	// TODO: need to check error codes
+	Logger::ok("Succesfully loaded all fonts.");
+
+	// Set initial screen parameters
+	update_screen_size(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT);
+}
+
+// TODO: take pairs of screen coords later
+void focus(float x, float y, float width, float height)
+{
+	glViewport(x, y, width, height);
+	// TODO: needs to pass x and y
+	update_screen_size(width, height);
 }
 
 }

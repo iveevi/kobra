@@ -7,6 +7,7 @@
 // Engine headers
 #include "include/init.hpp"
 #include "include/shader.hpp"
+#include "include/common.hpp"
 
 namespace mercury {
 
@@ -25,7 +26,25 @@ public:
 	}
 
 	static Shader shader;
-	static glm::mat4 projection;
+	static glm::mat4 projection;	// TODO: is this even necessary
+
+	static void set_projection(const glm::mat4 &proj) {
+		projection = proj;
+
+		// Set projection matrix of all uies
+		shader.use();
+		glCheckError();
+
+		shader.set_mat4("projection", proj);
+		glCheckError();
+
+		// Set projection matrix of all chars
+		Char::shader.use();
+		glCheckError();
+
+		Char::shader.set_mat4("projection", proj);
+		glCheckError();
+	}
 };
 
 }

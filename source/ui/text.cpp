@@ -112,6 +112,7 @@ void Text::draw()
 	// Set current things
 	Char::shader.use();
 	Char::shader.set_vec3("text_color", _color);
+	
 	glBindVertexArray(_vao);
 
 	// Construct the text

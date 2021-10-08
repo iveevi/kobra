@@ -48,11 +48,15 @@ struct Char {
 extern std::unordered_map <char, Char> cmap;
 
 // Parts of initialization
+// TODO: hide
 void load_fonts();
 
 // First function that should run
 // TODO: should take some kind of configuration file?
 void init();
+
+// Extra functions
+void focus(float, float, float, float);
 
 }
 

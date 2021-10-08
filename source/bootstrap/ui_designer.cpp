@@ -1,3 +1,4 @@
+// Engine headers
 #include "include/init.hpp"
 #include "include/common.hpp"
 #include "include/ui/text.hpp"
@@ -6,26 +7,17 @@
 #include "include/ui/button.hpp"
 #include "include/ui/ui_layer.hpp"
 
+// Extra headers
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+
+// Using declarations
+using namespace mercury;
 
 void process_input(GLFWwindow *window)
 {
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, true);
-}
-
-void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
-{
-	if (button == GLFW_MOUSE_BUTTON_LEFT) {
-		// TODO: put into function in init.hpp
-		double xpos, ypos;
-
-		glfwGetCursorPos(window, &xpos, &ypos);
-		mercury::cwin.mouse_handler.publish(
-			{(mercury::MouseBus::Type) action, {xpos, ypos}}
-		);
-	}
 }
 
 class DragNode : public mercury::ui::Button {
@@ -59,106 +51,113 @@ public:
 	}
 };
 
+// TODO: Abstract from an application class that
+// provides tools for "garbage collection"
+// - has its own allocator for faster allocation
 class UIDesigner {
 	// Text
-	mercury::ui::Text *title;
-	mercury::ui::Text *button_text;
+	ui::Text *title;
+	ui::Text *save_button_text;
 
 	// Shapes
-	mercury::ui::Rect *rect_dragb;
+	ui::Rect *border;
+	ui::Rect *vp_bounds;
+	ui::Rect *save_button_box;
 
 	// Buttons
-	DragNode *dnode;
+	ui::Button *save_button;
 
 	// UILayer
-	mercury::ui::UILayer *ui_layer;
-	mercury::ui::UILayer *dnode_layer;
-
-	void _init() {
+	ui::UILayer *ui_layer;
+	ui::UILayer *viewport_layer;
+	ui::UILayer *save_button_layer;
+public:
+	UIDesigner() {
 		// Initialize mercury
 		mercury::init();
 
-		// TODO: do in init
-		glfwSetMouseButtonCallback(mercury::cwin.window, mouse_button_callback);
-
-		// Setup the shader
-		// TODO: put 2d project into win struct...
-
-		// TODO: char should be part of text class...
-		glm::mat4 projection = glm::ortho(0.0f, mercury::cwin.width,
-				0.0f, mercury::cwin.height);
-		mercury::Char::shader.use();
-		mercury::Char::shader.set_mat4("projection", projection);
-
-		mercury::ui::UIElement::projection = glm::ortho(0.0f, mercury::cwin.width,
-				0.0f, mercury::cwin.height);
-
-		// TODO: add a use projection static method
-		// mercury::ui::UIElement::shader.use();
-		mercury::ui::UIElement::shader.set_mat4("projection", mercury::ui::UIElement::projection);
-		std::cout << "Err? " << glGetError() << std::endl;
-	}
-public:
-	UIDesigner() {
-		_init();
-
 		// Texts
-		title = new mercury::ui::Text("UI Designer",
+		title = new ui::Text("UI Designer",
 			10.0, 10.0, 1.0,
 			glm::vec3(0.5, 0.5, 0.5)
 		);
 
-		button_text = new mercury::ui::Text("Save",
+		save_button_text = new ui::Text("Save",
 			10.0, 10.0, 0.75,
 			glm::vec3(0.5, 0.5, 0.5)
 		);
 
 		// Shapes
-		rect_dragb = new mercury::ui::Rect(
-			{100.0, 100.0},
-			{200.0, 200.0},
-			{1.0, 0.1, 0.1, 1.0},
+		border = new ui::Rect(
+			{25.0, 100.0},
+			{775.0, 575.0},
+			{.1, 0.1, 0.1, 1.0},
 			5.0,
-			{0.5, 1.0, 0.5, 1.0}
+			{0.5, 0.5, 0.5, 1.0}
+		);
+		
+		vp_bounds = new ui::Rect(
+			{0.0, 0.0},
+			{1.0, 1.0},
+			{.1, 0.1, 0.1, 1.0},
+			5.0,
+			{0.5, 0.5, 0.5, 1.0}
+		);
+
+		save_button_box = new ui::Rect(
+			{650.0, 25.0},
+			{750.0, 75.0},
+			{.1, 0.1, 0.1, 1.0},
+			5.0,
+			{0.5, 0.5, 0.5, 1.0}
 		);
 
 		// Layers
-		dnode_layer = new mercury::ui::UILayer();
-		ui_layer = new mercury::ui::UILayer();
+		ui_layer = new ui::UILayer();
+		viewport_layer = new ui::UILayer();
+		save_button_layer = new ui::UILayer();
 	}
 
 	~UIDesigner() {
-		delete title;
-		delete button_text;
-		delete rect_dragb;
-		delete dnode_layer;
-		delete dnode;
-		delete ui_layer;
 	}
 
 	void build() {
 		// Building UI layers
-		button_text->center_within(rect_dragb->get_bounds(), true);
-		dnode_layer->add_element(button_text);
+		save_button_text->center_within(save_button_box->get_bounds(), true);
+		save_button_layer->add_element(save_button_text);
 
-		dnode = new DragNode(rect_dragb, dnode_layer);
+		save_button = new ui::Button(save_button_box, nullptr, nullptr, save_button_layer);
 
 		ui_layer->add_element(title);
-		ui_layer->add_element(dnode);
+		ui_layer->add_element(save_button);
+		ui_layer->add_element(border);
+
+		viewport_layer->add_element(vp_bounds);
+		viewport_layer->add_element(save_button);
 	}
 
 	int run() {
 		// TODO: loop function in cwin?
 		while (!glfwWindowShouldClose(mercury::cwin.window)) {
-			// std::cout << "----------------------> " << i++ << std::endl;
-
 			process_input(mercury::cwin.window);
 
 			glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 			glClear(GL_COLOR_BUFFER_BIT);
 
 			// NOTE: UI Layer is always drawn last
+			glViewport(0, 0, 1600, 1200);
+			glm::mat4 proj = glm::ortho(0, 800, 0, 600);
+			/* ui::UIElement::set_projection(
+				proj //glm::ortho(0, 1600, 0, 1200)
+			); */
 			ui_layer->draw();
+
+			// TODO: make a focus function for changing viewports
+			/* glViewport(25, 25, 1500, 950);
+			* ui::UIElement::set_projection(
+				glm::ortho(-2, 2, -2, 2)
+			); *
+			viewport_layer->draw(); */
 
 			glfwSwapBuffers(mercury::cwin.window);
 			glfwPollEvents();
