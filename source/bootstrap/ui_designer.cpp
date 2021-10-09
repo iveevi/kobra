@@ -58,18 +58,22 @@ class UIDesigner {
 	// Text
 	ui::Text *title;
 	ui::Text *save_button_text;
+	ui::Text *add_button_text;
 
 	// Shapes
 	ui::Rect *border;
 	ui::Rect *vp_bounds;
 	ui::Rect *save_button_box;
+	ui::Rect *add_button_box;
 
 	// Buttons
 	ui::Button *save_button;
+	ui::Button *add_button;
 
 	// UILayer
 	ui::UILayer *ui_layer;
 	ui::UILayer *viewport_layer;
+	ui::UILayer *add_button_layer;
 	ui::UILayer *save_button_layer;
 public:
 	UIDesigner() {
@@ -87,6 +91,11 @@ public:
 			glm::vec3(0.5, 0.5, 0.5)
 		);
 
+		add_button_text = new ui::Text("Add",
+			10.0, 10.0, 0.75,
+			glm::vec3(0.5, 0.5, 0.5)
+		);
+
 		// Shapes
 		border = new ui::Rect(
 			{25.0, 100.0},
@@ -95,19 +104,27 @@ public:
 			5.0,
 			{0.5, 0.5, 0.5, 1.0}
 		);
-		
+
 		vp_bounds = new ui::Rect(
 			{0.0, 0.0},
-			{1.0, 1.0},
-			{.1, 0.1, 0.1, 1.0},
+			{800.0, 600.0},
+			{0.1, 0.1, 0.1, 1.0},
 			5.0,
-			{0.5, 0.5, 0.5, 1.0}
+			{0.5, 0.7, 0.5, 1.0}
 		);
 
 		save_button_box = new ui::Rect(
 			{650.0, 25.0},
 			{750.0, 75.0},
-			{.1, 0.1, 0.1, 1.0},
+			{0.1, 0.1, 0.1, 1.0},
+			5.0,
+			{0.5, 0.5, 0.5, 1.0}
+		);
+
+		add_button_box = new ui::Rect(
+			{500.0, 25.0},
+			{600.0, 75.0},
+			{0.1, 0.1, 0.1, 1.0},
 			5.0,
 			{0.5, 0.5, 0.5, 1.0}
 		);
@@ -116,6 +133,7 @@ public:
 		ui_layer = new ui::UILayer();
 		viewport_layer = new ui::UILayer();
 		save_button_layer = new ui::UILayer();
+		add_button_layer = new ui::UILayer();
 	}
 
 	~UIDesigner() {
@@ -126,10 +144,17 @@ public:
 		save_button_text->center_within(save_button_box->get_bounds(), true);
 		save_button_layer->add_element(save_button_text);
 
+		add_button_text->center_within(add_button_box->get_bounds(), true);
+
+		// TODO: add element needs to check for nullptr
+		add_button_layer->add_element(add_button_text);
+
 		save_button = new ui::Button(save_button_box, nullptr, nullptr, save_button_layer);
+		add_button = new ui::Button(add_button_box, nullptr, nullptr, add_button_layer);
 
 		ui_layer->add_element(title);
 		ui_layer->add_element(save_button);
+		ui_layer->add_element(add_button);
 		ui_layer->add_element(border);
 
 		viewport_layer->add_element(vp_bounds);
@@ -145,19 +170,17 @@ public:
 			glClear(GL_COLOR_BUFFER_BIT);
 
 			// NOTE: UI Layer is always drawn last
-			glViewport(0, 0, 1600, 1200);
-			glm::mat4 proj = glm::ortho(0, 800, 0, 600);
-			/* ui::UIElement::set_projection(
-				proj //glm::ortho(0, 1600, 0, 1200)
-			); */
+			glViewport(0.0f, 0.0f, 1600.0f, 1200.0f);
+			glm::mat4 proj = glm::ortho(0.0f, 800.0f, 0.0f, 600.0f);
+			ui::UIElement::set_projection(proj);
 			ui_layer->draw();
 
 			// TODO: make a focus function for changing viewports
-			/* glViewport(25, 25, 1500, 950);
-			* ui::UIElement::set_projection(
-				glm::ortho(-2, 2, -2, 2)
-			); *
-			viewport_layer->draw(); */
+			glViewport(50, 50, 1500, 950);
+			ui::UIElement::set_projection(
+				glm::ortho(-25.0f, 625.0f * 14.5f/9.0f, -25.0f, 625.0f)
+			);
+			viewport_layer->draw();
 
 			glfwSwapBuffers(mercury::cwin.window);
 			glfwPollEvents();

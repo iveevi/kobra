@@ -1,4 +1,5 @@
-#include "../../include/ui/ui_layer.hpp"
+#include "include/ui/ui_layer.hpp"
+#include "include/logger.hpp"
 
 namespace mercury {
 
@@ -6,6 +7,8 @@ namespace ui {
 
 void UILayer::add_element(UIElement *uie)
 {
+	if (!uie)
+		Logger::warn("Adding null element to UILayer");
 	_elements.push_back(uie);
 }
 
