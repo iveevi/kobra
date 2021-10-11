@@ -1,9 +1,10 @@
-.cache/
+*.log
 .DS_Store
-bin/
+.cache/
 CMakeCache.txt
 CMakeFiles
 Makefile
 assimp/bin
+bin/
 cmake_install.cmake
 mercury

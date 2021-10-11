@@ -87,18 +87,18 @@ public:
 		);
 
 		save_button_text = new ui::Text("Save",
-			10.0, 10.0, 0.75,
+			10.0, 10.0, 0.6,
 			glm::vec3(0.5, 0.5, 0.5)
 		);
 
 		add_button_text = new ui::Text("Add",
-			10.0, 10.0, 0.75,
+			10.0, 10.0, 0.6,
 			glm::vec3(0.5, 0.5, 0.5)
 		);
 
 		// Shapes
 		border = new ui::Rect(
-			{25.0, 100.0},
+			{25.0, 75.0},
 			{775.0, 575.0},
 			{.1, 0.1, 0.1, 1.0},
 			5.0,
@@ -114,16 +114,16 @@ public:
 		);
 
 		save_button_box = new ui::Rect(
-			{650.0, 25.0},
-			{750.0, 75.0},
+			{650.0, 10.0},
+			{750.0, 50.0},
 			{0.1, 0.1, 0.1, 1.0},
 			5.0,
 			{0.5, 0.5, 0.5, 1.0}
 		);
 
 		add_button_box = new ui::Rect(
-			{500.0, 25.0},
-			{600.0, 75.0},
+			{500.0, 10.0},
+			{600.0, 50.0},
 			{0.1, 0.1, 0.1, 1.0},
 			5.0,
 			{0.5, 0.5, 0.5, 1.0}
@@ -170,15 +170,22 @@ public:
 			glClear(GL_COLOR_BUFFER_BIT);
 
 			// NOTE: UI Layer is always drawn last
-			glViewport(0.0f, 0.0f, 1600.0f, 1200.0f);
+			// glViewport(0.0f, 0.0f, 1600.0f, 1200.0f);
+			glViewport(0.0f, 0.0f, 800.0f, 600.0f);
 			glm::mat4 proj = glm::ortho(0.0f, 800.0f, 0.0f, 600.0f);
 			ui::UIElement::set_projection(proj);
 			ui_layer->draw();
 
 			// TODO: make a focus function for changing viewports
-			glViewport(50, 50, 1500, 950);
+			// glViewport(50, 50, 1500, 950);
+
+			// TODO: focus function eeds to take into account the
+			// achor location (of 0-0)
+
+			// TODO: need to make a 16:9 ratio thing (IRL)
+			glViewport(25, 25, 750, 500);
 			ui::UIElement::set_projection(
-				glm::ortho(-25.0f, 625.0f * 14.5f/9.0f, -25.0f, 625.0f)
+				glm::ortho(-25.0f, 825.0f, -25.0f, 625.0f)
 			);
 			viewport_layer->draw();
 

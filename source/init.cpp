@@ -226,7 +226,7 @@ void init()
 	load_fonts();
 
 	// TODO: need to check error codes
-	Logger::ok("Succesfully loaded all fonts.");
+	Logger::ok("Successfully loaded all fonts.");
 
 	// Set initial screen parameters
 	update_screen_size(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT);
