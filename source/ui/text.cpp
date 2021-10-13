@@ -112,7 +112,7 @@ void Text::draw()
 	// Set current things
 	Char::shader.use();
 	Char::shader.set_vec3("text_color", _color);
-	
+
 	glBindVertexArray(_vao);
 
 	// Construct the text
@@ -124,7 +124,8 @@ void Text::draw()
 		Char ch = cmap[c];
 
 		float xpos = cxpos + ch.bearing.x * _scale;
-		float ypos = (cwin.height - _ypos)
+		std::cout << "ypos = " << UIElement::sheight << ", " << _ypos << std::endl;
+		float ypos = (UIElement::sheight - _ypos)
 			- (ch.size.y - ch.bearing.y) * _scale - _maxy;
 
 		float w = ch.size.x * _scale;

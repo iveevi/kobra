@@ -21,7 +21,7 @@ PureRect::PureRect(float x1, float y1, float x2, float y2)
 
 void PureRect::_genbufs(const glm::vec2 &p1, const glm::vec2 &p2)
 {
-	float h = cwin.height;
+	float h = UIElement::sheight;
 	float vertices[] = {
 		p2.x, h - p1.y, 0.0f,
 		p2.x, h - p2.y, 0.0f,

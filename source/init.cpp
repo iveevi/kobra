@@ -40,6 +40,8 @@ Shader Char::shader;
 std::unordered_map <char, Char> cmap;
 
 // UI Element static variables
+float ui::UIElement::swidth = -1;
+float ui::UIElement::sheight = -1;
 Shader ui::UIElement::shader;
 glm::mat4 ui::UIElement::projection;
 
@@ -55,9 +57,8 @@ void update_screen_size(float width, float height)
 	cwin.width = width;
 	cwin.height = height;
 
-	glm::mat4 projection = glm::ortho(0.0f, width,
-			0.0f, height);
-	ui::UIElement::set_projection(projection);
+	// TODO: is this correct/needed?
+	ui::UIElement::set_projection(0.0f, width, 0.0f, height, width, height);
 }
 
 // Window size change callback
@@ -202,10 +203,11 @@ void load_fonts()
 		MERCURY_SOURCE_DIR "/resources/shaders/font_shader.fs"
 	);
 
-	// Create the default shader
-	ui::UIElement::shader = Shader(
-		MERCURY_SOURCE_DIR "/resources/shaders/shape_shader.vs",
-		MERCURY_SOURCE_DIR "/resources/shaders/shape_shader.fs"
+	// Set default projection
+	Char::shader.use();
+	Char::shader.set_mat4(
+		"projection",
+		glm::ortho(0.0f, 1920.0f, 0.0f, 1080.0f)
 	);
 }
 
@@ -227,6 +229,12 @@ void init()
 
 	// TODO: need to check error codes
 	Logger::ok("Successfully loaded all fonts.");
+
+	// Create the default shader
+	ui::UIElement::shader = Shader(
+		MERCURY_SOURCE_DIR "/resources/shaders/shape_shader.vs",
+		MERCURY_SOURCE_DIR "/resources/shaders/shape_shader.fs"
+	);
 
 	// Set initial screen parameters
 	update_screen_size(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT);

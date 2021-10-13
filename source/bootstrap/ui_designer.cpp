@@ -7,10 +7,6 @@
 #include "include/ui/button.hpp"
 #include "include/ui/ui_layer.hpp"
 
-// Extra headers
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
-
 // Using declarations
 using namespace mercury;
 
@@ -107,7 +103,7 @@ public:
 
 		vp_bounds = new ui::Rect(
 			{0.0, 0.0},
-			{800.0, 600.0},
+			{1920.0, 1080.0},
 			{0.1, 0.1, 0.1, 1.0},
 			5.0,
 			{0.5, 0.7, 0.5, 1.0}
@@ -172,8 +168,8 @@ public:
 			// NOTE: UI Layer is always drawn last
 			// glViewport(0.0f, 0.0f, 1600.0f, 1200.0f);
 			glViewport(0.0f, 0.0f, 800.0f, 600.0f);
-			glm::mat4 proj = glm::ortho(0.0f, 800.0f, 0.0f, 600.0f);
-			ui::UIElement::set_projection(proj);
+			// glm::mat4 proj = glm::ortho(0.0f, 800.0f, 0.0f, 600.0f);
+			ui::UIElement::set_projection(0.0f, 800.0f, 0.0f, 600.0f, 800.0f, 600.0f);
 			ui_layer->draw();
 
 			// TODO: make a focus function for changing viewports
@@ -184,8 +180,16 @@ public:
 
 			// TODO: need to make a 16:9 ratio thing (IRL)
 			glViewport(25, 25, 750, 500);
+
+			float swidth = 1920;
+			float sheight = 1080;
+			float hpad = 50;
+			float wpad = hpad * 16.0f/9.0f;
+
 			ui::UIElement::set_projection(
-				glm::ortho(-25.0f, 825.0f, -25.0f, 625.0f)
+				-wpad, swidth + wpad,
+				-hpad, sheight + hpad,
+				swidth, sheight
 			);
 			viewport_layer->draw();
 

@@ -3,6 +3,7 @@
 
 // GLM
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 // Engine headers
 #include "include/init.hpp"
@@ -28,22 +29,35 @@ public:
 	static Shader shader;
 	static glm::mat4 projection;	// TODO: is this even necessary
 
-	static void set_projection(const glm::mat4 &proj) {
-		projection = proj;
+	// Screen width and height
+	// 	distinct from cwin data to
+	// 	induce the notion of UI locality
+	static float swidth;
+	static float sheight;
+
+	static void set_projection(
+			float left, float right,
+			float bottom, float top,
+			float width, float height) {
+		// Recaculate dimensions
+		swidth = width;
+		sheight = height;
+
+		projection = glm::ortho(left, right, bottom, top);
 
 		// Set projection matrix of all uies
 		shader.use();
 		glCheckError();
 
-		shader.set_mat4("projection", proj);
+		shader.set_mat4("projection", projection);
 		glCheckError();
 
-		// Set projection matrix of all chars
+		/* Set projection matrix of all chars
 		Char::shader.use();
 		glCheckError();
 
 		Char::shader.set_mat4("projection", proj);
-		glCheckError();
+		glCheckError(); */
 	}
 };
 
