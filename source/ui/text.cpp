@@ -92,7 +92,10 @@ void Text::center_within(const PureRect &pr, bool local)
 	float w = get_width();
 	float h = _maxy;
 
-	float pr_w = pr.get_width();
+	float wrat = swidth/UIElement::swidth;
+	Logger::warn("WRAT = " + std::to_string(wrat));
+
+	float pr_w = pr.get_width() * wrat;
 	float pr_h = pr.get_height();
 
 	float woff = (pr_w - w)/2;
@@ -100,6 +103,8 @@ void Text::center_within(const PureRect &pr, bool local)
 
 	_xpos = woff;
 	_ypos = hoff;
+
+	Logger::warn("XPOS = " + std::to_string(_xpos));
 
 	if (!local) {
 		_xpos += pr.get_tl().x;
@@ -117,6 +122,9 @@ void Text::draw()
 
 	// Construct the text
 	float cxpos = _xpos;
+
+	// std::cout << std::string(50, '#') << std::endl;
+	// std::cout << "STRING = " << _str << std::endl;
 	for (const auto &c : _str) {
 		if (cmap.find(c) == cmap.end())
 			throw std::runtime_error("No character " + std::string(1, c) + " in map...");
@@ -124,8 +132,8 @@ void Text::draw()
 		Char ch = cmap[c];
 
 		float xpos = cxpos + ch.bearing.x * _scale;
-		std::cout << "ypos = " << UIElement::sheight << ", " << _ypos << std::endl;
-		float ypos = (UIElement::sheight - _ypos)
+		// std::cout << "xpos = " << xpos << std::endl;
+		float ypos = (sheight - _ypos)
 			- (ch.size.y - ch.bearing.y) * _scale - _maxy;
 
 		float w = ch.size.x * _scale;

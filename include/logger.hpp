@@ -2,8 +2,9 @@
 #define LOGGER_H_
 
 // Standard headers
-#include <iomanip>
 #include <chrono>
+#include <iomanip>
+#include <iostream>
 #include <sstream>
 
 // Color constants
@@ -44,30 +45,44 @@ public:
 		return oss.str();
 	}
 
+	// As ostream objects
+	static std::ostream &ok() {
+		return std::cerr << MC_GREEN << "[MERCURY ENGINE: "
+			<< time() << "] " << MC_RESET;
+	}
+
+	static std::ostream &error() {
+		return std::cerr << MC_RED << "[MERCURY ENGINE: "
+			<< time() << "] " << MC_RESET;
+	}
+
+	static std::ostream &warn() {
+		return std::cerr << MC_YELLOW << "[MERCURY ENGINE: "
+			<< time() << "] " << MC_RESET;
+	}
+
+	// C-string overloads
 	static void ok(const char *msg) {
-		std::cout << MC_GREEN << "[MERCURY ENGINE: " << time()
-			<< "] " << MC_RESET << msg << std::endl;
+		ok() << msg << std::endl;
 	}
-	
+
 	static void error(const char *msg) {
-		std::cout << MC_RED << "[MERCURY ENGINE: " << time()
-			<< "] " << MC_RESET << msg << std::endl;
+		error() << msg << std::endl;
 	}
-	
+
 	static void warn(const char *msg) {
-		std::cout << MC_YELLOW << "[MERCURY ENGINE: " << time()
-			<< "] " << MC_RESET << msg << std::endl;
+		warn() << msg << std::endl;
 	}
-	
+
 	// C++ string overloads
 	static void ok(std::string msg) {
 		ok(msg.c_str());
 	}
-	
+
 	static void error(std::string msg) {
 		error(msg.c_str());
 	}
-	
+
 	static void warn(std::string msg) {
 		warn(msg.c_str());
 	}

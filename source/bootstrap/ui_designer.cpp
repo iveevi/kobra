@@ -78,7 +78,7 @@ public:
 
 		// Texts
 		title = new ui::Text("UI Designer",
-			10.0, 10.0, 1.0,
+			10.0, 10.0, 1.2,
 			glm::vec3(0.5, 0.5, 0.5)
 		);
 
@@ -103,7 +103,7 @@ public:
 
 		vp_bounds = new ui::Rect(
 			{0.0, 0.0},
-			{1920.0, 1080.0},
+			{800.0, 600.0},
 			{0.1, 0.1, 0.1, 1.0},
 			5.0,
 			{0.5, 0.7, 0.5, 1.0}
@@ -137,12 +137,10 @@ public:
 
 	void build() {
 		// Building UI layers
-		save_button_text->center_within(save_button_box->get_bounds(), true);
+		// save_button_text->center_within(save_button_box->get_bounds(), true);
 		save_button_layer->add_element(save_button_text);
 
-		add_button_text->center_within(add_button_box->get_bounds(), true);
-
-		// TODO: add element needs to check for nullptr
+		// add_button_text->center_within(add_button_box->get_bounds(), true);
 		add_button_layer->add_element(add_button_text);
 
 		save_button = new ui::Button(save_button_box, nullptr, nullptr, save_button_layer);
@@ -166,29 +164,27 @@ public:
 			glClear(GL_COLOR_BUFFER_BIT);
 
 			// NOTE: UI Layer is always drawn last
-			// glViewport(0.0f, 0.0f, 1600.0f, 1200.0f);
 			glViewport(0.0f, 0.0f, 800.0f, 600.0f);
-			// glm::mat4 proj = glm::ortho(0.0f, 800.0f, 0.0f, 600.0f);
-			ui::UIElement::set_projection(0.0f, 800.0f, 0.0f, 600.0f, 800.0f, 600.0f);
+			ui::Text::set_projection(800, 600);
+			ui::UIElement::set_projection(
+				0.0f, 800.0f,
+				0.0f, 600.0f,
+				800.0f, 600.0f
+			);
 			ui_layer->draw();
 
-			// TODO: make a focus function for changing viewports
-			// glViewport(50, 50, 1500, 950);
-
-			// TODO: focus function eeds to take into account the
-			// achor location (of 0-0)
+			// TODO: make a focus function for changing viewports!!
 
 			// TODO: need to make a 16:9 ratio thing (IRL)
 			glViewport(25, 25, 750, 500);
 
-			float swidth = 1920;
-			float sheight = 1080;
-			float hpad = 50;
-			float wpad = hpad * 16.0f/9.0f;
+			float swidth = 800;
+			float sheight = 600;
 
+			ui::Text::set_projection(750, 500);
 			ui::UIElement::set_projection(
-				-wpad, swidth + wpad,
-				-hpad, sheight + hpad,
+				0.0, swidth,
+				0.0, sheight,
 				swidth, sheight
 			);
 			viewport_layer->draw();

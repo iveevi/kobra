@@ -61,6 +61,24 @@ public:
 	void draw() override;
 	glm::vec2 get_position() const override;
 	void set_position(const glm::vec2 &) override;
+
+	static float swidth;
+	static float sheight;
+	
+	static void set_projection(float width, float height) {
+		// Recaculate dimensions
+		swidth = width;
+		sheight = height;
+
+		projection = glm::ortho(0.0f, width, 0.0f, height);
+
+		// Set projection matrix of all uies
+		Char::shader.use();
+		glCheckError();
+
+		Char::shader.set_mat4("projection", projection);
+		glCheckError();
+	}
 };
 
 }

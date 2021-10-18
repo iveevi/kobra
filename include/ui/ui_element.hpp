@@ -51,13 +51,6 @@ public:
 
 		shader.set_mat4("projection", projection);
 		glCheckError();
-
-		/* Set projection matrix of all chars
-		Char::shader.use();
-		glCheckError();
-
-		Char::shader.set_mat4("projection", proj);
-		glCheckError(); */
 	}
 };
 

@@ -1,6 +1,7 @@
 #include "include/init.hpp"
 #include "include/logger.hpp"
 #include "include/common.hpp"
+#include "include/ui/text.hpp"
 #include "include/ui/ui_element.hpp"
 
 // Extra GLM headers
@@ -45,6 +46,10 @@ float ui::UIElement::sheight = -1;
 Shader ui::UIElement::shader;
 glm::mat4 ui::UIElement::projection;
 
+// Text static variables
+float ui::Text::swidth = -1;
+float ui::Text::sheight = -1;
+
 // Logger static variables
 Logger::tclk Logger::clk;
 Logger::tpoint Logger::epoch;
@@ -72,8 +77,8 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 #ifdef MERCURY_DEBUG
 
 	// TODO: update all orthos
-	Logger::ok("Resized window to " + std::to_string(width)
-		+ " x " + std::to_string(height));
+	Logger::ok() << "Resized window to " << width
+		<< " x " << height << std::endl;
 
 #endif
 
@@ -204,11 +209,7 @@ void load_fonts()
 	);
 
 	// Set default projection
-	Char::shader.use();
-	Char::shader.set_mat4(
-		"projection",
-		glm::ortho(0.0f, 1920.0f, 0.0f, 1080.0f)
-	);
+	ui::Text::set_projection(800, 600);
 }
 
 void init()
@@ -235,17 +236,12 @@ void init()
 		MERCURY_SOURCE_DIR "/resources/shaders/shape_shader.vs",
 		MERCURY_SOURCE_DIR "/resources/shaders/shape_shader.fs"
 	);
+	
+	// Set default projection
+	ui::UIElement::set_projection(0, 800, 0, 600, 800, 600);
 
 	// Set initial screen parameters
 	update_screen_size(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT);
-}
-
-// TODO: take pairs of screen coords later
-void focus(float x, float y, float width, float height)
-{
-	glViewport(x, y, width, height);
-	// TODO: needs to pass x and y
-	update_screen_size(width, height);
 }
 
 }
