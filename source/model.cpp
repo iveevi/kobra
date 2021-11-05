@@ -111,6 +111,9 @@ void Mesh::_init()
 // TODO: clean
 void Mesh::draw(Shader &shader)
 {
+	// Use the shader first
+	shader.use();
+
 	// bind appropriate textures
 	unsigned int diffuseNr  = 1;
 	unsigned int specularNr = 1;
@@ -132,6 +135,7 @@ void Mesh::draw(Shader &shader)
 			number = std::to_string(heightNr++); // transfer unsigned int to stream
 
 		// now set the sampler to the correct texture unit
+		// TODO: use the shader method instead
 		glUniform1i(glGetUniformLocation(shader.id, (name + number).c_str()), i);
 		// and finally bind the texture
 		glBindTexture(GL_TEXTURE_2D, _textures[i].id);
@@ -206,8 +210,7 @@ Mesh Model::_proc_mesh(const aiScene *scene, aiMesh *mesh)
 		vertex.position = vector;
 
 		// Set normals
-		if (mesh->HasNormals())
-		{
+		if (mesh->HasNormals()) {
 			vector.x = mesh->mNormals[i].x;
 			vector.y = mesh->mNormals[i].y;
 			vector.z = mesh->mNormals[i].z;
@@ -215,8 +218,7 @@ Mesh Model::_proc_mesh(const aiScene *scene, aiMesh *mesh)
 		}
 
 		// Set texture coordinates
-		if(mesh->mTextureCoords[0])
-		{
+		if(mesh->mTextureCoords[0]) {
 			glm::vec2 vec;
 			vec.x = mesh->mTextureCoords[0][i].x;
 			vec.y = mesh->mTextureCoords[0][i].y;

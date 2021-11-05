@@ -12,15 +12,8 @@ namespace mercury {
 class Shader {
 	unsigned int	_vertex;
 	unsigned int	_fragment;
-	int		_id;
 
 	static int	_current;
-
-	static int get_nid() {
-		static int count = 0;
-
-		return (++count);
-	}
 public:
 	Shader();
 	Shader(const char *, const char *);

@@ -19,6 +19,10 @@
 #define DEFAULT_WINDOW_WIDTH	800.0
 #define DEFAULT_WINDOW_HEIGHT	600.0
 
+// TODO: add handler for this later
+// Forward declare for now
+void mouse_callback(GLFWwindow* window, double xpos, double ypos);
+
 namespace mercury {
 
 // Initial window dimensions
@@ -84,7 +88,6 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 
 }
 
-// Mouse interrupt callback
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 {
 	// TODO: send change in mouse position anyways
@@ -123,6 +126,10 @@ static void init_glfw()
 	glfwMakeContextCurrent(cwin.window);
 	glfwSetFramebufferSizeCallback(cwin.window, framebuffer_size_callback);
 	glfwSetMouseButtonCallback(cwin.window, mouse_button_callback);
+	glfwSetCursorPosCallback(cwin.window, mouse_callback);
+
+	// Change later
+	glfwSetInputMode(cwin.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	// Now initialize glad
 	if (!gladLoadGLLoader((GLADloadproc) glfwGetProcAddress)) {
@@ -236,7 +243,7 @@ void init()
 		MERCURY_SOURCE_DIR "/resources/shaders/shape_shader.vs",
 		MERCURY_SOURCE_DIR "/resources/shaders/shape_shader.fs"
 	);
-	
+
 	// Set default projection
 	ui::UIElement::set_projection(0, 800, 0, 600, 800, 600);
 

@@ -47,6 +47,37 @@ bool firstMouse = true;
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 
+Mesh cuboid(const glm::vec3 &center, float w, float h, float d)
+{
+	float w2 = w/2;
+	float h2 = h/2;
+	float d2 = d/2;
+
+	// 8 faces
+	Mesh::AVertex vertices {
+		Vertex {.position = {center.x + w2, center.y + h2, center.z - d2}},
+		Vertex {.position = {center.x - w2, center.y + h2, center.z - d2}},
+		Vertex {.position = {center.x + w2, center.y - h2, center.z - d2}},
+		Vertex {.position = {center.x - w2, center.y - h2, center.z - d2}},
+		Vertex {.position = {center.x + w2, center.y + h2, center.z + d2}},
+		Vertex {.position = {center.x - w2, center.y + h2, center.z + d2}},
+		Vertex {.position = {center.x + w2, center.y - h2, center.z + d2}},
+		Vertex {.position = {center.x - w2, center.y - h2, center.z + d2}}
+	};
+
+	// Each row is a square constiting of two triangles
+	Mesh::AIndices indices {
+		0, 1, 2,	1, 2, 3,
+		4, 5, 6,	5, 6, 7,
+		0, 4, 2,	4, 2, 6,
+		2, 3, 6,	3, 6, 7,
+		0, 1, 4,	1, 4, 5,
+		1, 3, 7,	1, 5, 7
+	};
+
+	return Mesh {vertices, {}, indices};
+}
+
 int main()
 {
 	mercury::init();
@@ -64,8 +95,54 @@ int main()
 		"resources/backpack/shader.fs"
 	);
 
+	mercury::Shader meshShader(
+		"resources/shaders/shape_shader.vs",
+		"resources/shaders/shape_shader.fs"
+	);
+
+	meshShader.use();
+	meshShader.set_vec3("shape_color", {0.5, 0.5, 1.0});
+
 	// Models
-	mercury::Model ourModel("resources/backpack/backpack.obj");
+	// mercury::Model ourModel("resources/backpack/backpack.obj");
+
+	auto vert = [](const glm::vec3 &pos) {
+		return Vertex {
+			.position = pos
+		};
+	};
+
+	Mesh::AVertex vertices {
+		vert({0, 0, 0}),
+		vert({0, 1, 0}),
+		vert({1, 0, 0}),
+		vert({1, 1, 0}),
+		vert({0, 0, 1}),
+		vert({0, 1, 1}),
+		vert({1, 0, 1}),
+		vert({1, 1, 1})
+	};
+
+	Mesh::AIndices indices = {
+		0, 1, 2,
+		1, 2, 3,
+		4, 5, 6,
+		5, 6, 7,
+		0, 4, 2,
+		4, 2, 6,
+		2, 3, 6,
+		3, 6, 7,
+		0, 1, 4,
+		1, 4, 5,
+		1, 3, 7,
+		1, 5, 7
+	};
+
+	mercury::Mesh mesh {vertices, {}, indices};
+
+	meshShader.use();
+	meshShader.set_vec3("shape_color", {0.5, 0.1, 0.5});
+	Mesh cuboid1 = cuboid({2, 1, 0}, 0.5, 0.5, 0.5);
 
 	// draw in wireframe
 	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -103,8 +180,14 @@ int main()
 		model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f)); // translate it down so it's at the center of the scene
 		model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f));	// it's a bit too big for our scene, so scale it down
 		ourShader.set_mat4("model", model);
-		ourModel.draw(ourShader);
 
+		// ourModel.draw(ourShader);
+		// meshShader.use();
+		// meshShader.set_mat4("projection", projection);
+
+		// Draw the cube
+		mesh.draw(ourShader);
+		cuboid1.draw(ourShader);
 
 		// glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
 		// -------------------------------------------------------------------------------
@@ -125,7 +208,7 @@ void processInput(GLFWwindow *window)
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, true);
 
-	float cameraSpeed = 2.5 * deltaTime;
+	float cameraSpeed = 5 * deltaTime;
 	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
 		camera.move(cameraSpeed * camera.front);
 	if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
@@ -140,7 +223,7 @@ void processInput(GLFWwindow *window)
 // ---------------------------------------------------------------------------------------------
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
-	// make sure the viewport matches the new window dimensions; note that width and 
+	// make sure the viewport matches the new window dimensions; note that width and
 	// height will be significantly larger than specified on retina displays.
 	glViewport(0, 0, width, height);
 }
@@ -149,8 +232,9 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 // -------------------------------------------------------
 void mouse_callback(GLFWwindow* window, double xpos, double ypos)
 {
-	if (firstMouse)
-	{
+	static const float sensitivity = 0.1f;
+
+	if (firstMouse) {
 		lastX = xpos;
 		lastY = ypos;
 		firstMouse = false;
@@ -163,6 +247,8 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos)
 	lastY = ypos;
 
 	// camera.ProcessMouseMovement(xoffset, yoffset);
+	camera.add_yaw(xoffset * sensitivity);
+	camera.add_pitch(yoffset * sensitivity);
 }
 
 // glfw: whenever the mouse scroll wheel scrolls, this callback is called

@@ -18,8 +18,6 @@
 #include <assimp/postprocess.h>
 
 // STB headers
-// #define STB_IMAGE_IMPLEMENTATION
-
 #include "../thirdparty/stb/stb_image.h"
 
 // Engine headers
