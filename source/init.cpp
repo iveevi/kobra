@@ -69,16 +69,16 @@ void update_screen_size(float width, float height)
 // Window size change callback
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
-	Logger::ok(std::string("width = ") + std::to_string(width) + ", height = " + std::to_string(height));
+	// Logger::ok(std::string("width = ") + std::to_string(width) + ", height = " + std::to_string(height));
 	glViewport(0, 0, width, height);
-	Logger::ok("again: " + std::string("width = ") + std::to_string(width) + ", height = " + std::to_string(height));
+	// Logger::ok("again: " + std::string("width = ") + std::to_string(width) + ", height = " + std::to_string(height));
 	update_screen_size(width, height);
 
 #ifdef MERCURY_DEBUG
 
-	// TODO: update all orthos
+	/* TODO: update all orthos
 	Logger::ok() << "Resized window to " << width
-		<< " x " << height << std::endl;
+		<< " x " << height << std::endl; */
 
 #endif
 

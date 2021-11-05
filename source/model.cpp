@@ -1,4 +1,8 @@
-#include "../include/model.hpp"
+// Include stb symbols in this module only
+#define STB_IMAGE_IMPLEMENTATION
+
+#include "include/model.hpp"
+#include "include/logger.hpp"
 
 // Standard headers
 #include <iostream>
@@ -158,7 +162,7 @@ void Model::_load(const std::string &path)
 
 	if (!scene || (scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE)
 			|| !scene->mRootNode)  {
-		std::cerr << "ERROR::ASSIMP::"
+		Logger::error() << "Assimp error: "
 			<< import.GetErrorString() << std::endl;
 		return;
 	}

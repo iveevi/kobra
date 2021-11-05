@@ -23,7 +23,7 @@ int Shader::_current = -1;
 
 void error_file(const char *path)
 {
-	std::cerr << "Could not load file \"" << path << "\"\n";
+	Logger::error() << "Could not load file \"" << path << "\"\n";
 	exit(-1);
 
 	// TODO: should throw a retrievable exception later
