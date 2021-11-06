@@ -114,6 +114,8 @@ void Mesh::draw(Shader &shader)
 	// Use the shader first
 	shader.use();
 
+	// TODO: check for wireframe (and/or vertex-dot) mode
+
 	// bind appropriate textures
 	unsigned int diffuseNr  = 1;
 	unsigned int specularNr = 1;

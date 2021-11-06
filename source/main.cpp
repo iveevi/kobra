@@ -90,21 +90,15 @@ int main()
 	glEnable(GL_DEPTH_TEST);
 
 	// Shader
-	mercury::Shader ourShader(
+	Shader ourShader(
 		"resources/backpack/shader.vs",
 		"resources/backpack/shader.fs"
 	);
 
-	mercury::Shader meshShader(
-		"resources/shaders/shape_shader.vs",
-		"resources/shaders/shape_shader.fs"
+	Shader meshShader(
+		"resources/shaders/mesh_shader.vs",
+		"resources/shaders/mesh_shader.fs"
 	);
-
-	meshShader.use();
-	meshShader.set_vec3("shape_color", {0.5, 0.5, 1.0});
-
-	// Models
-	// mercury::Model ourModel("resources/backpack/backpack.obj");
 
 	auto vert = [](const glm::vec3 &pos) {
 		return Vertex {
@@ -138,10 +132,7 @@ int main()
 		1, 5, 7
 	};
 
-	mercury::Mesh mesh {vertices, {}, indices};
-
-	meshShader.use();
-	meshShader.set_vec3("shape_color", {0.5, 0.1, 0.5});
+	Mesh mesh {vertices, {}, indices};
 	Mesh cuboid1 = cuboid({2, 1, 0}, 0.5, 0.5, 0.5);
 
 	// draw in wireframe
@@ -166,28 +157,27 @@ int main()
 		glClearColor(0.05f, 0.05f, 0.05f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		// don't forget to enable shader before setting uniforms
-		ourShader.use();
-
-		// view/projection transformations
-		glm::mat4 projection = glm::perspective(glm::radians(camera.zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
-		glm::mat4 view = camera.get_view();
-		ourShader.set_mat4("projection", projection);
-		ourShader.set_mat4("view", view);
-
-		// render the loaded model
+		// Create model, view, projection
 		glm::mat4 model = glm::mat4(1.0f);
 		model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f)); // translate it down so it's at the center of the scene
 		model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f));	// it's a bit too big for our scene, so scale it down
-		ourShader.set_mat4("model", model);
+		glm::mat4 view = camera.get_view();
+		glm::mat4 projection = glm::perspective(glm::radians(camera.zoom),
+				(float) SCR_WIDTH / (float) SCR_HEIGHT, 0.1f, 100.0f);
 
-		// ourModel.draw(ourShader);
-		// meshShader.use();
-		// meshShader.set_mat4("projection", projection);
+		meshShader.use();
+		meshShader.set_mat4("model", model);
+		meshShader.set_mat4("view", view);
+		meshShader.set_mat4("projection", projection);
+		meshShader.set_vec3("color", {0.5, 1.0, 0.5});
 
 		// Draw the cube
-		mesh.draw(ourShader);
-		cuboid1.draw(ourShader);
+		mesh.draw(meshShader);
+		
+		meshShader.use();
+		meshShader.set_vec3("color", {1.0, 0.2, 0.2});
+
+		cuboid1.draw(meshShader);
 
 		// glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
 		// -------------------------------------------------------------------------------
