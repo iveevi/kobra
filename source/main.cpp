@@ -10,24 +10,12 @@
 #include "include/shader.hpp"
 #include "include/model.hpp"
 #include "include/init.hpp"
+#include "include/logger.hpp"
 
 // Using declarations
 using namespace mercury;
 
-/* #include <glad/glad.h>
-// #include <GLFW/glfw3.h>
-
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
-
-#include <learnopengl/shader_m.h>
-#include <learnopengl/camera.h>
-#include <learnopengl/model.h> */
-
-// #include <iostream>
-
-void framebuffer_size_callback(GLFWwindow* window, int width, int height);
+// Forward declarations
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void processInput(GLFWwindow *window);
@@ -47,7 +35,165 @@ bool firstMouse = true;
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 
+// Shader source
+const char *vertex = R"(
+#version 330 core
+
+layout (location = 0) in vec3 v_pos;
+layout (location = 1) in vec3 v_normal;
+
+out vec3 normal;
+out vec3 frag_pos;
+
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+void main()
+{
+	vec4 pos = vec4(v_pos, 1.0);
+	gl_Position = projection * view * model * pos;
+	frag_pos = vec3(model * pos);
+	normal = v_normal;
+}
+)";
+
+const char *fragment_source = R"(
+#version 330 core
+
+out vec4 frag_color;
+
+uniform vec3 color;
+
+void main()
+{
+	frag_color = vec4(color, 1.0);
+}
+)";
+
+const char *fragment_hit = R"(
+#version 330 core
+
+in vec3 normal;
+in vec3 frag_pos;
+
+out vec4 frag_color;
+
+uniform vec3 color;
+uniform vec3 light_color;
+uniform vec3 light_pos;
+
+void main()
+{
+	float strength = 0.1;
+
+	vec3 norm = normalize(normal);
+	vec3 ldir = normalize(light_pos - frag_pos);
+
+	float diff = max(dot(norm, ldir), 0.0);
+	vec3 diffuse = diff * light_color;
+
+	vec3 ambient = light_color * strength;
+	vec3 result = (ambient + diffuse) * color;
+
+	vec3 rbg_norm = 0.5 * norm + 0.5f;
+	frag_color = vec4(result, 1.0);
+}
+)";
+
+// Axis is the axis that is constant (0 = x, 1 = y, 2 = z)
+void add_face(Mesh::AVertex &vertices, Mesh::AIndices &indices,
+		const glm::vec3 &p1,
+		const glm::vec3 &p2,
+		const glm::vec3 &p3,
+		const glm::vec3 &p4,
+		const glm::vec3 &normal)
+{
+	unsigned int base = vertices.size();
+
+	Mesh::AVertex tmp {
+		Vertex {.position = p1, .normal = normal},
+		Vertex {.position = p2, .normal = normal},
+		Vertex {.position = p3, .normal = normal},
+		Vertex {.position = p4, .normal = normal}
+	};
+
+	// Add vertices
+	vertices.insert(vertices.begin(), tmp.begin(), tmp.end());
+
+	// Add indices
+	indices.push_back(base);
+	indices.push_back(base + 1);
+	indices.push_back(base + 3);
+
+	indices.push_back(base + 1);
+	indices.push_back(base + 2);
+	indices.push_back(base + 3);
+}
+
+// Generates a cuboid mesh
 Mesh cuboid(const glm::vec3 &center, float w, float h, float d)
+{
+	float w2 = w/2;
+	float h2 = h/2;
+	float d2 = d/2;
+
+	// 6 faces
+	Mesh::AVertex vertices;
+	Mesh::AIndices indices;
+
+	add_face(vertices, indices,
+		{center.x - w2, center.y - h2, center.z - d2},
+		{center.x - w2, center.y + h2, center.z - d2},
+		{center.x + w2, center.y + h2, center.z - d2},
+		{center.x + w2, center.y - h2, center.z - d2},
+		{0, 0, -1}
+	);
+
+	add_face(vertices, indices,
+		{center.x - w2, center.y - h2, center.z + d2},
+		{center.x - w2, center.y + h2, center.z + d2},
+		{center.x + w2, center.y + h2, center.z + d2},
+		{center.x + w2, center.y - h2, center.z + d2},
+		{0, 0, 1}
+	);
+
+	add_face(vertices, indices,
+		{center.x - w2, center.y - h2, center.z - d2},
+		{center.x - w2, center.y - h2, center.z + d2},
+		{center.x + w2, center.y - h2, center.z + d2},
+		{center.x + w2, center.y - h2, center.z - d2},
+		{0, -1, 0}
+	);
+
+	add_face(vertices, indices,
+		{center.x - w2, center.y + h2, center.z - d2},
+		{center.x - w2, center.y + h2, center.z + d2},
+		{center.x + w2, center.y + h2, center.z + d2},
+		{center.x + w2, center.y + h2, center.z - d2},
+		{0, 1, 0}
+	);
+
+	add_face(vertices, indices,
+		{center.x - w2, center.y - h2, center.z - d2},
+		{center.x - w2, center.y + h2, center.z - d2},
+		{center.x - w2, center.y + h2, center.z + d2},
+		{center.x - w2, center.y - h2, center.z + d2},
+		{-1, 0, 0}
+	);
+
+	add_face(vertices, indices,
+		{center.x + w2, center.y - h2, center.z - d2},
+		{center.x + w2, center.y + h2, center.z - d2},
+		{center.x + w2, center.y + h2, center.z + d2},
+		{center.x + w2, center.y - h2, center.z + d2},
+		{1, 0, 0}
+	);
+
+	return Mesh {vertices, {}, indices};
+}
+
+Mesh cuboid_alt(const glm::vec3 &center, float w, float h, float d)
 {
 	float w2 = w/2;
 	float h2 = h/2;
@@ -89,54 +235,32 @@ int main()
 	// -----------------------------
 	glEnable(GL_DEPTH_TEST);
 
-	// Shader
-	Shader ourShader(
-		"resources/backpack/shader.vs",
-		"resources/backpack/shader.fs"
-	);
-
-	Shader meshShader(
+	/* Shader meshShader(
 		"resources/shaders/mesh_shader.vs",
 		"resources/shaders/mesh_shader.fs"
-	);
+	); */
 
-	auto vert = [](const glm::vec3 &pos) {
-		return Vertex {
-			.position = pos
-		};
-	};
+	// Position of the light
+	glm::vec3 lpos = {2, 1.6, 1.6};
 
-	Mesh::AVertex vertices {
-		vert({0, 0, 0}),
-		vert({0, 1, 0}),
-		vert({1, 0, 0}),
-		vert({1, 1, 0}),
-		vert({0, 0, 1}),
-		vert({0, 1, 1}),
-		vert({1, 0, 1}),
-		vert({1, 1, 1})
-	};
+	// Meshes
+	Mesh hit_cube = cuboid({0.5, 0.5, 0.5}, 1, 1, 1);
+	Mesh source_cube = cuboid_alt(lpos, 0.5, 0.5, 0.5);
 
-	Mesh::AIndices indices = {
-		0, 1, 2,
-		1, 2, 3,
-		4, 5, 6,
-		5, 6, 7,
-		0, 4, 2,
-		4, 2, 6,
-		2, 3, 6,
-		3, 6, 7,
-		0, 1, 4,
-		1, 4, 5,
-		1, 3, 7,
-		1, 5, 7
-	};
+	// Create shader and set base properties
+	Shader source = Shader::from_source(vertex, fragment_source);
+	Shader hit = Shader::from_source(vertex, fragment_hit);
 
-	Mesh mesh {vertices, {}, indices};
-	Mesh cuboid1 = cuboid({2, 1, 0}, 0.5, 0.5, 0.5);
+	source.use();
+	source.set_vec3("color", {1.0, 1.0, 1.0});
+
+	hit.use();
+	hit.set_vec3("color", {0.5, 1.0, 0.5});
+	hit.set_vec3("light_color", {1.0, 1.0, 1.0});
+	hit.set_vec3("light_pos", lpos);		// TODO: add a centroid method for meshes
 
 	// draw in wireframe
-	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+	// glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
 	// render loop
 	// -----------
@@ -165,19 +289,20 @@ int main()
 		glm::mat4 projection = glm::perspective(glm::radians(camera.zoom),
 				(float) SCR_WIDTH / (float) SCR_HEIGHT, 0.1f, 100.0f);
 
-		meshShader.use();
-		meshShader.set_mat4("model", model);
-		meshShader.set_mat4("view", view);
-		meshShader.set_mat4("projection", projection);
-		meshShader.set_vec3("color", {0.5, 1.0, 0.5});
+		// Modify the shader properties
+		source.use();
+		source.set_mat4("model", model);
+		source.set_mat4("view", view);
+		source.set_mat4("projection", projection);
 
-		// Draw the cube
-		mesh.draw(meshShader);
-		
-		meshShader.use();
-		meshShader.set_vec3("color", {1.0, 0.2, 0.2});
+		hit.use();
+		hit.set_mat4("model", model);
+		hit.set_mat4("view", view);
+		hit.set_mat4("projection", projection);
 
-		cuboid1.draw(meshShader);
+		// Draw the cubes
+		source_cube.draw(source);
+		hit_cube.draw(hit);
 
 		// glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
 		// -------------------------------------------------------------------------------
@@ -207,15 +332,6 @@ void processInput(GLFWwindow *window)
 		camera.move(-cameraSpeed * camera.right);
 	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
 		camera.move(cameraSpeed * camera.right);
-}
-
-// glfw: whenever the window size changed (by OS or user resize) this callback function executes
-// ---------------------------------------------------------------------------------------------
-void framebuffer_size_callback(GLFWwindow* window, int width, int height)
-{
-	// make sure the viewport matches the new window dimensions; note that width and
-	// height will be significantly larger than specified on retina displays.
-	glViewport(0, 0, width, height);
 }
 
 // glfw: whenever the mouse moves, this callback is called
