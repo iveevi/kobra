@@ -37,6 +37,16 @@ if args.target == 'ud':
 
     executor = modes[args.mode]
     os.system(f'{executor}bin/ui_designer')
+elif args.target == 'fb':
+    ret = os.system(f'make -j{args.threads} file_browser')
+    if ret != 0:
+        print('Failed compilation...')
+        exit(-1)
+
+    os.system('mv file_browser bin/')
+
+    executor = modes[args.mode]
+    os.system(f'{executor}bin/file_browser')
 elif args.target == 'main':
     ret = os.system(f'make -j{args.threads} mercury')
     if ret != 0:

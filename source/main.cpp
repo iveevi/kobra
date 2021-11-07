@@ -94,7 +94,7 @@ void main()
 	float ambient_strength = 0.1;
 	vec3 ambient = ambient_strength * light_color;
 
-	// diffuse 
+	// diffuse
 	vec3 norm = normalize(normal);
 	vec3 light_dir = normalize(light_pos - frag_pos);
 	float diff = max(dot(norm, light_dir), 0.0);
@@ -104,9 +104,9 @@ void main()
 	float shine = 32;
 	float specular_strength = 0.5;
 	vec3 view_dir = normalize(view_pos - frag_pos);
-	vec3 reflect_dir = reflect(-light_dir, norm);  
+	vec3 reflect_dir = reflect(-light_dir, norm);
 	float spec = pow(max(dot(view_dir, reflect_dir), 0.0), shine);
-	vec3 specular = specular_strength * spec * light_color;  
+	vec3 specular = specular_strength * spec * light_color;
 
 	vec3 result = (ambient + diffuse + specular) * color;
 	frag_color = vec4(result, 1.0);
@@ -133,7 +133,8 @@ int main()
 	glm::vec3 lpos = {2, 1.6, 1.6};
 
 	// Meshes
-	Mesh hit_cube = cuboid({0.5, 0.5, 0.5}, 1, 1, 1);
+	Mesh hit_cube1 = cuboid({0.5, 0.5, 0.5}, 1, 1, 1);
+	Mesh hit_cube2 = cuboid({2.5, 0.5, 0.0}, 1, 2, 1);
 	Mesh source_cube = cuboid(lpos, 0.5, 0.5, 0.5);
 
 	// Create shader and set base properties
@@ -144,7 +145,6 @@ int main()
 	source.set_vec3("color", {1.0, 1.0, 1.0});
 
 	hit.use();
-	hit.set_vec3("color", {0.5, 1.0, 0.5});
 	hit.set_vec3("light_color", {1.0, 1.0, 1.0});
 	hit.set_vec3("light_pos", lpos);		// TODO: add a centroid method for meshes
 
@@ -192,7 +192,14 @@ int main()
 
 		// Draw the cubes
 		source_cube.draw(source);
-		hit_cube.draw(hit);
+
+		hit.use();
+		hit.set_vec3("color", {0.5, 1.0, 0.5});
+		hit_cube1.draw(hit);
+
+		hit.use();
+		hit.set_vec3("color", {1.0, 0.5, 0.5});
+		hit_cube2.draw(hit);
 
 		// glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
 		// -------------------------------------------------------------------------------

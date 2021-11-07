@@ -15,6 +15,7 @@ add_compile_definitions(MERCURY_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 # Projects
 project(mercury)
 project(ui_designer)
+project(file_browser)
 
 # Source variables
 set(MERCURY_SOURCE
@@ -51,6 +52,11 @@ add_executable(ui_designer
 	${MERCURY_SOURCE}
 )
 
+add_executable(file_browser
+	source/file_browser.cpp
+	${MERCURY_SOURCE}
+)
+
 # Include directories
 include_directories(.
 	glad
@@ -75,5 +81,9 @@ target_link_libraries(mercury
 )
 
 target_link_libraries(ui_designer
+	${MERCURY_LIBS}
+)
+
+target_link_libraries(file_browser
 	${MERCURY_LIBS}
 )

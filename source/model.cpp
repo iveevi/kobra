@@ -33,7 +33,7 @@ Texture::Texture(const std::string &txt_path,
 	);
 
 	if (!data) {
-		std::cerr << "Texture: Failed to load at path \""
+		Logger::error() << "Texture: Failed to load at path \""
 			<< path << "\"" << std::endl;
 		stbi_image_free(data);
 	}
