@@ -38,6 +38,9 @@ struct Texture {
 	std::string path;
 
 	Texture();
+	Texture(const std::string &);
+
+	// TODO: whats the last parameter for?
 	Texture(const std::string &, const std::string &, const std::string &);
 };
 

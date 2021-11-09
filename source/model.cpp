@@ -12,12 +12,60 @@ namespace mercury {
 // Texture functions
 Texture::Texture() {}
 
+Texture::Texture(const std::string &file)
+{
+	// Allocate the texture
+	glGenTextures(1, &id);
+
+	// Retrieve data and dimensions
+	int width;
+	int height;
+	int channels;
+
+	unsigned char *data = stbi_load(
+		file.c_str(), &width, &height,
+		&channels, 0
+	);
+
+	if (!data) {
+		Logger::error() << "Texture: Failed to load at path \""
+			<< path << "\"" << std::endl;
+		stbi_image_free(data);
+	}
+
+	// Check the image type
+	GLenum format;
+
+	if (channels == 1)
+		format = GL_RED;
+	else if (channels == 3)
+		format = GL_RGB;
+	else if (channels == 4)
+		format = GL_RGBA;
+
+	// Rest of the texture loading code
+	glBindTexture(GL_TEXTURE_2D, id);
+	glTexImage2D(GL_TEXTURE_2D, 0, format, width,
+		height, 0, format, GL_UNSIGNED_BYTE, data);
+	glGenerateMipmap(GL_TEXTURE_2D);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+			GL_LINEAR_MIPMAP_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+	stbi_image_free(data);
+}
+
 Texture::Texture(const std::string &txt_path,
 		const std::string &txt_dir,
 		const std::string &txt_type)
 		: type(txt_type), path(txt_path)
 {
 	std::string file = txt_dir + '/' + txt_path;
+
+	// TODO: remove this duplicate sutff... (delegate constructors)
 
 	// Allocate the texture
 	glGenTextures(1, &id);

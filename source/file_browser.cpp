@@ -9,6 +9,8 @@
 
 // Logger
 #include "include/logger.hpp"
+#include "include/init.hpp"
+#include "include/ui/text.hpp"
 
 using namespace std;
 using namespace mercury;
@@ -23,6 +25,12 @@ struct Project {
 	struct Config {
 		bool anti_aliasing = false;
 	} config;
+};
+
+struct File {
+	// Icon object
+	ui::Text text;
+	std::string name;
 };
 
 void proc_res(DIR *res)
@@ -44,7 +52,8 @@ void proc_res(DIR *res)
 
 int main()
 {
-	Logger::start();
+	// Logger::start();
+	init();
 
 	Logger::ok("Starting file browser.");
 
@@ -70,6 +79,9 @@ int main()
 		}
 	}
 	closedir(pdir);
+
+	while (!glfwWindowShouldClose(mercury::cwin.window)) {
+	}
 }
 
 void mouse_callback(GLFWwindow*, double, double) {}
