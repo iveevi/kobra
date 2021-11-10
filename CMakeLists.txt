@@ -2,7 +2,20 @@
 cmake_minimum_required(VERSION 3.14)
 
 # Settings
-set(CMAKE_CXX_COMPILER "/usr/bin/g++-8")
+if (EXISTS "/usr/bin/clang++-10")
+	message("${warning}Using Clang compiler${reset}")
+	set(CMAKE_CXX_COMPILER "/usr/bin/clang++-10")
+elseif (EXISTS "/usr/bin/g++-8")
+	message("${warning}Using GCC compiler${reset}")
+	set(CMAKE_CXX_COMPILER "/usr/bin/g++-8")
+elseif (EXISTS "/usr/bin/clang++")
+	message("${warning}Using default Clang compiler${reset}")
+	set(CMAKE_CXX_COMPILER "/usr/bin/clang++")
+else()
+	message("Requiring GCC compiler at /usr/bin/local/")
+	set(CMAKE_CXX_COMPILER "${warning}/usr/local/bin/g++-8${reset}")
+endif()
+
 set(CMAKE_CXX_STANDARD 14)
 
 if (${CMAKE_BUILD_TYPE} MATCHES Debug)
@@ -24,6 +37,9 @@ set(MERCURY_SOURCE
 	source/model.cpp
 	source/mouse_bus.cpp
 	source/shader.cpp
+
+	source/mesh/basic.cpp
+
 	source/ui/button.cpp
 	source/ui/pure_rect.cpp
 	source/ui/rect.cpp

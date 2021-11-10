@@ -7,4 +7,5 @@ Makefile
 assimp/bin
 bin/
 cmake_install.cmake
+file_browser
 mercury

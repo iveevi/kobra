@@ -6,11 +6,14 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+// Engine headers
 #include "include/camera.hpp"
 #include "include/shader.hpp"
 #include "include/model.hpp"
 #include "include/init.hpp"
 #include "include/logger.hpp"
+
+#include "include/mesh/basic.hpp"
 
 // Using declarations
 using namespace mercury;
@@ -19,11 +22,6 @@ using namespace mercury;
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void processInput(GLFWwindow *window);
-
-void add_triangle(Mesh::AVertex &, Mesh::AIndices &,
-	const glm::vec3 &, const glm::vec3 &, const glm::vec3 &);
-
-Mesh cuboid(const glm::vec3 &center, float w, float h, float d);
 
 // settings
 const unsigned int SCR_WIDTH = 800;
@@ -144,9 +142,9 @@ void add_ring(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 	for (int i = 0; i < divs; i++) {
 		int n = (i + 1) % divs;
 
-		add_triangle(vertices, indices,
+		mesh::add_triangle(vertices, indices,
 				ring1[i], ring2[i], ring1[n]);
-		add_triangle(vertices, indices,
+		mesh::add_triangle(vertices, indices,
 				ring2[i], ring2[n], ring1[n]);
 	}
 }
@@ -232,9 +230,9 @@ int main()
 	glm::vec3 lpos = {2, 1.6, 1.6};
 
 	// Meshes
-	Mesh hit_cube1 = cuboid({0.5, 0.5, 0.5}, 1, 1, 1);
-	Mesh hit_cube2 = cuboid({3, -0.5, 0.0}, 1, 2, 1);
-	Mesh source_cube = cuboid(lpos, 0.5, 0.5, 0.5);
+	Mesh hit_cube1 = mesh::cuboid({0.5, 0.5, 0.5}, 1, 1, 1);
+	Mesh hit_cube2 = mesh::cuboid({3, -0.5, 0.0}, 1, 2, 1);
+	Mesh source_cube = mesh::cuboid(lpos, 0.5, 0.5, 0.5);
 
 	// Create shader and set base properties
 	Shader source = Shader::from_source(vertex, fragment_source);
@@ -383,104 +381,4 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 		camera.zoom = 1.0f;
 	if (camera.zoom > 45.0f)
 		camera.zoom = 45.0f;
-}
-
-void add_triangle(Mesh::AVertex &vertices, Mesh::AIndices &indices,
-		const glm::vec3 &p1,
-		const glm::vec3 &p2,
-		const glm::vec3 &p3)
-{
-	glm::vec3 v1 = p2 - p1;
-	glm::vec3 v2 = p3 - p1;
-	glm::vec3 normal = glm::cross(v1, v2);
-
-	unsigned int base = vertices.size();
-
-	// Triangle coordinates
-	Mesh::AVertex tmp {
-		Vertex {.position = p1, .normal = normal},
-		Vertex {.position = p2, .normal = normal},
-		Vertex {.position = p3, .normal = normal}
-	};
-
-	// Add vertices
-	vertices.insert(vertices.begin(), tmp.begin(), tmp.end());
-
-	// Add indices
-	indices.push_back(base);
-	indices.push_back(base + 1);
-	indices.push_back(base + 2);
-}
-
-void add_face(Mesh::AVertex &vertices, Mesh::AIndices &indices,
-		const glm::vec3 &p1,
-		const glm::vec3 &p2,
-		const glm::vec3 &p3,
-		const glm::vec3 &p4,
-		const glm::vec3 &normal)
-{
-	add_triangle(vertices, indices, p1, p3, p2);
-	add_triangle(vertices, indices, p1, p4, p3);
-}
-
-// Generates a cuboid mesh
-Mesh cuboid(const glm::vec3 &center, float w, float h, float d)
-{
-	float w2 = w/2;
-	float h2 = h/2;
-	float d2 = d/2;
-
-	// 6 faces
-	Mesh::AVertex vertices;
-	Mesh::AIndices indices;
-
-	add_face(vertices, indices,
-		{center.x - w2, center.y - h2, center.z - d2},
-		{center.x + w2, center.y - h2, center.z - d2},
-		{center.x + w2, center.y + h2, center.z - d2},
-		{center.x - w2, center.y + h2, center.z - d2},
-		{0, 0, -1}
-	);
-
-	add_face(vertices, indices,
-		{center.x - w2, center.y - h2, center.z + d2},
-		{center.x - w2, center.y + h2, center.z + d2},
-		{center.x + w2, center.y + h2, center.z + d2},
-		{center.x + w2, center.y - h2, center.z + d2},
-		{0, 0, 1}
-	);
-
-	add_face(vertices, indices,
-		{center.x - w2, center.y - h2, center.z - d2},
-		{center.x - w2, center.y - h2, center.z + d2},
-		{center.x + w2, center.y - h2, center.z + d2},
-		{center.x + w2, center.y - h2, center.z - d2},
-		{0, -1, 0}
-	);
-
-	add_face(vertices, indices,
-		{center.x - w2, center.y + h2, center.z - d2},
-		{center.x + w2, center.y + h2, center.z - d2},
-		{center.x + w2, center.y + h2, center.z + d2},
-		{center.x - w2, center.y + h2, center.z + d2},
-		{0, 1, 0}
-	);
-
-	add_face(vertices, indices,
-		{center.x - w2, center.y - h2, center.z - d2},
-		{center.x - w2, center.y + h2, center.z - d2},
-		{center.x - w2, center.y + h2, center.z + d2},
-		{center.x - w2, center.y - h2, center.z + d2},
-		{-1, 0, 0}
-	);
-
-	add_face(vertices, indices,
-		{center.x + w2, center.y - h2, center.z - d2},
-		{center.x + w2, center.y - h2, center.z + d2},
-		{center.x + w2, center.y + h2, center.z + d2},
-		{center.x + w2, center.y + h2, center.z - d2},
-		{1, 0, 0}
-	);
-
-	return Mesh {vertices, {}, indices};
 }

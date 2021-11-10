@@ -15,11 +15,7 @@
 
 namespace mercury {
 
-#ifdef MERCURY_DEBUG
-
 int Shader::_current = -1;
-
-#endif
 
 void error_file(const char *path)
 {

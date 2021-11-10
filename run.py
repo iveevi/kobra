@@ -27,6 +27,7 @@ else:
     print('Invalid build mode...')
     exit(-1)
 
+os.system('mkdir -p bin/')
 if args.target == 'ud':
     ret = os.system(f'make -j{args.threads} ui_designer')
     if ret != 0:

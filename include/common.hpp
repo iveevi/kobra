@@ -49,4 +49,6 @@ inline GLenum __glCheckError(const char *file, int line)
 
 #define glCheckError() __glCheckError(__FILE__, __LINE__)
 
+std::ostream &operator<<(std::ostream &, const glm::vec3 &);
+
 #endif
