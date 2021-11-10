@@ -33,6 +33,7 @@ project(file_browser)
 # Source variables
 set(MERCURY_SOURCE
 	source/camera.cpp
+	source/common.cpp
 	source/init.cpp
 	source/model.cpp
 	source/mouse_bus.cpp
@@ -76,9 +77,9 @@ add_executable(file_browser
 # Include directories
 include_directories(.
 	glad
-	thirdparty/glm
 	thirdparty/assimp/include
 	thirdparty/freetype2/include
+	thirdparty/glm
 )
 
 # Import CMake modules

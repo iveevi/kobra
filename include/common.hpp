@@ -8,6 +8,9 @@
 #include "../glad/glad.h"
 #include <GLFW/glfw3.h>
 
+// GLM headers
+#include <glm/glm.hpp>
+
 // Engine headers
 #include "include/logger.hpp"
 

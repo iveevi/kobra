@@ -15,6 +15,7 @@
 
 namespace mercury {
 
+// Static variables
 int Shader::_current = -1;
 
 void error_file(const char *path)

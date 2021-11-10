@@ -1,10 +1,19 @@
 #include <iostream>
 
+// GLFW headers
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
+// GLM headers
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+
+// ImGui headers
+#include <imgui.h>
+#include <imgui_internal.h>
+#include <imgui_stdlib.h>
+// #include <imgui/backends/imgui_impl_glfw.h>
+// #include <imgui/backends/imgui_impl_opengl3.h>
 
 // Engine headers
 #include "include/camera.hpp"
@@ -14,6 +23,9 @@
 #include "include/logger.hpp"
 
 #include "include/mesh/basic.hpp"
+
+#include "include/ui/text.hpp"
+#include "include/ui/ui_layer.hpp"
 
 // Using declarations
 using namespace mercury;
@@ -35,8 +47,8 @@ float lastY = SCR_HEIGHT / 2.0f;
 bool firstMouse = true;
 
 // timing
-float deltaTime = 0.0f;
-float lastFrame = 0.0f;
+float delta_time = 0.0f;
+float last_frame = 0.0f;
 
 // Shader source
 const char *vertex = R"(
@@ -79,30 +91,40 @@ void main()
 const char *fragment_hit = R"(
 #version 330 core
 
+struct PointLight {
+	vec3 position;
+	vec3 color;
+};
+
 in vec3 normal;
 in vec3 frag_pos;
 
 out vec4 frag_color;
 
 uniform vec3 color;
-uniform vec3 light_color;
-uniform vec3 light_pos;
+// uniform vec3 light_color;
+// uniform vec3 light_pos;
 uniform vec3 view_pos;
 
-void main()
+#define NLIGHTS 4
+
+uniform PointLight point_lights[NLIGHTS];
+uniform int npoint_lights;
+
+vec3 point_light_contr(PointLight light)
 {
 	// ambient
-	float ambient_strength = 0.25;
-	vec3 ambient = ambient_strength * light_color;
+	float ambient_strength = 0.1;
+	vec3 ambient = ambient_strength * light.color;
 
 	// diffuse
 	vec3 norm = normalize(normal);
 	if (!gl_FrontFacing)
 		norm *= -1;
 
-	vec3 light_dir = normalize(light_pos - frag_pos);
+	vec3 light_dir = normalize(light.position - frag_pos);
 	float diff = max(dot(norm, light_dir), 0.0);
-	vec3 diffuse = diff * light_color;
+	vec3 diffuse = diff * light.color;
 
 	// specular
 	float shine = 32;
@@ -110,11 +132,18 @@ void main()
 	vec3 view_dir = normalize(view_pos - frag_pos);
 	vec3 reflect_dir = reflect(-light_dir, norm);
 	float spec = pow(max(dot(view_dir, reflect_dir), 0.0), shine);
-	vec3 specular = specular_strength * spec * light_color;
+	vec3 specular = specular_strength * spec * light.color;
 
 	vec3 result = (ambient + diffuse + specular) * color;
-	vec3 rgb_normal = 0.5 * norm + 0.5;
+	// vec3 rgb_normal = 0.5 * norm + 0.5;
+	return result;
+}
 
+void main()
+{
+	vec3 result = vec3(0.0, 0.0, 0.0);
+	for (int i = 0; i < npoint_lights; i++)
+		result += point_light_contr(point_lights[i]);
 	frag_color = vec4(result, 1.0);
 }
 )";
@@ -122,14 +151,6 @@ void main()
 float randm()
 {
 	return rand()/((float) RAND_MAX) - 0.5;
-}
-
-// TODO: put into common (.cpp/.hpp) file
-// Overload printing glm::vec3
-std::ostream &operator<<(std::ostream &os, const glm::vec3 &vec)
-{
-	return os << "<" << vec.x << ", " << vec.y
-		<< ", " << vec.z << ">";
 }
 
 // TODO: these go into a namespace like "tree"
@@ -215,7 +236,7 @@ int main()
 	// tell stb_image.h to flip loaded texture's on the y-axis (before loading model).
 	stbi_set_flip_vertically_on_load(true);
 
-	// configure global opengl state
+	// Configure global opengl state
 	glEnable(GL_DEPTH_TEST);
 
 	// Draw in wireframe -- TODO: should be an init option (or live option)
@@ -227,49 +248,68 @@ int main()
 	); */
 
 	// Position of the light
-	glm::vec3 lpos = {2, 1.6, 1.6};
+	glm::vec3 lpos1 = {2, 1.6, 1.6};
+	glm::vec3 lpos2 = {0.2, 1.6, 1.6};
+	glm::vec3 lcolor = {1.0, 1.0, 1.0};
 
 	// Meshes
 	Mesh hit_cube1 = mesh::cuboid({0.5, 0.5, 0.5}, 1, 1, 1);
 	Mesh hit_cube2 = mesh::cuboid({3, -0.5, 0.0}, 1, 2, 1);
-	Mesh source_cube = mesh::cuboid(lpos, 0.5, 0.5, 0.5);
+	Mesh source_cube1 = mesh::cuboid(lpos1, 0.5, 0.5, 0.5);
+	Mesh source_cube2 = mesh::cuboid(lpos2, 0.5, 0.5, 0.5);
 
 	// Create shader and set base properties
 	Shader source = Shader::from_source(vertex, fragment_source);
 	Shader hit = Shader::from_source(vertex, fragment_hit);
 
 	source.use();
-	source.set_vec3("color", {1.0, 1.0, 1.0});
+	source.set_vec3("color", lcolor);
 
 	hit.use();
-	hit.set_vec3("light_color", {1.0, 1.0, 1.0});
-	hit.set_vec3("light_pos", lpos);		// TODO: add a centroid method for meshes
+
+	// hit.set_vec3("light_color", {1.0, 1.0, 1.0});
+	// hit.set_vec3("light_pos", lpos); // TODO: add a centroid method for meshes
+
+	hit.set_int("npoint_lights", 2);
+
+	hit.set_vec3("point_lights[0].color", lcolor);
+	hit.set_vec3("point_lights[0].position", lpos1);
+
+	hit.set_vec3("point_lights[1].color", lcolor);
+	hit.set_vec3("point_lights[1].position", lpos2);
 
 	// Another branch alg
 	Mesh::AVertex vertices;
 	Mesh::AIndices indices;
 
-	add_branch(vertices, indices, {4, 0, 2}, {4, 3, 2}, 0.7, 0.3, 25, 25);
+	add_branch(vertices, indices, {4, 0, 2}, {4, 3, 2}, 0.7, 0.3, 10, 10);
 	add_branch(vertices, indices, {4.1, 2.9, 2}, {5, 5, 2}, 0.25, 0.1);
 
 	Mesh tree(vertices, {}, indices);
 
+	Logger::ok("Finished constructing tree.");
+
+	// Create the fps text
+	ui::UILayer layer;
+	ui::Text text("FPS:", 10, 10, 0.7, {0.0, 0.0, 0.0});
+	layer.add_element(&text);
+
 	// render loop
 	// -----------
+	glfwSwapInterval(0);
 	while (!glfwWindowShouldClose(mercury::cwin.window))
 	{
 		// per-frame time logic
-		// --------------------
-		float currentFrame = glfwGetTime();
-		deltaTime = currentFrame - lastFrame;
-		lastFrame = currentFrame;
+		float current_frame = glfwGetTime();
+		delta_time = current_frame - last_frame;
+		last_frame = current_frame;
+		int fps = 1/delta_time;
 
 		// input
 		// -----
 		processInput(mercury::cwin.window);
 
 		// render
-		// ------
 		glClearColor(0.05f, 1.00f, 0.05f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -294,7 +334,8 @@ int main()
 		hit.set_vec3("view_pos", camera.position);
 
 		// Draw the cubes
-		source_cube.draw(source);
+		source_cube1.draw(source);
+		source_cube2.draw(source);
 
 		hit.use();
 		hit.set_vec3("color", {0.5, 1.0, 0.5});
@@ -307,6 +348,11 @@ int main()
 		hit.use();
 		hit.set_vec3("color", {1.0, 0.8, 0.5});
 		tree.draw(hit);
+
+		// Draw text
+		text.set_str(std::to_string(delta_time).substr(0, 6) + "s delta, "
+			+ std::to_string(fps) + " fps");
+		layer.draw();
 
 		// glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
 		// -------------------------------------------------------------------------------
@@ -327,7 +373,7 @@ void processInput(GLFWwindow *window)
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, true);
 
-	float cameraSpeed = 5 * deltaTime;
+	float cameraSpeed = 5 * delta_time;
 
 	// Forward motion
 	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
