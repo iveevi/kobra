@@ -17,7 +17,7 @@ Button::Button(Shape *cbox, Handler *handler1,
 		_release_handler(handler2), _layer(layer)
 {
 	// TODO: store returned index
-	cwin.mouse_handler.subscribe(this, &Button::handler);
+	winman.mouse_handler.subscribe(this, &Button::handler);
 
 	// Localize the ui_layer
 	layer->set_position(cbox->get_position());

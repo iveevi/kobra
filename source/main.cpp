@@ -9,13 +9,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-// ImGui headers
-#include <imgui.h>
-#include <imgui_internal.h>
-#include <imgui_stdlib.h>
-// #include <imgui/backends/imgui_impl_glfw.h>
-// #include <imgui/backends/imgui_impl_opengl3.h>
-
 // Engine headers
 #include "include/camera.hpp"
 #include "include/shader.hpp"
@@ -34,7 +27,7 @@ using namespace mercury;
 // Forward declarations
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
-void processInput(GLFWwindow *window);
+void process_input(GLFWwindow *window);
 
 // settings
 const unsigned int SCR_WIDTH = 800;
@@ -233,14 +226,12 @@ int main()
 	Shader source = Shader::from_source(vertex, fragment_source);
 	Shader hit = Shader::from_source(vertex, fragment_hit);
 
+	// Configure source shader
 	source.use();
 	source.set_vec3("color", lcolor);
 
+	// Configure hit shader
 	hit.use();
-
-	// hit.set_vec3("light_color", {1.0, 1.0, 1.0});
-	// hit.set_vec3("light_pos", lpos); // TODO: add a centroid method for meshes
-
 	hit.set_int("npoint_lights", 2);
 
 	hit.set_vec3("point_lights[0].color", lcolor);
@@ -268,7 +259,7 @@ int main()
 	// render loop
 	// -----------
 	glfwSwapInterval(0);
-	while (!glfwWindowShouldClose(mercury::cwin.window))
+	while (!glfwWindowShouldClose(mercury::winman.cwin))
 	{
 		// per-frame time logic
 		float current_frame = glfwGetTime();
@@ -278,7 +269,7 @@ int main()
 
 		// input
 		// -----
-		processInput(mercury::cwin.window);
+		process_input(mercury::winman.cwin);
 
 		// render
 		glClearColor(0.05f, 1.00f, 0.05f, 1.0f);
@@ -327,7 +318,7 @@ int main()
 
 		// glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
 		// -------------------------------------------------------------------------------
-		glfwSwapBuffers(mercury::cwin.window);
+		glfwSwapBuffers(mercury::winman.cwin);
 		glfwPollEvents();
 	}
 
@@ -339,10 +330,15 @@ int main()
 
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
 // ---------------------------------------------------------------------------------------------------------
-void processInput(GLFWwindow *window)
+void process_input(GLFWwindow *window)
 {
-	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+	if (glfwGetKey(window, GLFW_KEY_BACKSPACE) == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, true);
+
+	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+		// glfwSetWindowShouldClose(window, true);
+		glfwSetInputMode(winman.cwin, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+	}
 
 	float cameraSpeed = 5 * delta_time;
 

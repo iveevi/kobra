@@ -23,14 +23,27 @@
 namespace mercury {
 
 // Wrapped struct
-struct Window {
-	GLFWwindow *window;
+struct WindowManager {
+	GLFWwindow *cwin;
+
+	// TODO: remove these
 	float width;
 	float height;
-	MouseBus mouse_handler;
-} extern cwin;
 
-glm::vec2 transform(const glm::vec2 &);
+	MouseBus mouse_handler;
+
+	// Array of windows
+	std::vector <GLFWwindow *> wins;
+
+	// TODO: add hash table from title to indices
+
+	// Methods
+	void add_win(GLFWwindow *);
+
+	void set_wcontext(size_t);
+} extern winman;
+
+// glm::vec2 transform(const glm::vec2 &);
 
 // Character struct and map
 struct Char {
@@ -39,6 +52,7 @@ struct Char {
 	glm::ivec2 bearing;
 	unsigned int offset;
 
+	// TODO: put this shader into the Shader class
 	static Shader shader;
 };
 
@@ -47,16 +61,8 @@ struct Char {
 // 	make functions for these
 extern std::unordered_map <char, Char> cmap;
 
-// Parts of initialization
-// TODO: hide
-void load_fonts();
-
 // First function that should run
-// TODO: should take some kind of configuration file?
-void init();
-
-// Extra functions
-void focus(float, float, float, float);
+void init(bool = true);
 
 }
 

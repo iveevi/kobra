@@ -1,3 +1,7 @@
+// Standard headers
+#include <vector>
+#include <functional>
+
 // Engine headers
 #include "include/init.hpp"
 #include "include/logger.hpp"
@@ -31,17 +35,17 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 namespace mercury {
 
 // Initial window dimensions
-Window cwin;
+WindowManager winman;
 
-// TODO: this is no longer necessary
+/* TODO: this is no longer necessary
 glm::vec2 transform(const glm::vec2 &in)
 {
 	// TODO: this should not be using the global cwin
 	return glm::vec2 {
-		(in.x - cwin.width/2)/(cwin.width/2),
+		(in.x - win.width/2)/(cwin.width/2),
 		-(in.y - cwin.height/2)/(cwin.height/2)
 	};
-}
+} */
 
 // Character static variables
 Shader Char::shader;
@@ -55,21 +59,35 @@ float ui::UIElement::sheight = -1;
 Shader ui::UIElement::shader;
 glm::mat4 ui::UIElement::projection;
 
-// Text static variables
+// Text static variables: TODO: into own source
 float ui::Text::swidth = -1;
 float ui::Text::sheight = -1;
 
-// Logger static variables
+// Logger static variables - TODO: put into its own source file
 Logger::tclk Logger::clk;
 Logger::tpoint Logger::epoch;
+
+// Daemon methods
+void WindowManager::add_win(GLFWwindow *win)
+{
+	wins.push_back(win);
+}
+
+void WindowManager::set_wcontext(size_t index)
+{
+	cwin = wins[index];
+	glfwMakeContextCurrent(cwin);
+}
+
+// TODO: put these default functions into a separate source file
 
 // Reassign orthos
 void update_screen_size(float width, float height)
 {
 	// Logger::ok(std::string("width = ") + std::to_string(width) + ", height = " + std::to_string(height));
 	// TODO: use gl get dims or smthing?
-	cwin.width = width;
-	cwin.height = height;
+	winman.width = width;
+	winman.height = height;
 
 	// TODO: is this correct/needed?
 	ui::UIElement::set_projection(0.0f, width, 0.0f, height, width, height);
@@ -101,60 +119,77 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 		double xpos, ypos;
 
 		glfwGetCursorPos(window, &xpos, &ypos);
-		mercury::cwin.mouse_handler.publish(
+		mercury::winman.mouse_handler.publish(
 			{(mercury::MouseBus::Type) action, {xpos, ypos}}
 		);
 	}
 }
 
 // Private static methods
-static void init_glfw()
+static GLFWwindow *mk_win(const char *title,
+		float width = DEFAULT_WINDOW_WIDTH,
+		float height = DEFAULT_WINDOW_HEIGHT)
+{
+	GLFWwindow *win = glfwCreateWindow(width, height, title, nullptr, nullptr);
+
+	// Check valid creation
+	if (!win) {
+		Logger::error("Failed to create GLFW window\n");
+
+		// TODO: do we really need to terminate?
+		glfwTerminate();
+		exit(-1);
+	}
+
+	// Set window properties
+	glfwSetFramebufferSizeCallback(win, framebuffer_size_callback);
+	glfwSetMouseButtonCallback(win, mouse_button_callback);
+	glfwSetCursorPosCallback(win, mouse_callback);
+
+	return win;
+}
+
+static void load_glfw()
 {
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-#ifdef __APPLE__
+#ifdef __APPLE__	// Apple support
 
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-#endif
 
-	cwin.window = glfwCreateWindow(DEFAULT_WINDOW_WIDTH,
-		DEFAULT_WINDOW_HEIGHT, "Mercury", nullptr, nullptr);
-	if (cwin.window == nullptr) {
-		std::cout << "Failed to create GLFW window" << std::endl;
+#endif			// Apple support
+
+}
+
+static void load_glad()
+{
+	// Now initialize glad
+	if (!gladLoadGLLoader((GLADloadproc) glfwGetProcAddress)) {
+		Logger::error("Failed to initialize GLAD.");
 		glfwTerminate();
 		exit(-1);
 	}
+}
 
-	glfwMakeContextCurrent(cwin.window);
-	glfwSetFramebufferSizeCallback(cwin.window, framebuffer_size_callback);
-	glfwSetMouseButtonCallback(cwin.window, mouse_button_callback);
-	glfwSetCursorPosCallback(cwin.window, mouse_callback);
+// TODO: this needs some arguments...
+static void load_glfw_opts()
+{
 
-	// Change later
-	glfwSetInputMode(cwin.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-
-	// Now initialize glad
-	if (!gladLoadGLLoader((GLADloadproc) glfwGetProcAddress)) {
-		std::cout << "Failed to initialize GLAD" << std::endl;
-		exit(-1);
-	}
-
-#ifndef MERCURY_DEBUG
+#ifndef MERCURY_DEBUG	// Debug mode
 
 	glEnable(GL_CULL_FACE);
 
-#endif
+#endif			// Debug mode
 
 	// For text rendering
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
 
-// TODO: should this not be static?
-void load_fonts()
+static void load_fonts()
 {
 	// Load default font
 	FT_Library ft;
@@ -250,39 +285,63 @@ static void load_headers()
 	}
 }
 
+// Initialization
+using Loader = std::pair <std::function <void ()>, std::string>;
+std::vector <Loader> init_seq {
+	{
+		[]() {
+			Logger::start();
+		},
+		"Started Mercury Engine."
+	},
+	{load_glfw, "Initialized GLFW."},
+	{
+		[]() {
+			// Create window
+			winman.add_win(mk_win("Mercury"));
+			winman.set_wcontext(0);
+
+			// Change later
+			glfwSetInputMode(winman.cwin,
+				GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		},
+		"Created main window."
+	},
+	{load_glad, "Initialized GLAD."},
+	{load_glfw_opts, "Set GLFW options."},
+	{load_fonts, "Finished loading all fonts."},
+	{load_headers, "Finished loading all shader headers."},
+	{
+		[]() {					// TODO: function called load_shaders
+			ui::UIElement::shader = Shader(
+				MERCURY_SOURCE_DIR "/resources/shaders/shape_shader.vs",
+				MERCURY_SOURCE_DIR "/resources/shaders/shape_shader.fs"
+			);
+		},
+		"Finished loading all static shaders."
+	},
+	{
+		[]() {
+			// Set default projection
+			ui::UIElement::set_projection(0, 800, 0, 600, 800, 600);
+
+			// Set initial screen parameters
+			update_screen_size(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT);
+		},
+		"Finished post-init sequence."
+	}
+};
+
 // TODO: should this be a list of functions to execute and log?
-void init()
+// TODO: to avoid creating the window, add an index limiter
+void init(bool full_seq)
 {
-	// Start the logger
-	Logger::start();
-	Logger::ok("Started Mercury Engine.");
+	size_t len = full_seq ? init_seq.size() : 1;
 
-	// Very first thing
-	// TODO: need to check error codes
-	init_glfw();					// TODO: option to avoid creating window, rename to load glfw
-	Logger::ok("Initialized GLFW.");
-
-	// TODO: need to check error codes
-	load_fonts();
-	Logger::ok("Loaded all fonts.");
-
-	// Load headers
-	load_headers();
-	Logger::ok("Loaded all shader headers.");
-
-	// Other stuff
-
-	// Create the default shader
-	ui::UIElement::shader = Shader(
-		MERCURY_SOURCE_DIR "/resources/shaders/shape_shader.vs",
-		MERCURY_SOURCE_DIR "/resources/shaders/shape_shader.fs"
-	);
-
-	// Set default projection
-	ui::UIElement::set_projection(0, 800, 0, 600, 800, 600);
-
-	// Set initial screen parameters
-	update_screen_size(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT);
+	for (size_t i = 0; i < len; i++) {
+		init_seq[i].first();
+		Logger::ok(init_seq[i].second);
+	}
 }
 
 }
