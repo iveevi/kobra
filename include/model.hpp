@@ -61,6 +61,7 @@ private:
 
 	void _init();
 public:
+	Mesh();
 	Mesh(const AVertex &, const ATexture &, const AIndices &);
 
 	void draw(Shader &);

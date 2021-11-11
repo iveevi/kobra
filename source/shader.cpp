@@ -173,6 +173,7 @@ Shader::Shader(const char *vpath, const char *fpath)
 void Shader::use() const
 {
 	glUseProgram(id);
+	glCheckError();
 	_current = id;
 }
 
@@ -232,6 +233,8 @@ void Shader::compile()
 int get_index(unsigned int id, const std::string &name)
 {
 	// Cached uniform names
+	// TODO: helper function for cached logging?
+	//	would avoid looped clutter with certain logging
 	static std::set <std::string> cached;
 
 	int index = glGetUniformLocation(id, name.c_str());

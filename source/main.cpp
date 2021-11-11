@@ -29,87 +29,21 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void process_input(GLFWwindow *window);
 
-// settings
+// Settings
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 
-// camera
+// Camera
 mercury::Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
 
+// Variables for mouse movement
 float lastX = SCR_WIDTH / 2.0f;
 float lastY = SCR_HEIGHT / 2.0f;
 bool firstMouse = true;
 
-// timing
+// Variables for timing
 float delta_time = 0.0f;
 float last_frame = 0.0f;
-
-// Shader source
-const char *vertex = R"(
-#version 330 core
-
-layout (location = 0) in vec3 v_pos;
-layout (location = 1) in vec3 v_normal;
-
-out vec3 normal;
-out vec3 frag_pos;
-
-uniform mat4 model;
-uniform mat4 view;
-uniform mat4 projection;
-
-void main()
-{
-	vec4 pos = vec4(v_pos, 1.0);
-	gl_Position = projection * view * model * pos;
-	frag_pos = vec3(model * pos);
-
-	// TODO: this should be done on the cpu because its intensive
-	normal = mat3(transpose(inverse(model))) * v_normal;
-}
-)";
-
-const char *fragment_source = R"(
-#version 330 core
-
-out vec4 frag_color;
-
-uniform vec3 color;
-
-void main()
-{
-	frag_color = vec4(color, 1.0);
-}
-)";
-
-// TODO: add preprocessing for certain constants
-//	constants must be bookmarked in advanced,
-//	then the source is copied, with the bookmark replaced
-std::string fragment_hit = R"(
-#include lighting
-
-in vec3 normal;
-in vec3 frag_pos;
-
-out vec4 frag_color;
-
-// TODO: put these into a material struct
-uniform vec3 color;
-uniform vec3 view_pos;
-
-#define NLIGHTS 4
-
-uniform PointLight point_lights[NLIGHTS];
-uniform int npoint_lights;
-
-void main()
-{
-	vec3 result = vec3(0.0, 0.0, 0.0);
-	for (int i = 0; i < npoint_lights; i++)
-		result += point_light_contr(point_lights[i], color, frag_pos, view_pos, normal);
-	frag_color = vec4(result, 1.0);
-}
-)";
 
 // Random [-0.5, 0.5]
 float randm()
@@ -191,12 +125,143 @@ void add_branch(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 		add_ring(vertices, indices, rings[i], rings[i + 1]);
 }
 
+// Render function for FPS monitor
+Shader basic;
+
+const char *basic_vert = R"(
+#version 330 core
+
+layout (location = 0) in vec3 vertex;
+
+uniform mat4 projection;
+
+void main()
+{
+	gl_Position = projection * vec4(vertex, 1.0);
+}
+)";
+
+const char *basic_frag = R"(
+#version 330 core
+
+out vec4 color;
+
+uniform vec3 ecolor;
+
+void main()
+{
+	color = vec4(ecolor, 1.0);
+}
+)";
+
+// Graph points
+float fps_vertices[] = {
+	0.0f, 0.0f, 0.0f,
+	100.0f, 100.0f, 0.0f,
+	100.0f,  50.0f, 0.0f
+};
+
+unsigned vbo;
+unsigned vao;
+
+void fps_monitor()
+{
+	glClearColor(0.05f, 0.05f, 0.05f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	// Draw the graph
+	Logger::warn_cached("vao = " + std::to_string(vao));
+
+	basic.use();
+	glBindVertexArray(vao);
+	glCheckError();
+
+	glDrawArrays(GL_TRIANGLES, 0, 3);
+	glCheckError();
+}
+
+// Render function for main window
+Mesh hit_cube1;
+Mesh hit_cube2;
+Mesh source_cube1;
+Mesh source_cube2;
+Mesh tree;
+
+Shader source;
+Shader hit;
+
+ui::UILayer layer;
+ui::Text text;
+
+void main_renderer()
+{
+	// per-frame time logic
+	float current_frame = glfwGetTime();
+	delta_time = current_frame - last_frame;
+	last_frame = current_frame;
+	int fps = 1/delta_time;
+
+	// Process input
+	process_input(mercury::winman.cwin);
+
+	// render
+	glClearColor(0.05f, 1.00f, 0.05f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	// Create model, view, projection
+	glm::mat4 model = glm::mat4(1.0f);
+	model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f));
+	model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f));
+	glm::mat4 view = camera.get_view();
+	glm::mat4 projection = glm::perspective(
+		glm::radians(camera.zoom),
+		(float) SCR_WIDTH / (float) SCR_HEIGHT,
+		0.1f, 100.0f
+	);
+
+	// Modify the shader properties
+	source.use();
+	source.set_mat4("model", model);
+	source.set_mat4("view", view);
+	source.set_mat4("projection", projection);
+
+	hit.use();
+	hit.set_mat4("model", model);
+	hit.set_mat4("view", view);
+	hit.set_mat4("projection", projection);
+	hit.set_vec3("view_pos", camera.position);
+
+	// Draw the cubes
+	source_cube1.draw(source);
+	source_cube2.draw(source);
+
+	hit.use();
+	hit.set_vec3("color", {0.5, 1.0, 0.5});
+	hit_cube1.draw(hit);
+
+	hit.use();
+	hit.set_vec3("color", {1.0, 0.5, 0.5});
+	hit_cube2.draw(hit);
+
+	hit.use();
+	hit.set_vec3("color", {1.0, 0.8, 0.5});
+	tree.draw(hit);
+
+	// Draw text
+	text.set_str(std::to_string(delta_time).substr(0, 6) + "s delta, "
+		+ std::to_string(fps) + " fps");
+	layer.draw();
+}
+
 int main()
 {
 	// TODO: do in init
 	srand(clock());
 	mercury::init();	// TODO: add an option to skip window creation
 
+	winman.add_win("FPS Monitor"); //, 800, 200);
+
+	// TODO: put in init or smthing
 	// tell stb_image.h to flip loaded texture's on the y-axis (before loading model).
 	stbi_set_flip_vertically_on_load(true);
 
@@ -206,25 +271,27 @@ int main()
 	// Draw in wireframe -- TODO: should be an init option (or live option)
 	// glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
-	/* Shader meshShader(
-		"resources/shaders/mesh_shader.vs",
-		"resources/shaders/mesh_shader.fs"
-	); */
-
 	// Position of the light
 	glm::vec3 lpos1 = {2, 1.6, 1.6};
 	glm::vec3 lpos2 = {0.2, 1.6, 1.6};
 	glm::vec3 lcolor = {1.0, 1.0, 1.0};
 
 	// Meshes
-	Mesh hit_cube1 = mesh::cuboid({0.5, 0.5, 0.5}, 1, 1, 1);
-	Mesh hit_cube2 = mesh::cuboid({3, -0.5, 0.0}, 1, 2, 1);
-	Mesh source_cube1 = mesh::cuboid(lpos1, 0.5, 0.5, 0.5);
-	Mesh source_cube2 = mesh::cuboid(lpos2, 0.5, 0.5, 0.5);
+	hit_cube1 = mesh::cuboid({0.5, 0.5, 0.5}, 1, 1, 1);
+	hit_cube2 = mesh::cuboid({3, -0.5, 0.0}, 1, 2, 1);
+	source_cube1 = mesh::cuboid(lpos1, 0.5, 0.5, 0.5);
+	source_cube2 = mesh::cuboid(lpos2, 0.5, 0.5, 0.5);
 
-	// Create shader and set base properties
-	Shader source = Shader::from_source(vertex, fragment_source);
-	Shader hit = Shader::from_source(vertex, fragment_hit);
+	// Create shaders and set base properties
+	source = Shader(
+		"resources/shaders/mesh/mesh_shader.vert",
+		"resources/shaders/color_shader.frag"
+	);
+
+	hit = Shader(
+		"resources/shaders/mesh/mesh_shader.vert",
+		"resources/shaders/mesh/mesh_shader.frag"
+	);
 
 	// Configure source shader
 	source.use();
@@ -247,84 +314,61 @@ int main()
 	add_branch(vertices, indices, {4, 0, 2}, {4, 3, 2}, 0.7, 0.3, 10, 10);
 	add_branch(vertices, indices, {4.1, 2.9, 2}, {5, 5, 2}, 0.25, 0.1);
 
-	Mesh tree(vertices, {}, indices);
+	tree = Mesh(vertices, {}, indices);
 
 	Logger::ok("Finished constructing tree.");
 
-	// Create the fps text
-	ui::UILayer layer;
-	ui::Text text("FPS:", 10, 10, 0.7, {0.0, 0.0, 0.0});
+	// FPS graph buffer
+	// TODO: some way to check that the resources being used in render are in another context
+	winman.set_wcontext(1);			// TODO: add an init method for winman so that we dont need to generate buffers and switch contexts manually
+	glGenVertexArrays(1, &vao);
+	glGenBuffers(1, &vbo);
+	glBindVertexArray(vao);
+
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(fps_vertices), fps_vertices, GL_STATIC_DRAW);
+
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *) 0);
+	glEnableVertexAttribArray(0);
+
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glCheckError();
+
+	basic = Shader::from_source(basic_vert, basic_frag);
+
+	// Configure base graphing shader
+	basic.use();
+	basic.set_vec3("ecolor", {1.0, 1.0, 1.0});
+	basic.set_mat4("projection", glm::ortho(0.0f, 800.0f, 0.0f, 200.0f));
+
+	// Create the FPS text
+	winman.set_wcontext(0);			// TODO: see prev todo
+	text = ui::Text("Frames", 10, 10, 0.7, {0.0, 0.0, 0.0});
 	layer.add_element(&text);
 
-	// render loop
-	// -----------
+	// Uncap FPS for all contexts
+	winman.set_wcontext(0);
 	glfwSwapInterval(0);
-	while (!glfwWindowShouldClose(mercury::winman.cwin))
-	{
-		// per-frame time logic
-		float current_frame = glfwGetTime();
-		delta_time = current_frame - last_frame;
-		last_frame = current_frame;
-		int fps = 1/delta_time;
 
-		// input
-		// -----
-		process_input(mercury::winman.cwin);
+	winman.set_wcontext(1);
+	glfwSwapInterval(0);
 
-		// render
-		glClearColor(0.05f, 1.00f, 0.05f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	// Set render bindings
+	winman.set_renderer(0, main_renderer);
+	winman.set_renderer(1, fps_monitor);
 
-		// Create model, view, projection
-		glm::mat4 model = glm::mat4(1.0f);
-		model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f)); // translate it down so it's at the center of the scene
-		model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f));	// it's a bit too big for our scene, so scale it down
-		glm::mat4 view = camera.get_view();
-		glm::mat4 projection = glm::perspective(glm::radians(camera.zoom),
-				(float) SCR_WIDTH / (float) SCR_HEIGHT, 0.1f, 100.0f);
+	// Render loop
+	while (!glfwWindowShouldClose(winman[0])) {
+		// Main window
+		winman.render(0);
 
-		// Modify the shader properties
-		source.use();
-		source.set_mat4("model", model);
-		source.set_mat4("view", view);
-		source.set_mat4("projection", projection);
-
-		hit.use();
-		hit.set_mat4("model", model);
-		hit.set_mat4("view", view);
-		hit.set_mat4("projection", projection);
-		hit.set_vec3("view_pos", camera.position);
-
-		// Draw the cubes
-		source_cube1.draw(source);
-		source_cube2.draw(source);
-
-		hit.use();
-		hit.set_vec3("color", {0.5, 1.0, 0.5});
-		hit_cube1.draw(hit);
-
-		hit.use();
-		hit.set_vec3("color", {1.0, 0.5, 0.5});
-		hit_cube2.draw(hit);
-
-		hit.use();
-		hit.set_vec3("color", {1.0, 0.8, 0.5});
-		tree.draw(hit);
-
-		// Draw text
-		text.set_str(std::to_string(delta_time).substr(0, 6) + "s delta, "
-			+ std::to_string(fps) + " fps");
-		layer.draw();
-
-		// glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
-		// -------------------------------------------------------------------------------
-		glfwSwapBuffers(mercury::winman.cwin);
-		glfwPollEvents();
+		// FPS monitor
+		winman.render(1);
 	}
 
-	// glfw: terminate, clearing all previously allocated GLFW resources.
-	// ------------------------------------------------------------------
+	// Terminate GLFW
 	glfwTerminate();
+
 	return 0;
 }
 

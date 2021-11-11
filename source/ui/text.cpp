@@ -123,8 +123,6 @@ void Text::draw()
 	// Construct the text
 	float cxpos = _xpos;
 
-	// std::cout << std::string(50, '#') << std::endl;
-	// std::cout << "STRING = " << _str << std::endl;
 	for (const auto &c : _str) {
 		if (cmap.find(c) == cmap.end())
 			throw std::runtime_error("No character " + std::string(1, c) + " in map...");

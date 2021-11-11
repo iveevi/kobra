@@ -24,10 +24,6 @@
 
 #endif
 
-// Defined constants
-#define DEFAULT_WINDOW_WIDTH	800.0
-#define DEFAULT_WINDOW_HEIGHT	600.0
-
 // TODO: add handler for this later
 // Forward declare for now
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
@@ -67,18 +63,6 @@ float ui::Text::sheight = -1;
 Logger::tclk Logger::clk;
 Logger::tpoint Logger::epoch;
 
-// Daemon methods
-void WindowManager::add_win(GLFWwindow *win)
-{
-	wins.push_back(win);
-}
-
-void WindowManager::set_wcontext(size_t index)
-{
-	cwin = wins[index];
-	glfwMakeContextCurrent(cwin);
-}
-
 // TODO: put these default functions into a separate source file
 
 // Reassign orthos
@@ -96,19 +80,8 @@ void update_screen_size(float width, float height)
 // Window size change callback
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
-	// Logger::ok(std::string("width = ") + std::to_string(width) + ", height = " + std::to_string(height));
 	glViewport(0, 0, width, height);
-	// Logger::ok("again: " + std::string("width = ") + std::to_string(width) + ", height = " + std::to_string(height));
 	update_screen_size(width, height);
-
-#ifdef MERCURY_DEBUG
-
-	/* TODO: update all orthos
-	Logger::ok() << "Resized window to " << width
-		<< " x " << height << std::endl; */
-
-#endif
-
 }
 
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
@@ -125,7 +98,13 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 	}
 }
 
-// Private static methods
+// Window manager methods
+void WindowManager::_add_win(GLFWwindow *win)
+{
+	wins.push_back(win);
+	bindings.push_back(nullptr);
+}
+
 static GLFWwindow *mk_win(const char *title,
 		float width = DEFAULT_WINDOW_WIDTH,
 		float height = DEFAULT_WINDOW_HEIGHT)
@@ -149,6 +128,56 @@ static GLFWwindow *mk_win(const char *title,
 	return win;
 }
 
+void WindowManager::add_win(const std::string &title,
+		float width, float height)
+{
+	GLFWwindow *win = mk_win(title.c_str(), width, height);
+	_add_win(win);
+}
+
+void WindowManager::set_wcontext(size_t index)
+{
+	cwin = wins[index];
+	glfwMakeContextCurrent(cwin);
+}
+
+void WindowManager::set_renderer(size_t index, Renderer renderer)
+{
+	if (bindings.size() < index)
+		bindings.resize(index + 1);
+
+	bindings[index] = renderer;
+}
+
+void WindowManager::render(size_t context)
+{
+	// Ensure the context is in bounds
+	if (context >= bindings.size()) {
+		Logger::error() << __PRETTY_FUNCTION__
+			<< ": context [" << context
+			<< "] is out of bounds (size = "
+			<< bindings.size() << ")\n";
+	}
+
+	Renderer renderer = bindings[context];
+
+	if (!renderer) {
+		// TODO: display title of the corresponding window
+		Logger::warn() << "No render binding for window @"
+			<< context << ".\n";
+		return;
+	}
+
+	// Set context and run the renderer
+	winman.set_wcontext(context);
+	renderer();
+
+	// Swap buffers and finish
+	glfwSwapBuffers(cwin);
+	glfwPollEvents();
+}
+
+// Private static methods
 static void load_glfw()
 {
 	glfwInit();
@@ -298,7 +327,7 @@ std::vector <Loader> init_seq {
 	{
 		[]() {
 			// Create window
-			winman.add_win(mk_win("Mercury"));
+			winman.add_win("Mercury");
 			winman.set_wcontext(0);
 
 			// Change later

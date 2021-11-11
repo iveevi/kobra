@@ -112,6 +112,8 @@ Texture::Texture(const std::string &txt_path,
 }
 
 // Mesh functions
+Mesh::Mesh() {}
+
 Mesh::Mesh(const AVertex &vertices,
 		const ATexture &textures,
 		const AIndices &indices)

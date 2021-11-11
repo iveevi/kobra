@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <set>
 
 // Color constants
 #define MC_RESET	"\033[0m"
@@ -76,16 +77,35 @@ public:
 	}
 
 	// C++ string overloads
-	static void ok(std::string msg) {
+	static void ok(const std::string &msg) {
 		ok(msg.c_str());
 	}
 
-	static void error(std::string msg) {
+	static void error(const std::string &msg) {
 		error(msg.c_str());
 	}
 
-	static void warn(std::string msg) {
+	static void warn(const std::string &msg) {
 		warn(msg.c_str());
+	}
+
+	// Cached logging
+	static void error_cached(const std::string &msg) {
+		static std::set <std::string> cached;
+
+		if (cached.find(msg) == cached.end()) {
+			cached.insert(cached.end(), msg);
+			error(msg);
+		}
+	}
+
+	static void warn_cached(const std::string &msg) {
+		static std::set <std::string> cached;
+
+		if (cached.find(msg) == cached.end()) {
+			cached.insert(cached.end(), msg);
+			warn(msg);
+		}
 	}
 };
 

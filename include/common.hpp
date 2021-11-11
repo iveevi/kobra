@@ -44,7 +44,7 @@ inline GLenum __glCheckError(const char *file, int line)
                         break;
                 }
 
-		mercury::Logger::error("OpenGL error: " + error
+		mercury::Logger::error_cached("OpenGL error: " + error
 			+ " at " + file + " (" + std::to_string(line) + ")");
         }
 

@@ -47,7 +47,7 @@ public:
 
 		// Set projection matrix of all uies
 		shader.use();
-		glCheckError();
+		// glCheckError();
 
 		shader.set_mat4("projection", projection);
 		glCheckError();
