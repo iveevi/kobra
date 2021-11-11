@@ -102,6 +102,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 void WindowManager::_add_win(GLFWwindow *win)
 {
 	wins.push_back(win);
+	initers.push_back(nullptr);
 	bindings.push_back(nullptr);
 }
 
@@ -141,12 +142,49 @@ void WindowManager::set_wcontext(size_t index)
 	glfwMakeContextCurrent(cwin);
 }
 
+void WindowManager::set_initializer(size_t index, Initializer initer)
+{
+	if (initers.size() < index)
+		initers.resize(index + 1);
+
+	initers[index] = initer;
+}
+
 void WindowManager::set_renderer(size_t index, Renderer renderer)
 {
 	if (bindings.size() < index)
 		bindings.resize(index + 1);
 
 	bindings[index] = renderer;
+}
+
+void WindowManager::set_condition(RCondition cond)
+{
+	condition = cond;
+}
+
+void WindowManager::initialize(size_t context)
+{
+	// Ensure the context is in bounds
+	if (context >= initers.size()) {
+		Logger::error() << __PRETTY_FUNCTION__
+			<< ": context [" << context
+			<< "] is out of bounds (size = "
+			<< initers.size() << ")\n";
+	}
+
+	Initializer initer = initers[context];
+
+	if (!initer) {
+		// TODO: display title of the corresponding window
+		Logger::warn() << "No initialization binding for window @"
+			<< context << ".\n";
+		return;
+	}
+
+	// Set context and run the initializer
+	set_wcontext(context);
+	initer();
 }
 
 void WindowManager::render(size_t context)
@@ -175,6 +213,32 @@ void WindowManager::render(size_t context)
 	// Swap buffers and finish
 	glfwSwapBuffers(cwin);
 	glfwPollEvents();
+}
+
+void WindowManager::initialize_all()
+{
+	for (size_t i = 0; i < wins.size(); i++)
+		initialize(i);
+}
+
+void WindowManager::render_all()
+{
+	if (!condition) {
+		// TODO: display title of the corresponding window
+		Logger::error("No render loop condition for winman.");
+		exit(-1);
+	}
+
+	while (condition()) {
+		for (size_t i = 0; i < wins.size(); i++)
+			render(i);
+	}
+}
+
+void WindowManager::run()
+{
+	initialize_all();
+	render_all();
 }
 
 // Private static methods

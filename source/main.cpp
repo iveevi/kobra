@@ -164,19 +164,48 @@ float fps_vertices[] = {
 unsigned vbo;
 unsigned vao;
 
-void fps_monitor()
+// TODO: once this is done, should go into separate file
+//	to create a fps monitor on the fly
+void fps_monitor_initializer()
+{
+	// TODO: display fps counter here
+
+	// Uncap FPS
+	glfwSwapInterval(0);
+
+	// Allocate graph buffer
+	glGenVertexArrays(1, &vao);
+	glGenBuffers(1, &vbo);
+	glBindVertexArray(vao);
+
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(fps_vertices), fps_vertices, GL_STATIC_DRAW);
+
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *) 0);
+	glEnableVertexAttribArray(0);
+
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glCheckError();
+
+	// Create and configure base graphing shader
+	basic = Shader::from_source(basic_vert, basic_frag);
+
+	basic.use();
+	basic.set_vec3("ecolor", {1.0, 1.0, 1.0});
+	basic.set_mat4("projection", glm::ortho(0.0f, 800.0f, 0.0f, 200.0f));
+}
+
+void fps_monitor_renderer()
 {
 	glClearColor(0.05f, 0.05f, 0.05f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT);
 
 	// Draw the graph
-	Logger::warn_cached("vao = " + std::to_string(vao));
-
 	basic.use();
 	glBindVertexArray(vao);
 	glCheckError();
 
-	glDrawArrays(GL_TRIANGLES, 0, 3);
+	glDrawArrays(GL_LINE_STRIP, 0, 3);
 	glCheckError();
 }
 
@@ -192,6 +221,76 @@ Shader hit;
 
 ui::UILayer layer;
 ui::Text text;
+
+void main_initializer()
+{
+	// Uncap FPS
+	glfwSwapInterval(0);
+
+	// TODO: put in init or smthing
+	// tell stb_image.h to flip loaded texture's on the y-axis (before loading model).
+	stbi_set_flip_vertically_on_load(true);
+
+	// Configure global opengl state
+	glEnable(GL_DEPTH_TEST);
+
+	// TODO: do in init
+	srand(clock());
+
+	// Draw in wireframe -- TODO: should be an init option (or live option)
+	// glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+	// Position of the light
+	glm::vec3 lpos1 = {2, 1.6, 1.6};
+	glm::vec3 lpos2 = {0.2, 1.6, 1.6};
+	glm::vec3 lcolor = {1.0, 1.0, 1.0};
+
+	// Meshes
+	hit_cube1 = mesh::cuboid({0.5, 0.5, 0.5}, 1, 1, 1);
+	hit_cube2 = mesh::cuboid({3, -0.5, 0.0}, 1, 2, 1);
+	source_cube1 = mesh::cuboid(lpos1, 0.5, 0.5, 0.5);
+	source_cube2 = mesh::cuboid(lpos2, 0.5, 0.5, 0.5);
+
+	// Create shaders and set base properties
+	source = Shader(
+		"resources/shaders/mesh/mesh_shader.vert",
+		"resources/shaders/color_shader.frag"
+	);
+
+	hit = Shader(
+		"resources/shaders/mesh/mesh_shader.vert",
+		"resources/shaders/mesh/mesh_shader.frag"
+	);
+
+	// Configure source shader
+	source.use();
+	source.set_vec3("color", lcolor);
+
+	// Configure hit shader
+	hit.use();
+	hit.set_int("npoint_lights", 2);
+
+	hit.set_vec3("point_lights[0].color", lcolor);
+	hit.set_vec3("point_lights[0].position", lpos1);
+
+	hit.set_vec3("point_lights[1].color", lcolor);
+	hit.set_vec3("point_lights[1].position", lpos2);
+
+	// Another branch alg
+	Mesh::AVertex vertices;
+	Mesh::AIndices indices;
+
+	add_branch(vertices, indices, {4, 0, 2}, {4, 3, 2}, 0.7, 0.3, 10, 10);
+	add_branch(vertices, indices, {4.1, 2.9, 2}, {5, 5, 2}, 0.25, 0.1);
+
+	tree = Mesh(vertices, {}, indices);
+
+	Logger::ok("Finished constructing tree.");
+
+	// TODO: some way to check that the resources being used in render are in another context
+	text = ui::Text("Frames", 10, 10, 0.7, {0.0, 0.0, 0.0});
+	layer.add_element(&text);
+}
 
 void main_renderer()
 {
@@ -253,119 +352,33 @@ void main_renderer()
 	layer.draw();
 }
 
+// Program render loop condition
+bool rcondition()
+{
+	return !glfwWindowShouldClose(winman[0]);
+}
+
 int main()
 {
-	// TODO: do in init
-	srand(clock());
-	mercury::init();	// TODO: add an option to skip window creation
+	// Initialize mercury
+	mercury::init();
 
-	winman.add_win("FPS Monitor"); //, 800, 200);
+	// Add windows
+	winman.add_win("FPS Monitor");
 
-	// TODO: put in init or smthing
-	// tell stb_image.h to flip loaded texture's on the y-axis (before loading model).
-	stbi_set_flip_vertically_on_load(true);
+	// Set winman bindings
+	winman.set_condition(rcondition);
 
-	// Configure global opengl state
-	glEnable(GL_DEPTH_TEST);
+	winman.set_initializer(0, main_initializer);
+	winman.set_initializer(1, fps_monitor_initializer);
 
-	// Draw in wireframe -- TODO: should be an init option (or live option)
-	// glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-
-	// Position of the light
-	glm::vec3 lpos1 = {2, 1.6, 1.6};
-	glm::vec3 lpos2 = {0.2, 1.6, 1.6};
-	glm::vec3 lcolor = {1.0, 1.0, 1.0};
-
-	// Meshes
-	hit_cube1 = mesh::cuboid({0.5, 0.5, 0.5}, 1, 1, 1);
-	hit_cube2 = mesh::cuboid({3, -0.5, 0.0}, 1, 2, 1);
-	source_cube1 = mesh::cuboid(lpos1, 0.5, 0.5, 0.5);
-	source_cube2 = mesh::cuboid(lpos2, 0.5, 0.5, 0.5);
-
-	// Create shaders and set base properties
-	source = Shader(
-		"resources/shaders/mesh/mesh_shader.vert",
-		"resources/shaders/color_shader.frag"
-	);
-
-	hit = Shader(
-		"resources/shaders/mesh/mesh_shader.vert",
-		"resources/shaders/mesh/mesh_shader.frag"
-	);
-
-	// Configure source shader
-	source.use();
-	source.set_vec3("color", lcolor);
-
-	// Configure hit shader
-	hit.use();
-	hit.set_int("npoint_lights", 2);
-
-	hit.set_vec3("point_lights[0].color", lcolor);
-	hit.set_vec3("point_lights[0].position", lpos1);
-
-	hit.set_vec3("point_lights[1].color", lcolor);
-	hit.set_vec3("point_lights[1].position", lpos2);
-
-	// Another branch alg
-	Mesh::AVertex vertices;
-	Mesh::AIndices indices;
-
-	add_branch(vertices, indices, {4, 0, 2}, {4, 3, 2}, 0.7, 0.3, 10, 10);
-	add_branch(vertices, indices, {4.1, 2.9, 2}, {5, 5, 2}, 0.25, 0.1);
-
-	tree = Mesh(vertices, {}, indices);
-
-	Logger::ok("Finished constructing tree.");
-
-	// FPS graph buffer
-	// TODO: some way to check that the resources being used in render are in another context
-	winman.set_wcontext(1);			// TODO: add an init method for winman so that we dont need to generate buffers and switch contexts manually
-	glGenVertexArrays(1, &vao);
-	glGenBuffers(1, &vbo);
-	glBindVertexArray(vao);
-
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(fps_vertices), fps_vertices, GL_STATIC_DRAW);
-
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *) 0);
-	glEnableVertexAttribArray(0);
-
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	glCheckError();
-
-	basic = Shader::from_source(basic_vert, basic_frag);
-
-	// Configure base graphing shader
-	basic.use();
-	basic.set_vec3("ecolor", {1.0, 1.0, 1.0});
-	basic.set_mat4("projection", glm::ortho(0.0f, 800.0f, 0.0f, 200.0f));
-
-	// Create the FPS text
-	winman.set_wcontext(0);			// TODO: see prev todo
-	text = ui::Text("Frames", 10, 10, 0.7, {0.0, 0.0, 0.0});
-	layer.add_element(&text);
-
-	// Uncap FPS for all contexts
-	winman.set_wcontext(0);
-	glfwSwapInterval(0);
-
-	winman.set_wcontext(1);
-	glfwSwapInterval(0);
-
-	// Set render bindings
 	winman.set_renderer(0, main_renderer);
-	winman.set_renderer(1, fps_monitor);
+	winman.set_renderer(1, fps_monitor_renderer);
 
 	// Render loop
-	while (!glfwWindowShouldClose(winman[0])) {
-		// Main window
-		winman.render(0);
+	winman.run();
 
-		// FPS monitor
-		winman.render(1);
-	}
-
+	// TODO: mercury deinit function?
 	// Terminate GLFW
 	glfwTerminate();
 

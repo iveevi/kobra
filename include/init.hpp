@@ -33,7 +33,9 @@ class WindowManager {
 	void _add_win(GLFWwindow *);
 public:
 	// Aliases
+	using Initializer = void (*)();
 	using Renderer = void (*)();
+	using RCondition = bool (*)();
 
 	// Members
 	GLFWwindow *cwin;
@@ -49,11 +51,20 @@ public:
 	// TODO: make private and add a size getter
 	std::vector <GLFWwindow *> wins;
 
+	// Initializer for each context
+	//	because resources are generally
+	//	not sharable across contexts
+	std::vector <Initializer> initers;
+
 	// Loop bindings for each window
 	//	references to the current
 	//	window can be made using
 	//	this sentinel object
 	std::vector <Renderer> bindings;
+
+	// Hook condition: terminates the
+	//	render loop if false
+	RCondition condition = nullptr;
 
 	// TODO: add hash table from title to indices
 	// 	TODO: add title indexing as well
@@ -64,11 +75,28 @@ public:
 
 	// Setters
 	void set_wcontext(size_t);
+	void set_initializer(size_t, Initializer);
 	void set_renderer(size_t, Renderer);
+	void set_condition(RCondition);
+
+	// Initial the specified context
+	//	using the corresponding initializer
+	void initialize(size_t);
 
 	// Render the specified context using
 	//	its corresponding binding
 	void render(size_t);
+
+	// Initializes all windows sequentially
+	void initialize_all();
+
+	// Renders all windows sequentially
+	void render_all();
+
+	// Full program run
+	//	first initializes all contexts, using the bindings
+	//	then renders all in a loop
+	void run();
 
 	// Indexing
 	GLFWwindow *get(size_t index) const {
