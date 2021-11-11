@@ -14,6 +14,7 @@
 // Engine headers
 #include "include/logger.hpp"
 
+// Error checking utilities
 inline GLenum __glCheckError(const char *file, int line)
 {
         GLenum err;
@@ -52,6 +53,11 @@ inline GLenum __glCheckError(const char *file, int line)
 
 #define glCheckError() __glCheckError(__FILE__, __LINE__)
 
+// Printing utilities
 std::ostream &operator<<(std::ostream &, const glm::vec3 &);
+
+// Miscellaneous
+std::string read_code(const char *);
+std::string read_code(const std::string &);
 
 #endif

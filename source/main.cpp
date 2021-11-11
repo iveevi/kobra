@@ -1,4 +1,5 @@
 #include <iostream>
+#include <unordered_map>
 
 // GLFW headers
 #include <glad/glad.h>
@@ -88,22 +89,19 @@ void main()
 }
 )";
 
-const char *fragment_hit = R"(
-#version 330 core
-
-struct PointLight {
-	vec3 position;
-	vec3 color;
-};
+// TODO: add preprocessing for certain constants
+//	constants must be bookmarked in advanced,
+//	then the source is copied, with the bookmark replaced
+std::string fragment_hit = R"(
+#include lighting
 
 in vec3 normal;
 in vec3 frag_pos;
 
 out vec4 frag_color;
 
+// TODO: put these into a material struct
 uniform vec3 color;
-// uniform vec3 light_color;
-// uniform vec3 light_pos;
 uniform vec3 view_pos;
 
 #define NLIGHTS 4
@@ -111,43 +109,16 @@ uniform vec3 view_pos;
 uniform PointLight point_lights[NLIGHTS];
 uniform int npoint_lights;
 
-vec3 point_light_contr(PointLight light)
-{
-	// ambient
-	float ambient_strength = 0.1;
-	vec3 ambient = ambient_strength * light.color;
-
-	// diffuse
-	vec3 norm = normalize(normal);
-	if (!gl_FrontFacing)
-		norm *= -1;
-
-	vec3 light_dir = normalize(light.position - frag_pos);
-	float diff = max(dot(norm, light_dir), 0.0);
-	vec3 diffuse = diff * light.color;
-
-	// specular
-	float shine = 32;
-	float specular_strength = 0.5;
-	vec3 view_dir = normalize(view_pos - frag_pos);
-	vec3 reflect_dir = reflect(-light_dir, norm);
-	float spec = pow(max(dot(view_dir, reflect_dir), 0.0), shine);
-	vec3 specular = specular_strength * spec * light.color;
-
-	vec3 result = (ambient + diffuse + specular) * color;
-	// vec3 rgb_normal = 0.5 * norm + 0.5;
-	return result;
-}
-
 void main()
 {
 	vec3 result = vec3(0.0, 0.0, 0.0);
 	for (int i = 0; i < npoint_lights; i++)
-		result += point_light_contr(point_lights[i]);
+		result += point_light_contr(point_lights[i], color, frag_pos, view_pos, normal);
 	frag_color = vec4(result, 1.0);
 }
 )";
 
+// Random [-0.5, 0.5]
 float randm()
 {
 	return rand()/((float) RAND_MAX) - 0.5;
@@ -231,7 +202,7 @@ int main()
 {
 	// TODO: do in init
 	srand(clock());
-	mercury::init();
+	mercury::init();	// TODO: add an option to skip window creation
 
 	// tell stb_image.h to flip loaded texture's on the y-axis (before loading model).
 	stbi_set_flip_vertically_on_load(true);

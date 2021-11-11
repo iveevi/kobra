@@ -3,6 +3,8 @@
 
 // Standard headers
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 // GLM
 #include <glm/glm.hpp>
@@ -22,8 +24,13 @@ public:
 
 	// Methods
 	void use() const;
+
 	void set_vertex_shader(const char *);
+	void set_vertex_shader(const std::string &);
+
 	void set_fragment_shader(const char *);
+	void set_fragment_shader(const std::string &);
+
 	void compile();
 
 	// Variables
@@ -49,6 +56,10 @@ public:
 
 	// Static methods
 	static Shader from_source(const char *, const char *);
+	static Shader from_source(const std::string &, const std::string &);
+
+	// Headers
+	static std::unordered_map <std::string, std::string> headers;
 };
 
 }

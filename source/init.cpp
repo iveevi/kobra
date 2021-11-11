@@ -1,8 +1,13 @@
+// Engine headers
 #include "include/init.hpp"
 #include "include/logger.hpp"
 #include "include/common.hpp"
 #include "include/ui/text.hpp"
 #include "include/ui/ui_element.hpp"
+
+// Unix directory headers
+#include <sys/types.h>
+#include <dirent.h>
 
 // Extra GLM headers
 #include <glm/gtc/matrix_transform.hpp>
@@ -148,6 +153,7 @@ static void init_glfw()
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
 
+// TODO: should this not be static?
 void load_fonts()
 {
 	// Load default font
@@ -219,24 +225,52 @@ void load_fonts()
 	ui::Text::set_projection(800, 600);
 }
 
+static void load_headers()
+{
+	static const char *dir = MERCURY_SOURCE_DIR "/resources/shaders/headers";
+	static const char *ext = ".glsl";
+	static const size_t ext_len = 5;
+
+	DIR *hdir = opendir(dir);
+
+	dirent *dp;
+	while ((dp = readdir(hdir))) {
+		std::string file = dp->d_name;
+
+		if (file.length() < ext_len)
+			continue;
+
+		std::string fext = file.substr(file.length() - ext_len, ext_len);
+		std::string name = file.substr(0, file.length() - ext_len);
+
+		if (fext == ext) {
+			std::string source = read_code(std::string(dir) + "/" + file);
+			Shader::headers[name] = source;
+		}
+	}
+}
+
+// TODO: should this be a list of functions to execute and log?
 void init()
 {
 	// Start the logger
 	Logger::start();
-
-	// TODO: need to check error codes
 	Logger::ok("Started Mercury Engine.");
 
 	// Very first thing
-	init_glfw();
+	// TODO: need to check error codes
+	init_glfw();					// TODO: option to avoid creating window, rename to load glfw
+	Logger::ok("Initialized GLFW.");
 
 	// TODO: need to check error codes
-	Logger::ok("Successfully initialized GLFW.");
-
 	load_fonts();
+	Logger::ok("Loaded all fonts.");
 
-	// TODO: need to check error codes
-	Logger::ok("Successfully loaded all fonts.");
+	// Load headers
+	load_headers();
+	Logger::ok("Loaded all shader headers.");
+
+	// Other stuff
 
 	// Create the default shader
 	ui::UIElement::shader = Shader(

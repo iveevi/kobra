@@ -1,13 +1,16 @@
-#include "include/shader.hpp"
-#include "include/common.hpp"
-#include "include/logger.hpp"
-
 // Standard headers
 #include <fstream>
 #include <sstream>
 #include <iostream>
 #include <stdexcept>
 #include <utility>
+#include <cstring>
+#include <set>
+
+// Engine headers
+#include "include/shader.hpp"
+#include "include/common.hpp"
+#include "include/logger.hpp"
 
 // GLFW
 #include <glad/glad.h>
@@ -17,60 +20,115 @@ namespace mercury {
 
 // Static variables
 int Shader::_current = -1;
+std::unordered_map <std::string, std::string> Shader::headers;
 
-void error_file(const char *path)
+// Shader source processing
+static void check_header(const std::string &source, std::string &out, int &i)
 {
-	Logger::error() << "Could not load file \"" << path << "\"\n";
-	exit(-1);
+	// Skip white space
+	while (i < source.length() && isspace(source[i])) i++;
 
-	// TODO: should throw a retrievable exception later
-	// a vector of potential files...?
+	// Extract header name
+	std::string header;
+	while (i < source.length() && source[i] != '\n')
+		header += source[i++];
+
+	// Check header database
+	if (Shader::headers.find(header) != Shader::headers.end()) {
+		out += Shader::headers[header];
+	} else {
+		Logger::warn() << "No header \"" << header
+			<< "\" found. Ignoring include.\n";
+	}
 }
 
-// Helper functions (TODO: different headers?)
-std::string read_code(const char *path)
+static void check_directive(const std::string &source, std::string &out, int &i)
 {
-	std::ifstream file;
+	// For now, only dealing with #include directive
+	std::string preproc;
+	for (int j = 0; j < 8 && j + i < source.length(); j++)
+		preproc += source[i + j];
+
+	// Advance the index
+	i += 7;
+	if (preproc == "#include")
+		check_header(source, out, ++i);
+	else
+		out += preproc;
+}
+
+static std::string proc_source(const std::string &source)
+{
 	std::string out;
 
-	file.open(path);
-	if (!file)
-		error_file(path);
+	// TODO: check available glsl versions, or stick with 3.3
+	if (source.find("#version ") == std::string::npos)
+		out = "#version 330\n";
 
-	std::stringstream ss;
-	ss << file.rdbuf();
-	out = ss.str();
+	for (int i = 0; i < source.length(); i++) {
+		char c = source[i];
+
+		if (c == '#')
+			check_directive(source, out, i);
+		else
+			out += c;
+	}
 
 	return out;
 }
 
 // TODO: clean
-void check_program_errors(unsigned int shader, const std::string &type)
+// Source compilation errors
+static void check_compilation(unsigned int shader, const std::string &type)
 {
+	static const int ibsize = 1024;
+	static const int lsize = 80;
+	static const std::string line(lsize, '=');
+
 	GLint success;
-	GLchar infoLog[1024];
-	if(type != "PROGRAM")
-	{
-		glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
-		if(!success)
-		{
-			glGetShaderInfoLog(shader, 1024, NULL, infoLog);
-			std::cout << "ERROR::SHADER_COMPILATION_ERROR of type: "
-				<< type << "\n" << infoLog
-				<< "\n -- --------------------------------------------------- -- " << std::endl;
-		}
-	}
+	GLchar info[ibsize];
+
+	glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+	if (success)
+		return;
+
+	glGetShaderInfoLog(shader, ibsize, nullptr, info);
+
+	// Print error messages
+	Logger::error() << "Shader compilation error in " << type
+		<< " shader (ID = " << shader << ")\n\n";
+
+	std::cout << line << "\n" << info << "\n" << line << "\n\n";
+}
+
+static void check_linker(unsigned int shader, const std::string &type)
+{
+	static const int ibsize = 1024;
+	static const int lsize = 80;
+	static const std::string line(lsize, '=');
+
+	GLint success;
+	GLchar info[ibsize];
+
+	glGetProgramiv(shader, GL_LINK_STATUS, &success);
+	if (success)
+		return;
+
+	glGetProgramInfoLog(shader, ibsize, nullptr, info);
+
+	// Print error messages
+	Logger::error() << "Shader program linking error in " << type
+		<< " shader (ID = " << shader << ")\n\n";
+
+	std::cout << line << "\n" << info << "\n" << line << "\n\n";
+}
+
+static void check_program_errors(unsigned int shader, const std::string &type)
+{
+	if (type != "PROGRAM")
+		check_compilation(shader, type);
 	else
-	{
-		glGetProgramiv(shader, GL_LINK_STATUS, &success);
-		if(!success)
-		{
-			glGetProgramInfoLog(shader, 1024, NULL, infoLog);
-			std::cout << "ERROR::PROGRAM_LINKING_ERROR of type: "
-				<< type << "\n" << infoLog
-				<< "\n -- --------------------------------------------------- -- " << std::endl;
-		}
-	}
+		check_linker(shader, type);
 }
 
 Shader::Shader() {}
@@ -78,10 +136,11 @@ Shader::Shader() {}
 Shader::Shader(const char *vpath, const char *fpath)
 {
 	// TODO: separate into functions
+	// TODO: use set vertex shader, etc
 
 	// Reading the code
-	std::string vcode_str = read_code(vpath);
-	std::string fcode_str = read_code(fpath);
+	std::string vcode_str = proc_source(read_code(vpath));
+	std::string fcode_str = proc_source(read_code(fpath));
 
 	// Convert to C-strings
 	const char *vcode = vcode_str.c_str();
@@ -119,16 +178,38 @@ void Shader::use() const
 
 void Shader::set_vertex_shader(const char *code)
 {
+	set_vertex_shader(std::string(code));
+}
+
+void Shader::set_vertex_shader(const std::string &code)
+{
 	_vertex = glCreateShader(GL_VERTEX_SHADER);
-	glShaderSource(_vertex, 1, &code, NULL);
+
+	// Allocate - TODO: create allocator
+	std::string pcode = proc_source(code);
+	const char *c_pcode = pcode.c_str();
+
+	// Compiler source
+	glShaderSource(_vertex, 1, &c_pcode, NULL);
 	glCompileShader(_vertex);
 	check_program_errors(_vertex, "VERTEX");
 }
 
 void Shader::set_fragment_shader(const char *code)
 {
+	set_fragment_shader(std::string(code));
+}
+
+void Shader::set_fragment_shader(const std::string &code)
+{
 	_fragment = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderSource(_fragment, 1, &code, NULL);
+
+	// Allocate - TODO: create allocator
+	std::string pcode = proc_source(code);
+	const char *c_pcode = pcode.c_str();
+
+	// Compiler source
+	glShaderSource(_fragment, 1, &c_pcode, NULL);
 	glCompileShader(_fragment);
 	check_program_errors(_fragment, "FRAGMENT");
 }
@@ -150,10 +231,16 @@ void Shader::compile()
 // Setters
 int get_index(unsigned int id, const std::string &name)
 {
+	// Cached uniform names
+	static std::set <std::string> cached;
+
 	int index = glGetUniformLocation(id, name.c_str());
-	if (index < 0) {
+	if (index < 0 && cached.find(name) == cached.end()) {
 		Logger::error() << "No uniform \"" << name
 			<< "\" in shader (ID = " << id << ").\n";
+
+		// Add name to the cached list if not present
+		cached.insert(cached.begin(), name);
 	}
 	return index;
 }
@@ -241,6 +328,11 @@ void Shader::set_mat4(const std::string &name, const glm::mat4 &mat) const
 
 // Static methods
 Shader Shader::from_source(const char *vcode, const char *fcode)
+{
+	return from_source(std::string(vcode), std::string(fcode));
+}
+
+Shader Shader::from_source(const std::string &vcode, const std::string &fcode)
 {
 	Shader shader;
 	shader.set_vertex_shader(vcode);
