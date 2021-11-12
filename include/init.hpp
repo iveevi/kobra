@@ -51,6 +51,7 @@ private:
 	// Common resources
 	struct {
 		std::vector <Shader> text_shaders;
+		std::vector <Shader> skybox_shaders;
 		std::vector <CMap> character_maps;
 	} _cmn;
 public:
@@ -64,6 +65,7 @@ public:
 	// Current resources
 	struct {
 		Shader *text_shader;
+		Shader *sb_shader;
 		CMap *character_map;
 	} cres;
 

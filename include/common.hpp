@@ -60,4 +60,8 @@ std::ostream &operator<<(std::ostream &, const glm::vec3 &);
 std::string read_code(const char *);
 std::string read_code(const std::string &);
 
+// Filesystem shortcuts
+#define _res(path) "resources/" path
+#define _shader(path) "resources/shaders/" path
+
 #endif

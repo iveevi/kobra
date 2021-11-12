@@ -39,6 +39,8 @@ set(MERCURY_SOURCE
 	source/mouse_bus.cpp
 	source/shader.cpp
 
+	source/engine/skybox.cpp
+
 	source/mesh/basic.cpp
 
 	source/ui/button.cpp
