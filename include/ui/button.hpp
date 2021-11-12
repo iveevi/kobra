@@ -29,7 +29,7 @@ public:
 	virtual void on_pressed(const glm::vec2 &);
 	virtual void on_released(const glm::vec2 &);
 
-	void draw() override;
+	void draw(Shader &) override;
 	glm::vec2 get_position() const override;
 	void set_position(const glm::vec2 &) override;
 	void move(const glm::vec2 &) override;

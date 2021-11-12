@@ -19,7 +19,8 @@
 namespace mercury {
 
 // Static variables
-int Shader::_current = -1;
+std::string Shader::_current = "";
+
 std::unordered_map <std::string, std::string> Shader::headers;
 
 // Shader source processing
@@ -168,13 +169,26 @@ Shader::Shader(const char *vpath, const char *fpath)
 	// Free other programs
 	glDeleteShader(_vertex);
 	glDeleteShader(_fragment);
+
+	// Set name
+	set_name("shader_" + std::to_string(id));
 }
 
 void Shader::use() const
 {
 	glUseProgram(id);
 	glCheckError();
-	_current = id;
+	_current = _name;
+}
+
+const std::string &Shader::get_name() const
+{
+	return _name;
+}
+
+void Shader::set_name(const std::string &name)
+{
+	_name = name;
 }
 
 void Shader::set_vertex_shader(const char *code)
@@ -227,20 +241,23 @@ void Shader::compile()
 	// Free other programs
 	glDeleteShader(_vertex);
 	glDeleteShader(_fragment);
+
+	// Set name
+	set_name("shader_" + std::to_string(id));
 }
 
 // Setters
-int get_index(unsigned int id, const std::string &name)
+int get_index(const Shader *shader, const std::string &name)
 {
 	// Cached uniform names
 	// TODO: helper function for cached logging?
 	//	would avoid looped clutter with certain logging
 	static std::set <std::string> cached;
 
-	int index = glGetUniformLocation(id, name.c_str());
+	int index = glGetUniformLocation(shader->id, name.c_str());
 	if (index < 0 && cached.find(name) == cached.end()) {
 		Logger::error() << "No uniform \"" << name
-			<< "\" in shader (ID = " << id << ").\n";
+			<< "\" in shader (ID: " << shader->get_name() << ").\n";
 
 		// Add name to the cached list if not present
 		cached.insert(cached.begin(), name);
@@ -250,83 +267,82 @@ int get_index(unsigned int id, const std::string &name)
 
 // Current checker macro
 #define CHECK_CURRENT(ftn)						\
-	if (id != _current) {						\
-		Logger::error("Not using current shader (ID = "		\
-			+ std::to_string(_current) + ") for "		\
-			+ std::string(ftn));				\
+	if (_name != _current) {					\
+		Logger::error("Not using current shader (ID: "		\
+			+ _current + ") for " + std::string(ftn));	\
 	}
 
 void Shader::set_bool(const std::string &name, bool value) const
 {
 	CHECK_CURRENT(__PRETTY_FUNCTION__);
-	glUniform1i(get_index(id, name), (int) value);
+	glUniform1i(get_index(this, name), (int) value);
 }
 
 void Shader::set_int(const std::string &name, int value) const
 {
 	CHECK_CURRENT(__PRETTY_FUNCTION__);
-	glUniform1i(get_index(id, name), value);
+	glUniform1i(get_index(this, name), value);
 }
 
 void Shader::set_float(const std::string &name, float value) const
 {
 	CHECK_CURRENT(__PRETTY_FUNCTION__);
-	glUniform1f(get_index(id, name), value);
+	glUniform1f(get_index(this, name), value);
 }
 
 void Shader::set_vec2(const std::string &name, const glm::vec2 &value) const
 {
 	CHECK_CURRENT(__PRETTY_FUNCTION__);
-	glUniform2fv(get_index(id, name), 1, &value[0]);
+	glUniform2fv(get_index(this, name), 1, &value[0]);
 }
 
 void Shader::set_vec2(const std::string &name, float x, float y) const
 {
 	CHECK_CURRENT(__PRETTY_FUNCTION__);
-	glUniform2f(get_index(id, name), x, y);
+	glUniform2f(get_index(this, name), x, y);
 }
 
 void Shader::set_vec3(const std::string &name, const glm::vec3 &value) const
 {
 	CHECK_CURRENT(__PRETTY_FUNCTION__);
-	glUniform3fv(get_index(id, name), 1, &value[0]);
+	glUniform3fv(get_index(this, name), 1, &value[0]);
 }
 
 void Shader::set_vec3(const std::string &name, float x, float y, float z) const
 {
 	CHECK_CURRENT(__PRETTY_FUNCTION__);
-	glUniform3f(get_index(id, name), x, y, z);
+	glUniform3f(get_index(this, name), x, y, z);
 }
 
 void Shader::set_vec4(const std::string &name, const glm::vec4 &value) const
 {
 	CHECK_CURRENT(__PRETTY_FUNCTION__);
-	glUniform4fv(get_index(id, name), 1, &value[0]);
+	glUniform4fv(get_index(this, name), 1, &value[0]);
 }
 
 void Shader::set_vec4(const std::string &name,
 		float x, float y, float z, float w) const
 {
 	CHECK_CURRENT(__PRETTY_FUNCTION__);
-	glUniform4f(get_index(id, name), x, y, z, w);
+	glUniform4f(get_index(this, name), x, y, z, w);
 }
 
 void Shader::set_mat2(const std::string &name, const glm::mat2 &mat) const
 {
 	CHECK_CURRENT(__PRETTY_FUNCTION__);
-	glUniformMatrix2fv(get_index(id, name), 1, GL_FALSE, &mat[0][0]);
+	glUniformMatrix2fv(get_index(this, name), 1, GL_FALSE, &mat[0][0]);
 }
 
 void Shader::set_mat3(const std::string &name, const glm::mat3 &mat) const
 {
 	CHECK_CURRENT(__PRETTY_FUNCTION__);
-	glUniformMatrix3fv(get_index(id, name), 1, GL_FALSE, &mat[0][0]);
+	glUniformMatrix3fv(get_index(this, name), 1, GL_FALSE, &mat[0][0]);
 }
 
 void Shader::set_mat4(const std::string &name, const glm::mat4 &mat) const
 {
 	CHECK_CURRENT(__PRETTY_FUNCTION__);
-	glUniformMatrix4fv(get_index(id, name), 1, GL_FALSE, &mat[0][0]);
+	glUniformMatrix4fv(get_index(this, name), 1, GL_FALSE, &mat[0][0]);
 }
 
 // Static methods

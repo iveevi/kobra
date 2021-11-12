@@ -40,11 +40,11 @@ const PureRect &Rect::get_bounds() const
 	return _fill;
 }
 
-void Rect::draw()
+void Rect::draw(Shader &shader)
 {
 	if (_border_on)
-		_border.draw();
-	_fill.draw();
+		_border.draw(shader);
+	_fill.draw(shader);
 }
 
 glm::vec2 Rect::get_position() const

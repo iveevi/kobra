@@ -28,7 +28,7 @@ public:
 
 	const PureRect &get_bounds() const;
 
-	void draw() override;
+	void draw(Shader &) override;
 	glm::vec2 get_position() const override;
 	void set_position(const glm::vec2 &) override;
 	bool contains(const glm::vec2 &) const override;

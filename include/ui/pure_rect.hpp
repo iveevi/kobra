@@ -32,7 +32,7 @@ public:
 	float get_height() const;
 	const glm::vec2 &get_tl() const;
 
-	void draw() override;
+	void draw(Shader &) override;
 	glm::vec2 get_position() const override;
 	void set_position(const glm::vec2 &) override;
 	bool contains(const glm::vec2 &) const override;

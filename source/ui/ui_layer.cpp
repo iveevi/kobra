@@ -12,10 +12,10 @@ void UILayer::add_element(UIElement *uie)
 	_elements.push_back(uie);
 }
 
-void UILayer::draw()
+void UILayer::draw(Shader &shader)
 {
 	for (UIElement *uie : _elements)
-		uie->draw();
+		uie->draw(shader);
 }
 
 glm::vec2 UILayer::get_position() const

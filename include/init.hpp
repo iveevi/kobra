@@ -28,21 +28,47 @@
 
 namespace mercury {
 
+// Character struct and map
+struct Char {
+	unsigned int tid;
+	glm::ivec2 size;
+	glm::ivec2 bearing;
+	unsigned int offset;
+
+	// TODO: put this shader into the Shader class
+	static Shader shader;
+};
+
 // Wrapped struct
 class WindowManager {
-	void _add_win(GLFWwindow *);
 public:
 	// Aliases
 	using Initializer = void (*)();
 	using Renderer = void (*)();
 	using RCondition = bool (*)();
 
+	using CMap = std::unordered_map <char, Char>;
+private:
+	void _add_win(GLFWwindow *);
+
+	// Common resources
+	struct {
+		std::vector <Shader> text_shaders;
+		std::vector <CMap> character_maps;
+	} _cmn;
+public:
 	// Members
 	GLFWwindow *cwin;
 
 	// TODO: update everytime the context changes
 	float width;
 	float height;
+
+	// Current resources
+	struct {
+		Shader *text_shader;
+		CMap *character_map;
+	} cres;
 
 	// TODO: change this...
 	MouseBus mouse_handler;
@@ -79,6 +105,9 @@ public:
 	void set_renderer(size_t, Renderer);
 	void set_condition(RCondition);
 
+	// Loaders
+	void load_font(size_t);
+
 	// Initial the specified context
 	//	using the corresponding initializer
 	void initialize(size_t);
@@ -109,17 +138,6 @@ public:
 } extern winman;
 
 // glm::vec2 transform(const glm::vec2 &);
-
-// Character struct and map
-struct Char {
-	unsigned int tid;
-	glm::ivec2 size;
-	glm::ivec2 bearing;
-	unsigned int offset;
-
-	// TODO: put this shader into the Shader class
-	static Shader shader;
-};
 
 // Character mapping
 // TODO: need to consider loading multiple font packs

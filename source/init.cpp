@@ -104,6 +104,10 @@ void WindowManager::_add_win(GLFWwindow *win)
 	wins.push_back(win);
 	initers.push_back(nullptr);
 	bindings.push_back(nullptr);
+
+	// Append to current resources
+	_cmn.text_shaders.push_back(Shader());
+	_cmn.character_maps.push_back(CMap());
 }
 
 static GLFWwindow *mk_win(const char *title,
@@ -136,10 +140,17 @@ void WindowManager::add_win(const std::string &title,
 	_add_win(win);
 }
 
-void WindowManager::set_wcontext(size_t index)
+void WindowManager::set_wcontext(size_t context)
 {
-	cwin = wins[index];
+	// TODO: make sure window is in bounds
+	cwin = wins[context];
 	glfwMakeContextCurrent(cwin);
+
+	// TODO: set window dimensions
+
+	// Set current resources
+	cres.text_shader = &_cmn.text_shaders[context];
+	cres.character_map = &_cmn.character_maps[context];
 }
 
 void WindowManager::set_initializer(size_t index, Initializer initer)
@@ -161,6 +172,112 @@ void WindowManager::set_renderer(size_t index, Renderer renderer)
 void WindowManager::set_condition(RCondition cond)
 {
 	condition = cond;
+}
+
+static void _load_font(WindowManager::CMap *cmap)
+{
+	// Load default font
+	FT_Library ft;
+	if (FT_Init_FreeType(&ft)) {
+		std::cout << "ERROR::FREETYPE: Could not init FreeType Library" << std::endl;
+		exit(-1);
+	}
+
+	FT_Face face;
+	int ret;
+	if ((ret = FT_New_Face(ft, MERCURY_SOURCE_DIR "/resources/fonts/arial.ttf", 0, &face))) {
+		std::cout << "ERROR::FREETYPE: Failed to load font (" << ret << ")" << std::endl;
+		exit(-1);
+	}
+
+	FT_Set_Pixel_Sizes(face, 0, 48);
+
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1); // disable byte-alignment restriction
+	for (unsigned char c = 0; c < 128; c++) {
+		// load character glyph
+		if (FT_Load_Char(face, c, FT_LOAD_RENDER))
+		{
+			std::cout << "ERROR::FREETYTPE: Failed to load Glyph" << std::endl;
+			continue;
+		}
+		// generate texture
+		unsigned int texture;
+		glGenTextures(1, &texture);
+		glBindTexture(GL_TEXTURE_2D, texture);
+		glTexImage2D(
+				GL_TEXTURE_2D,
+				0,
+				GL_RED,
+				face->glyph->bitmap.width,
+				face->glyph->bitmap.rows,
+				0,
+				GL_RED,
+				GL_UNSIGNED_BYTE,
+				face->glyph->bitmap.buffer
+		);
+		// set texture options
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		// now store character for later use
+		Char character = {
+			texture,
+			glm::ivec2(face->glyph->bitmap.width, face->glyph->bitmap.rows),
+			glm::ivec2(face->glyph->bitmap_left, face->glyph->bitmap_top),
+			(unsigned int) face->glyph->advance.x
+		};
+
+		cmap->insert({c, character});
+	}
+
+	// Release resources
+	FT_Done_Face(face);
+	FT_Done_FreeType(ft);
+
+	// TODO: remove
+	// Create the text shader
+	Char::shader = Shader(
+		MERCURY_SOURCE_DIR "/resources/shaders/font_shader.vs",
+		MERCURY_SOURCE_DIR "/resources/shaders/font_shader.fs"
+	);
+
+	Char::shader.set_name("char_shader");
+
+	// Set default projection
+	ui::Text::set_projection(800, 600);
+}
+
+
+void WindowManager::load_font(size_t context)
+{
+	static const char *vert = MERCURY_SOURCE_DIR
+		"/resources/shaders/font_shader.vs";
+	static const char *frag = MERCURY_SOURCE_DIR
+		"/resources/shaders/font_shader.fs";
+
+	// TODO: check context for in bounds
+	set_wcontext(context);
+
+	// Create the shader
+	_cmn.text_shaders[context] = Shader(vert, frag);
+
+	// TODO: use width and height --> set in set_wcontext
+	int w, h;
+	glfwGetWindowSize(cwin, &w, &h);
+
+	// Set the shader properties
+	cres.text_shader->use();
+	cres.text_shader->set_mat4(
+		"projection",
+		glm::ortho(0.0f, (float) w, 0.0f, (float) h)
+	);
+
+	// TODO: set name of the shader based on the window title
+	cres.text_shader->set_name("text_shader");
+
+	// Load the character map
+	_load_font(cres.character_map);
 }
 
 void WindowManager::initialize(size_t context)
@@ -282,77 +399,6 @@ static void load_glfw_opts()
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
 
-static void load_fonts()
-{
-	// Load default font
-	FT_Library ft;
-	if (FT_Init_FreeType(&ft)) {
-		std::cout << "ERROR::FREETYPE: Could not init FreeType Library" << std::endl;
-		exit(-1);
-	}
-
-	FT_Face face;
-	int ret;
-	if ((ret = FT_New_Face(ft, MERCURY_SOURCE_DIR "/resources/fonts/arial.ttf", 0, &face))) {
-		std::cout << "ERROR::FREETYPE: Failed to load font (" << ret << ")" << std::endl;
-		exit(-1);
-	}
-
-	FT_Set_Pixel_Sizes(face, 0, 48);
-
-	glPixelStorei(GL_UNPACK_ALIGNMENT, 1); // disable byte-alignment restriction
-	for (unsigned char c = 0; c < 128; c++) {
-		// load character glyph
-		if (FT_Load_Char(face, c, FT_LOAD_RENDER))
-		{
-			std::cout << "ERROR::FREETYTPE: Failed to load Glyph" << std::endl;
-			continue;
-		}
-		// generate texture
-		unsigned int texture;
-		glGenTextures(1, &texture);
-		glBindTexture(GL_TEXTURE_2D, texture);
-		glTexImage2D(
-				GL_TEXTURE_2D,
-				0,
-				GL_RED,
-				face->glyph->bitmap.width,
-				face->glyph->bitmap.rows,
-				0,
-				GL_RED,
-				GL_UNSIGNED_BYTE,
-				face->glyph->bitmap.buffer
-		);
-		// set texture options
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		// now store character for later use
-		Char character = {
-			texture,
-			glm::ivec2(face->glyph->bitmap.width, face->glyph->bitmap.rows),
-			glm::ivec2(face->glyph->bitmap_left, face->glyph->bitmap_top),
-			(unsigned int) face->glyph->advance.x
-		};
-
-		cmap.insert({c, character});
-	}
-
-	// Release resources
-	FT_Done_Face(face);
-	FT_Done_FreeType(ft);
-
-	// Create the text shader
-	Char::shader = Shader(
-		MERCURY_SOURCE_DIR "/resources/shaders/font_shader.vs",
-		MERCURY_SOURCE_DIR "/resources/shaders/font_shader.fs"
-	);
-
-	// Set default projection
-	ui::Text::set_projection(800, 600);
-}
-
 static void load_headers()
 {
 	static const char *dir = MERCURY_SOURCE_DIR "/resources/shaders/headers";
@@ -402,7 +448,12 @@ std::vector <Loader> init_seq {
 	},
 	{load_glad, "Initialized GLAD."},
 	{load_glfw_opts, "Set GLFW options."},
-	{load_fonts, "Finished loading all fonts."},
+	{
+		[]() {
+			_load_font(&cmap);
+		},
+		"Finished loading all fonts (REMOVE STAGE)."
+	},
 	{load_headers, "Finished loading all shader headers."},
 	{
 		[]() {					// TODO: function called load_shaders
@@ -411,7 +462,7 @@ std::vector <Loader> init_seq {
 				MERCURY_SOURCE_DIR "/resources/shaders/shape_shader.fs"
 			);
 		},
-		"Finished loading all static shaders."
+		"Finished loading all static shaders (REMOVE STAGE)."
 	},
 	{
 		[]() {
@@ -419,9 +470,10 @@ std::vector <Loader> init_seq {
 			ui::UIElement::set_projection(0, 800, 0, 600, 800, 600);
 
 			// Set initial screen parameters
+			// TODO: is this even needed?
 			update_screen_size(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT);
 		},
-		"Finished post-init sequence."
+		"Finished post-init sequence (REMOVE STAGE)."
 	}
 };
 

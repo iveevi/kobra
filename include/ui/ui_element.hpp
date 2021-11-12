@@ -16,7 +16,7 @@ namespace ui {
 
 class UIElement {
 public:
-	virtual void draw() = 0;
+	virtual void draw(Shader &) = 0;
 
 	virtual glm::vec2 get_position() const = 0;
 	virtual void set_position(const glm::vec2 &) = 0;

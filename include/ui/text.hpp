@@ -37,6 +37,8 @@ class Text : public UIElement {
 
 	std::string	_str;
 
+	// TODO: store pointer to character map
+
 	void _alloc();
 	void _get_maxy();
 public:
@@ -58,8 +60,10 @@ public:
 	void center_within(const PureRect &, bool = false);
 
 	// Virtual overrides
-	void draw() override;
+	void draw(Shader &) override;
+
 	glm::vec2 get_position() const override;
+
 	void set_position(const glm::vec2 &) override;
 
 	static float swidth;

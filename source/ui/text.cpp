@@ -112,22 +112,33 @@ void Text::center_within(const PureRect &pr, bool local)
 	}
 }
 
-void Text::draw()
+void Text::draw(Shader &shader)
 {
 	// Set current things
-	Char::shader.use();
-	Char::shader.set_vec3("text_color", _color);
+	// Char::shader.use();
+	// Char::shader.set_vec3("text_color", _color);
+	shader.use();
+	shader.set_vec3("text_color", _color);
 
 	glBindVertexArray(_vao);
 
 	// Construct the text
 	float cxpos = _xpos;
 
+	// Extract character map
+	WindowManager::CMap *cmap = winman.cres.character_map;
+
 	for (const auto &c : _str) {
-		if (cmap.find(c) == cmap.end())
+		if (!cmap) {
+			// TODO: make a difference between error and fatal/terminal error?
+			Logger::error("Active character map is null.");
+			exit(-1);
+		}
+
+		if (cmap->find(c) == cmap->end())
 			throw std::runtime_error("No character " + std::string(1, c) + " in map...");
 
-		Char ch = cmap[c];
+		Char ch = cmap->at(c); // cmap[c];
 
 		float xpos = cxpos + ch.bearing.x * _scale;
 		// std::cout << "xpos = " << xpos << std::endl;
@@ -150,6 +161,8 @@ void Text::draw()
 
 		// render glyph texture over quad
 		glBindTexture(GL_TEXTURE_2D, ch.tid);
+		glCheckError();
+
 		// update content of VBO memory
 		glBindBuffer(GL_ARRAY_BUFFER, _vbo);
 		glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);

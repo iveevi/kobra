@@ -19,7 +19,7 @@ class UILayer : public UIElement {
 public:
 	void add_element(UIElement *);
 
-	void draw() override;
+	void draw(Shader &) override;
 	glm::vec2 get_position() const override;
 	void set_position(const glm::vec2 &) override;
 	void move(const glm::vec2 &) override;

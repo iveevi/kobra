@@ -47,12 +47,12 @@ void Button::on_released(const glm::vec2 &mpos)
 		_release_handler->run((size_t *) &mpos);
 }
 
-void Button::draw()
+void Button::draw(Shader &shader)
 {
-	_cbox->draw();
+	_cbox->draw(shader);
 
 	if (_layer)
-		_layer->draw();
+		_layer->draw(shader);
 }
 
 glm::vec2 Button::get_position() const

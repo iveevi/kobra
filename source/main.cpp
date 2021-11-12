@@ -154,15 +154,173 @@ void main()
 }
 )";
 
-// Graph points
-float fps_vertices[] = {
-	0.0f, 0.0f, 0.0f,
-	100.0f, 100.0f, 0.0f,
-	100.0f,  50.0f, 0.0f
+using CMap = std::unordered_map <char, Char>;
+
+static void load_fonts(CMap *cmap)
+{
+	// Load default font
+	FT_Library ft;
+	if (FT_Init_FreeType(&ft)) {
+		std::cout << "ERROR::FREETYPE: Could not init FreeType Library" << std::endl;
+		exit(-1);
+	}
+
+	FT_Face face;
+	int ret;
+	if ((ret = FT_New_Face(ft, MERCURY_SOURCE_DIR "/resources/fonts/arial.ttf", 0, &face))) {
+		std::cout << "ERROR::FREETYPE: Failed to load font (" << ret << ")" << std::endl;
+		exit(-1);
+	}
+
+	FT_Set_Pixel_Sizes(face, 0, 48);
+
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1); // disable byte-alignment restriction
+	for (unsigned char c = 0; c < 128; c++) {
+		// load character glyph
+		if (FT_Load_Char(face, c, FT_LOAD_RENDER))
+		{
+			std::cout << "ERROR::FREETYTPE: Failed to load Glyph" << std::endl;
+			continue;
+		}
+
+		// generate texture
+		unsigned int texture;
+		glGenTextures(1, &texture);
+
+		Logger::warn() << "New texture is " << texture << "\n";
+		glBindTexture(GL_TEXTURE_2D, texture);
+		glTexImage2D(
+				GL_TEXTURE_2D,
+				0,
+				GL_RED,
+				face->glyph->bitmap.width,
+				face->glyph->bitmap.rows,
+				0,
+				GL_RED,
+				GL_UNSIGNED_BYTE,
+				face->glyph->bitmap.buffer
+		);
+
+		// set texture options
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+		// now store character for later use
+		Char character = {
+			texture,
+			glm::ivec2(face->glyph->bitmap.width, face->glyph->bitmap.rows),
+			glm::ivec2(face->glyph->bitmap_left, face->glyph->bitmap_top),
+			(unsigned int) face->glyph->advance.x
+		};
+
+		cmap->insert({c, character});
+	}
+
+	// Release resources
+	FT_Done_Face(face);
+	FT_Done_FreeType(ft);
+
+	/* Create the text shader
+	Char::shader = Shader(
+		MERCURY_SOURCE_DIR "/resources/shaders/font_shader.vs",
+		MERCURY_SOURCE_DIR "/resources/shaders/font_shader.fs"
+	);
+
+	Char::shader.set_name("char_shader");
+
+	// Set default projection
+	ui::Text::set_projection(800, 600); */
+}
+
+// FPS monitor
+
+// Graph vertices: normalize for [0, 100] for each coordinate
+std::vector <float> fps_vertices = {
+	10, 10, 0,
+	40, 20, 0,
+	70, 50, 0
 };
 
-unsigned vbo;
-unsigned vao;
+// Vertex buffer struct
+//	fields is the number of floating point
+//	numbers that represent a single vertex
+//
+//	for plain 3d vertices, this would be 3
+//	if normals are included, it would become 6
+template <unsigned int fields>
+struct VertexArray {
+	unsigned int vao;
+	unsigned int vbo;
+
+	// Number of vertices
+	size_t size;
+
+	// TODO: what about index buffer?
+	virtual void draw(GLenum mode) const {
+		glBindVertexArray(vao);
+		glDrawArrays(GL_LINE_STRIP, 0, size);
+		glCheckError();
+	}
+};
+
+// Vertex array that cannot be modified
+template <unsigned int fields>
+struct StaticVA : public VertexArray <fields> {
+	StaticVA() {}
+
+	StaticVA(const std::vector <float> &verts) {
+		// Set size
+		this->size = verts.size() / fields;
+
+		// Allocate buffers
+		glGenVertexArrays(1, &this->vao);
+		glGenBuffers(1, &this->vbo);
+		glBindVertexArray(this->vao);
+
+		// Load buffer
+		glBindBuffer(GL_ARRAY_BUFFER, this->vbo);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * verts.size(),
+			&verts[0], GL_STATIC_DRAW);
+
+		glVertexAttribPointer(0, fields, GL_FLOAT, GL_FALSE,
+			fields * sizeof(float), (void *) 0);
+		glEnableVertexAttribArray(0);
+		glCheckError();
+	}
+};
+
+using VA3 = VertexArray <3>;
+using SVA3 = StaticVA <3>;
+
+// Graph points
+unsigned int vbo;
+unsigned int vao;
+
+// Axes
+SVA3 axes;
+
+// Text
+ui::Text text_fps;
+
+Shader tshader;
+
+CMap fps_cmap;
+
+// Reload the buffer
+void generate_arrays()
+{
+	// Load graph buffer
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(float) * fps_vertices.size(),
+		&fps_vertices[0], GL_STATIC_DRAW);
+
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE,
+		3 * sizeof(float), (void *) 0);
+	glEnableVertexAttribArray(0);
+	glCheckError();
+}
 
 // TODO: once this is done, should go into separate file
 //	to create a fps monitor on the fly
@@ -173,26 +331,47 @@ void fps_monitor_initializer()
 	// Uncap FPS
 	glfwSwapInterval(0);
 
+	// Set line width
+	glLineWidth(5.0f);
+
+	// Create axes
+	axes = SVA3({
+		0,	100,	0,
+		0,	0,	0,
+		100,	0,	0,
+	});
+
 	// Allocate graph buffer
 	glGenVertexArrays(1, &vao);
 	glGenBuffers(1, &vbo);
 	glBindVertexArray(vao);
 
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(fps_vertices), fps_vertices, GL_STATIC_DRAW);
-
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *) 0);
-	glEnableVertexAttribArray(0);
-
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	glCheckError();
+	generate_arrays();
 
 	// Create and configure base graphing shader
 	basic = Shader::from_source(basic_vert, basic_frag);
 
 	basic.use();
-	basic.set_vec3("ecolor", {1.0, 1.0, 1.0});
-	basic.set_mat4("projection", glm::ortho(0.0f, 800.0f, 0.0f, 200.0f));
+	//basic.set_vec3("ecolor", {1.0, 1.0, 1.0});
+	basic.set_mat4("projection", glm::ortho(-10.0f, 110.0f, -10.0f, 110.0f));
+
+	tshader = Shader("resources/shaders/font_shader.vs", "resources/shaders/font_shader.fs");
+	tshader.set_name("tshader");
+
+	tshader.use();
+	tshader.set_mat4("projection", glm::ortho(0.0f, 800.0f, 0.0f, 600.0f));
+
+	// Set text
+	// winman.load_font(1);
+	text_fps = ui::Text("FPS", 10, 10, 1.0, {1.0, 0.5, 1.0});
+
+	// load_fonts(&fps_cmap);
+	winman.load_font(1);
+
+	// TODO: move to init or smthing
+	// For text rendering
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
 
 void fps_monitor_renderer()
@@ -202,11 +381,30 @@ void fps_monitor_renderer()
 
 	// Draw the graph
 	basic.use();
+	basic.set_vec3("ecolor", {1.0, 1.0, 1.0});
+
 	glBindVertexArray(vao);
 	glCheckError();
 
-	glDrawArrays(GL_LINE_STRIP, 0, 3);
+	glDrawArrays(GL_LINE_STRIP, 0, fps_vertices.size()/3);
 	glCheckError();
+
+	// Draw axes
+	basic.set_vec3("ecolor", {0.6, 0.6, 0.6});
+
+	axes.draw(GL_LINE_STRIP);
+
+	// Draw text
+	// winman.cshader.text->use();
+	// winman.cshader.text->set_vec3("text_color", {1.0, 1.0, 1.0});
+
+	/* tshader.use();
+	tshader.set_vec3("text_color", {1.0, 0.5, 1.0}); */
+
+	glCheckError();
+
+	// winman.cmap = &fps_cmap;
+	text_fps.draw(tshader);
 }
 
 // Render function for main window
@@ -234,11 +432,18 @@ void main_initializer()
 	// Configure global opengl state
 	glEnable(GL_DEPTH_TEST);
 
+	// Hide cursor
+	glfwSetInputMode(winman.cwin,
+		GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
 	// TODO: do in init
 	srand(clock());
 
 	// Draw in wireframe -- TODO: should be an init option (or live option)
 	// glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+	// Load text shader for this context
+	winman.load_font(0);
 
 	// Position of the light
 	glm::vec3 lpos1 = {2, 1.6, 1.6};
@@ -347,9 +552,12 @@ void main_renderer()
 	tree.draw(hit);
 
 	// Draw text
+	// winman.cshader.text->use();
+	// winman.cshader.text->set_vec3("text_color", {0, 0, 0});
+	// winman.cmap = &cmap;
 	text.set_str(std::to_string(delta_time).substr(0, 6) + "s delta, "
 		+ std::to_string(fps) + " fps");
-	layer.draw();
+	layer.draw(Char::shader);
 }
 
 // Program render loop condition

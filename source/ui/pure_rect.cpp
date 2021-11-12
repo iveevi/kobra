@@ -70,8 +70,9 @@ const glm::vec2 &PureRect::get_tl() const
 	return _tl;
 }
 
-void PureRect::draw()
+void PureRect::draw(Shader &shader)
 {
+	// TODO: use the passed shader
 	// Use and set shader properties
 	UIElement::shader.use();
 	UIElement::shader.set_vec3("shape_color", _color);

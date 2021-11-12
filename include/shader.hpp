@@ -12,10 +12,12 @@
 namespace mercury {
 
 class Shader {
-	unsigned int	_vertex;
-	unsigned int	_fragment;
+	unsigned int		_vertex;
+	unsigned int		_fragment;
 
-	static int	_current;
+	std::string		_name;
+
+	static std::string	_current;
 public:
 	Shader();
 	Shader(const char *, const char *);
@@ -24,6 +26,10 @@ public:
 
 	// Methods
 	void use() const;
+
+	const std::string &get_name() const;
+
+	void set_name(const std::string &);
 
 	void set_vertex_shader(const char *);
 	void set_vertex_shader(const std::string &);
