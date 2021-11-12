@@ -44,10 +44,10 @@ glm::vec2 transform(const glm::vec2 &in)
 } */
 
 // Character static variables
-Shader Char::shader;
+// Shader Char::shader;
 
 // Character map
-std::unordered_map <char, Char> cmap;
+// std::unordered_map <char, Char> cmap;
 
 // UI Element static variables
 float ui::UIElement::swidth = -1;
@@ -56,8 +56,8 @@ Shader ui::UIElement::shader;
 glm::mat4 ui::UIElement::projection;
 
 // Text static variables: TODO: into own source
-float ui::Text::swidth = -1;
-float ui::Text::sheight = -1;
+// float ui::Text::swidth = -1;
+// float ui::Text::sheight = -1;
 
 // Logger static variables - TODO: put into its own source file
 Logger::tclk Logger::clk;
@@ -146,7 +146,14 @@ void WindowManager::set_wcontext(size_t context)
 	cwin = wins[context];
 	glfwMakeContextCurrent(cwin);
 
-	// TODO: set window dimensions
+	// Set window dimensions
+	int w;
+	int h;
+
+	glfwGetWindowSize(cwin, &w, &h);
+
+	width = w;
+	height = h;
 
 	// Set current resources
 	cres.text_shader = &_cmn.text_shaders[context];
@@ -223,9 +230,9 @@ static void _load_font(WindowManager::CMap *cmap)
 		// now store character for later use
 		Char character = {
 			texture,
+			(unsigned int) face->glyph->advance.x,
 			glm::ivec2(face->glyph->bitmap.width, face->glyph->bitmap.rows),
-			glm::ivec2(face->glyph->bitmap_left, face->glyph->bitmap_top),
-			(unsigned int) face->glyph->advance.x
+			glm::ivec2(face->glyph->bitmap_left, face->glyph->bitmap_top)
 		};
 
 		cmap->insert({c, character});
@@ -234,23 +241,14 @@ static void _load_font(WindowManager::CMap *cmap)
 	// Release resources
 	FT_Done_Face(face);
 	FT_Done_FreeType(ft);
-
-	// TODO: remove
-	// Create the text shader
-	Char::shader = Shader(
-		MERCURY_SOURCE_DIR "/resources/shaders/font_shader.vs",
-		MERCURY_SOURCE_DIR "/resources/shaders/font_shader.fs"
-	);
-
-	Char::shader.set_name("char_shader");
-
-	// Set default projection
-	ui::Text::set_projection(800, 600);
 }
 
 
 void WindowManager::load_font(size_t context)
 {
+	// Path to shader source
+
+	// TODO: add macros to retrieve resources and shaders
 	static const char *vert = MERCURY_SOURCE_DIR
 		"/resources/shaders/font_shader.vs";
 	static const char *frag = MERCURY_SOURCE_DIR
@@ -262,15 +260,11 @@ void WindowManager::load_font(size_t context)
 	// Create the shader
 	_cmn.text_shaders[context] = Shader(vert, frag);
 
-	// TODO: use width and height --> set in set_wcontext
-	int w, h;
-	glfwGetWindowSize(cwin, &w, &h);
-
 	// Set the shader properties
 	cres.text_shader->use();
 	cres.text_shader->set_mat4(
 		"projection",
-		glm::ortho(0.0f, (float) w, 0.0f, (float) h)
+		glm::ortho(0.0f, width, 0.0f, height) //(float) h)
 	);
 
 	// TODO: set name of the shader based on the window title
@@ -448,12 +442,6 @@ std::vector <Loader> init_seq {
 	},
 	{load_glad, "Initialized GLAD."},
 	{load_glfw_opts, "Set GLFW options."},
-	{
-		[]() {
-			_load_font(&cmap);
-		},
-		"Finished loading all fonts (REMOVE STAGE)."
-	},
 	{load_headers, "Finished loading all shader headers."},
 	{
 		[]() {					// TODO: function called load_shaders
@@ -471,7 +459,7 @@ std::vector <Loader> init_seq {
 
 			// Set initial screen parameters
 			// TODO: is this even needed?
-			update_screen_size(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT);
+			// update_screen_size(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT);
 		},
 		"Finished post-init sequence (REMOVE STAGE)."
 	}

@@ -28,15 +28,12 @@
 
 namespace mercury {
 
-// Character struct and map
+// Character struct
 struct Char {
-	unsigned int tid;
-	glm::ivec2 size;
-	glm::ivec2 bearing;
-	unsigned int offset;
-
-	// TODO: put this shader into the Shader class
-	static Shader shader;
+	unsigned int	tid;
+	unsigned int	offset;
+	glm::ivec2	size;
+	glm::ivec2	bearing;
 };
 
 // Wrapped struct
@@ -136,13 +133,6 @@ public:
 		return wins[index];
 	}
 } extern winman;
-
-// glm::vec2 transform(const glm::vec2 &);
-
-// Character mapping
-// TODO: need to consider loading multiple font packs
-// 	make functions for these
-extern std::unordered_map <char, Char> cmap;
 
 // First function that should run
 void init(bool = true);

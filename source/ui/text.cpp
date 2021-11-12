@@ -40,7 +40,9 @@ void Text::_get_maxy()
 {
 	_maxy = 0.0;
 	for (const auto &c : _str) {
-		Char ch = cmap[c];
+		// TODO: check for exception here
+		//	reprodcue by omitting load_font as init
+		Char ch = winman.cres.character_map->at(c);
 
 		_maxy = std::fmax(_maxy, ch.size.y * _scale);
 	}
@@ -74,7 +76,7 @@ float Text::get_width() const
 {
 	float w = 0;
 	for (size_t i = 0; i < _str.length(); i++) {
-		Char ch = cmap[_str[i]];
+		Char ch = winman.cres.character_map->at(_str[i]);
 
 		w += (ch.size.x + ch.bearing.x) * _scale;
 
@@ -89,7 +91,7 @@ float Text::get_width() const
 // assuming that it will be part of a ui_layer
 void Text::center_within(const PureRect &pr, bool local)
 {
-	float w = get_width();
+	/* float w = get_width();
 	float h = _maxy;
 
 	float wrat = swidth/UIElement::swidth;
@@ -109,7 +111,9 @@ void Text::center_within(const PureRect &pr, bool local)
 	if (!local) {
 		_xpos += pr.get_tl().x;
 		_ypos += pr.get_tl().y;
-	}
+	} */
+
+	Logger::warn() << __PRETTY_FUNCTION__ << " currently does nothing.\n";
 }
 
 void Text::draw(Shader &shader)
@@ -138,10 +142,10 @@ void Text::draw(Shader &shader)
 		if (cmap->find(c) == cmap->end())
 			throw std::runtime_error("No character " + std::string(1, c) + " in map...");
 
-		Char ch = cmap->at(c); // cmap[c];
+		// Retrieve character data
+		Char ch = cmap->at(c);
 
 		float xpos = cxpos + ch.bearing.x * _scale;
-		// std::cout << "xpos = " << xpos << std::endl;
 		float ypos = (sheight - _ypos)
 			- (ch.size.y - ch.bearing.y) * _scale - _maxy;
 
