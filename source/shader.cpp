@@ -80,7 +80,7 @@ static std::string proc_source(const std::string &source)
 
 // TODO: clean
 // Source compilation errors
-static void check_compilation(unsigned int shader, const std::string &type)
+static void check_compilation(unsigned int id, const std::string &type)
 {
 	static const int ibsize = 1024;
 	static const int lsize = 80;
@@ -89,20 +89,20 @@ static void check_compilation(unsigned int shader, const std::string &type)
 	GLint success;
 	GLchar info[ibsize];
 
-	glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+	glGetShaderiv(id, GL_COMPILE_STATUS, &success);
 	if (success)
 		return;
 
-	glGetShaderInfoLog(shader, ibsize, nullptr, info);
+	glGetShaderInfoLog(id, ibsize, nullptr, info);
 
 	// Print error messages
 	Logger::error() << "Shader compilation error in " << type
-		<< " shader (ID = " << shader << ")\n\n";
+		<< " shader (id: " << id << ")\n\n";
 
 	std::cout << line << "\n" << info << "\n" << line << "\n\n";
 }
 
-static void check_linker(unsigned int shader, const std::string &type)
+static void check_linker(unsigned int id, const std::string &type)
 {
 	static const int ibsize = 1024;
 	static const int lsize = 80;
@@ -111,25 +111,25 @@ static void check_linker(unsigned int shader, const std::string &type)
 	GLint success;
 	GLchar info[ibsize];
 
-	glGetProgramiv(shader, GL_LINK_STATUS, &success);
+	glGetProgramiv(id, GL_LINK_STATUS, &success);
 	if (success)
 		return;
 
-	glGetProgramInfoLog(shader, ibsize, nullptr, info);
+	glGetProgramInfoLog(id, ibsize, nullptr, info);
 
 	// Print error messages
 	Logger::error() << "Shader program linking error in " << type
-		<< " shader (ID = " << shader << ")\n\n";
+		<< " shader (id: " << id << ")\n\n";
 
 	std::cout << line << "\n" << info << "\n" << line << "\n\n";
 }
 
-static void check_program_errors(unsigned int shader, const std::string &type)
+static void check_program_errors(unsigned int id, const std::string &type)
 {
 	if (type != "PROGRAM")
-		check_compilation(shader, type);
+		check_compilation(id, type);
 	else
-		check_linker(shader, type);
+		check_linker(id, type);
 }
 
 Shader::Shader() {}
@@ -169,9 +169,6 @@ Shader::Shader(const char *vpath, const char *fpath)
 	// Free other programs
 	glDeleteShader(_vertex);
 	glDeleteShader(_fragment);
-
-	// Set name
-	set_name("shader_" + std::to_string(id));
 }
 
 void Shader::use() const
@@ -257,7 +254,7 @@ int get_index(const Shader *shader, const std::string &name)
 	int index = glGetUniformLocation(shader->id, name.c_str());
 	if (index < 0 && cached.find(name) == cached.end()) {
 		Logger::error() << "No uniform \"" << name
-			<< "\" in shader (ID: " << shader->get_name() << ").\n";
+			<< "\" in shader (id: " << shader->get_name() << ").\n";
 
 		// Add name to the cached list if not present
 		cached.insert(cached.begin(), name);
@@ -268,8 +265,11 @@ int get_index(const Shader *shader, const std::string &name)
 // Current checker macro
 #define CHECK_CURRENT(ftn)						\
 	if (_name != _current) {					\
-		Logger::error("Not using current shader (ID: "		\
-			+ _current + ") for " + std::string(ftn));	\
+		std::ostringstream oss;					\
+		oss << "Not using current shader (id: "			\
+			<< _name << ", current: "			\
+			<< _current << ") for " << ftn;			\
+		Logger::error_cached(oss.str());			\
 	}
 
 void Shader::set_bool(const std::string &name, bool value) const

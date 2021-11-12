@@ -298,6 +298,9 @@ void fps_monitor_renderer()
 {
 	// Static timer
 	static float time = 0.0f;
+	static float totfps = 0.0f;
+	static float iters = 0.0f;
+	static float avgfps = 0.0f;
 
 	// Clear the color
 	glClearColor(0.05f, 0.05f, 0.05f, 1.0f);
@@ -310,12 +313,17 @@ void fps_monitor_renderer()
 	time += delta_time;
 
 	int fps = 1/delta_time;
+	totfps += fps;
+	iters++;
+
 	if (time > 0.5f) {
 		// Delete the first point
 		fps_vertices.erase(fps_vertices.begin(), fps_vertices.begin() + 3);
 
 		// 0 -> 600 fps
-		float normalized = 100.0f * fps/600.0f;
+		avgfps = totfps/iters;
+
+		float normalized = 100.0f * avgfps/600.0f;
 		fps_vertices.push_back(100.0f);
 		fps_vertices.push_back(normalized);
 		fps_vertices.push_back(0.0f);
@@ -356,7 +364,7 @@ void fps_monitor_renderer()
 
 	// Draw text
 	text_fps.set_str(std::to_string(delta_time).substr(0, 6)
-		+ "s delta, " + std::to_string(fps) + " fps");
+		+ "s delta, " + std::to_string(avgfps).substr(0, 6) + " fps");
 	text_fps.draw(*winman.cres.text_shader);
 }
 
@@ -370,6 +378,126 @@ Mesh tree;
 Shader source;
 Shader hit;
 
+// TODO: make a skybox object
+
+// Textures
+unsigned int skybox_texture;
+
+// Vertices for skybox
+float skybox_vertices[] = {
+	// positions
+	-1.0f,  1.0f, -1.0f,
+	-1.0f, -1.0f, -1.0f,
+	1.0f, -1.0f, -1.0f,
+	1.0f, -1.0f, -1.0f,
+	1.0f,  1.0f, -1.0f,
+	-1.0f,  1.0f, -1.0f,
+
+	-1.0f, -1.0f,  1.0f,
+	-1.0f, -1.0f, -1.0f,
+	-1.0f,  1.0f, -1.0f,
+	-1.0f,  1.0f, -1.0f,
+	-1.0f,  1.0f,  1.0f,
+	-1.0f, -1.0f,  1.0f,
+
+	1.0f, -1.0f, -1.0f,
+	1.0f, -1.0f,  1.0f,
+	1.0f,  1.0f,  1.0f,
+	1.0f,  1.0f,  1.0f,
+	1.0f,  1.0f, -1.0f,
+	1.0f, -1.0f, -1.0f,
+
+	-1.0f, -1.0f,  1.0f,
+	-1.0f,  1.0f,  1.0f,
+	1.0f,  1.0f,  1.0f,
+	1.0f,  1.0f,  1.0f,
+	1.0f, -1.0f,  1.0f,
+	-1.0f, -1.0f,  1.0f,
+
+	-1.0f,  1.0f, -1.0f,
+	1.0f,  1.0f, -1.0f,
+	1.0f,  1.0f,  1.0f,
+	1.0f,  1.0f,  1.0f,
+	-1.0f,  1.0f,  1.0f,
+	-1.0f,  1.0f, -1.0f,
+
+	-1.0f, -1.0f, -1.0f,
+	-1.0f, -1.0f,  1.0f,
+	1.0f, -1.0f, -1.0f,
+	1.0f, -1.0f, -1.0f,
+	-1.0f, -1.0f,  1.0f,
+	1.0f, -1.0f,  1.0f
+};
+
+SVA3 skybox;
+
+unsigned int skyboxVAO, skyboxVBO;
+
+// Shader for skybox
+Shader skybox_shader;
+
+const char *skybox_vert = R"(
+#version 330 core
+
+layout (location = 0) in vec3 aPos;
+
+out vec3 TexCoords;
+
+uniform mat4 projection;
+uniform mat4 view;
+
+void main()
+{
+	TexCoords = aPos;
+	vec4 pos = projection * view * vec4(aPos, 1.0);
+	gl_Position = pos.xyww;
+}
+)";
+
+const char *skybox_frag = R"(
+#version 330 core
+
+out vec4 FragColor;
+
+in vec3 TexCoords;
+
+uniform samplerCube skybox;
+
+void main()
+{
+	FragColor = texture(skybox, TexCoords);
+}
+)";
+
+// TODO: clean
+unsigned int _load_cubemap(const std::vector <std::string> &faces)
+{
+	unsigned int textureID;
+	glGenTextures(1, &textureID);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
+
+	int width, height, nrChannels;
+	for (unsigned int i = 0; i < faces.size(); i++)
+	{
+		unsigned char *data = stbi_load(faces[i].c_str(), &width, &height, &nrChannels, 0);
+		if (data) {
+			glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB,
+				     width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+			stbi_image_free(data);
+		} else {
+			std::cout << "Cubemap texture failed to load at path: " << faces[i] << std::endl;
+			stbi_image_free(data);
+		}
+	}
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+	return textureID;
+}
+
 void main_initializer()
 {
 	// Uncap FPS
@@ -377,7 +505,7 @@ void main_initializer()
 
 	// TODO: put in init or smthing
 	// tell stb_image.h to flip loaded texture's on the y-axis (before loading model).
-	stbi_set_flip_vertically_on_load(true);
+	// stbi_set_flip_vertically_on_load(true);
 
 	// Configure global opengl state
 	glEnable(GL_DEPTH_TEST);
@@ -443,6 +571,38 @@ void main_initializer()
 	Logger::ok("Finished constructing tree.");
 
 	// TODO: some way to check that the resources being used in render are in another context
+
+	// Skybox stuff
+	// TODO: use some other skybox! (like unity)
+	skybox_texture = _load_cubemap({
+		"resources/textures/skybox/right.jpg",
+		"resources/textures/skybox/left.jpg",
+		"resources/textures/skybox/top.jpg",
+		"resources/textures/skybox/bottom.jpg",
+		"resources/textures/skybox/front.jpg",
+		"resources/textures/skybox/back.jpg"
+	});
+
+	Logger::ok() << "Loaded skybox textures, id = " << skybox_texture << "\n";
+
+	// Create the static vertex buffer
+	// skybox = SVA3(skybox_vertices);
+	// skybox VAO
+
+	glGenVertexArrays(1, &skyboxVAO);
+	glGenBuffers(1, &skyboxVBO);
+	glBindVertexArray(skyboxVAO);
+	glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(skybox_vertices), &skybox_vertices, GL_STATIC_DRAW);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*) 0);
+
+	// Load the shader for the skybox
+	skybox_shader = Shader::from_source(skybox_vert, skybox_frag);
+	skybox_shader.set_name("skybox_shader");
+
+	skybox_shader.use();
+	skybox_shader.set_int("skybox", 0);
 }
 
 void main_renderer()
@@ -492,6 +652,26 @@ void main_renderer()
 	hit.use();
 	hit.set_vec3("color", {1.0, 0.8, 0.5});
 	tree.draw(hit);
+
+	// Draw skybox
+	view = glm::mat4(glm::mat3(camera.get_view()));	// Removes translation
+
+	// Draw the skybox
+	// glDepthMask(GL_FALSE);
+	glDepthFunc(GL_LEQUAL);
+
+	skybox_shader.use();
+	skybox_shader.set_mat4("projection", projection);
+	skybox_shader.set_mat4("view", view);
+
+	glBindVertexArray(skyboxVAO);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, skybox_texture);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+        glBindVertexArray(0);
+
+	// glDepthMask(GL_TRUE);
+	glDepthFunc(GL_LESS);
 }
 
 // Program render loop condition

@@ -29,7 +29,7 @@ Texture::Texture(const std::string &file)
 
 	if (!data) {
 		Logger::error() << "Texture: Failed to load at path \""
-			<< path << "\"" << std::endl;
+			<< path << "\"\n";
 		stbi_image_free(data);
 	}
 
@@ -55,6 +55,7 @@ Texture::Texture(const std::string &file)
 			GL_LINEAR_MIPMAP_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
+	// Free the raw data
 	stbi_image_free(data);
 }
 
