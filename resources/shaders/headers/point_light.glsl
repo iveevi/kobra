@@ -3,9 +3,10 @@ struct PointLight {
 	vec3 color;
 };
 
+// TODO: pass material struct later
 vec3 point_light_contr(PointLight light, vec3 color, vec3 frag_pos, vec3 view_pos, vec3 normal)
 {
-	// ambient
+	// ambient: TODO: set properties from struct
 	float ambient_strength = 0.1;
 	vec3 ambient = ambient_strength * light.color;
 

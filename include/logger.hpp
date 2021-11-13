@@ -14,10 +14,16 @@
 #define MC_RED		"\033[31m"
 #define MC_GREEN	"\033[32m"
 #define MC_YELLOW	"\033[33m"
+#define MC_BLUE		"\033[34m"
+#define MC_MAGENTA	"\033[35m"
 
 namespace mercury {
 
 class Logger {
+	static std::ostream &_fatal_error() {
+		return std::cerr << MC_MAGENTA << "[MERCURY ENGINE: "
+			<< time() << ": FATAL ERROR] " << MC_RESET;
+	}
 public:
 	// Aliases
 	using tclk = std::chrono::high_resolution_clock;
@@ -74,6 +80,11 @@ public:
 
 	static void warn(const char *msg) {
 		warn() << msg << std::endl;
+	}
+
+	static void fatal_error(const char *msg) {
+		_fatal_error() << msg << std::endl;
+		exit(-1);
 	}
 
 	// C++ string overloads

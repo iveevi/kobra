@@ -1,6 +1,7 @@
 *.log
 .DS_Store
 .cache/
+.vscode
 CMakeCache.txt
 CMakeFiles
 Makefile

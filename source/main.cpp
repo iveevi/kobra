@@ -15,6 +15,7 @@
 #include "include/model.hpp"
 #include "include/init.hpp"
 #include "include/logger.hpp"
+#include "include/lighting.hpp"
 
 #include "include/engine/skybox.hpp"
 
@@ -374,16 +375,111 @@ void fps_monitor_renderer()
 Mesh hit_cube1;
 Mesh hit_cube2;
 Mesh hit_cube3;
+Mesh global_hit;
 Mesh source_cube1;
 Mesh source_cube2;
 Mesh tree;
 
-Shader source;
-Shader hit;
-
 // Shader for skybox
 Shader skybox_shader;	// TODO: goes to common resources
 Skybox sb;
+
+const char *global_vert = R"(
+#version 330 core
+
+layout (location = 0) in vec3 v_pos;
+layout (location = 1) in vec3 v_normal;
+
+out vec3 normal;
+out vec3 frag_pos;
+
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+void main()
+{
+	vec4 pos = vec4(v_pos, 1.0);
+	gl_Position = projection * view * model * pos;
+	frag_pos = vec3(model * pos);
+
+	// TODO: this should be done on the cpu because its intensive
+	normal = mat3(transpose(inverse(model))) * v_normal;
+}
+)";
+
+const char *global_frag = R"(
+in vec3 normal;
+in vec3 frag_pos;
+
+out vec4 frag_color;
+
+// TODO: put these into a material struct
+uniform vec3 color;
+uniform vec3 view_pos;
+
+struct DirLight {
+	vec3 direction;
+	vec3 ambient;
+	vec3 diffuse;
+	vec3 specular;
+};
+
+uniform DirLight light;
+
+void main()
+{
+	// Ambient
+	vec3 ambient = light.ambient;
+
+	// Diffuse
+	vec3 norm = normalize(normal);
+	if (!gl_FrontFacing)
+		norm *= -1;
+
+	vec3 light_dir = normalize(-light.direction);
+	float diff = max(dot(norm, light_dir), 0.0);
+	vec3 diffuse = diff * light.diffuse;
+
+	// Specular
+	float shine = 32;
+
+	vec3 view_dir = normalize(view_pos - frag_pos);
+	vec3 refl_dir = reflect(-light_dir, norm);
+	float spec = pow(max(dot(view_dir, refl_dir), 0.0), shine);
+	vec3 specular = spec * light.specular;
+
+	// Total result
+	vec3 result = (ambient + diffuse + specular) * color;
+	frag_color = vec4(result, 1.0);
+}
+)";
+
+// Lights
+const glm::vec3 lpos1 {2, 1.6, 1.6};
+const glm::vec3 lpos2 {0.2, 1.6, 1.6};
+
+lighting::DirLight dirlight {
+	{-0.2f, -1.0f, -0.3f},
+	{0.2f, 0.2f, 0.2f},
+        {0.8f, 0.8f, 0.8f},
+	{1.0f, 1.0f, 1.0f}
+};
+
+lighting::PointLight light1 {
+	lpos1,
+	{1.0, 1.0, 1.0}		// TODO: color constants and hex strings
+};
+
+lighting::PointLight light2 {
+	lpos2,
+	{1.0, 1.0, 1.0}
+};
+
+// Lighting daemon
+lighting::Daemon ldam;
+
+// TODO: draw vectors!
 
 void main_initializer()
 {
@@ -409,51 +505,22 @@ void main_initializer()
 	// Load text shader for this context
 	winman.load_font(0);
 
-	// Position of the light
-	glm::vec3 lpos1 = {2, 1.6, 1.6};
-	glm::vec3 lpos2 = {0.2, 1.6, 1.6};
-	glm::vec3 lcolor = {1.0, 1.0, 1.0};
-
 	// Meshes
 	hit_cube1 = mesh::cuboid({0.5, 0, 0.5}, 1, 1, 1);
 	hit_cube2 = mesh::cuboid({3, 0.5, 0.0}, 1, 2, 1);
 	hit_cube3 = mesh::cuboid({3, -1.0, 0.0}, 10, 1, 10);
 
+	global_hit = mesh::cuboid({3, -1.0, 12.0}, 10, 1, 10);
+
 	source_cube1 = mesh::cuboid(lpos1, 0.5, 0.5, 0.5);
 	source_cube2 = mesh::cuboid(lpos2, 0.5, 0.5, 0.5);
 
 	// Create shaders and set base properties
-	source = Shader(
-		_shader("mesh/mesh_shader.vert"),
-		_shader("color_shader.frag")
-	);
-	source.set_name("source_shader");
-
-	hit = Shader(
-		"resources/shaders/mesh/mesh_shader.vert",
-		"resources/shaders/mesh/mesh_shader.frag"
-	);
-	hit.set_name("hit_shader");
-
 	skybox_shader = Shader(
 		"resources/shaders/mesh/skybox.vert",
 		"resources/shaders/mesh/skybox.frag"
 	);
 	skybox_shader.set_name("skybox_shader");
-
-	// Configure source shader
-	source.use();
-	source.set_vec3("color", lcolor);
-
-	// Configure hit shader
-	hit.use();
-	hit.set_int("npoint_lights", 2);
-
-	hit.set_vec3("point_lights[0].color", lcolor);
-	hit.set_vec3("point_lights[0].position", lpos1);
-
-	hit.set_vec3("point_lights[1].color", lcolor);
-	hit.set_vec3("point_lights[1].position", lpos2);
 
 	// Configure skybox shader
 	skybox_shader.use();
@@ -463,8 +530,10 @@ void main_initializer()
 	Mesh::AVertex vertices;
 	Mesh::AIndices indices;
 
-	add_branch(vertices, indices, {4, -0.5, 2}, {4, 3, 2}, 0.7, 0.3, 10, 10);
+	add_branch(vertices, indices, {4, -0.5, 2}, {4, 3, 2}, 0.7, 0.3);
 	add_branch(vertices, indices, {4.1, 2.4, 2}, {5, 5, 2}, 0.25, 0.1);
+	add_branch(vertices, indices, {4.1, 2.4, 2}, {3.3, 5.3, 2.3}, 0.3, 0.1);
+	add_branch(vertices, indices, {4.1, 2.4, 2}, {4, 4.5, 1}, 0.25, 0.1);
 
 	tree = Mesh(vertices, {}, indices);
 
@@ -481,10 +550,34 @@ void main_initializer()
 		"resources/textures/skybox/uv_3.png",
 		"resources/textures/skybox/uv_5.png"
 	});
+
+	Logger::ok("Finished constructing skybox.");
+
+	// Add objects and lights to the ldam system
+	ldam.add_light(dirlight);
+
+	// ldam.add_light(light1);
+	// ldam.add_light(light2);
+
+	// ldam.add_object(&source_cube1, {.color = {1.0, 1.0, 1.0}}, lighting::COLOR_ONLY);
+	// ldam.add_object(&source_cube2, {.color = {1.0, 1.0, 1.0}}, lighting::COLOR_ONLY);
+
+	ldam.add_object(&hit_cube1, {.color = {0.5, 1.0, 0.5}});
+	ldam.add_object(&hit_cube2, {.color = {1.0, 0.5, 0.5}});
+	ldam.add_object(&hit_cube3, {.color = {0.9, 0.9, 0.9}});
+
+	ldam.add_object(&global_hit, {.color = {0.9, 0.9, 0.9}});
+	
+	ldam.add_object(&tree, {.color = {1.0, 0.8, 0.5}});
 }
 
 void main_renderer()
 {
+	// Get time stuff
+	float current_frame = glfwGetTime();
+	delta_time = current_frame - last_frame;
+	last_frame = current_frame;
+	
 	// Process input
 	process_input(mercury::winman.cwin);
 
@@ -492,7 +585,7 @@ void main_renderer()
 	glClearColor(0.05f, 1.00f, 0.05f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	// Create model, view, projection
+	// Create model, view, projection matrices
 	glm::mat4 model = glm::mat4(1.0f);
 	model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f));
 	model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f));
@@ -503,43 +596,20 @@ void main_renderer()
 		0.1f, 100.0f
 	);
 
-	// Modify the shader properties
-	source.use();
-	source.set_mat4("model", model);
-	source.set_mat4("view", view);
-	source.set_mat4("projection", projection);
+	// Set lighting daemon uniforms
+	ldam.model = model;
+	ldam.view = view;
+	ldam.projection = projection;
+	ldam.view_position = camera.position;
 
-	hit.use();
-	hit.set_mat4("model", model);
-	hit.set_mat4("view", view);
-	hit.set_mat4("projection", projection);
-	hit.set_vec3("view_pos", camera.position);
-
-	// Draw the cubes
-	source_cube1.draw(source);
-	source_cube2.draw(source);
-
-	hit.use();
-	hit.set_vec3("color", {0.5, 1.0, 0.5});
-	hit_cube1.draw(hit);
-
-	hit.use();
-	hit.set_vec3("color", {1.0, 0.5, 0.5});
-	hit_cube2.draw(hit);
-
-	hit.use();
-	hit.set_vec3("color", {0.9, 0.9, 0.9});
-	hit_cube3.draw(hit);
-
-	hit.use();
-	hit.set_vec3("color", {1.0, 0.8, 0.5});
-	tree.draw(hit);
+	// Render scene
+	ldam.render();
 
 	// Draw skybox
 	view = glm::mat4(glm::mat3(camera.get_view()));
 
 	// Draw the skybox
-	skybox_shader.use();
+	skybox_shader.use();		// TODO: use cres shader
 	skybox_shader.set_mat4("projection", projection);
 	skybox_shader.set_mat4("view", view);
 
@@ -558,16 +628,16 @@ int main()
 	mercury::init();
 
 	// Add windows
-	winman.add_win("FPS Monitor");
+	// winman.add_win("FPS Monitor");
 
 	// Set winman bindings
 	winman.set_condition(rcondition);
 
 	winman.set_initializer(0, main_initializer);
-	winman.set_initializer(1, fps_monitor_initializer);
+	// winman.set_initializer(1, fps_monitor_initializer);
 
 	winman.set_renderer(0, main_renderer);
-	winman.set_renderer(1, fps_monitor_renderer);
+	// winman.set_renderer(1, fps_monitor_renderer);
 
 	// Render loop
 	winman.run();
@@ -588,7 +658,7 @@ void process_input(GLFWwindow *window)
 
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
 		// glfwSetWindowShouldClose(window, true);
-		glfwSetInputMode(winman.cwin, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 	}
 
 	float cameraSpeed = 5 * delta_time;

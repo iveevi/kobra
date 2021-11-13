@@ -19,6 +19,10 @@ parser.add_argument("-j", "--threads",
 
 args = parser.parse_args()
 
+if args.target == 'json':
+    os.system('cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 .')
+    exit(0);
+
 if args.mode in ['gdb', 'mdb']:
     os.system('cmake -DCMAKE_BUILD_TYPE=Debug .')
 elif args.mode == '':

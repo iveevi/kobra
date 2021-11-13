@@ -1,122 +1,242 @@
 [
 {
   "directory": "/home/venki/mercury",
-  "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -DMERCURY_DEBUG=0 -g -std=gnu++14 -o CMakeFiles/ui_designer.dir/source/bootstrap/ui_designer.cpp.o -c /home/venki/mercury/source/bootstrap/ui_designer.cpp",
-  "file": "/home/venki/mercury/source/bootstrap/ui_designer.cpp"
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/file_browser.dir/source/file_browser.cpp.o -c /home/venki/mercury/source/file_browser.cpp",
+  "file": "/home/venki/mercury/source/file_browser.cpp"
 },
 {
   "directory": "/home/venki/mercury",
-  "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -DMERCURY_DEBUG=0 -g -std=gnu++14 -o CMakeFiles/ui_designer.dir/source/camera.cpp.o -c /home/venki/mercury/source/camera.cpp",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/file_browser.dir/source/camera.cpp.o -c /home/venki/mercury/source/camera.cpp",
   "file": "/home/venki/mercury/source/camera.cpp"
 },
 {
   "directory": "/home/venki/mercury",
-  "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -DMERCURY_DEBUG=0 -g -std=gnu++14 -o CMakeFiles/ui_designer.dir/source/init.cpp.o -c /home/venki/mercury/source/init.cpp",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/file_browser.dir/source/common.cpp.o -c /home/venki/mercury/source/common.cpp",
+  "file": "/home/venki/mercury/source/common.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/file_browser.dir/source/init.cpp.o -c /home/venki/mercury/source/init.cpp",
   "file": "/home/venki/mercury/source/init.cpp"
 },
 {
   "directory": "/home/venki/mercury",
-  "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -DMERCURY_DEBUG=0 -g -std=gnu++14 -o CMakeFiles/ui_designer.dir/source/model.cpp.o -c /home/venki/mercury/source/model.cpp",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/file_browser.dir/source/lighting.cpp.o -c /home/venki/mercury/source/lighting.cpp",
+  "file": "/home/venki/mercury/source/lighting.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/file_browser.dir/source/model.cpp.o -c /home/venki/mercury/source/model.cpp",
   "file": "/home/venki/mercury/source/model.cpp"
 },
 {
   "directory": "/home/venki/mercury",
-  "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -DMERCURY_DEBUG=0 -g -std=gnu++14 -o CMakeFiles/ui_designer.dir/source/mouse_bus.cpp.o -c /home/venki/mercury/source/mouse_bus.cpp",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/file_browser.dir/source/mouse_bus.cpp.o -c /home/venki/mercury/source/mouse_bus.cpp",
   "file": "/home/venki/mercury/source/mouse_bus.cpp"
 },
 {
   "directory": "/home/venki/mercury",
-  "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -DMERCURY_DEBUG=0 -g -std=gnu++14 -o CMakeFiles/ui_designer.dir/source/shader.cpp.o -c /home/venki/mercury/source/shader.cpp",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/file_browser.dir/source/shader.cpp.o -c /home/venki/mercury/source/shader.cpp",
   "file": "/home/venki/mercury/source/shader.cpp"
 },
 {
   "directory": "/home/venki/mercury",
-  "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -DMERCURY_DEBUG=0 -g -std=gnu++14 -o CMakeFiles/ui_designer.dir/source/ui/button.cpp.o -c /home/venki/mercury/source/ui/button.cpp",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/file_browser.dir/source/engine/skybox.cpp.o -c /home/venki/mercury/source/engine/skybox.cpp",
+  "file": "/home/venki/mercury/source/engine/skybox.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/file_browser.dir/source/mesh/basic.cpp.o -c /home/venki/mercury/source/mesh/basic.cpp",
+  "file": "/home/venki/mercury/source/mesh/basic.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/file_browser.dir/source/ui/button.cpp.o -c /home/venki/mercury/source/ui/button.cpp",
   "file": "/home/venki/mercury/source/ui/button.cpp"
 },
 {
   "directory": "/home/venki/mercury",
-  "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -DMERCURY_DEBUG=0 -g -std=gnu++14 -o CMakeFiles/ui_designer.dir/source/ui/pure_rect.cpp.o -c /home/venki/mercury/source/ui/pure_rect.cpp",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/file_browser.dir/source/ui/pure_rect.cpp.o -c /home/venki/mercury/source/ui/pure_rect.cpp",
   "file": "/home/venki/mercury/source/ui/pure_rect.cpp"
 },
 {
   "directory": "/home/venki/mercury",
-  "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -DMERCURY_DEBUG=0 -g -std=gnu++14 -o CMakeFiles/ui_designer.dir/source/ui/rect.cpp.o -c /home/venki/mercury/source/ui/rect.cpp",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/file_browser.dir/source/ui/rect.cpp.o -c /home/venki/mercury/source/ui/rect.cpp",
   "file": "/home/venki/mercury/source/ui/rect.cpp"
 },
 {
   "directory": "/home/venki/mercury",
-  "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -DMERCURY_DEBUG=0 -g -std=gnu++14 -o CMakeFiles/ui_designer.dir/source/ui/text.cpp.o -c /home/venki/mercury/source/ui/text.cpp",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/file_browser.dir/source/ui/text.cpp.o -c /home/venki/mercury/source/ui/text.cpp",
   "file": "/home/venki/mercury/source/ui/text.cpp"
 },
 {
   "directory": "/home/venki/mercury",
-  "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -DMERCURY_DEBUG=0 -g -std=gnu++14 -o CMakeFiles/ui_designer.dir/source/ui/ui_layer.cpp.o -c /home/venki/mercury/source/ui/ui_layer.cpp",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/file_browser.dir/source/ui/ui_layer.cpp.o -c /home/venki/mercury/source/ui/ui_layer.cpp",
   "file": "/home/venki/mercury/source/ui/ui_layer.cpp"
 },
 {
   "directory": "/home/venki/mercury",
-  "command": "/usr/bin/cc -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -g -o CMakeFiles/ui_designer.dir/glad/glad.c.o -c /home/venki/mercury/glad/glad.c",
+  "command": "/usr/bin/cc -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm -g -o CMakeFiles/file_browser.dir/glad/glad.c.o -c /home/venki/mercury/glad/glad.c",
   "file": "/home/venki/mercury/glad/glad.c"
 },
 {
   "directory": "/home/venki/mercury",
-  "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -DMERCURY_DEBUG=0 -g -std=gnu++14 -o CMakeFiles/mercury.dir/source/main.cpp.o -c /home/venki/mercury/source/main.cpp",
-  "file": "/home/venki/mercury/source/main.cpp"
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/ui_designer.dir/source/bootstrap/ui_designer.cpp.o -c /home/venki/mercury/source/bootstrap/ui_designer.cpp",
+  "file": "/home/venki/mercury/source/bootstrap/ui_designer.cpp"
 },
 {
   "directory": "/home/venki/mercury",
-  "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -DMERCURY_DEBUG=0 -g -std=gnu++14 -o CMakeFiles/mercury.dir/source/camera.cpp.o -c /home/venki/mercury/source/camera.cpp",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/ui_designer.dir/source/camera.cpp.o -c /home/venki/mercury/source/camera.cpp",
   "file": "/home/venki/mercury/source/camera.cpp"
 },
 {
   "directory": "/home/venki/mercury",
-  "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -DMERCURY_DEBUG=0 -g -std=gnu++14 -o CMakeFiles/mercury.dir/source/init.cpp.o -c /home/venki/mercury/source/init.cpp",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/ui_designer.dir/source/common.cpp.o -c /home/venki/mercury/source/common.cpp",
+  "file": "/home/venki/mercury/source/common.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/ui_designer.dir/source/init.cpp.o -c /home/venki/mercury/source/init.cpp",
   "file": "/home/venki/mercury/source/init.cpp"
 },
 {
   "directory": "/home/venki/mercury",
-  "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -DMERCURY_DEBUG=0 -g -std=gnu++14 -o CMakeFiles/mercury.dir/source/model.cpp.o -c /home/venki/mercury/source/model.cpp",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/ui_designer.dir/source/lighting.cpp.o -c /home/venki/mercury/source/lighting.cpp",
+  "file": "/home/venki/mercury/source/lighting.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/ui_designer.dir/source/model.cpp.o -c /home/venki/mercury/source/model.cpp",
   "file": "/home/venki/mercury/source/model.cpp"
 },
 {
   "directory": "/home/venki/mercury",
-  "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -DMERCURY_DEBUG=0 -g -std=gnu++14 -o CMakeFiles/mercury.dir/source/mouse_bus.cpp.o -c /home/venki/mercury/source/mouse_bus.cpp",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/ui_designer.dir/source/mouse_bus.cpp.o -c /home/venki/mercury/source/mouse_bus.cpp",
   "file": "/home/venki/mercury/source/mouse_bus.cpp"
 },
 {
   "directory": "/home/venki/mercury",
-  "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -DMERCURY_DEBUG=0 -g -std=gnu++14 -o CMakeFiles/mercury.dir/source/shader.cpp.o -c /home/venki/mercury/source/shader.cpp",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/ui_designer.dir/source/shader.cpp.o -c /home/venki/mercury/source/shader.cpp",
   "file": "/home/venki/mercury/source/shader.cpp"
 },
 {
   "directory": "/home/venki/mercury",
-  "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -DMERCURY_DEBUG=0 -g -std=gnu++14 -o CMakeFiles/mercury.dir/source/ui/button.cpp.o -c /home/venki/mercury/source/ui/button.cpp",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/ui_designer.dir/source/engine/skybox.cpp.o -c /home/venki/mercury/source/engine/skybox.cpp",
+  "file": "/home/venki/mercury/source/engine/skybox.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/ui_designer.dir/source/mesh/basic.cpp.o -c /home/venki/mercury/source/mesh/basic.cpp",
+  "file": "/home/venki/mercury/source/mesh/basic.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/ui_designer.dir/source/ui/button.cpp.o -c /home/venki/mercury/source/ui/button.cpp",
   "file": "/home/venki/mercury/source/ui/button.cpp"
 },
 {
   "directory": "/home/venki/mercury",
-  "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -DMERCURY_DEBUG=0 -g -std=gnu++14 -o CMakeFiles/mercury.dir/source/ui/pure_rect.cpp.o -c /home/venki/mercury/source/ui/pure_rect.cpp",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/ui_designer.dir/source/ui/pure_rect.cpp.o -c /home/venki/mercury/source/ui/pure_rect.cpp",
   "file": "/home/venki/mercury/source/ui/pure_rect.cpp"
 },
 {
   "directory": "/home/venki/mercury",
-  "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -DMERCURY_DEBUG=0 -g -std=gnu++14 -o CMakeFiles/mercury.dir/source/ui/rect.cpp.o -c /home/venki/mercury/source/ui/rect.cpp",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/ui_designer.dir/source/ui/rect.cpp.o -c /home/venki/mercury/source/ui/rect.cpp",
   "file": "/home/venki/mercury/source/ui/rect.cpp"
 },
 {
   "directory": "/home/venki/mercury",
-  "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -DMERCURY_DEBUG=0 -g -std=gnu++14 -o CMakeFiles/mercury.dir/source/ui/text.cpp.o -c /home/venki/mercury/source/ui/text.cpp",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/ui_designer.dir/source/ui/text.cpp.o -c /home/venki/mercury/source/ui/text.cpp",
   "file": "/home/venki/mercury/source/ui/text.cpp"
 },
 {
   "directory": "/home/venki/mercury",
-  "command": "/usr/bin/c++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include  -g -Wall -DMERCURY_DEBUG=0 -g -std=gnu++14 -o CMakeFiles/mercury.dir/source/ui/ui_layer.cpp.o -c /home/venki/mercury/source/ui/ui_layer.cpp",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/ui_designer.dir/source/ui/ui_layer.cpp.o -c /home/venki/mercury/source/ui/ui_layer.cpp",
   "file": "/home/venki/mercury/source/ui/ui_layer.cpp"
 },
 {
   "directory": "/home/venki/mercury",
-  "command": "/usr/bin/cc -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/glm -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -g -o CMakeFiles/mercury.dir/glad/glad.c.o -c /home/venki/mercury/glad/glad.c",
+  "command": "/usr/bin/cc -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm -g -o CMakeFiles/ui_designer.dir/glad/glad.c.o -c /home/venki/mercury/glad/glad.c",
+  "file": "/home/venki/mercury/glad/glad.c"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/mercury.dir/source/main.cpp.o -c /home/venki/mercury/source/main.cpp",
+  "file": "/home/venki/mercury/source/main.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/mercury.dir/source/camera.cpp.o -c /home/venki/mercury/source/camera.cpp",
+  "file": "/home/venki/mercury/source/camera.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/mercury.dir/source/common.cpp.o -c /home/venki/mercury/source/common.cpp",
+  "file": "/home/venki/mercury/source/common.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/mercury.dir/source/init.cpp.o -c /home/venki/mercury/source/init.cpp",
+  "file": "/home/venki/mercury/source/init.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/mercury.dir/source/lighting.cpp.o -c /home/venki/mercury/source/lighting.cpp",
+  "file": "/home/venki/mercury/source/lighting.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/mercury.dir/source/model.cpp.o -c /home/venki/mercury/source/model.cpp",
+  "file": "/home/venki/mercury/source/model.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/mercury.dir/source/mouse_bus.cpp.o -c /home/venki/mercury/source/mouse_bus.cpp",
+  "file": "/home/venki/mercury/source/mouse_bus.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/mercury.dir/source/shader.cpp.o -c /home/venki/mercury/source/shader.cpp",
+  "file": "/home/venki/mercury/source/shader.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/mercury.dir/source/engine/skybox.cpp.o -c /home/venki/mercury/source/engine/skybox.cpp",
+  "file": "/home/venki/mercury/source/engine/skybox.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/mercury.dir/source/mesh/basic.cpp.o -c /home/venki/mercury/source/mesh/basic.cpp",
+  "file": "/home/venki/mercury/source/mesh/basic.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/mercury.dir/source/ui/button.cpp.o -c /home/venki/mercury/source/ui/button.cpp",
+  "file": "/home/venki/mercury/source/ui/button.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/mercury.dir/source/ui/pure_rect.cpp.o -c /home/venki/mercury/source/ui/pure_rect.cpp",
+  "file": "/home/venki/mercury/source/ui/pure_rect.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/mercury.dir/source/ui/rect.cpp.o -c /home/venki/mercury/source/ui/rect.cpp",
+  "file": "/home/venki/mercury/source/ui/rect.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/mercury.dir/source/ui/text.cpp.o -c /home/venki/mercury/source/ui/text.cpp",
+  "file": "/home/venki/mercury/source/ui/text.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/clang++ -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm  -g -Wall -DMERCURY_DEBUG=0 -std=gnu++14 -o CMakeFiles/mercury.dir/source/ui/ui_layer.cpp.o -c /home/venki/mercury/source/ui/ui_layer.cpp",
+  "file": "/home/venki/mercury/source/ui/ui_layer.cpp"
+},
+{
+  "directory": "/home/venki/mercury",
+  "command": "/usr/bin/cc -DMERCURY_SOURCE_DIR=\\\"/home/venki/mercury\\\" -I/home/venki/mercury/. -I/home/venki/mercury/glad -I/home/venki/mercury/thirdparty/assimp/include -I/home/venki/mercury/thirdparty/freetype2/include -I/home/venki/mercury/thirdparty/glm -g -o CMakeFiles/mercury.dir/glad/glad.c.o -c /home/venki/mercury/glad/glad.c",
   "file": "/home/venki/mercury/glad/glad.c"
 }
 ]

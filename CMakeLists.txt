@@ -35,6 +35,7 @@ set(MERCURY_SOURCE
 	source/camera.cpp
 	source/common.cpp
 	source/init.cpp
+	source/lighting.cpp
 	source/model.cpp
 	source/mouse_bus.cpp
 	source/shader.cpp

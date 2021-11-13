@@ -38,6 +38,7 @@ static void check_header(const std::string &source, std::string &out, int &i)
 	if (Shader::headers.find(header) != Shader::headers.end()) {
 		out += Shader::headers[header];
 	} else {
+		// TODO: list all available headers
 		Logger::warn() << "No header \"" << header
 			<< "\" found. Ignoring include.\n";
 	}
@@ -240,7 +241,7 @@ void Shader::compile()
 	glDeleteShader(_fragment);
 
 	// Set name
-	set_name("shader_" + std::to_string(id));
+	_name = "shader_" + std::to_string(id);
 }
 
 // Setters
