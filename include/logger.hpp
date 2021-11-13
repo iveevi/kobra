@@ -69,6 +69,11 @@ public:
 			<< time() << "] " << MC_RESET;
 	}
 
+	static std::ostream &notify() {
+		return std::cerr << MC_BLUE << "[MERCURY ENGINE: "
+			<< time() << "] " << MC_RESET;
+	}
+
 	// C-string overloads
 	static void ok(const char *msg) {
 		ok() << msg << std::endl;

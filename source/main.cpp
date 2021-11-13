@@ -16,6 +16,7 @@
 #include "include/init.hpp"
 #include "include/logger.hpp"
 #include "include/lighting.hpp"
+#include "include/varray.hpp"
 
 #include "include/engine/skybox.hpp"
 
@@ -161,54 +162,6 @@ void main()
 
 // Graph vertices: normalize for [0, 100] for each coordinate
 std::vector <float> fps_vertices(3 * 10);
-
-// Vertex buffer struct
-//	fields is the number of floating point
-//	numbers that represent a single vertex
-//
-//	for plain 3d vertices, this would be 3
-//	if normals are included, it would become 6
-template <unsigned int fields>
-struct VertexArray {
-	unsigned int vao;
-	unsigned int vbo;
-
-	// Number of vertices
-	size_t size;
-
-	// TODO: what about index buffer?
-	virtual void draw(GLenum mode) const {
-		glBindVertexArray(vao);
-		glDrawArrays(mode, 0, size);
-		glCheckError();
-	}
-};
-
-// Vertex array that cannot be modified
-template <unsigned int fields>
-struct StaticVA : public VertexArray <fields> {
-	StaticVA() {}
-
-	StaticVA(const std::vector <float> &verts) {
-		// Set size
-		this->size = verts.size() / fields;
-
-		// Allocate buffers
-		glGenVertexArrays(1, &this->vao);
-		glGenBuffers(1, &this->vbo);
-		glBindVertexArray(this->vao);
-
-		// Load buffer
-		glBindBuffer(GL_ARRAY_BUFFER, this->vbo);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * verts.size(),
-			&verts[0], GL_STATIC_DRAW);
-
-		glVertexAttribPointer(0, fields, GL_FLOAT, GL_FALSE,
-			fields * sizeof(float), (void *) 0);
-		glEnableVertexAttribArray(0);
-		glCheckError();
-	}
-};
 
 template <unsigned int fields>
 class DynamicVA : public VertexArray <fields> {
@@ -389,79 +342,6 @@ Shader skybox_shader;	// TODO: goes to common resources
 Skybox sb;
 
 // Arrow
-const char *arrow_vert = R"(
-layout (location = 0) in vec3 v_pos;
-
-uniform mat4 model;
-uniform mat4 view;
-// uniform mat4 projection;
-
-void main()
-{
-	gl_Position = view * model * vec4(v_pos, 1.0);
-}
-)";
-
-const char *arrow_frag = R"(
-out vec4 frag_color;
-
-uniform vec3 color;
-
-void main()
-{
-	frag_color = vec4(color, 1.0);
-}
-)";
-
-const char *arrow_geom = R"(
-layout (lines) in;
-layout (line_strip, max_vertices = 6) out;
-
-uniform mat4 projection;
-
-// TODO: add header for geom shaders
-void _emit_line(vec4 start, vec4 end)
-{
-	gl_Position = start;
-	EmitVertex();
-
-	gl_Position = end;
-	EmitVertex();
-
-	EndPrimitive();
-}
-
-vec2 rotate(vec2 vec, float angle)
-{
-	float s = sin(angle);
-	float c = cos(angle);
-
-	mat2 mat = mat2(c, -s, s, c);
-
-	return mat * vec;
-}
-
-void main()
-{
-	vec4 p1 = projection * gl_in[0].gl_Position;
-	vec4 p2 = projection * gl_in[1].gl_Position;
-
-	_emit_line(p1, p2);
-
-	vec2 p_p1 = p1.xy;
-	vec2 p_p2 = p2.xy;
-
-	float length = length(p_p2 - p_p1);
-	vec2 diff = normalize(p_p2 - p_p1);
-
-	vec2 d1 = 0.1 * length * rotate(diff, -2.5);
-	vec2 d2 = 0.1 * length * rotate(diff, 2.5);
-
-	_emit_line(p2, p2 + vec4(d1, 0.0, 0.0));
-	_emit_line(p2, p2 + vec4(d2, 0.0, 0.0));
-}
-)";
-
 Shader arrow_shader;
 
 std::vector <float> arrow_vt = {
@@ -469,7 +349,47 @@ std::vector <float> arrow_vt = {
 	0.0, 1.0, 0.0
 };
 
-SVA3 arrow;
+// SVA3 arrow;
+
+// Line class (with arrow options)
+class Line {
+	SVA3 line;
+public:
+	// TODO: should this be private?
+	glm::vec3 color;
+
+	Line() {}
+	Line(const std::vector <float> vertices) : line(vertices) {}
+
+	// TODO: make an mvp class?
+	void set_mvp(const glm::mat4 &model, const glm::mat4 &view, const glm::mat4 &projection) {
+		Shader *shader = winman.cres.line_shader;
+
+		// TODO: add a shader method for this	
+		shader->use();
+		shader->set_mat4("model", model);
+		shader->set_mat4("view", view);
+		shader->set_mat4("projection", projection);
+	}
+
+	enum EndType : uint8_t {
+		NONE = 0,
+		ARROW = 1
+	};
+
+	void draw(EndType start = NONE, EndType end = NONE) const {
+		Shader *shader = winman.cres.line_shader;
+
+		shader->use();
+		shader->set_vec3("color", color);
+		shader->set_int("start_mode", start);
+		shader->set_int("end_mode", end);
+
+		line.draw(GL_LINES);
+	}
+};
+
+Line arrow;
 
 // Lights
 const glm::vec3 lpos1 {2, 1.6, 1.6};
@@ -517,8 +437,10 @@ void main_initializer()
 	// Draw in wireframe -- TODO: should be an init option (or live option)
 	// glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
-	// Load text shader for this context
+	// Load resources
 	winman.load_font(0);
+	winman.load_skybox(0);
+	winman.load_lines(0);
 
 	// Meshes
 	hit_cube1 = mesh::cuboid({0.5, 0, 0.5}, 1, 1, 1);
@@ -532,12 +454,16 @@ void main_initializer()
 
 	// Create shaders and set base properties
 	skybox_shader = Shader(
-		"resources/shaders/mesh/skybox.vert",
-		"resources/shaders/mesh/skybox.frag"
+		_shader("mesh/skybox.vert"),
+		_shader("mesh/skybox.frag")
 	);
 	skybox_shader.set_name("skybox_shader");
 
-	arrow_shader = Shader::from_source(arrow_vert, arrow_frag, arrow_geom);
+	arrow_shader = Shader(
+		_shader("ui/arrow.vert"),
+		_shader("ui/arrow.frag"),
+		_shader("ui/arrow.geom")
+	);
 	arrow_shader.set_name("arrow_shader");
 
 	// Configure skybox shader
@@ -548,7 +474,9 @@ void main_initializer()
 	glLineWidth(5.0f);
 
 	// Create the arrow
-	arrow = SVA3(arrow_vt);
+	// arrow = SVA3(arrow_vt);
+	arrow = Line(arrow_vt);
+	arrow.color = {0.5, 0.5, 1.0};
 
 	// Another branch alg
 	Mesh::AVertex vertices;
@@ -586,8 +514,8 @@ void main_initializer()
 	// ldam.add_object(&source_cube1, {.color = {1.0, 1.0, 1.0}}, lighting::COLOR_ONLY);
 	// ldam.add_object(&source_cube2, {.color = {1.0, 1.0, 1.0}}, lighting::COLOR_ONLY);
 
-	/*ldam.add_object(&hit_cube1, {.color = {0.5, 1.0, 0.5}});
-	ldam.add_object(&hit_cube2, {.color = {1.0, 0.5, 0.5}}); */
+	ldam.add_object(&hit_cube1, {.color = {0.5, 1.0, 0.5}});
+	ldam.add_object(&hit_cube2, {.color = {1.0, 0.5, 0.5}});
 	ldam.add_object(&hit_cube3, {.color = {0.9, 0.9, 0.9}});
 
 	ldam.add_object(&global_hit, {.color = {0.9, 0.9, 0.9}});
@@ -633,12 +561,8 @@ void main_renderer()
 	ldam.render();
 
 	// Draw the arrow
-	arrow_shader.use();
-	arrow_shader.set_mat4("model", model);
-	arrow_shader.set_mat4("view", view);
-	arrow_shader.set_mat4("projection", projection);
-	arrow_shader.set_vec3("color", 0.0, 0.0, 1.0);
-	arrow.draw(GL_LINES);
+	arrow.set_mvp(model, view, projection);
+	arrow.draw();
 
 	// Draw skybox
 	view = glm::mat4(glm::mat3(camera.get_view()));

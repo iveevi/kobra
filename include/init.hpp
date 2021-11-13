@@ -51,7 +51,8 @@ private:
 	// Common resources
 	struct {
 		std::vector <Shader> text_shaders;
-		std::vector <Shader> skybox_shaders;
+		std::vector <Shader> sb_shaders;
+		std::vector <Shader> line_shaders;
 		std::vector <CMap> character_maps;
 	} _cmn;
 public:
@@ -66,6 +67,7 @@ public:
 	struct {
 		Shader *text_shader;
 		Shader *sb_shader;
+		Shader *line_shader;
 		CMap *character_map;
 	} cres;
 
@@ -106,6 +108,8 @@ public:
 
 	// Loaders
 	void load_font(size_t);
+	void load_skybox(size_t);
+	void load_lines(size_t);
 
 	// Initial the specified context
 	//	using the corresponding initializer

@@ -87,6 +87,8 @@ void WindowManager::_add_win(GLFWwindow *win)
 
 	// Append to current resources
 	_cmn.text_shaders.push_back(Shader());
+	_cmn.sb_shaders.push_back(Shader());
+	_cmn.line_shaders.push_back(Shader());
 	_cmn.character_maps.push_back(CMap());
 }
 
@@ -134,6 +136,8 @@ void WindowManager::set_wcontext(size_t context)
 
 	// Set current resources
 	cres.text_shader = &_cmn.text_shaders[context];
+	cres.sb_shader = &_cmn.sb_shaders[context];
+	cres.line_shader = &_cmn.line_shaders[context];
 	cres.character_map = &_cmn.character_maps[context];
 }
 
@@ -245,6 +249,48 @@ void WindowManager::load_font(size_t context)
 
 	// Load the character map
 	_load_font(cres.character_map);
+
+	// Notify success
+	Logger::notify() << "Loaded text resources for window[" << context << "]\n";
+}
+
+void WindowManager::load_skybox(size_t context)
+{
+	// Paths to shader source
+	static const char *vert = _shader("mesh/skybox.vert");
+	static const char *frag = _shader("mesh/skybox.frag");
+
+	// TODO: check context for in bounds
+	set_wcontext(context);
+
+	// Create the shader
+	_cmn.sb_shaders[context] = Shader(vert, frag);
+
+	// TODO: set name of the shader based on the window title
+	cres.sb_shader->set_name("skybox_shader");
+
+	// Notify success
+	Logger::notify() << "Loaded skybox shader for window[" << context << "]\n";
+}
+
+void WindowManager::load_lines(size_t context)
+{
+	// Paths to shader source
+	static const char *vert = _shader("ui/arrow.vert");
+	static const char *frag = _shader("ui/arrow.frag");
+	static const char *geom = _shader("ui/arrow.geom");
+
+	// TODO: check context for in bounds
+	set_wcontext(context);
+
+	// Create the shader
+	_cmn.line_shaders[context] = Shader(vert, frag, geom);
+
+	// TODO: set name of the shader based on the window title
+	cres.line_shader->set_name("line_shader");
+
+	// Notify success
+	Logger::notify() << "Loaded line shader for window[" << context << "]\n";
 }
 
 void WindowManager::initialize(size_t context)
