@@ -179,7 +179,7 @@ struct VertexArray {
 	// TODO: what about index buffer?
 	virtual void draw(GLenum mode) const {
 		glBindVertexArray(vao);
-		glDrawArrays(GL_LINE_STRIP, 0, size);
+		glDrawArrays(mode, 0, size);
 		glCheckError();
 	}
 };
@@ -213,6 +213,9 @@ struct StaticVA : public VertexArray <fields> {
 template <unsigned int fields>
 class DynamicVA : public VertexArray <fields> {
 	std::vector <float> _vertices;
+
+	// TODO: nead indexing operations,
+	// maybe even iterators...
 };
 
 using VA3 = VertexArray <3>;
@@ -249,6 +252,7 @@ void generate_arrays()
 
 // TODO: once this is done, should go into separate file
 //	to create a fps monitor on the fly
+// TODO: and graphs in general
 void fps_monitor_initializer()
 {
 	// TODO: display fps counter here
@@ -333,7 +337,7 @@ void fps_monitor_renderer()
 
 		// Shift other points
 
-		// TODO: += fields
+		// TODO: += fields (getter)
 		for (size_t i = 0; i < fps_vertices.size(); i += 3) {
 			float px = fps_vertices[i];
 			fps_vertices[i] = std::max(px - 10.0f, 0.0f);
@@ -384,76 +388,88 @@ Mesh tree;
 Shader skybox_shader;	// TODO: goes to common resources
 Skybox sb;
 
-const char *global_vert = R"(
-#version 330 core
-
+// Arrow
+const char *arrow_vert = R"(
 layout (location = 0) in vec3 v_pos;
-layout (location = 1) in vec3 v_normal;
-
-out vec3 normal;
-out vec3 frag_pos;
 
 uniform mat4 model;
 uniform mat4 view;
-uniform mat4 projection;
+// uniform mat4 projection;
 
 void main()
 {
-	vec4 pos = vec4(v_pos, 1.0);
-	gl_Position = projection * view * model * pos;
-	frag_pos = vec3(model * pos);
-
-	// TODO: this should be done on the cpu because its intensive
-	normal = mat3(transpose(inverse(model))) * v_normal;
+	gl_Position = view * model * vec4(v_pos, 1.0);
 }
 )";
 
-const char *global_frag = R"(
-in vec3 normal;
-in vec3 frag_pos;
-
+const char *arrow_frag = R"(
 out vec4 frag_color;
 
-// TODO: put these into a material struct
 uniform vec3 color;
-uniform vec3 view_pos;
-
-struct DirLight {
-	vec3 direction;
-	vec3 ambient;
-	vec3 diffuse;
-	vec3 specular;
-};
-
-uniform DirLight light;
 
 void main()
 {
-	// Ambient
-	vec3 ambient = light.ambient;
-
-	// Diffuse
-	vec3 norm = normalize(normal);
-	if (!gl_FrontFacing)
-		norm *= -1;
-
-	vec3 light_dir = normalize(-light.direction);
-	float diff = max(dot(norm, light_dir), 0.0);
-	vec3 diffuse = diff * light.diffuse;
-
-	// Specular
-	float shine = 32;
-
-	vec3 view_dir = normalize(view_pos - frag_pos);
-	vec3 refl_dir = reflect(-light_dir, norm);
-	float spec = pow(max(dot(view_dir, refl_dir), 0.0), shine);
-	vec3 specular = spec * light.specular;
-
-	// Total result
-	vec3 result = (ambient + diffuse + specular) * color;
-	frag_color = vec4(result, 1.0);
+	frag_color = vec4(color, 1.0);
 }
 )";
+
+const char *arrow_geom = R"(
+layout (lines) in;
+layout (line_strip, max_vertices = 6) out;
+
+uniform mat4 projection;
+
+// TODO: add header for geom shaders
+void _emit_line(vec4 start, vec4 end)
+{
+	gl_Position = start;
+	EmitVertex();
+
+	gl_Position = end;
+	EmitVertex();
+
+	EndPrimitive();
+}
+
+vec2 rotate(vec2 vec, float angle)
+{
+	float s = sin(angle);
+	float c = cos(angle);
+
+	mat2 mat = mat2(c, -s, s, c);
+
+	return mat * vec;
+}
+
+void main()
+{
+	vec4 p1 = projection * gl_in[0].gl_Position;
+	vec4 p2 = projection * gl_in[1].gl_Position;
+
+	_emit_line(p1, p2);
+
+	vec2 p_p1 = p1.xy;
+	vec2 p_p2 = p2.xy;
+
+	float length = length(p_p2 - p_p1);
+	vec2 diff = normalize(p_p2 - p_p1);
+
+	vec2 d1 = 0.1 * length * rotate(diff, -2.5);
+	vec2 d2 = 0.1 * length * rotate(diff, 2.5);
+
+	_emit_line(p2, p2 + vec4(d1, 0.0, 0.0));
+	_emit_line(p2, p2 + vec4(d2, 0.0, 0.0));
+}
+)";
+
+Shader arrow_shader;
+
+std::vector <float> arrow_vt = {
+	1.0, 3.0, 0.0,
+	0.0, 1.0, 0.0
+};
+
+SVA3 arrow;
 
 // Lights
 const glm::vec3 lpos1 {2, 1.6, 1.6};
@@ -462,7 +478,7 @@ const glm::vec3 lpos2 {0.2, 1.6, 1.6};
 lighting::DirLight dirlight {
 	{-0.2f, -1.0f, -0.3f},
 	{0.2f, 0.2f, 0.2f},
-        {0.8f, 0.8f, 0.8f},
+        {0.9f, 0.9f, 0.9f},
 	{1.0f, 1.0f, 1.0f}
 };
 
@@ -480,7 +496,6 @@ lighting::PointLight light2 {
 lighting::Daemon ldam;
 
 // TODO: draw vectors!
-
 void main_initializer()
 {
 	// Uncap FPS
@@ -522,9 +537,18 @@ void main_initializer()
 	);
 	skybox_shader.set_name("skybox_shader");
 
+	arrow_shader = Shader::from_source(arrow_vert, arrow_frag, arrow_geom);
+	arrow_shader.set_name("arrow_shader");
+
 	// Configure skybox shader
 	skybox_shader.use();
 	skybox_shader.set_int("skybox", 0);
+
+	// Set line width
+	glLineWidth(5.0f);
+
+	// Create the arrow
+	arrow = SVA3(arrow_vt);
 
 	// Another branch alg
 	Mesh::AVertex vertices;
@@ -562,12 +586,12 @@ void main_initializer()
 	// ldam.add_object(&source_cube1, {.color = {1.0, 1.0, 1.0}}, lighting::COLOR_ONLY);
 	// ldam.add_object(&source_cube2, {.color = {1.0, 1.0, 1.0}}, lighting::COLOR_ONLY);
 
-	ldam.add_object(&hit_cube1, {.color = {0.5, 1.0, 0.5}});
-	ldam.add_object(&hit_cube2, {.color = {1.0, 0.5, 0.5}});
+	/*ldam.add_object(&hit_cube1, {.color = {0.5, 1.0, 0.5}});
+	ldam.add_object(&hit_cube2, {.color = {1.0, 0.5, 0.5}}); */
 	ldam.add_object(&hit_cube3, {.color = {0.9, 0.9, 0.9}});
 
 	ldam.add_object(&global_hit, {.color = {0.9, 0.9, 0.9}});
-	
+
 	ldam.add_object(&tree, {.color = {1.0, 0.8, 0.5}});
 }
 
@@ -577,7 +601,7 @@ void main_renderer()
 	float current_frame = glfwGetTime();
 	delta_time = current_frame - last_frame;
 	last_frame = current_frame;
-	
+
 	// Process input
 	process_input(mercury::winman.cwin);
 
@@ -588,7 +612,8 @@ void main_renderer()
 	// Create model, view, projection matrices
 	glm::mat4 model = glm::mat4(1.0f);
 	model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f));
-	model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f));
+	model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f));		// TODO: what is the basis of this computation?
+
 	glm::mat4 view = camera.get_view();
 	glm::mat4 projection = glm::perspective(
 		glm::radians(camera.zoom),
@@ -597,13 +622,23 @@ void main_renderer()
 	);
 
 	// Set lighting daemon uniforms
-	ldam.model = model;
-	ldam.view = view;
-	ldam.projection = projection;
-	ldam.view_position = camera.position;
+	ldam.uniforms = {
+		model,
+		view,
+		projection,
+		camera.position
+	};
 
 	// Render scene
 	ldam.render();
+
+	// Draw the arrow
+	arrow_shader.use();
+	arrow_shader.set_mat4("model", model);
+	arrow_shader.set_mat4("view", view);
+	arrow_shader.set_mat4("projection", projection);
+	arrow_shader.set_vec3("color", 0.0, 0.0, 1.0);
+	arrow.draw(GL_LINES);
 
 	// Draw skybox
 	view = glm::mat4(glm::mat3(camera.get_view()));

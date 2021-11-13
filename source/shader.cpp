@@ -103,7 +103,7 @@ static void check_compilation(unsigned int id, const std::string &type)
 	std::cout << line << "\n" << info << "\n" << line << "\n\n";
 }
 
-static void check_linker(unsigned int id, const std::string &type)
+static void check_linker(unsigned int id)
 {
 	static const int ibsize = 1024;
 	static const int lsize = 80;
@@ -119,57 +119,40 @@ static void check_linker(unsigned int id, const std::string &type)
 	glGetProgramInfoLog(id, ibsize, nullptr, info);
 
 	// Print error messages
-	Logger::error() << "Shader program linking error in " << type
-		<< " shader (id: " << id << ")\n\n";
+	Logger::error() << "Shader program linking error within PROGRAM (id: "
+		<< id << ")\n\n";
 
 	std::cout << line << "\n" << info << "\n" << line << "\n\n";
 }
 
 static void check_program_errors(unsigned int id, const std::string &type)
 {
-	if (type != "PROGRAM")
-		check_compilation(id, type);
+	if (type == "PROGRAM")
+		check_linker(id);
 	else
-		check_linker(id, type);
+		check_compilation(id, type);
 }
 
 Shader::Shader() {}
 
-Shader::Shader(const char *vpath, const char *fpath)
+Shader::Shader(const char *vpath, const char *fpath, const char *gpath)
 {
-	// TODO: separate into functions
-	// TODO: use set vertex shader, etc
-
 	// Reading the code
 	std::string vcode_str = proc_source(read_code(vpath));
 	std::string fcode_str = proc_source(read_code(fpath));
 
-	// Convert to C-strings
-	const char *vcode = vcode_str.c_str();
-	const char *fcode = fcode_str.c_str();
+	std::string gcode_str;
+	if (gpath)
+		gcode_str = proc_source(read_code(gpath));
 
-	// vertex shader
-	_vertex = glCreateShader(GL_VERTEX_SHADER);
-	glShaderSource(_vertex, 1, &vcode, NULL);
-	glCompileShader(_vertex);
-	check_program_errors(_vertex, "VERTEX");
+	// Set code and compile
+	set_vertex_shader(vcode_str);
+	set_fragment_shader(fcode_str);
 
-	// similiar for Fragment Shader TODO in function
-	_fragment = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderSource(_fragment, 1, &fcode, NULL);
-	glCompileShader(_fragment);
-	check_program_errors(_fragment, "FRAGMENT");
+	if (gpath)
+		set_geometry_shader(gcode_str);
 
-	// Shader program
-	id = glCreateProgram();
-	glAttachShader(id, _vertex);
-	glAttachShader(id, _fragment);
-	glLinkProgram(id);
-	check_program_errors(id, "PROGRAM");
-
-	// Free other programs
-	glDeleteShader(_vertex);
-	glDeleteShader(_fragment);
+	compile();
 }
 
 void Shader::use() const
@@ -189,6 +172,7 @@ void Shader::set_name(const std::string &name)
 	_name = name;
 }
 
+// Source code setters
 void Shader::set_vertex_shader(const char *code)
 {
 	set_vertex_shader(std::string(code));
@@ -227,18 +211,48 @@ void Shader::set_fragment_shader(const std::string &code)
 	check_program_errors(_fragment, "FRAGMENT");
 }
 
+void Shader::set_geometry_shader(const char *code)
+{
+	set_geometry_shader(std::string(code));
+}
+
+void Shader::set_geometry_shader(const std::string &code)
+{
+	_geometry = glCreateShader(GL_GEOMETRY_SHADER);
+	_has_gshader = true;
+
+	// Preprocess code
+	std::string pcode = proc_source(code);
+	const char *c_pcode = pcode.c_str();
+
+	// Compiler source
+	glShaderSource(_geometry, 1, &c_pcode, NULL);
+	glCompileShader(_geometry);
+	check_program_errors(_geometry, "GEOMETRY");
+}
+
 void Shader::compile()
 {
 	// Shader program
 	id = glCreateProgram();
+	
+	// Attach shaders
 	glAttachShader(id, _vertex);
 	glAttachShader(id, _fragment);
+	
+	if (_has_gshader)
+		glAttachShader(id, _geometry);
+
+	// Link and check for errors
 	glLinkProgram(id);
 	check_program_errors(id, "PROGRAM");
 
 	// Free other programs
 	glDeleteShader(_vertex);
 	glDeleteShader(_fragment);
+
+	if (_has_gshader)
+		glDeleteShader(_geometry);
 
 	// Set name
 	_name = "shader_" + std::to_string(id);
@@ -250,6 +264,7 @@ int get_index(const Shader *shader, const std::string &name)
 	// Cached uniform names
 	// TODO: helper function for cached logging?
 	//	would avoid looped clutter with certain logging
+	//	TODO: replace with error_cached
 	static std::set <std::string> cached;
 
 	int index = glGetUniformLocation(shader->id, name.c_str());
@@ -347,16 +362,26 @@ void Shader::set_mat4(const std::string &name, const glm::mat4 &mat) const
 }
 
 // Static methods
-Shader Shader::from_source(const char *vcode, const char *fcode)
+Shader Shader::from_source(const char *vcode, const char *fcode, const char *gcode)
 {
-	return from_source(std::string(vcode), std::string(fcode));
+	return from_source(
+		std::string(vcode),
+		std::string(fcode),
+		(gcode ? std::string(gcode) : "")
+	);
 }
 
-Shader Shader::from_source(const std::string &vcode, const std::string &fcode)
+Shader Shader::from_source(const std::string &vcode, const std::string &fcode, const std::string &gcode)
 {
 	Shader shader;
+
+	// Set source
 	shader.set_vertex_shader(vcode);
 	shader.set_fragment_shader(fcode);
+
+	if (!gcode.empty())
+		shader.set_geometry_shader(gcode);
+
 	shader.compile();
 	return shader;
 }

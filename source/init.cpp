@@ -33,31 +33,11 @@ namespace mercury {
 // Initial window dimensions
 WindowManager winman;
 
-/* TODO: this is no longer necessary
-glm::vec2 transform(const glm::vec2 &in)
-{
-	// TODO: this should not be using the global cwin
-	return glm::vec2 {
-		(in.x - win.width/2)/(cwin.width/2),
-		-(in.y - cwin.height/2)/(cwin.height/2)
-	};
-} */
-
-// Character static variables
-// Shader Char::shader;
-
-// Character map
-// std::unordered_map <char, Char> cmap;
-
 // UI Element static variables
 float ui::UIElement::swidth = -1;
 float ui::UIElement::sheight = -1;
 Shader ui::UIElement::shader;
 glm::mat4 ui::UIElement::projection;
-
-// Text static variables: TODO: into own source
-// float ui::Text::swidth = -1;
-// float ui::Text::sheight = -1;
 
 // Logger static variables - TODO: put into its own source file
 Logger::tclk Logger::clk;
@@ -118,11 +98,8 @@ static GLFWwindow *mk_win(const char *title,
 
 	// Check valid creation
 	if (!win) {
-		Logger::error("Failed to create GLFW window\n");
-
-		// TODO: do we really need to terminate?
 		glfwTerminate();
-		exit(-1);
+		Logger::fatal_error("Failed to create GLFW window\n");
 	}
 
 	// Set window properties
@@ -246,13 +223,9 @@ static void _load_font(WindowManager::CMap *cmap)
 
 void WindowManager::load_font(size_t context)
 {
-	// Path to shader source
-
-	// TODO: add macros to retrieve resources and shaders
-	static const char *vert = MERCURY_SOURCE_DIR
-		"/resources/shaders/font_shader.vs";
-	static const char *frag = MERCURY_SOURCE_DIR
-		"/resources/shaders/font_shader.fs";
+	// Paths to shader source
+	static const char *vert = _shader("font_shader.vs");
+	static const char *frag = _shader("font_shader.fs");
 
 	// TODO: check context for in bounds
 	set_wcontext(context);
@@ -465,8 +438,6 @@ std::vector <Loader> init_seq {
 	}
 };
 
-// TODO: should this be a list of functions to execute and log?
-// TODO: to avoid creating the window, add an index limiter
 void init(bool full_seq)
 {
 	size_t len = full_seq ? init_seq.size() : 1;

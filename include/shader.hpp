@@ -11,16 +11,20 @@
 
 namespace mercury {
 
+// TODO: computer shader class - derived?
 class Shader {
 	unsigned int		_vertex;
 	unsigned int		_fragment;
+	unsigned int		_geometry;
+
+	bool			_has_gshader = false;
 
 	std::string		_name;
 
 	static std::string	_current;
 public:
 	Shader();
-	Shader(const char *, const char *);
+	Shader(const char *, const char *, const char * = nullptr);
 
 	// TODO: destructor?
 
@@ -36,6 +40,9 @@ public:
 
 	void set_fragment_shader(const char *);
 	void set_fragment_shader(const std::string &);
+	
+	void set_geometry_shader(const char *);
+	void set_geometry_shader(const std::string &);
 
 	void compile();
 
@@ -61,8 +68,8 @@ public:
 	void set_mat4(const std::string &, const glm::mat4 &) const;
 
 	// Static methods
-	static Shader from_source(const char *, const char *);
-	static Shader from_source(const std::string &, const std::string &);
+	static Shader from_source(const char *, const char *, const char * = nullptr);
+	static Shader from_source(const std::string &, const std::string &, const std::string & = "");
 
 	// Headers
 	static std::unordered_map <std::string, std::string> headers;

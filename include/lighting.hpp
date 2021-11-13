@@ -49,52 +49,64 @@ enum Shading : uint8_t {
 // Daemon for lighting in 3D
 class Daemon {
 	// Compilation status for shaders
-	bool _cmp_color_only = false;
-	bool _cmp_phong = false;
+	struct {
+		bool basic = false;
+		bool phong = false;
+	} _compiled;
+
+	// Represents the attributes of a render object
+	struct RenderObject {
+		// TODO: later generalize to allow
+		// vertex buffer classes
+
+		Mesh *mesh;
+		Material material;
+		Shading shtype;
+	};
+
+	// List of render objects
+	std::vector <RenderObject> _robjs;
 	
 	// List of lights
 	struct {
 		std::vector <DirLight> directional;
 		std::vector <PointLight> point;
-	} lights;
+	} _lights;
+
+	// Set of shaders
+	// TODO: also need different shaders for
+	// different vertex formats (w or w/ normal, etc)
+	struct {
+		Shader basic;
+		Shader phong;
+	} _shaders;
 
 	// Compilers
 	void _compile_color_only();
 	void _compile_phong();
 
 	// Renderers
-	void _color_only(size_t);
-	void _point_phong_only(size_t);
-	void _dir_phong_only(size_t);
-	void _full_phong(size_t);
+	void _color_only(const RenderObject &);
+	void _point_phong_only(const RenderObject &);
+	void _dir_phong_only(const RenderObject &);
+	void _full_phong(const RenderObject &);
+
+	// Helper functions
+	void _phong_helper(const RenderObject &);
+
+	void _set_shader_uniforms();
+	void _render_object(const RenderObject &);
 public:
-	// TODO: make all members private
-
-	// All the types of shaders
-	// NOTE: Compiled on a need-basis
-	Shader color_only;
-	Shader phong;
-
-	// TODO: also need different shaders for different vertex formats (w or w/ normal, etc)
-
-	// TODO: concatenate the vector structures struct {mesh, shading, mat...}
-
-	// TODO: later generalize to allow
-	// vertex buffer classes
-	std::vector <Mesh *> objects;
-
-	// Shading type for each object
-	std::vector <Shading> shtypes;
-
-	std::vector <Material> materials;
-
 	// Shader uniforms
-	glm::mat4 model;
-	glm::mat4 view;
-	glm::mat4 projection;
-	glm::vec3 view_position;
+	struct {
+		glm::mat4 model;
+		glm::mat4 view;
+		glm::mat4 projection;
+		glm::vec3 view_position;
+	} uniforms;
 
 	// Adding lights
+	// TODO:  consider moving lights etc
 	void add_light(const DirLight &);
 	void add_light(const PointLight &);
 
