@@ -1,6 +1,8 @@
 # Set CMake version
 cmake_minimum_required(VERSION 3.14)
 
+# TODO: disable rtti (-fno-rtti)
+
 # Settings
 if (EXISTS "/usr/bin/clang++-10")
 	message("${warning}Using Clang compiler${reset}")
@@ -43,6 +45,7 @@ set(MERCURY_SOURCE
 	source/engine/skybox.cpp
 
 	source/mesh/basic.cpp
+	source/mesh/sphere.cpp
 
 	source/ui/button.cpp
 	source/ui/pure_rect.cpp

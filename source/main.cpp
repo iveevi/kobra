@@ -21,9 +21,11 @@
 #include "include/engine/skybox.hpp"
 
 #include "include/mesh/basic.hpp"
+#include "include/mesh/sphere.hpp"
 
 #include "include/ui/text.hpp"
 #include "include/ui/ui_layer.hpp"
+#include "include/ui/line.hpp"
 
 // Using declarations
 using namespace mercury;
@@ -49,10 +51,10 @@ bool firstMouse = true;
 float delta_time = 0.0f;
 float last_frame = 0.0f;
 
-// Random [-0.5, 0.5]
-float randm()
+// Random [0, 1]
+float runit()
 {
-	return rand()/((float) RAND_MAX) - 0.5;
+	return rand()/((float) RAND_MAX);
 }
 
 // TODO: these go into a namespace like "tree"
@@ -73,6 +75,10 @@ void add_ring(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 }
 
 // TODO: Generate fewer vertices, and use more normal maps
+std::vector <ui::Line> lines;
+std::vector <SVA3> spheres;		// NOTE: wireframe objects and lines are not considered in lighting...
+std::vector <SVA3> spheres2;
+
 void add_branch(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 		const glm::vec3 &p1, const glm::vec3 &p2,
 		float rad_i, float rad_f,
@@ -81,11 +87,27 @@ void add_branch(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 	// Constants
 	const float k_exp = std::log(rad_f/rad_i) / nrings;
 	const float slice = 2 * acos(-1) / nslices;
+	const float rk = 2.0;					// Radial spacing constant
 
 	// Radius function
 	auto radius = [k_exp, rad_i](float x) -> float {
 		return rad_i * std::exp(k_exp * x);
 	};
+
+	// Add the branch line
+	ui::Line line({
+		p1.x, p1.y, p1.z,	// TODO: Add a better constructor (with just two vec3s)
+		p2.x, p2.y, p2.z
+	});
+	line.color = {0.5, 0.5, 1.0};
+
+	lines.push_back(line);
+
+	spheres.push_back(mesh::wireframe_sphere(p1, rad_i));
+	spheres.push_back(mesh::wireframe_sphere(p2, rad_f));
+	
+	spheres2.push_back(mesh::wireframe_sphere(p1, rk * rad_i));
+	spheres2.push_back(mesh::wireframe_sphere(p2, rk * rad_f));
 
 	// TODO: need some way to draw vectors
 	const glm::vec3 axis = p2 - p1;
@@ -104,7 +126,7 @@ void add_branch(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 	glm::vec3 point = p1;
 
 	// Adding the vertices
-	for (int i = 0; i < nrings; i++) {
+	for (int i = 0; i <= nrings; i++) {
 		// Next ring
 		Ring ring;
 
@@ -125,13 +147,60 @@ void add_branch(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 		point += axis/(float) nrings;
 	}
 
-	for (int i = 0; i < nrings - 1; i++)
+	for (int i = 0; i < nrings; i++)
 		add_ring(vertices, indices, rings[i], rings[i + 1]);
+}
+
+void add_tree(Mesh::AVertex &vertices, Mesh::AIndices &indices,
+		const glm::vec3 &p1, const glm::vec3 &p2,
+		float rad_i, float rad_f)
+{
+	add_branch(vertices, indices, p1, p2, rad_i, rad_f);
+
+	// TODO: Perform (one) step of recursion. Should recursion be limited by final radius or by iterations?
+	float pi = acos(-1);
+	float xy_angle = pi * runit()/2;
+	float xz_angle = 2 * pi * runit();
+	
+	// TODO: change from a tight fit
+	float offset = rad_f;			// ring in which the center is
+	float raiuds = rad_f;			// actual radius
+
+	float dist = offset + radius;
+
+	float length = 5.0;			// TODO: how to variably change size
+	add_branch(
+		vertices,  indices,
+		{dist * cos(xz_angle), dist * },
+		{},
+		radius, 0.2 * radius	// TODO: change scaling
+	);
+
+	// TODO: Retrieve remaining rings and sew the mesh together
+}
+
+// TODO: replace height with a vector indicating direction and magnitude
+// TODO: specify number of divisions
+// TODO: some way to save these meshes
+Mesh make_tree(const glm::vec3 &base, float height, float tradius1, float tradius2)
+{
+	Mesh::AVertex vertices;
+	Mesh::AIndices indices;
+
+	glm::vec3 p1 = base;
+	glm::vec3 p2 = base + glm::vec3 {0, height, 0};
+
+	add_tree(vertices, indices, p1, p2, tradius1, tradius2);
+
+	// Return the tree
+	// TODO: how to return it efficiently? should mesh store indices/vertices?
+	return Mesh(vertices, {}, indices);
 }
 
 // Render function for FPS monitor
 Shader basic;
 
+// TODO: basic_2d.vert
 const char *basic_vert = R"(
 #version 330 core
 
@@ -170,9 +239,6 @@ class DynamicVA : public VertexArray <fields> {
 	// TODO: nead indexing operations,
 	// maybe even iterators...
 };
-
-using VA3 = VertexArray <3>;
-using SVA3 = StaticVA <3>;
 
 // Graph points
 unsigned int vbo;
@@ -337,59 +403,8 @@ Mesh source_cube1;
 Mesh source_cube2;
 Mesh tree;
 
-// Shader for skybox
-Shader skybox_shader;	// TODO: goes to common resources
+// Skybox
 Skybox sb;
-
-// Arrow
-Shader arrow_shader;
-
-std::vector <float> arrow_vt = {
-	1.0, 3.0, 0.0,
-	0.0, 1.0, 0.0
-};
-
-// SVA3 arrow;
-
-// Line class (with arrow options)
-class Line {
-	SVA3 line;
-public:
-	// TODO: should this be private?
-	glm::vec3 color;
-
-	Line() {}
-	Line(const std::vector <float> vertices) : line(vertices) {}
-
-	// TODO: make an mvp class?
-	void set_mvp(const glm::mat4 &model, const glm::mat4 &view, const glm::mat4 &projection) {
-		Shader *shader = winman.cres.line_shader;
-
-		// TODO: add a shader method for this	
-		shader->use();
-		shader->set_mat4("model", model);
-		shader->set_mat4("view", view);
-		shader->set_mat4("projection", projection);
-	}
-
-	enum EndType : uint8_t {
-		NONE = 0,
-		ARROW = 1
-	};
-
-	void draw(EndType start = NONE, EndType end = NONE) const {
-		Shader *shader = winman.cres.line_shader;
-
-		shader->use();
-		shader->set_vec3("color", color);
-		shader->set_int("start_mode", start);
-		shader->set_int("end_mode", end);
-
-		line.draw(GL_LINES);
-	}
-};
-
-Line arrow;
 
 // Lights
 const glm::vec3 lpos1 {2, 1.6, 1.6};
@@ -415,7 +430,29 @@ lighting::PointLight light2 {
 // Lighting daemon
 lighting::Daemon ldam;
 
-// TODO: draw vectors!
+// Wireframe sphere: TODO: is there a better way than to manually set vertices?
+const glm::vec3 center {1.0, 1.0, 1.0};
+const float radius = 0.2f;
+
+SVA3 wsphere;
+Shader sphere_shader;
+
+// TODO: basic_3d.vert
+const char *sphere_vert = R"(
+#version 330 core
+
+layout (location = 0) in vec3 vertex;
+
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+void main()
+{
+	gl_Position = projection * view * model * vec4(vertex, 1.0);
+}
+)";
+
 void main_initializer()
 {
 	// Uncap FPS
@@ -426,6 +463,7 @@ void main_initializer()
 
 	// Configure global opengl state
 	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_MULTISAMPLE);
 
 	// Hide cursor
 	glfwSetInputMode(winman.cwin,
@@ -452,42 +490,26 @@ void main_initializer()
 	source_cube1 = mesh::cuboid(lpos1, 0.5, 0.5, 0.5);
 	source_cube2 = mesh::cuboid(lpos2, 0.5, 0.5, 0.5);
 
-	// Create shaders and set base properties
-	skybox_shader = Shader(
-		_shader("mesh/skybox.vert"),
-		_shader("mesh/skybox.frag")
-	);
-	skybox_shader.set_name("skybox_shader");
-
-	arrow_shader = Shader(
-		_shader("ui/arrow.vert"),
-		_shader("ui/arrow.frag"),
-		_shader("ui/arrow.geom")
-	);
-	arrow_shader.set_name("arrow_shader");
-
-	// Configure skybox shader
-	skybox_shader.use();
-	skybox_shader.set_int("skybox", 0);
-
 	// Set line width
 	glLineWidth(5.0f);
 
-	// Create the arrow
-	// arrow = SVA3(arrow_vt);
-	arrow = Line(arrow_vt);
-	arrow.color = {0.5, 0.5, 1.0};
+	// Create the sphere
+	wsphere = mesh::wireframe_sphere(center, radius);
+
+	sphere_shader = Shader::from_source(sphere_vert, basic_frag);
+	sphere_shader.set_name("sphere_shader");
 
 	// Another branch alg
 	Mesh::AVertex vertices;
 	Mesh::AIndices indices;
 
-	add_branch(vertices, indices, {4, -0.5, 2}, {4, 3, 2}, 0.7, 0.3);
-	add_branch(vertices, indices, {4.1, 2.4, 2}, {5, 5, 2}, 0.25, 0.1);
-	add_branch(vertices, indices, {4.1, 2.4, 2}, {3.3, 5.3, 2.3}, 0.3, 0.1);
-	add_branch(vertices, indices, {4.1, 2.4, 2}, {4, 4.5, 1}, 0.25, 0.1);
+	// add_branch(vertices, indices, {4, -0.5, 2}, {4, 3, 2}, 0.7, 0.3);
+	// add_branch(vertices, indices, {4.1, 2.4, 2}, {5, 5, 2}, 0.25, 0.1);
+	// add_branch(vertices, indices, {4.1, 2.4, 2}, {3.3, 5.3, 2.3}, 0.3, 0.1);
+	// add_branch(vertices, indices, {4.1, 2.4, 2}, {4, 4.5, 1}, 0.25, 0.1);
 
-	tree = Mesh(vertices, {}, indices);
+	// tree = Mesh(vertices, {}, indices);
+	tree = make_tree({4, -0.5, 2}, 4, 0.7, 0.3);
 
 	Logger::ok("Finished constructing tree.");
 
@@ -520,7 +542,7 @@ void main_initializer()
 
 	ldam.add_object(&global_hit, {.color = {0.9, 0.9, 0.9}});
 
-	ldam.add_object(&tree, {.color = {1.0, 0.8, 0.5}});
+	// ldam.add_object(&tree, {.color = {1.0, 0.8, 0.5}});
 }
 
 void main_renderer()
@@ -560,19 +582,38 @@ void main_renderer()
 	// Render scene
 	ldam.render();
 
-	// Draw the arrow
-	arrow.set_mvp(model, view, projection);
-	arrow.draw();
+	// Draw sphere		TODO: seriously some way to check that uniforms have been set
+	sphere_shader.use();
+	sphere_shader.set_mat4("model", model);
+	sphere_shader.set_mat4("view", view);
+	sphere_shader.set_mat4("projection", projection);
+	// wsphere.draw(GL_LINE_STRIP);
+
+	sphere_shader.use();
+	sphere_shader.set_vec3("ecolor", 0.1, 0.5, 1.0);
+	for (const SVA3 &sva : spheres)
+		sva.draw(GL_LINE_STRIP);
+	
+	sphere_shader.use();
+	sphere_shader.set_vec3("ecolor", 0.9, 0.9, 0.5);
+	for (const SVA3 &sva : spheres2)
+		sva.draw(GL_LINE_STRIP);
+
+	// Draw tree skeleton
+	lines[0].set_mvp(model, view, projection);
+	for (const ui::Line &line : lines)
+		line.draw();
 
 	// Draw skybox
 	view = glm::mat4(glm::mat3(camera.get_view()));
 
-	// Draw the skybox
-	skybox_shader.use();		// TODO: use cres shader
-	skybox_shader.set_mat4("projection", projection);
-	skybox_shader.set_mat4("view", view);
+	// Set skybox shader properties
+	winman.cres.sb_shader->use();
+	winman.cres.sb_shader->set_mat4("projection", projection);
+	winman.cres.sb_shader->set_mat4("view", view);
 
-	sb.draw(skybox_shader);
+	// TODO: use the current shader in the skybox draw method
+	sb.draw(*winman.cres.sb_shader);
 }
 
 // Program render loop condition

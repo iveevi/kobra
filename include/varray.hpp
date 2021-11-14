@@ -19,7 +19,7 @@ namespace mercury {
 //	for plain 3d vertices, this would be 3
 //	if normals are included, it would become 6
 template <unsigned int fields>
-struct VertexArray {
+struct VertexArray {		// TODO: should be derived from something? or switch with manual ids
 	unsigned int vao;
 	unsigned int vbo;
 
@@ -59,6 +59,10 @@ struct StaticVA : public VertexArray <fields> {
 		glCheckError();
 	}
 };
+
+// Aliases
+using VA3 = VertexArray <3>;
+using SVA3 = StaticVA <3>;
 
 }
 
