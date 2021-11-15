@@ -17,6 +17,15 @@ public:
 	glm::vec3 color;
 
 	Line() {}
+
+	// Create line between two points	
+	Line(const glm::vec3 &p1, const glm::vec3 &p2,
+		const glm::vec3 &col = glm::vec3(1.0f, 1.0f, 1.0f))
+		: line({
+			p1.x, p1.y, p1.z,
+			p2.x, p2.y, p2.z
+		}), color(col) {}
+
 	Line(const std::vector <float> vertices) : line(vertices) {}
 
 	// TODO: make an mvp class?

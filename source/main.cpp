@@ -79,6 +79,19 @@ std::vector <ui::Line> lines;
 std::vector <SVA3> spheres;		// NOTE: wireframe objects and lines are not considered in lighting...
 std::vector <SVA3> spheres2;
 
+// Radial spacing constants
+const float rk_max = 2.5f;
+const float rk_min = 1.5f;
+
+// TODO: move this to a glm extra header
+
+// Project v over u
+glm::vec3 project(const glm::vec3 &v, const glm::vec3 &u)
+{
+	return u * glm::dot(v, u)/glm::dot(u, u);
+}
+
+// TODO: return the vector of rings
 void add_branch(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 		const glm::vec3 &p1, const glm::vec3 &p2,
 		float rad_i, float rad_f,
@@ -87,7 +100,7 @@ void add_branch(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 	// Constants
 	const float k_exp = std::log(rad_f/rad_i) / nrings;
 	const float slice = 2 * acos(-1) / nslices;
-	const float rk = 2.0;					// Radial spacing constant
+	// const float rk = 2.0;					// Radial spacing constant
 
 	// Radius function
 	auto radius = [k_exp, rad_i](float x) -> float {
@@ -106,14 +119,15 @@ void add_branch(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 	spheres.push_back(mesh::wireframe_sphere(p1, rad_i));
 	spheres.push_back(mesh::wireframe_sphere(p2, rad_f));
 	
-	spheres2.push_back(mesh::wireframe_sphere(p1, rk * rad_i));
-	spheres2.push_back(mesh::wireframe_sphere(p2, rk * rad_f));
+	// spheres2.push_back(mesh::wireframe_sphere(p1, rk_max * rad_i));
+	// spheres2.push_back(mesh::wireframe_sphere(p2, rk_max * rad_f));
 
-	// TODO: need some way to draw vectors
+	// Tree axis
 	const glm::vec3 axis = p2 - p1;
 
-	// TODO: why dont we do cross product?
-	// glm::vec3 perp = {1, 0, 0};
+	// Gram-Schmidt process to create an orthonormal vector
+	glm::vec3 v2 = p1 + glm::vec3 {1.0f, 0.0f, 0.0f};
+	glm::vec3 perp = glm::normalize(v2 - project(v2, axis));
 
 	// Generate the rotation matrix
 	glm::mat4 transform(1);
@@ -131,11 +145,11 @@ void add_branch(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 		Ring ring;
 
 		// Save perpendicular
-		glm::vec3 c_perp = {1, 0, 0};
+		glm::vec3 c_perp = perp;// {1, 0, 0};
 
 		float rad = radius(i);
 		for (int j = 0; j < nslices; j++) {
-			glm::vec3 v1 = point + (rad + 0.02f * randm()) * c_perp;
+			glm::vec3 v1 = point + (rad + 0.02f * runit()) * c_perp;
 			c_perp = glm::vec3(transform * glm::vec4(c_perp, 1.0));
 			ring.push_back(v1);
 		}
@@ -151,49 +165,74 @@ void add_branch(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 		add_ring(vertices, indices, rings[i], rings[i + 1]);
 }
 
-void add_tree(Mesh::AVertex &vertices, Mesh::AIndices &indices,
-		const glm::vec3 &p1, const glm::vec3 &p2,
-		float rad_i, float rad_f)
+// Spherical coordinates to cartesian
+glm::vec3 sph_to_cart(float xy, float xz)
 {
-	add_branch(vertices, indices, p1, p2, rad_i, rad_f);
-
-	// TODO: Perform (one) step of recursion. Should recursion be limited by final radius or by iterations?
-	float pi = acos(-1);
-	float xy_angle = pi * runit()/2;
-	float xz_angle = 2 * pi * runit();
-	
-	// TODO: change from a tight fit
-	float offset = rad_f;			// ring in which the center is
-	float raiuds = rad_f;			// actual radius
-
-	float dist = offset + radius;
-
-	float length = 5.0;			// TODO: how to variably change size
-	add_branch(
-		vertices,  indices,
-		{dist * cos(xz_angle), dist * },
-		{},
-		radius, 0.2 * radius	// TODO: change scaling
+	float xr_rad = cos(xy);
+	return glm::vec3(
+		xr_rad * cos(xz),
+		sin(xy),
+		xr_rad * sin(xz)
 	);
-
-	// TODO: Retrieve remaining rings and sew the mesh together
 }
 
-// TODO: replace height with a vector indicating direction and magnitude
-// TODO: specify number of divisions
-// TODO: some way to save these meshes
-Mesh make_tree(const glm::vec3 &base, float height, float tradius1, float tradius2)
+// Generate the tree skeleton
+// TODO: make recursive
+// TODO: later implement tropisms, etc
+void generate_tree(Mesh::AVertex &vertices, Mesh::AIndices &indices,
+		const glm::vec3 &base,
+		const glm::vec3 &up,
+		float height,
+		float tradius,
+		int max_iterations = 5)
+{
+	// At least two branches
+	size_t nbranches = (rand() % 2) + 2;
+
+	// Stopping point
+	spheres.push_back(mesh::wireframe_sphere(base, tradius));
+	if (height < 0.2 || max_iterations <= 0) {
+		// TODO: these are actually leaves
+		return;
+	}
+
+	const glm::vec3 color = glm::vec3 {1.0f, 0.5f, 1.0f};
+	const glm::vec3 end = base + height * up;
+
+	lines.push_back(ui::Line(base, end, color));
+
+	add_branch(vertices, indices, base, end, tradius, 0.6 * tradius);
+
+	// TODO: will need to cull branches that are too close to each other
+	float pi = acos(-1);
+	for (size_t i = 0; i < nbranches; i++) {
+		// Recurse
+
+		float xy_angle = pi * runit() / 2;
+		float xz_angle = 2 * pi * runit();
+
+		glm::vec3 nup = sph_to_cart(xy_angle, xz_angle);
+
+		// TODO: store min scale
+		float hk = 0.5 * runit() + 0.5;
+		float nheight = hk * height;
+
+		generate_tree(
+			vertices, indices,
+			end, nup,
+			nheight, tradius * 0.6,
+			max_iterations - 1
+		);
+	}
+}
+
+Mesh make_tree(const glm::vec3 &base, const glm::vec3 &up, float height, float tradius)
 {
 	Mesh::AVertex vertices;
 	Mesh::AIndices indices;
 
-	glm::vec3 p1 = base;
-	glm::vec3 p2 = base + glm::vec3 {0, height, 0};
+	generate_tree(vertices, indices, base, up, height, tradius);
 
-	add_tree(vertices, indices, p1, p2, tradius1, tradius2);
-
-	// Return the tree
-	// TODO: how to return it efficiently? should mesh store indices/vertices?
 	return Mesh(vertices, {}, indices);
 }
 
@@ -499,17 +538,11 @@ void main_initializer()
 	sphere_shader = Shader::from_source(sphere_vert, basic_frag);
 	sphere_shader.set_name("sphere_shader");
 
-	// Another branch alg
-	Mesh::AVertex vertices;
-	Mesh::AIndices indices;
+	// Construct the tree
+	tree = make_tree({0, -0.5, -2}, {0, 1, 0}, 3.0f, 0.5f);
 
-	// add_branch(vertices, indices, {4, -0.5, 2}, {4, 3, 2}, 0.7, 0.3);
-	// add_branch(vertices, indices, {4.1, 2.4, 2}, {5, 5, 2}, 0.25, 0.1);
-	// add_branch(vertices, indices, {4.1, 2.4, 2}, {3.3, 5.3, 2.3}, 0.3, 0.1);
-	// add_branch(vertices, indices, {4.1, 2.4, 2}, {4, 4.5, 1}, 0.25, 0.1);
-
-	// tree = Mesh(vertices, {}, indices);
-	tree = make_tree({4, -0.5, 2}, 4, 0.7, 0.3);
+	/* std::vector <glm::vec3> tree_vertices;
+	generate_tree_skeleton(tree_vertices, {0, 0, 0}, {0, 1, 0}, 3.0f, 0.5f); */
 
 	Logger::ok("Finished constructing tree.");
 
@@ -542,7 +575,7 @@ void main_initializer()
 
 	ldam.add_object(&global_hit, {.color = {0.9, 0.9, 0.9}});
 
-	// ldam.add_object(&tree, {.color = {1.0, 0.8, 0.5}});
+	ldam.add_object(&tree, {.color = {1.0, 0.8, 0.5}});
 }
 
 void main_renderer()
@@ -583,7 +616,7 @@ void main_renderer()
 	ldam.render();
 
 	// Draw sphere		TODO: seriously some way to check that uniforms have been set
-	sphere_shader.use();
+	sphere_shader.use();	// TODO: make into a common shader
 	sphere_shader.set_mat4("model", model);
 	sphere_shader.set_mat4("view", view);
 	sphere_shader.set_mat4("projection", projection);
