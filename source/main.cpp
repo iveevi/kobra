@@ -22,6 +22,7 @@
 
 #include "include/mesh/basic.hpp"
 #include "include/mesh/sphere.hpp"
+#include "include/mesh/cube.hpp"
 
 #include "include/ui/text.hpp"
 #include "include/ui/ui_layer.hpp"
@@ -59,6 +60,7 @@ float runit()
 
 // TODO: these go into a namespace like "tree"
 using Ring = std::vector <glm::vec3>;
+using Branch = std::vector <Ring>;		// Should be a queue so poping is easier
 
 void add_ring(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 		const Ring &ring1, const Ring &ring2)
@@ -76,8 +78,9 @@ void add_ring(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 
 // TODO: Generate fewer vertices, and use more normal maps
 std::vector <ui::Line> lines;
+
 std::vector <SVA3> spheres;		// NOTE: wireframe objects and lines are not considered in lighting...
-std::vector <SVA3> spheres2;
+std::vector <SVA3> annotations;
 
 // Radial spacing constants
 const float rk_max = 2.5f;
@@ -92,7 +95,7 @@ glm::vec3 project(const glm::vec3 &v, const glm::vec3 &u)
 }
 
 // TODO: return the vector of rings
-void add_branch(Mesh::AVertex &vertices, Mesh::AIndices &indices,
+Branch generate_branch(
 		const glm::vec3 &p1, const glm::vec3 &p2,
 		float rad_i, float rad_f,
 		int nrings = 10, int nslices = 10)
@@ -134,7 +137,7 @@ void add_branch(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 	transform = glm::rotate(transform, -slice, axis);
 
 	// List of rings
-	std::vector <Ring> rings;
+	Branch rings;
 
 	// Spacial traverser
 	glm::vec3 point = p1;
@@ -161,8 +164,7 @@ void add_branch(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 		point += axis/(float) nrings;
 	}
 
-	for (int i = 0; i < nrings; i++)
-		add_ring(vertices, indices, rings[i], rings[i + 1]);
+	return rings;
 }
 
 // Spherical coordinates to cartesian
@@ -176,15 +178,173 @@ glm::vec3 sph_to_cart(float xy, float xz)
 	);
 }
 
+// Add branch to vertices
+void add_branch(Mesh::AVertex &vertices, Mesh::AIndices &indices,
+		const Branch &branch)
+{
+	// Add the rings
+	for (int i = 0; i < (int) branch.size() - 1; i++)
+		add_ring(vertices, indices, branch[i], branch[i + 1]);
+}
+
+using Interval = std::pair <float, float>;
+
+// Bounding box structure
+struct BoundingBox {
+	glm::vec3 center;
+	glm::vec3 size;
+	glm::vec3 up;
+	glm::vec3 right;
+
+	void annotate() {
+		annotations.push_back(mesh::wireframe_cuboid(
+			center, size, up
+		));
+	}
+
+	// TODO: put both these methods outside bbox, into header in physics namespace
+	// Return min and max of projection on axis
+	float proj_len(const glm::vec3 &pt, const glm::vec3 &naxis) const
+	{
+		return glm::length(::project(pt, naxis));
+	}
+
+	Interval project(const glm::vec3 &axis) const
+	{
+		float min = std::numeric_limits <float> ::max();
+		float max = -std::numeric_limits <float> ::max();
+        
+		glm::vec3 nup = glm::normalize(up);
+		glm::vec3 nright = glm::normalize(right);
+		glm::vec3 nforward = glm::normalize(glm::cross(nup, nright));
+
+		glm::vec3 xdir = nright * size.x/2.0f;
+		glm::vec3 ydir = nup * size.y/2.0f;
+		glm::vec3 zdir = nforward * size.z/2.0f;
+
+		std::vector <glm::vec3> pts = {
+			center + xdir + ydir + zdir,
+			center - xdir + ydir + zdir,
+			center + xdir - ydir + zdir,
+			center - xdir - ydir + zdir,
+			center + xdir + ydir - zdir,
+			center - xdir + ydir - zdir,
+			center + xdir - ydir - zdir,
+			center - xdir - ydir - zdir
+		};
+
+		for (const glm::vec3 &pt : pts) {
+			float len = proj_len(pt, axis);
+			// Logger::notify() << "\t\t\tlen = " << len << ", pt = " << pt << ", axis = " << axis << ", projction = " << ::project(pt, axis) << "\n";
+			if (len < min)
+				min = len;
+			if (len > max)
+				max = len;
+		}
+
+		return {min, max};
+	}
+};
+
+bool intersecting(const BoundingBox &b1, const BoundingBox &b2)
+{
+	glm::vec3 foward1 = glm::normalize(glm::cross(b1.up, b1.right));
+	glm::vec3 foward2 = glm::normalize(glm::cross(b2.up, b2.right));
+
+	std::vector <glm::vec3> axes {
+		// b1 normals
+		b1.right,
+		b1.up,
+		foward1,
+
+		// b2 normals
+		b2.right,
+		b2.up,
+		foward2,
+
+		// cross products
+		glm::cross(b1.right, b2.right),
+		glm::cross(b1.right, b2.up),
+		glm::cross(b1.right, foward2),
+
+		glm::cross(b1.up, b2.right),
+		glm::cross(b1.up, b2.up),
+		glm::cross(b1.up, foward2),
+
+		glm::cross(foward1, b2.right),
+		glm::cross(foward1, b2.up),
+		glm::cross(foward1, foward2)
+	};
+
+	// Iterate over all axes
+	Logger::notify() << "\tIntersection function\n";
+	for (const glm::vec3 &axis : axes) {
+		if (axis == glm::vec3(0, 0, 0)) {
+			Logger::notify() << "\t\tAxis is zero\n";
+			continue;
+		}
+
+		Interval i1 = b1.project(axis);
+		Interval i2 = b2.project(axis);
+
+		Logger::notify() << "\t\ti1 = " << i1.first << ", " << i1.second << "\ti2 = " << i2.first << ", " << i2.second << "\n";
+
+		if (i1.first > i2.second || i2.first > i1.second)
+			return false;
+	}
+
+	return true;
+}
+
+// Get the bounding box
+BoundingBox get_bounding_box(const Ring &ring1, const Ring &ring2,
+		const glm::vec3 &center, const glm::vec3 &up,
+		float rheight)
+{
+	// TODO: add a helper method for this...
+	glm::vec3 c1 = center - rheight * up/2.0f;
+	glm::vec3 c2 = center + rheight * up/2.0f;
+
+	// First ring
+	float max1 = 0.0f;
+
+	// Logger::notify() << "\tcenter = " << center << ", c1 = " << c1 << ", c2 = " << c2 << std::endl;
+	for (int i = 0; i < (int) ring1.size(); i++) {
+		float d = glm::length(ring1[i] - c1);
+		if (d > max1)
+			max1 = d;
+	}
+
+	// Second ring
+	float max2 = 0.0f;
+
+	for (int i = 0; i < (int) ring2.size(); i++) {
+		float d = glm::length(ring2[i] - c2);
+		if (d > max2)
+			max2 = d;
+	}
+
+	// Add the bounding box
+	float radius = 2 * std::fmax(max1, max2);
+	// Logger::notify() << "\tradius = " << radius << "\n";
+
+	return {
+		center,
+		{radius, rheight, radius},
+		up,
+		{radius, 0, 0}
+	};
+}
+
 // Generate the tree skeleton
-// TODO: make recursive
 // TODO: later implement tropisms, etc
-void generate_tree(Mesh::AVertex &vertices, Mesh::AIndices &indices,
+// NOTE: only draws the branchs that steam from the current trunk
+Branch generate_tree(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 		const glm::vec3 &base,
 		const glm::vec3 &up,
 		float height,
 		float tradius,
-		int max_iterations = 5)
+		int max_iterations = 4)
 {
 	// At least two branches
 	size_t nbranches = (rand() % 2) + 2;
@@ -193,7 +353,7 @@ void generate_tree(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 	spheres.push_back(mesh::wireframe_sphere(base, tradius));
 	if (height < 0.2 || max_iterations <= 0) {
 		// TODO: these are actually leaves
-		return;
+		return {};
 	}
 
 	const glm::vec3 color = glm::vec3 {1.0f, 0.5f, 1.0f};
@@ -201,13 +361,40 @@ void generate_tree(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 
 	lines.push_back(ui::Line(base, end, color));
 
-	add_branch(vertices, indices, base, end, tradius, 0.6 * tradius);
+	Branch branch = generate_branch(base, end, tradius, 0.6 * tradius);
+
+	float sliceh = height/10.0f;
+	Logger::notify() << "max_iterations = " << max_iterations << std::endl;
+	// get_bounding_box(branch[0], branch[1], base + (sliceh/2.0f) * up, up, sliceh);
+
+	// Main bounding box
+	BoundingBox mbbox = get_bounding_box(
+		branch[9], branch[10],
+		base + (height - sliceh/2.0f) * up,
+		up, sliceh
+	);
+	mbbox.annotate();
+
+	// Logger::notify() << "bbox test.\n";
+	// bool b1 = mbbox.is_inside(mbbox.center);
+	// bool b2 = mbbox.is_inside(mbbox.center + mbbox.size/2.0f);
+
+	// Logger::notify() << "\tb1 = " << b1 << ", b2 = " << b2 << "\n";
 
 	// TODO: will need to cull branches that are too close to each other
 	float pi = acos(-1);
+
+	/* Simple bounding box test:
+	 * if the ring's bounding box is
+	 * intersecting the main bounding box,
+	 * (or two branch's bounding boxes are
+	 * intersecting each other), then
+	 * remove the ring from the branch
+	 */
+
+	std::vector <Branch> branches;		// TODO: why do I need this?
 	for (size_t i = 0; i < nbranches; i++) {
 		// Recurse
-
 		float xy_angle = pi * runit() / 2;
 		float xz_angle = 2 * pi * runit();
 
@@ -217,13 +404,45 @@ void generate_tree(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 		float hk = 0.5 * runit() + 0.5;
 		float nheight = hk * height;
 
-		generate_tree(
+		Branch br = generate_tree(
 			vertices, indices,
 			end, nup,
 			nheight, tradius * 0.6,
 			max_iterations - 1
 		);
+
+		if (max_iterations <= 1)
+			break;
+
+		// Ensure that the bounding box for the branch is not intersecting
+		float nsliceh = nheight/10.0f;
+		float kheight = nsliceh/2.0f;
+
+		int len = br.size();
+
+		BoundingBox bbox;
+		for (int j = 0; j < len; j++, kheight += nsliceh) {
+			bbox = get_bounding_box(
+				br[j], br[j + 1],
+				end + kheight * nup,
+				nup, nsliceh
+			);
+
+			bool inter = intersecting(mbbox, bbox);
+			Logger::notify() << "Index is [" << i << ", " << j << "]: intersect? " << inter << std::endl;
+			if (intersecting(mbbox, bbox)) {
+				br.erase(br.begin());
+			} else {
+				break;
+			}
+		}
+
+		add_branch(vertices, indices, br);
+		bbox.annotate();
+		// branches.push_back(br);
 	}
+
+	return branch;
 }
 
 Mesh make_tree(const glm::vec3 &base, const glm::vec3 &up, float height, float tradius)
@@ -231,7 +450,11 @@ Mesh make_tree(const glm::vec3 &base, const glm::vec3 &up, float height, float t
 	Mesh::AVertex vertices;
 	Mesh::AIndices indices;
 
-	generate_tree(vertices, indices, base, up, height, tradius);
+	std::vector <Ring> rings = generate_tree(vertices, indices, base, up, height, tradius);
+	Logger::notify() << "Finished generating tree\n";
+
+	// Draw the last branch
+	add_branch(vertices, indices, rings);
 
 	return Mesh(vertices, {}, indices);
 }
@@ -541,11 +764,6 @@ void main_initializer()
 	// Construct the tree
 	tree = make_tree({0, -0.5, -2}, {0, 1, 0}, 3.0f, 0.5f);
 
-	/* std::vector <glm::vec3> tree_vertices;
-	generate_tree_skeleton(tree_vertices, {0, 0, 0}, {0, 1, 0}, 3.0f, 0.5f); */
-
-	Logger::ok("Finished constructing tree.");
-
 	// TODO: some way to check that the resources being used in render are in another context
 
 	// Skybox stuff
@@ -629,7 +847,7 @@ void main_renderer()
 	
 	sphere_shader.use();
 	sphere_shader.set_vec3("ecolor", 0.9, 0.9, 0.5);
-	for (const SVA3 &sva : spheres2)
+	for (const SVA3 &sva : annotations)
 		sva.draw(GL_LINE_STRIP);
 
 	// Draw tree skeleton

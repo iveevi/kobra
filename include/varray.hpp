@@ -1,6 +1,9 @@
 #ifndef VARRAY_H_
 #define VARRAY_H_
 
+// Standard headers
+#include <vector>
+
 // GLFW headers
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -37,7 +40,23 @@ struct VertexArray {		// TODO: should be derived from something? or switch with 
 // Vertex array that cannot be modified
 template <unsigned int fields>
 struct StaticVA : public VertexArray <fields> {
+	// TODO: put in mesh header
+	std::vector <float> flatten(const std::vector <glm::vec3> &vertices) {
+		std::vector <float> data;
+		for (const auto &v : vertices) {
+			data.push_back(v.x);
+			data.push_back(v.y);
+			data.push_back(v.z);
+		}
+		return data;
+	}
+public:
+	// TODO: pass draw mode as well
 	StaticVA() {}
+
+	// TODO: can the vector address be used directly?
+	StaticVA(const std::vector <glm::vec3> &verts)
+		: StaticVA(flatten(verts)) {}
 
 	StaticVA(const std::vector <float> &verts) {
 		// Set size
