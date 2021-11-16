@@ -130,6 +130,9 @@ public:
 	//	then renders all in a loop
 	void run();
 
+	// Turn off all windows
+	void close_all();
+
 	// Indexing
 	GLFWwindow *get(size_t index) const {
 		return wins[index];

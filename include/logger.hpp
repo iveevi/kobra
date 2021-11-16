@@ -39,10 +39,20 @@ std::ostream &operator<<(std::ostream &, const log_notify &);
 std::ostream &operator<<(std::ostream &, const log_fatal_error &);
 
 // Window buffer
+#define WBUFFER_SIZE	1024
+
 class wbuffer : public std::streambuf {
-	WINDOW *	_window = nullptr;
-	std::string	_buffer;
+	WINDOW *			_window = nullptr;
+	std::string			_buffer;
 public:
+	// Buffer structure
+	static const size_t buffer_size;
+	struct {
+		std::string buffer[WBUFFER_SIZE];
+		size_t index = 0;
+	} buffer;
+
+	// Constructors
 	wbuffer() {}
 	wbuffer(WINDOW *win) : _window(win) {}
 
@@ -53,7 +63,7 @@ public:
 		for (std::streamsize i = 0; i < size; i++) {
 			if (str[i] == '\n') {
 				_buffer.append(str + start, str + (i + 1));
-				sync();
+				sync_ln();
 				start = i + 1;
 			}
 		}
@@ -65,8 +75,14 @@ public:
 	virtual int overflow(int c) override {
 		_buffer.append(1, c);
 		if (c == '\n')
-			sync();
+			sync_ln();
 		return c;
+	}
+
+	void sync_ln() {
+		buffer.buffer[buffer.index] = _buffer;
+		buffer.index = (buffer.index + 1) % WBUFFER_SIZE;
+		sync();
 	}
 
 	virtual int sync() override {
@@ -75,15 +91,17 @@ public:
 		_buffer.clear();
 		return 0;
 	}
+
+	// Friend class
+	friend class owstream;
 };
 
 class owstream : public std::ostream {
-	wbuffer _buf;
 public:
-	WINDOW *win;
+	WINDOW *win = nullptr;
 
-	owstream(WINDOW *window) : win(window), std::ostream(&_buf) {
-		_buf = wbuffer(win);
+	owstream(wbuffer *buf) : std::ostream(buf) {
+		win = buf->_window;
 	}
 };
 
@@ -129,13 +147,19 @@ class Logger {
 		I_FATAL_ERROR,
 	};
 
+	static void _print_line() {
+		*ows << line++ << ": ";
+		ows->flush();
+	}
+
 	static void _print_ows_header() {
-		*ows << line++ << ": MERCURY ENGINE: "
+		*ows << "MERCURY ENGINE: "
 			<< time() << " $ ";
 		ows->flush();
 	}
 
 	static std::ostream &_ows_fatal_error() {
+		_print_line();
 		wattron(ows->win, COLOR_PAIR(I_FATAL_ERROR));
 		_print_ows_header();
 		wattroff(ows->win, COLOR_PAIR(I_FATAL_ERROR));
@@ -144,6 +168,7 @@ class Logger {
 	}
 
 	static std::ostream &_ows_ok() {
+		_print_line();
 		wattron(ows->win, COLOR_PAIR(I_OK));
 		_print_ows_header();
 		wattroff(ows->win, COLOR_PAIR(I_OK));
@@ -152,6 +177,7 @@ class Logger {
 	}
 
 	static std::ostream &_ows_error() {
+		_print_line();
 		wattron(ows->win, COLOR_PAIR(I_ERROR));
 		_print_ows_header();
 		wattroff(ows->win, COLOR_PAIR(I_ERROR));
@@ -160,6 +186,7 @@ class Logger {
 	}
 
 	static std::ostream &_ows_warn() {
+		_print_line();
 		wattron(ows->win, COLOR_PAIR(I_WARN));
 		_print_ows_header();
 		wattroff(ows->win, COLOR_PAIR(I_WARN));
@@ -168,6 +195,7 @@ class Logger {
 	}
 
 	static std::ostream &_ows_notify() {
+		_print_line();
 		wattron(ows->win, COLOR_PAIR(I_NOTIFY));
 		_print_ows_header();
 		wattroff(ows->win, COLOR_PAIR(I_NOTIFY));

@@ -858,21 +858,30 @@ void main_initializer()
 
 void main_renderer()
 {
+	// Total time
+	static float time = 0;
+
 	// Get time stuff
 	float current_frame = glfwGetTime();
 	delta_time = current_frame - last_frame;
 	last_frame = current_frame;
 
-	// Update TUI
-	tui::tui.update_logs();
-	tui::tui.update_fps(delta_time);
+	// Update time
+	time += delta_time;
+
+	if (time > 1.0f) {
+		time = 0;
+		Logger::notify() << "One second has passed...\n";
+	}
 
 	// Process input
-	process_input(mercury::winman.cwin);
+	process_input(mercury::winman.cwin);	// TODO: return movement of camera
 
 	// render
 	glClearColor(0.05f, 1.00f, 0.05f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	// TODO: rerender all this only if the camera has moved
 
 	// Create model, view, projection matrices
 	glm::mat4 model = glm::mat4(1.0f);
@@ -934,6 +943,11 @@ void main_renderer()
 
 	// TODO: use the current shader in the skybox draw method
 	sb.draw(*winman.cres.sb_shader);
+
+	// Update TUI
+	tui::tui.update();
+	tui::tui.update_fps(delta_time);
+	tui::tui.input();
 }
 
 // Program render loop condition

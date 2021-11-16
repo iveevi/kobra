@@ -371,6 +371,12 @@ void WindowManager::run()
 	render_all();
 }
 
+void WindowManager::close_all()
+{
+	for (size_t i = 0; i < wins.size(); i++)
+		glfwSetWindowShouldClose(wins[i], true);
+}
+
 // Private static methods
 static void load_glfw()
 {
