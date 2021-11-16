@@ -9,6 +9,9 @@
 #include <sstream>
 #include <set>
 
+// Ncurses
+#include <ncurses.h>
+
 // Color constants
 #define MC_RESET	"\033[0m"
 #define MC_RED		"\033[31m"
@@ -19,10 +22,156 @@
 
 namespace mercury {
 
+// Color structs
+struct log_ok {};
+struct log_warn {};
+struct log_error {};
+struct log_reset {};
+struct log_notify {};
+struct log_fatal_error {};
+
+// Overload printing these structs
+std::ostream &operator<<(std::ostream &, const log_ok &);
+std::ostream &operator<<(std::ostream &, const log_warn &);
+std::ostream &operator<<(std::ostream &, const log_error &);
+std::ostream &operator<<(std::ostream &, const log_reset &);
+std::ostream &operator<<(std::ostream &, const log_notify &);
+std::ostream &operator<<(std::ostream &, const log_fatal_error &);
+
+// Window buffer
+class wbuffer : public std::streambuf {
+	WINDOW *_window = nullptr;
+
+	std::string _buffer;
+public:
+	wbuffer() {}
+	wbuffer(WINDOW *win) : _window(win) {}
+
+	virtual std::streamsize xsputn(const char *str, std::streamsize size) override {
+		// Starting index
+		std::streamsize start = 0;
+
+		for (std::streamsize i = 0; i < size; i++) {
+			if (str[i] == '\n') {
+				_buffer.append(str + start, str + (i + 1));
+				sync();
+				start = i + 1;
+			}
+		}
+
+		_buffer.append(str + start, str + size);
+		return size;
+	}
+
+	virtual int overflow(int c) override {
+		_buffer.append(1, c);
+		if (c == '\n')
+			sync();
+		return c;
+	}
+
+	virtual int sync() override {
+		// TODO: check that the _window is not nullptr
+		wprintw(_window, "%s", _buffer.c_str());
+		_buffer.clear();
+		return 0;
+	}
+};
+
+class owstream : public std::ostream {
+	wbuffer _buf;
+public:
+	owstream(WINDOW *win) : std::ostream(&_buf) {
+		_buf = wbuffer(win);
+	}
+};
+
+// Logger class
 class Logger {
-	static std::ostream &_fatal_error() {
-		return std::cerr << MC_MAGENTA << "[MERCURY ENGINE: "
-			<< time() << ": FATAL ERROR] " << MC_RESET;
+	// Static members
+	static std::ostream *os;
+	static bool on_main;
+	static size_t line;
+
+	// For main stream
+	static std::ostream &_main_fatal_error() {
+		return *os << log_fatal_error() << "[MERCURY ENGINE: "
+			<< time() << ": FATAL ERROR] " << log_reset();
+	}
+
+	static std::ostream &_main_ok() {
+		return *os << log_ok() << "[MERCURY ENGINE: "
+			<< time() << "] " << log_reset();
+	}
+
+	static std::ostream &_main_error() {
+		return *os << log_error() << "[MERCURY ENGINE: "
+			<< time() << "] " << log_reset();
+	}
+
+	static std::ostream &_main_warn() {
+		return *os << log_warn() << "[MERCURY ENGINE: "
+			<< time() << "] " << log_reset();
+	}
+
+	static std::ostream &_main_notify() {
+		return *os << log_notify() << "[MERCURY ENGINE: "
+			<< time() << "] " << log_reset();
+	}
+	
+	// For owstream
+	enum {
+		I_OK = 1,
+		I_WARN,
+		I_ERROR,
+		I_NOTIFY,
+		I_FATAL_ERROR,
+	};
+
+	static void _print_ows_header() {
+		*ows << line++ << ": MERCURY ENGINE: "
+			<< time() << " $ ";
+		ows->flush();
+	}
+
+	static std::ostream &_ows_fatal_error() {
+		attron(COLOR_PAIR(I_FATAL_ERROR));
+		_print_ows_header();
+		attroff(COLOR_PAIR(I_FATAL_ERROR));
+		
+		return *ows;
+	}
+
+	static std::ostream &_ows_ok() {
+		attron(COLOR_PAIR(I_OK));
+		_print_ows_header();
+		attroff(COLOR_PAIR(I_OK));
+		
+		return *ows;
+	}
+
+	static std::ostream &_ows_error() {
+		attron(COLOR_PAIR(I_ERROR));
+		_print_ows_header();
+		attroff(COLOR_PAIR(I_ERROR));
+		
+		return *ows;
+	}
+
+	static std::ostream &_ows_warn() {
+		attron(COLOR_PAIR(I_WARN));
+		_print_ows_header();
+		attroff(COLOR_PAIR(I_WARN));
+		
+		return *ows;
+	}
+
+	static std::ostream &_ows_notify() {
+		attron(COLOR_PAIR(I_NOTIFY));
+		_print_ows_header();
+		attroff(COLOR_PAIR(I_NOTIFY));
+		
+		return *ows;
 	}
 public:
 	// Aliases
@@ -34,6 +183,13 @@ public:
 
 	static void start() {
 		epoch = clk.now();
+
+		// TODO: setup all color indexes
+		init_pair(I_OK, COLOR_GREEN, COLOR_BLACK);
+		init_pair(I_WARN, COLOR_YELLOW, COLOR_BLACK);
+		init_pair(I_ERROR, COLOR_RED, COLOR_BLACK);
+		init_pair(I_NOTIFY, COLOR_BLUE, COLOR_BLACK);
+		init_pair(I_FATAL_ERROR, COLOR_MAGENTA, COLOR_BLACK);
 	}
 
 	static std::string time() {
@@ -52,26 +208,38 @@ public:
 
 		return oss.str();
 	}
-
-	// As ostream objects
+	
+	// For main stream
 	static std::ostream &ok() {
-		return std::cerr << MC_GREEN << "[MERCURY ENGINE: "
-			<< time() << "] " << MC_RESET;
+		if (on_main)
+			return _main_ok();
+
+		return _ows_ok();
 	}
 
 	static std::ostream &error() {
-		return std::cerr << MC_RED << "[MERCURY ENGINE: "
-			<< time() << "] " << MC_RESET;
+		if (on_main)
+			return _main_error();
+
+		return _ows_error();
 	}
 
 	static std::ostream &warn() {
-		return std::cerr << MC_YELLOW << "[MERCURY ENGINE: "
-			<< time() << "] " << MC_RESET;
+		if (on_main)
+			return _main_warn();
+
+		return _ows_warn();
 	}
 
 	static std::ostream &notify() {
-		return std::cerr << MC_BLUE << "[MERCURY ENGINE: "
-			<< time() << "] " << MC_RESET;
+		if (on_main)
+			return _main_notify();
+
+		return _ows_notify();
+	}
+
+	static void switch_stream() {
+		on_main = !on_main;
 	}
 
 	// C-string overloads
@@ -88,7 +256,15 @@ public:
 	}
 
 	static void fatal_error(const char *msg) {
-		_fatal_error() << msg << std::endl;
+		if (on_main) {
+			_main_fatal_error() << msg << std::endl;
+		} else {
+			_ows_fatal_error() << msg << std::endl;
+			_ows_fatal_error() << "Press any key to exit." << std::endl;
+			getch();
+			endwin();
+		}
+
 		exit(-1);
 	}
 
@@ -123,6 +299,8 @@ public:
 			warn(msg);
 		}
 	}
+	
+	static owstream *ows;
 };
 
 }

@@ -18,6 +18,7 @@
 #include "include/lighting.hpp"
 #include "include/varray.hpp"
 
+#include "include/engine/monitors.hpp"
 #include "include/engine/skybox.hpp"
 
 #include "include/mesh/basic.hpp"
@@ -81,6 +82,7 @@ std::vector <ui::Line> lines;
 
 std::vector <SVA3> spheres;		// NOTE: wireframe objects and lines are not considered in lighting...
 std::vector <SVA3> annotations;
+std::vector <SVA3> annotations2;
 
 // Radial spacing constants
 const float rk_max = 2.5f;
@@ -189,6 +191,44 @@ void add_branch(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 
 using Interval = std::pair <float, float>;
 
+// Annotate a ring
+void annotate_ring(std::vector <SVA3> &dest, const Ring &ring)
+{
+	Ring cring = ring;
+	cring.push_back(ring[0]);		// Line loop
+	dest.push_back(SVA3(cring));	// TODO: pass drawing mode to sva3
+}
+
+// Project a ring onto a plane
+Ring project(const Ring &ring, const glm::vec3 &center, const glm::vec3 &normal)
+{
+	Ring out;
+
+	glm::vec3 normed = glm::normalize(normal);
+	for (const glm::vec3 &pt : ring) {
+		glm::vec3 vec = pt - center;
+		float length = glm::dot(vec, normed);
+		out.push_back(pt - length * normed);
+	}
+
+	return out;
+}
+
+void shift_ring(Ring &ring, const glm::vec3 &up)
+{
+	for (glm::vec3 &pt : ring)
+		pt += up;
+}
+
+Ring concat_rings(const std::vector <Ring> &rings)
+{
+	Ring out;
+	for (const Ring &ring : rings)
+		out.insert(out.begin(), ring.begin(), ring.end());
+
+	return out;
+}
+
 // Bounding box structure
 struct BoundingBox {
 	glm::vec3 center;
@@ -277,17 +317,17 @@ bool intersecting(const BoundingBox &b1, const BoundingBox &b2)
 	};
 
 	// Iterate over all axes
-	Logger::notify() << "\tIntersection function\n";
+	// Logger::notify() << "\tIntersection function\n";
 	for (const glm::vec3 &axis : axes) {
 		if (axis == glm::vec3(0, 0, 0)) {
-			Logger::notify() << "\t\tAxis is zero\n";
+			// Logger::notify() << "\t\tAxis is zero\n";
 			continue;
 		}
 
 		Interval i1 = b1.project(axis);
 		Interval i2 = b2.project(axis);
 
-		Logger::notify() << "\t\ti1 = " << i1.first << ", " << i1.second << "\ti2 = " << i2.first << ", " << i2.second << "\n";
+		// Logger::notify() << "\t\ti1 = " << i1.first << ", " << i1.second << "\ti2 = " << i2.first << ", " << i2.second << "\n";
 
 		if (i1.first > i2.second || i2.first > i1.second)
 			return false;
@@ -344,7 +384,7 @@ Branch generate_tree(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 		const glm::vec3 &up,
 		float height,
 		float tradius,
-		int max_iterations = 4)
+		int max_iterations = 5)
 {
 	// At least two branches
 	size_t nbranches = (rand() % 2) + 2;
@@ -362,6 +402,7 @@ Branch generate_tree(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 	lines.push_back(ui::Line(base, end, color));
 
 	Branch branch = generate_branch(base, end, tradius, 0.6 * tradius);
+	// annotate_ring(annotations, branch[10]);
 
 	float sliceh = height/10.0f;
 	Logger::notify() << "max_iterations = " << max_iterations << std::endl;
@@ -392,16 +433,20 @@ Branch generate_tree(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 	 * remove the ring from the branch
 	 */
 
-	std::vector <Branch> branches;		// TODO: why do I need this?
+	// Store the last overlappnig rings
+	std::vector <Ring> last;
+
+	// Store xy angle offset
+	float xy = glm::dot(up, {0, 1, 0});
 	for (size_t i = 0; i < nbranches; i++) {
 		// Recurse
-		float xy_angle = pi * runit() / 2;
+		float xy_angle = pi * runit() / 2 + xy;
 		float xz_angle = 2 * pi * runit();
 
 		glm::vec3 nup = sph_to_cart(xy_angle, xz_angle);
 
 		// TODO: store min scale
-		float hk = 0.5 * runit() + 0.5;
+		float hk = 0.6 * runit() + 0.4;
 		float nheight = hk * height;
 
 		Branch br = generate_tree(
@@ -421,6 +466,8 @@ Branch generate_tree(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 		int len = br.size();
 
 		BoundingBox bbox;
+
+		Branch cbranch = br;		// Copy the branch
 		for (int j = 0; j < len; j++, kheight += nsliceh) {
 			bbox = get_bounding_box(
 				br[j], br[j + 1],
@@ -431,16 +478,29 @@ Branch generate_tree(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 			bool inter = intersecting(mbbox, bbox);
 			Logger::notify() << "Index is [" << i << ", " << j << "]: intersect? " << inter << std::endl;
 			if (intersecting(mbbox, bbox)) {
-				br.erase(br.begin());
+				cbranch.erase(cbranch.begin());
 			} else {
+				last.push_back(cbranch[0]);
 				break;
 			}
 		}
 
-		add_branch(vertices, indices, br);
+		add_branch(vertices, indices, cbranch);
 		bbox.annotate();
-		// branches.push_back(br);
 	}
+
+	// TODO: properly determine last rings
+
+	if (last.size() <= 0)
+		return branch;
+
+	// Annotate the last rings
+	//for (const Ring &ring : last)
+	//	annotate_ring(annotations, ring);
+
+	Ring proj = project(last[0], end, up);
+	shift_ring(proj, 0.1f * up);
+	annotate_ring(annotations2, proj);
 
 	return branch;
 }
@@ -796,12 +856,27 @@ void main_initializer()
 	ldam.add_object(&tree, {.color = {1.0, 0.8, 0.5}});
 }
 
+void update_fps()
+{
+	mvprintw(0, 0, "Mercury Engine");
+	refresh();
+
+	int fps = 1/delta_time;
+
+	box(tui::tui.fps_monitor, 0, 0);
+	mvwprintw(tui::tui.fps_monitor, 1, 1, "FPS: %d", fps);
+	mvwprintw(tui::tui.fps_monitor, 2, 1, "g - toggle graph");
+	wrefresh(tui::tui.fps_monitor);
+}
+
 void main_renderer()
 {
 	// Get time stuff
 	float current_frame = glfwGetTime();
 	delta_time = current_frame - last_frame;
 	last_frame = current_frame;
+
+	update_fps();	
 
 	// Process input
 	process_input(mercury::winman.cwin);
@@ -849,6 +924,11 @@ void main_renderer()
 	sphere_shader.set_vec3("ecolor", 0.9, 0.9, 0.5);
 	for (const SVA3 &sva : annotations)
 		sva.draw(GL_LINE_STRIP);
+	
+	sphere_shader.use();
+	sphere_shader.set_vec3("ecolor", 1.0, 0.5, 0.5);
+	for (const SVA3 &sva : annotations2)
+		sva.draw(GL_LINE_STRIP);
 
 	// Draw tree skeleton
 	lines[0].set_mvp(model, view, projection);
@@ -875,6 +955,8 @@ bool rcondition()
 
 int main()
 {
+	mercury::tui::init();
+
 	// Initialize mercury
 	mercury::init();
 
@@ -894,6 +976,8 @@ int main()
 	winman.run();
 
 	// TODO: mercury deinit function?
+	mercury::tui::deinit();
+
 	// Terminate GLFW
 	glfwTerminate();
 

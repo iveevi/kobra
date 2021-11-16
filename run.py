@@ -52,6 +52,16 @@ elif args.target == 'fb':
 
     executor = modes[args.mode]
     os.system(f'{executor}bin/file_browser')
+elif args.target == 'cli':
+    ret = os.system(f'make -j{args.threads} curses')
+    if ret != 0:
+        print('Failed compilation...')
+        exit(-1)
+
+    os.system('mv curses bin/')
+
+    executor = modes[args.mode]
+    os.system(f'{executor}bin/curses')
 elif args.target == 'main':
     ret = os.system(f'make -j{args.threads} mercury')
     if ret != 0:

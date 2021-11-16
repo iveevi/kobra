@@ -9,5 +9,6 @@ assimp/bin
 bin/
 build
 cmake_install.cmake
+compile_commands.json
 file_browser
 mercury

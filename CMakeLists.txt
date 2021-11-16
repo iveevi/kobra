@@ -31,6 +31,7 @@ add_compile_definitions(MERCURY_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 project(mercury)
 project(ui_designer)
 project(file_browser)
+project(curses)
 
 # Source variables
 set(MERCURY_SOURCE
@@ -38,10 +39,12 @@ set(MERCURY_SOURCE
 	source/common.cpp
 	source/init.cpp
 	source/lighting.cpp
+	source/logger.cpp
 	source/model.cpp
 	source/mouse_bus.cpp
 	source/shader.cpp
 
+	source/engine/monitors.cpp
 	source/engine/skybox.cpp
 
 	source/mesh/basic.cpp
@@ -63,6 +66,7 @@ set(MERCURY_LIBS
 	OpenGL::GL
 	${CMAKE_DL_LIBS}
 	${ASSIMP_LIBRARY}
+	ncurses
 )
 
 # Adding sources
@@ -77,7 +81,12 @@ add_executable(ui_designer
 )
 
 add_executable(file_browser
-	source/file_browser.cpp
+	source/bootstrap/file_browser.cpp
+	${MERCURY_SOURCE}
+)
+
+add_executable(curses
+	source/bootstrap/curses.cpp
 	${MERCURY_SOURCE}
 )
 
@@ -109,5 +118,9 @@ target_link_libraries(ui_designer
 )
 
 target_link_libraries(file_browser
+	${MERCURY_LIBS}
+)
+
+target_link_libraries(curses
 	${MERCURY_LIBS}
 )
