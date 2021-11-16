@@ -40,9 +40,8 @@ std::ostream &operator<<(std::ostream &, const log_fatal_error &);
 
 // Window buffer
 class wbuffer : public std::streambuf {
-	WINDOW *_window = nullptr;
-
-	std::string _buffer;
+	WINDOW *	_window = nullptr;
+	std::string	_buffer;
 public:
 	wbuffer() {}
 	wbuffer(WINDOW *win) : _window(win) {}
@@ -81,7 +80,9 @@ public:
 class owstream : public std::ostream {
 	wbuffer _buf;
 public:
-	owstream(WINDOW *win) : std::ostream(&_buf) {
+	WINDOW *win;
+
+	owstream(WINDOW *window) : win(window), std::ostream(&_buf) {
 		_buf = wbuffer(win);
 	}
 };
@@ -135,41 +136,41 @@ class Logger {
 	}
 
 	static std::ostream &_ows_fatal_error() {
-		attron(COLOR_PAIR(I_FATAL_ERROR));
+		wattron(ows->win, COLOR_PAIR(I_FATAL_ERROR));
 		_print_ows_header();
-		attroff(COLOR_PAIR(I_FATAL_ERROR));
+		wattroff(ows->win, COLOR_PAIR(I_FATAL_ERROR));
 		
 		return *ows;
 	}
 
 	static std::ostream &_ows_ok() {
-		attron(COLOR_PAIR(I_OK));
+		wattron(ows->win, COLOR_PAIR(I_OK));
 		_print_ows_header();
-		attroff(COLOR_PAIR(I_OK));
+		wattroff(ows->win, COLOR_PAIR(I_OK));
 		
 		return *ows;
 	}
 
 	static std::ostream &_ows_error() {
-		attron(COLOR_PAIR(I_ERROR));
+		wattron(ows->win, COLOR_PAIR(I_ERROR));
 		_print_ows_header();
-		attroff(COLOR_PAIR(I_ERROR));
+		wattroff(ows->win, COLOR_PAIR(I_ERROR));
 		
 		return *ows;
 	}
 
 	static std::ostream &_ows_warn() {
-		attron(COLOR_PAIR(I_WARN));
+		wattron(ows->win, COLOR_PAIR(I_WARN));
 		_print_ows_header();
-		attroff(COLOR_PAIR(I_WARN));
+		wattroff(ows->win, COLOR_PAIR(I_WARN));
 		
 		return *ows;
 	}
 
 	static std::ostream &_ows_notify() {
-		attron(COLOR_PAIR(I_NOTIFY));
+		wattron(ows->win, COLOR_PAIR(I_NOTIFY));
 		_print_ows_header();
-		attroff(COLOR_PAIR(I_NOTIFY));
+		wattroff(ows->win, COLOR_PAIR(I_NOTIFY));
 		
 		return *ows;
 	}

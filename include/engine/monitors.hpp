@@ -15,14 +15,22 @@ struct _tui_struct {
         owstream *main;
 
         // Windows
-        WINDOW *fps_monitor;
+        WINDOW *w_log;
+        WINDOW *w_log_box;
+        WINDOW *w_title;
+        WINDOW *w_fps;
+
+        // Init and deinit
+        void init();
+        void deinit();
+
+        // Update methods
+        void update_logs();
+        void update_fps(float);
 };
 
+// Sential object
 extern _tui_struct tui;
-
-// Initialize and deinitialize
-void init();
-void deinit();
 
 }
 

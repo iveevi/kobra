@@ -856,19 +856,6 @@ void main_initializer()
 	ldam.add_object(&tree, {.color = {1.0, 0.8, 0.5}});
 }
 
-void update_fps()
-{
-	mvprintw(0, 0, "Mercury Engine");
-	refresh();
-
-	int fps = 1/delta_time;
-
-	box(tui::tui.fps_monitor, 0, 0);
-	mvwprintw(tui::tui.fps_monitor, 1, 1, "FPS: %d", fps);
-	mvwprintw(tui::tui.fps_monitor, 2, 1, "g - toggle graph");
-	wrefresh(tui::tui.fps_monitor);
-}
-
 void main_renderer()
 {
 	// Get time stuff
@@ -876,7 +863,9 @@ void main_renderer()
 	delta_time = current_frame - last_frame;
 	last_frame = current_frame;
 
-	update_fps();	
+	// Update TUI
+	tui::tui.update_logs();
+	tui::tui.update_fps(delta_time);
 
 	// Process input
 	process_input(mercury::winman.cwin);
@@ -955,10 +944,9 @@ bool rcondition()
 
 int main()
 {
-	mercury::tui::init();
-
 	// Initialize mercury
-	mercury::init();
+	init();
+	tui::tui.init();
 
 	// Add windows
 	// winman.add_win("FPS Monitor");
@@ -976,7 +964,7 @@ int main()
 	winman.run();
 
 	// TODO: mercury deinit function?
-	mercury::tui::deinit();
+	tui::tui.deinit();
 
 	// Terminate GLFW
 	glfwTerminate();
