@@ -10,6 +10,7 @@
 
 // Engine headers
 #include "include/common.hpp"
+#include "include/drawable.hpp"
 
 namespace mercury {
 
@@ -22,7 +23,9 @@ namespace mercury {
 //	for plain 3d vertices, this would be 3
 //	if normals are included, it would become 6
 template <unsigned int fields>
-struct VertexArray {		// TODO: should be derived from something? or switch with manual ids
+struct VertexArray : public Drawable {		// TODO: should be derived from something? or switch with manual ids
+	glm::vec3 color = {1.0f, 1.0f, 1.0f};	// TODO: make this a static member of Drawable
+	GLenum mode = GL_LINE_STRIP;
 	unsigned int vao;
 	unsigned int vbo;
 
@@ -30,7 +33,11 @@ struct VertexArray {		// TODO: should be derived from something? or switch with 
 	size_t size;
 
 	// TODO: what about index buffer?
-	virtual void draw(GLenum mode) const {
+	virtual void draw(Shader *shader) override {
+		// Logger::notify() << "VA color = " << color.x << ", " << color.y << ", " << color.z << "\n";
+		shader->use();
+		shader->set_vec3("color", color);
+
 		glBindVertexArray(vao);
 		glDrawArrays(mode, 0, size);
 		glCheckError();
@@ -55,12 +62,18 @@ public:
 	StaticVA() {}
 
 	// TODO: can the vector address be used directly?
-	StaticVA(const std::vector <glm::vec3> &verts)
-		: StaticVA(flatten(verts)) {}
+	StaticVA(const std::vector <glm::vec3> &verts,
+		const glm::vec3 &color = {1.0, 1.0, 1.0},
+		GLenum mode = GL_LINE_STRIP)
+		: StaticVA(flatten(verts), color, mode) {}
 
-	StaticVA(const std::vector <float> &verts) {
-		// Set size
+	StaticVA(const std::vector <float> &verts,
+		const glm::vec3 &color = {1.0, 1.0, 1.0},
+		GLenum mode = GL_LINE_STRIP) {
+		// Set VA properties
 		this->size = verts.size() / fields;
+		this->mode = mode;
+		this->color = color;
 
 		// Allocate buffers
 		glGenVertexArrays(1, &this->vao);

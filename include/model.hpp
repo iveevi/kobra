@@ -21,7 +21,9 @@
 #include "../thirdparty/stb/stb_image.h"
 
 // Engine headers
-#include "shader.hpp"
+#include "include/drawable.hpp"
+#include "include/shader.hpp"
+#include "include/material.hpp"
 
 namespace mercury {
 
@@ -44,7 +46,7 @@ struct Texture {
 	Texture(const std::string &, const std::string &, const std::string &);
 };
 
-class Mesh {
+class Mesh : public Drawable {
 public:
 	// Public aliases
 	using AVertex = std::vector <Vertex>;
@@ -55,16 +57,20 @@ private:
 	ATexture	_textures;
 	AIndices	_indices;
 
-	unsigned int			_vao;
-	unsigned int			_vbo;
-	unsigned int			_ebo;
+	unsigned int	_vao;
+	unsigned int	_vbo;
+	unsigned int	_ebo;
+
+	Material	_material;
 
 	void _init();
 public:
 	Mesh();
 	Mesh(const AVertex &, const ATexture &, const AIndices &);
+	
+	void set_material(const Material &);
 
-	void draw(Shader &);
+	virtual void draw(Shader *) override;
 };
 
 class Model {

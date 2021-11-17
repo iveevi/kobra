@@ -11,14 +11,15 @@ glm::vec3 _project(const glm::vec3 &v, const glm::vec3 &u)
 
 // Wireframe cuboid
 SVA3 wireframe_cuboid(const glm::vec3 &center, const glm::vec3 &size,
-        const glm::vec3 &up)
+                const glm::vec3 &up, const glm::vec3 &color)
 {
         glm::vec3 right = glm::cross(up, glm::vec3(0.0f, 0.0f, 1.0f));
-        return wireframe_cuboid(center, size, up, right);
+        return wireframe_cuboid(center, size, up, right, color);
 }
 
 SVA3 wireframe_cuboid(const glm::vec3 &center, const glm::vec3 &size,
-                const glm::vec3 &up, const glm::vec3 &right)
+                const glm::vec3 &up, const glm::vec3 &right,
+                const glm::vec3 &color)
 {
         glm::vec3 nup = glm::normalize(up);
         glm::vec3 nright = glm::normalize(right);
@@ -71,7 +72,7 @@ SVA3 wireframe_cuboid(const glm::vec3 &center, const glm::vec3 &size,
                 center - xdir - ydir - zdir,
                 center - xdir - ydir + zdir,
                 center + xdir - ydir + zdir
-        });
+        }, color);
 }
 
 }

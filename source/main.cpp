@@ -16,6 +16,7 @@
 #include "include/init.hpp"
 #include "include/logger.hpp"
 #include "include/lighting.hpp"
+#include "include/rendering.hpp"
 #include "include/varray.hpp"
 
 #include "include/engine/monitors.hpp"
@@ -113,16 +114,13 @@ Branch generate_branch(
 	};
 
 	// Add the branch line
-	ui::Line line({
-		p1.x, p1.y, p1.z,	// TODO: Add a better constructor (with just two vec3s)
-		p2.x, p2.y, p2.z
-	});
-	line.color = {0.5, 0.5, 1.0};
+	ui::Line line(p1, p2, {0.5f, 0.5f, 0.5f});
 
 	lines.push_back(line);
 
-	spheres.push_back(mesh::wireframe_sphere(p1, rad_i));
-	spheres.push_back(mesh::wireframe_sphere(p2, rad_f));
+	// TODO: global color variables
+	spheres.push_back(mesh::wireframe_sphere(p1, rad_i, {1.0, 1.0, 0.5}));
+	spheres.push_back(mesh::wireframe_sphere(p2, rad_f, {1.0, 1.0, 0.5}));
 	
 	// spheres2.push_back(mesh::wireframe_sphere(p1, rk_max * rad_i));
 	// spheres2.push_back(mesh::wireframe_sphere(p2, rk_max * rad_f));
@@ -238,7 +236,7 @@ struct BoundingBox {
 
 	void annotate() {
 		annotations.push_back(mesh::wireframe_cuboid(
-			center, size, up
+			center, size, up, {1.0, 1.0, 0.5}
 		));
 	}
 
@@ -390,7 +388,7 @@ Branch generate_tree(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 	size_t nbranches = (rand() % 2) + 2;
 
 	// Stopping point
-	spheres.push_back(mesh::wireframe_sphere(base, tradius));
+	spheres.push_back(mesh::wireframe_sphere(base, tradius, {1.0, 1.0, 0.5}));
 	if (height < 0.2 || max_iterations <= 0) {
 		// TODO: these are actually leaves
 		return {};
@@ -440,7 +438,7 @@ Branch generate_tree(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 	float xy = glm::dot(up, {0, 1, 0});
 	for (size_t i = 0; i < nbranches; i++) {
 		// Recurse
-		float xy_angle = pi * runit() / 2 + xy;
+		float xy_angle = pi * runit() / 2; // + xy;
 		float xz_angle = 2 * pi * runit();
 
 		glm::vec3 nup = sph_to_cart(xy_angle, xz_angle);
@@ -519,210 +517,10 @@ Mesh make_tree(const glm::vec3 &base, const glm::vec3 &up, float height, float t
 	return Mesh(vertices, {}, indices);
 }
 
-// Render function for FPS monitor
-Shader basic;
-
-// TODO: basic_2d.vert
-const char *basic_vert = R"(
-#version 330 core
-
-layout (location = 0) in vec3 vertex;
-
-uniform mat4 projection;
-
-void main()
-{
-	gl_Position = projection * vec4(vertex, 1.0);
-}
-)";
-
-const char *basic_frag = R"(
-#version 330 core
-
-out vec4 color;
-
-uniform vec3 ecolor;
-
-void main()
-{
-	color = vec4(ecolor, 1.0);
-}
-)";
-
-// FPS monitor
-
-// Graph vertices: normalize for [0, 100] for each coordinate
-std::vector <float> fps_vertices(3 * 10);
-
-template <unsigned int fields>
-class DynamicVA : public VertexArray <fields> {
-	std::vector <float> _vertices;
-
-	// TODO: nead indexing operations,
-	// maybe even iterators...
-};
-
-// Graph points
-unsigned int vbo;
-unsigned int vao;
-
-// Axes
-SVA3 axes;
-
-// Text
-ui::Text text_fps;
-
-// Reload the buffer
-void generate_arrays()
-{
-	// Load graph buffer
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	glCheckError();
-
-	glBufferData(GL_ARRAY_BUFFER, sizeof(float) * fps_vertices.size(),
-		&fps_vertices[0], GL_STATIC_DRAW);
-	glCheckError();
-
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE,
-		3 * sizeof(float), (void *) 0);
-	glCheckError();
-
-	glEnableVertexAttribArray(0);
-	glCheckError();
-}
-
-// TODO: once this is done, should go into separate file
-//	to create a fps monitor on the fly
-// TODO: and graphs in general
-void fps_monitor_initializer()
-{
-	// TODO: display fps counter here
-
-	// Uncap FPS
-	glfwSwapInterval(0);
-
-	// For text rendering
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-	// Load font
-	winman.load_font(1);
-
-	// Set line width
-	glLineWidth(5.0f);
-
-	// Fill vertices with 0
-	for (size_t i = 0; i < 3 * 10; i++)
-		fps_vertices[i] = 0;
-
-	// Create axes
-	axes = SVA3({
-		0,	100,	0,
-		0,	0,	0,
-		100,	0,	0,
-	});
-
-	// Allocate graph buffer
-	glGenVertexArrays(1, &vao);
-	glGenBuffers(1, &vbo);
-	glBindVertexArray(vao);
-
-	generate_arrays();
-
-	// Create and configure base graphing shader
-	basic = Shader::from_source(basic_vert, basic_frag);
-
-	basic.use();
-	//basic.set_vec3("ecolor", {1.0, 1.0, 1.0});
-	basic.set_mat4("projection", glm::ortho(-10.0f, 110.0f, -10.0f, 110.0f));
-
-	// Set text
-	text_fps = ui::Text("FPS", 100, 10, 0.9, {1.0, 0.5, 1.0});
-
-	// TODO: move to init or smthing
-}
-
-void fps_monitor_renderer()
-{
-	// Static timer
-	static float time = 0.0f;
-	static float totfps = 0.0f;
-	static float iters = 0.0f;
-	static float avgfps = 0.0f;
-
-	// Clear the color
-	glClearColor(0.05f, 0.05f, 0.05f, 1.0f);
-	glClear(GL_COLOR_BUFFER_BIT);
-
-	// Get time stuff
-	float current_frame = glfwGetTime();
-	delta_time = current_frame - last_frame;
-	last_frame = current_frame;
-	time += delta_time;
-
-	int fps = 1/delta_time;
-	totfps += fps;
-	iters++;
-
-	if (time > 0.5f) {
-		// Delete the first point
-		fps_vertices.erase(fps_vertices.begin(), fps_vertices.begin() + 3);
-
-		// 0 -> 600 fps
-		avgfps = totfps/iters;
-
-		float normalized = 100.0f * avgfps/600.0f;
-		fps_vertices.push_back(100.0f);
-		fps_vertices.push_back(normalized);
-		fps_vertices.push_back(0.0f);
-
-		// Shift other points
-
-		// TODO: += fields (getter)
-		for (size_t i = 0; i < fps_vertices.size(); i += 3) {
-			float px = fps_vertices[i];
-			fps_vertices[i] = std::max(px - 10.0f, 0.0f);
-		}
-
-		// Regenerate buffer data
-		glBindBuffer(GL_ARRAY_BUFFER, vbo);
-		glCheckError();
-
-		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * fps_vertices.size(),
-			&fps_vertices[0], GL_STATIC_DRAW);
-
-		// Reset time
-		time = 0.0f;
-	}
-
-	// Draw the graph
-	basic.use();
-	basic.set_vec3("ecolor", {1.0, 1.0, 1.0});
-
-	glBindVertexArray(vao);
-	glCheckError();
-
-	glDrawArrays(GL_LINE_STRIP, 0, fps_vertices.size()/3);
-	glCheckError();
-
-	// Draw axes
-	basic.set_vec3("ecolor", {0.6, 0.6, 0.6});
-
-	axes.draw(GL_LINE_STRIP);
-
-	// Draw text
-	text_fps.set_str(std::to_string(delta_time).substr(0, 6)
-		+ "s delta, " + std::to_string(avgfps).substr(0, 6) + " fps");
-	text_fps.draw(*winman.cres.text_shader);
-}
-
 // Render function for main window
 Mesh hit_cube1;
 Mesh hit_cube2;
 Mesh hit_cube3;
-Mesh global_hit;
-Mesh source_cube1;
-Mesh source_cube2;
 Mesh tree;
 
 // Skybox
@@ -739,18 +537,11 @@ lighting::DirLight dirlight {
 	{1.0f, 1.0f, 1.0f}
 };
 
-lighting::PointLight light1 {
-	lpos1,
-	{1.0, 1.0, 1.0}		// TODO: color constants and hex strings
-};
+// TODO: color constants and hex strings
 
-lighting::PointLight light2 {
-	lpos2,
-	{1.0, 1.0, 1.0}
-};
-
-// Lighting daemon
+// Daemons: TODO: put at the top as global variables
 lighting::Daemon ldam;
+rendering::Daemon rdam;
 
 // Wireframe sphere: TODO: is there a better way than to manually set vertices?
 const glm::vec3 center {1.0, 1.0, 1.0};
@@ -758,22 +549,6 @@ const float radius = 0.2f;
 
 SVA3 wsphere;
 Shader sphere_shader;
-
-// TODO: basic_3d.vert
-const char *sphere_vert = R"(
-#version 330 core
-
-layout (location = 0) in vec3 vertex;
-
-uniform mat4 model;
-uniform mat4 view;
-uniform mat4 projection;
-
-void main()
-{
-	gl_Position = projection * view * model * vec4(vertex, 1.0);
-}
-)";
 
 void main_initializer()
 {
@@ -807,10 +582,15 @@ void main_initializer()
 	hit_cube2 = mesh::cuboid({3, 0.5, 0.0}, 1, 2, 1);
 	hit_cube3 = mesh::cuboid({3, -1.0, 0.0}, 10, 1, 10);
 
-	global_hit = mesh::cuboid({3, -1.0, 12.0}, 10, 1, 10);
+	// Construct the tree
+	tree = make_tree({0, -0.5, -2}, {0, 1, 0}, 3.0f, 0.5f);
+	
+	// Set the materials
+	hit_cube1.set_material({.color = {0.5, 1.0, 0.5}});
+	hit_cube2.set_material({.color = {1.0, 0.5, 0.5}});
+	hit_cube3.set_material({.color = {0.9, 0.9, 0.9}});
 
-	source_cube1 = mesh::cuboid(lpos1, 0.5, 0.5, 0.5);
-	source_cube2 = mesh::cuboid(lpos2, 0.5, 0.5, 0.5);
+	tree.set_material({.color = {1.0, 0.8, 0.5}});
 
 	// Set line width
 	glLineWidth(5.0f);
@@ -818,11 +598,12 @@ void main_initializer()
 	// Create the sphere
 	wsphere = mesh::wireframe_sphere(center, radius);
 
-	sphere_shader = Shader::from_source(sphere_vert, basic_frag);
-	sphere_shader.set_name("sphere_shader");
+	sphere_shader = Shader(
+		_shader("basic3d.vert"),
+		_shader("basic.frag")
+	);
 
-	// Construct the tree
-	tree = make_tree({0, -0.5, -2}, {0, 1, 0}, 3.0f, 0.5f);
+	sphere_shader.set_name("sphere_shader");
 
 	// TODO: some way to check that the resources being used in render are in another context
 
@@ -836,24 +617,16 @@ void main_initializer()
 		"resources/textures/skybox/uv_5.png"
 	});
 
-	Logger::ok("Finished constructing skybox.");
-
 	// Add objects and lights to the ldam system
+	ldam = lighting::Daemon(&rdam);
+
 	ldam.add_light(dirlight);
 
-	// ldam.add_light(light1);
-	// ldam.add_light(light2);
+	ldam.add_object(&hit_cube1);
+	ldam.add_object(&hit_cube2);
+	ldam.add_object(&hit_cube3);
 
-	// ldam.add_object(&source_cube1, {.color = {1.0, 1.0, 1.0}}, lighting::COLOR_ONLY);
-	// ldam.add_object(&source_cube2, {.color = {1.0, 1.0, 1.0}}, lighting::COLOR_ONLY);
-
-	ldam.add_object(&hit_cube1, {.color = {0.5, 1.0, 0.5}});
-	ldam.add_object(&hit_cube2, {.color = {1.0, 0.5, 0.5}});
-	ldam.add_object(&hit_cube3, {.color = {0.9, 0.9, 0.9}});
-
-	ldam.add_object(&global_hit, {.color = {0.9, 0.9, 0.9}});
-
-	ldam.add_object(&tree, {.color = {1.0, 0.8, 0.5}});
+	ldam.add_object(&tree);
 }
 
 void main_renderer()
@@ -865,14 +638,6 @@ void main_renderer()
 	float current_frame = glfwGetTime();
 	delta_time = current_frame - last_frame;
 	last_frame = current_frame;
-
-	// Update time
-	time += delta_time;
-
-	if (time > 1.0f) {
-		time = 0;
-		Logger::notify() << "One second has passed...\n";
-	}
 
 	// Process input
 	process_input(mercury::winman.cwin);	// TODO: return movement of camera
@@ -904,7 +669,8 @@ void main_renderer()
 	};
 
 	// Render scene
-	ldam.render();
+	ldam.light();
+	rdam.render();
 
 	// Draw sphere		TODO: seriously some way to check that uniforms have been set
 	sphere_shader.use();	// TODO: make into a common shader
@@ -913,25 +679,26 @@ void main_renderer()
 	sphere_shader.set_mat4("projection", projection);
 	// wsphere.draw(GL_LINE_STRIP);
 
+	// TODO: make an add annotation function
 	sphere_shader.use();
-	sphere_shader.set_vec3("ecolor", 0.1, 0.5, 1.0);
-	for (const SVA3 &sva : spheres)
-		sva.draw(GL_LINE_STRIP);
+	sphere_shader.set_vec3("color", 0.1, 0.5, 1.0);
+	for (SVA3 &sva : spheres)
+		sva.draw(&sphere_shader);
 	
 	sphere_shader.use();
-	sphere_shader.set_vec3("ecolor", 0.9, 0.9, 0.5);
-	for (const SVA3 &sva : annotations)
-		sva.draw(GL_LINE_STRIP);
+	sphere_shader.set_vec3("color", 0.9, 0.9, 0.5);
+	for (SVA3 &sva : annotations)
+		sva.draw(&sphere_shader);
 	
 	sphere_shader.use();
-	sphere_shader.set_vec3("ecolor", 1.0, 0.5, 0.5);
-	for (const SVA3 &sva : annotations2)
-		sva.draw(GL_LINE_STRIP);
+	sphere_shader.set_vec3("color", 1.0, 0.5, 0.5);
+	for (SVA3 &sva : annotations2)
+		sva.draw(&sphere_shader);
 
 	// Draw tree skeleton
 	lines[0].set_mvp(model, view, projection);
-	for (const ui::Line &line : lines)
-		line.draw();
+	for (ui::Line &line : lines)
+		line.draw(winman.cres.line_shader);
 
 	// Draw skybox
 	view = glm::mat4(glm::mat3(camera.get_view()));
@@ -943,11 +710,6 @@ void main_renderer()
 
 	// TODO: use the current shader in the skybox draw method
 	sb.draw(*winman.cres.sb_shader);
-
-	// Update TUI
-	tui::tui.update();
-	tui::tui.update_fps(delta_time);
-	tui::tui.input();
 }
 
 // Program render loop condition
@@ -960,25 +722,15 @@ int main()
 {
 	// Initialize mercury
 	init();
-	tui::tui.init();
-
-	// Add windows
-	// winman.add_win("FPS Monitor");
 
 	// Set winman bindings
 	winman.set_condition(rcondition);
 
 	winman.set_initializer(0, main_initializer);
-	// winman.set_initializer(1, fps_monitor_initializer);
-
 	winman.set_renderer(0, main_renderer);
-	// winman.set_renderer(1, fps_monitor_renderer);
 
 	// Render loop
 	winman.run();
-
-	// TODO: mercury deinit function?
-	tui::tui.deinit();
 
 	// Terminate GLFW
 	glfwTerminate();

@@ -10,15 +10,12 @@
 // Engine headers
 #include "include/model.hpp"	// TODO: create a dedicated header/source for mesh
 #include "include/shader.hpp"
+#include "include/rendering.hpp"
+#include "include/material.hpp"
 
 namespace mercury {
 
 namespace lighting {
-
-// Material
-struct Material {
-	glm::vec3 color;
-};
 
 // Directional light
 struct DirLight {
@@ -41,13 +38,14 @@ struct PointLight {
 // NOTE: Change the int-type for more types
 enum Shading : uint8_t {
 	COLOR_ONLY = 0,			// Should be mutually exclusive of all options
-	DIRECTIONAL_PHONG = 1,
-	POINT_PHONG = 2,
-	FULL_PHONG = 3
+	FULL_PHONG = 1
 };
 
 // Daemon for lighting in 3D
 class Daemon {
+	// Reference to rndering daemon
+	rendering::Daemon *_rdaemon;
+
 	// Compilation status for shaders
 	struct {
 		bool basic = false;
@@ -60,7 +58,6 @@ class Daemon {
 		// vertex buffer classes
 
 		Mesh *mesh;
-		Material material;
 		Shading shtype;
 	};
 
@@ -85,17 +82,8 @@ class Daemon {
 	void _compile_color_only();
 	void _compile_phong();
 
-	// Renderers
-	void _color_only(const RenderObject &);
-	void _point_phong_only(const RenderObject &);
-	void _dir_phong_only(const RenderObject &);
-	void _full_phong(const RenderObject &);
-
 	// Helper functions
-	void _phong_helper(const RenderObject &);
-
 	void _set_shader_uniforms();
-	void _render_object(const RenderObject &);
 public:
 	// Shader uniforms
 	struct {
@@ -105,16 +93,20 @@ public:
 		glm::vec3 view_position;
 	} uniforms;
 
+	// Constructors
+	Daemon();
+	Daemon(rendering::Daemon *);
+
 	// Adding lights
 	// TODO:  consider moving lights etc
 	void add_light(const DirLight &);
 	void add_light(const PointLight &);
 
 	// Add an object and specify the shading type
-	void add_object(Mesh *, Material, Shading = FULL_PHONG);
+	void add_object(Mesh *, Shading = FULL_PHONG);
 
-	// Renders a frame
-	void render();
+	// Sets the lighting for each object
+	void light();
 };
 
 }

@@ -42,6 +42,7 @@ set(MERCURY_SOURCE
 	source/logger.cpp
 	source/model.cpp
 	source/mouse_bus.cpp
+	source/rendering.cpp
 	source/shader.cpp
 
 	source/engine/monitors.cpp

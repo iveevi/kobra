@@ -62,6 +62,12 @@ extern _tui_struct tui;
 // Graphical interface
 namespace monitors {
 
+// TODO: monitor struct
+
+// TODO: make a make_monitor function/api
+void fps_monitor_initializer();
+void fps_monitor_renderer();
+
 }
 
 }

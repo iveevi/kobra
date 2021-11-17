@@ -106,6 +106,11 @@ void main()
 }
 )";
 
+// Constructors
+Daemon::Daemon() {}
+
+Daemon::Daemon(rendering::Daemon *rdam) : _rdaemon(rdam) {}
+
 // Compiling each shader
 void Daemon::_compile_color_only()
 {
@@ -154,14 +159,13 @@ void Daemon::add_light(const DirLight &light)
 	std::string diffuse = "dir_lights[" + index + "].diffuse";
 	std::string specular = "dir_lights[" + index + "].specular";
 
-	// The number of point lights is not being
-	// set because depending on the shading mode,
-	// they will have to be set to zero anyways
+	// Set the uniforms
 	_shaders.phong.use();
 	_shaders.phong.set_vec3(direction, _lights.directional[i].direction);
 	_shaders.phong.set_vec3(ambient, _lights.directional[i].ambient);
 	_shaders.phong.set_vec3(diffuse, _lights.directional[i].diffuse);
 	_shaders.phong.set_vec3(specular, _lights.directional[i].specular);
+	_shaders.phong.set_int("ndir_lights", _lights.directional.size());
 }
 
 void Daemon::add_light(const PointLight &light)
@@ -176,79 +180,29 @@ void Daemon::add_light(const PointLight &light)
 	std::string color = "point_lights[" + index + "].color";
 	std::string position = "point_lights[" + index + "].position";
 
+	// Set the uniforms
 	_shaders.phong.use();
 	_shaders.phong.set_vec3(color, _lights.point[i].color);
 	_shaders.phong.set_vec3(position, _lights.point[i].position);
+	_shaders.phong.set_int("npoint_lights", _lights.point.size());
 }
 
 // Adding objects
-void Daemon::add_object(Mesh *mesh, Material mat, Shading type)
+void Daemon::add_object(Mesh *mesh, Shading type)
 {
-	_robjs.push_back({mesh, mat, type});
+	_robjs.push_back({mesh, type});
 	
-	/* objects.push_back(mesh);
-	materials.push_back(mat);
-	shtypes.push_back(type); */
-
 	// Compiled the appropriate shader
 	switch (type) {
 	case COLOR_ONLY:
 		_compile_color_only();
+		_rdaemon->add(mesh, &_shaders.basic);
 		break;
-	case POINT_PHONG:
-	case DIRECTIONAL_PHONG:
 	case FULL_PHONG:
 		_compile_phong();
+		_rdaemon->add(mesh, &_shaders.phong);
 		break;
 	}
-}
-
-// Render object with color only
-void Daemon::_color_only(const RenderObject &robj)
-{
-	// Check that the shader is compiled
-	if (!_compiled.basic)
-		Logger::fatal_error("COLOR_ONLY shader has not been compiled.");
-
-	// Set color and render
-	_shaders.basic.use();
-	_shaders.basic.set_vec3("color", robj.material.color);
-	robj.mesh->draw(_shaders.basic);
-}
-
-void Daemon::_phong_helper(const RenderObject &robj)
-{
-	// Check that the shader is compiled
-	if (!_compiled.phong)
-		Logger::fatal_error("POINT_PHONG shader has not been compiled.");
-	
-	// Set object material uniform
-	_shaders.phong.use();
-	_shaders.phong.set_vec3("color", robj.material.color);
-}
-
-void Daemon::_point_phong_only(const RenderObject &robj)
-{
-	_phong_helper(robj);
-	_shaders.phong.set_int("ndir_lights", 0);	// Ignore directional lights
-	_shaders.phong.set_int("npoint_lights", _lights.point.size());
-	robj.mesh->draw(_shaders.phong);
-}
-
-void Daemon::_dir_phong_only(const RenderObject &robj)
-{
-	_phong_helper(robj);
-	_shaders.phong.set_int("ndir_lights", _lights.directional.size());
-	_shaders.phong.set_int("npoint_lights", 0);	// Ignore point lights
-	robj.mesh->draw(_shaders.phong);
-}
-
-void Daemon::_full_phong(const RenderObject &robj)
-{
-	_phong_helper(robj);
-	_shaders.phong.set_int("ndir_lights", _lights.directional.size());
-	_shaders.phong.set_int("npoint_lights", _lights.point.size());
-	robj.mesh->draw(_shaders.phong);
 }
 
 // Set the common shader uniforms
@@ -271,39 +225,10 @@ void Daemon::_set_shader_uniforms()
 	}
 }
 
-// Render a single object
-void Daemon::_render_object(const RenderObject &robj)
-{
-	switch (robj.shtype) {
-	case COLOR_ONLY:
-		_color_only(robj);
-		break;
-	case POINT_PHONG:
-		_point_phong_only(robj);
-		break;
-	case DIRECTIONAL_PHONG:
-		_dir_phong_only(robj);
-		break;
-	case FULL_PHONG:
-		_full_phong(robj);
-		break;
-	default:
-		Logger::error() << "Undefined shading type ["
-			<< (int) robj.shtype << "].\n";
-		break;
-	}
-}
-
 // Rendering a frame
-void Daemon::render()
+void Daemon::light()
 {
 	_set_shader_uniforms();
-
-	// Render each object
-	for (const RenderObject &robj : _robjs)
-		_render_object(robj);
-	// for (size_t i = 0; i < objects.size(); i++)
-	//	_render_object(i);
 }
 
 }

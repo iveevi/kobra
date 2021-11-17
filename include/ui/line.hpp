@@ -10,23 +10,31 @@ namespace ui {
 
 // Line class (with arrow options)
 // TODO: add corresponding source file
-class Line {
-	SVA3 line;
+class Line : public Drawable {				// TODO: inherit from SVA3
 public:
-	// TODO: should this be private?
-	glm::vec3 color;
-
+	// Public enums
+	enum EndType : uint8_t {
+		NONE = 0,
+		ARROW = 1
+	};
+private:
+	SVA3	_line;
+	EndType	_start_type;
+	EndType	_end_type;
+public:
 	Line() {}
 
 	// Create line between two points	
 	Line(const glm::vec3 &p1, const glm::vec3 &p2,
-		const glm::vec3 &col = glm::vec3(1.0f, 1.0f, 1.0f))
-		: line({
+		const glm::vec3 &color = glm::vec3(1.0f, 1.0f, 1.0f),
+		EndType start_type = NONE, EndType end_type = NONE)
+		: _line({
 			p1.x, p1.y, p1.z,
 			p2.x, p2.y, p2.z
-		}), color(col) {}
+		}, color, GL_LINES), _start_type(start_type),
+		_end_type(end_type) {}
 
-	Line(const std::vector <float> vertices) : line(vertices) {}
+	Line(const std::vector <float> vertices) : _line(vertices) {}
 
 	// TODO: make an mvp class?
 	void set_mvp(const glm::mat4 &model, const glm::mat4 &view, const glm::mat4 &projection) {
@@ -39,20 +47,12 @@ public:
 		shader->set_mat4("projection", projection);
 	}
 
-	enum EndType : uint8_t {
-		NONE = 0,
-		ARROW = 1
-	};
-
-	void draw(EndType start = NONE, EndType end = NONE) const {
-		Shader *shader = winman.cres.line_shader;
-
+	virtual void draw(Shader *shader) override {
 		shader->use();
-		shader->set_vec3("color", color);
-		shader->set_int("start_mode", start);
-		shader->set_int("end_mode", end);
+		shader->set_int("start_mode", _start_type);
+		shader->set_int("end_mode", _end_type);
 
-		line.draw(GL_LINES);
+		_line.draw(shader);
 	}
 };
 

@@ -188,4 +188,130 @@ void _tui_struct::input()
 
 }
 
+namespace monitors {
+
+/* void fps_monitor_initializer()
+{
+	// TODO: display fps counter here
+
+	// Uncap FPS
+	glfwSwapInterval(0);
+
+	// For text rendering
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+	// Load font
+	winman.load_font(1);
+
+	// Set line width
+	glLineWidth(5.0f);
+
+	// Fill vertices with 0
+	for (size_t i = 0; i < 3 * 10; i++)
+		fps_vertices[i] = 0;
+
+	// Create axes
+	axes = SVA3({
+		0,	100,	0,
+		0,	0,	0,
+		100,	0,	0,
+	});
+
+	// Allocate graph buffer
+	glGenVertexArrays(1, &vao);
+	glGenBuffers(1, &vbo);
+	glBindVertexArray(vao);
+
+	generate_arrays();
+
+	// Create and configure base graphing shader
+	basic = Shader::from_source(basic_vert, basic_frag);
+
+	basic.use();
+	//basic.set_vec3("ecolor", {1.0, 1.0, 1.0});
+	basic.set_mat4("projection", glm::ortho(-10.0f, 110.0f, -10.0f, 110.0f));
+
+	// Set text
+	text_fps = ui::Text("FPS", 100, 10, 0.9, {1.0, 0.5, 1.0});
+
+	// TODO: move to init or smthing
+}
+
+void fps_monitor_renderer()
+{
+	// Static timer
+	static float time = 0.0f;
+	static float totfps = 0.0f;
+	static float iters = 0.0f;
+	static float avgfps = 0.0f;
+
+	// Clear the color
+	glClearColor(0.05f, 0.05f, 0.05f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	// Get time stuff
+	float current_frame = glfwGetTime();
+	delta_time = current_frame - last_frame;
+	last_frame = current_frame;
+	time += delta_time;
+
+	int fps = 1/delta_time;
+	totfps += fps;
+	iters++;
+
+	if (time > 0.5f) {
+		// Delete the first point
+		fps_vertices.erase(fps_vertices.begin(), fps_vertices.begin() + 3);
+
+		// 0 -> 600 fps
+		avgfps = totfps/iters;
+
+		float normalized = 100.0f * avgfps/600.0f;
+		fps_vertices.push_back(100.0f);
+		fps_vertices.push_back(normalized);
+		fps_vertices.push_back(0.0f);
+
+		// Shift other points
+
+		// TODO: += fields (getter)
+		for (size_t i = 0; i < fps_vertices.size(); i += 3) {
+			float px = fps_vertices[i];
+			fps_vertices[i] = std::max(px - 10.0f, 0.0f);
+		}
+
+		// Regenerate buffer data
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		glCheckError();
+
+		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * fps_vertices.size(),
+			&fps_vertices[0], GL_STATIC_DRAW);
+
+		// Reset time
+		time = 0.0f;
+	}
+
+	// Draw the graph
+	basic.use();
+	basic.set_vec3("ecolor", {1.0, 1.0, 1.0});
+
+	glBindVertexArray(vao);
+	glCheckError();
+
+	glDrawArrays(GL_LINE_STRIP, 0, fps_vertices.size()/3);
+	glCheckError();
+
+	// Draw axes
+	basic.set_vec3("ecolor", {0.6, 0.6, 0.6});
+
+	axes.draw(GL_LINE_STRIP);
+
+	// Draw text
+	text_fps.set_str(std::to_string(delta_time).substr(0, 6)
+		+ "s delta, " + std::to_string(avgfps).substr(0, 6) + " fps");
+	text_fps.draw(*winman.cres.text_shader);
+} */
+
+}
+
 }

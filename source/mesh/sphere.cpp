@@ -17,7 +17,10 @@ static void _add_vec3(std::vector <float> &vertices, const glm::vec3 &vec)
         vertices.push_back(vec.z);
 }
 
-SVA3 wireframe_sphere(const glm::vec3 &center, float radius, int divisions)
+SVA3 wireframe_sphere(const glm::vec3 &center,
+		float radius,
+		const glm::vec3 &color,
+		int divisions)
 {
         // Constants
         const int divs = (divisions + 3) & (-3);        // Round to next multiple of 4
@@ -53,7 +56,7 @@ SVA3 wireframe_sphere(const glm::vec3 &center, float radius, int divisions)
 	}
         
         // Return vertex array object
-        return SVA3(vertices);
+        return SVA3(vertices, color);
 }
 
 }

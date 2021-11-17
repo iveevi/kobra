@@ -113,14 +113,19 @@ Texture::Texture(const std::string &txt_path,
 }
 
 // Mesh functions
-Mesh::Mesh() {}
+Mesh::Mesh() : _material({
+			.color = {1.0f, 1.0f, 1.0f}
+		}) {}
 
 Mesh::Mesh(const AVertex &vertices,
 		const ATexture &textures,
 		const AIndices &indices)
 		: _vertices(vertices),
 		_textures(textures),
-		_indices(indices)
+		_indices(indices),
+		_material({
+			.color = {1.0f, 1.0f, 1.0f}
+		})
 {
 	_init();
 }
@@ -159,11 +164,17 @@ void Mesh::_init()
 	glBindVertexArray(0);
 }
 
+void Mesh::set_material(const Material &material)
+{
+	_material = material;
+}
+
 // TODO: clean
-void Mesh::draw(Shader &shader)
+void Mesh::draw(Shader *shader)
 {
 	// Use the shader first
-	shader.use();
+	shader->use();
+	shader->set_vec3("color", _material.color);
 
 	// TODO: check for wireframe (and/or vertex-dot) mode
 
@@ -189,7 +200,7 @@ void Mesh::draw(Shader &shader)
 
 		// now set the sampler to the correct texture unit
 		// TODO: use the shader method instead
-		glUniform1i(glGetUniformLocation(shader.id, (name + number).c_str()), i);
+		glUniform1i(glGetUniformLocation(shader->id, (name + number).c_str()), i);
 		// and finally bind the texture
 		glBindTexture(GL_TEXTURE_2D, _textures[i].id);
 	}
@@ -350,7 +361,7 @@ Model::ATexture Model::_load_textures(
 void Model::draw(Shader &shader)
 {
 	for (Mesh &mesh : _meshes)
-		mesh.draw(shader);
+		mesh.draw(&shader);
 }
 
 }
