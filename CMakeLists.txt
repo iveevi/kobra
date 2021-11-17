@@ -54,7 +54,7 @@ set(MERCURY_SOURCE
 
 	source/mesh/basic.cpp
 	source/mesh/sphere.cpp
-	source/mesh/cube.cpp
+	source/mesh/cuboid.cpp
 
 	source/ui/button.cpp
 	source/ui/pure_rect.cpp

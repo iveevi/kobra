@@ -1,4 +1,4 @@
-#include "include/mesh/cube.hpp"
+#include "include/mesh/cuboid.hpp"
 
 namespace mercury {
 

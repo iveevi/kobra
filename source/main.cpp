@@ -26,7 +26,7 @@
 
 #include "include/mesh/basic.hpp"
 #include "include/mesh/sphere.hpp"
-#include "include/mesh/cube.hpp"
+#include "include/mesh/cuboid.hpp"
 
 #include "include/ui/text.hpp"
 #include "include/ui/ui_layer.hpp"
@@ -69,6 +69,10 @@ void add_annotation(ui::Line *line, const glm::vec3 &color)
 	rdam.add(annotations[index], winman.cres.line_shader);
 }
 
+// Annotation colors
+glm::vec3 spheres {0.6f, 0.6f, 1.0f};
+glm::vec3 lines {1.0f, 0.6f, 1.0f};
+
 // TODO: these go into a namespace like "tree"
 
 // Random [0, 1]
@@ -77,175 +81,131 @@ inline float runit()
 	return rand()/((float) RAND_MAX);
 }
 
-using Ring = std::vector <glm::vec3>;
-using Branch = std::vector <Ring>;		// Should be a queue so poping is easier
+// Maximum number of branches
+const int MAX_BRANCHES = 4;
 
-void add_ring(Mesh::AVertex &vertices, Mesh::AIndices &indices,
-		const Ring &ring1, const Ring &ring2)
-{
-	int divs = ring1.size();
-	for (int i = 0; i < divs; i++) {
-		int n = (i + 1) % divs;
+// Tree skeleton structure
+struct Skeleton {
+	glm::vec3 base;
+	glm::vec3 tip;
+	glm::vec3 saddle;	// Offset to saddle point
 
-		mesh::add_triangle(vertices, indices,
-				ring1[i], ring2[i], ring1[n]);
-		mesh::add_triangle(vertices, indices,
-				ring2[i], ring2[n], ring1[n]);
-	}
-}
+	float rad_i;
+	float rad_f;
 
-// TODO: return the vector of rings
-Branch generate_branch(
-		const glm::vec3 &p1, const glm::vec3 &p2,
-		float rad_i, float rad_f,
-		int nrings = 10, int nslices = 10)
-{
-	// Constants
-	const float k_exp = std::log(rad_f/rad_i) / nrings;
-	const float slice = 2 * acos(-1) / nslices;
+	size_t nbranches = 0;
 
-	// Radius function
-	auto radius = [k_exp, rad_i](float x) -> float {
-		return rad_i * std::exp(k_exp * x);
-	};
+	Skeleton *branches[MAX_BRANCHES];
 
-	// Add the branch line
-	add_annotation(new ui::Line(p1, p2), {0.5f, 0.5f, 0.5f});
-
-	// TODO: global color variables
-	add_annotation(new SVA3(mesh::wireframe_sphere(p1, rad_i)), {0.0, 0.0, 1.0});
-	add_annotation(new SVA3(mesh::wireframe_sphere(p2, rad_f)), {0.0, 0.0, 1.0});
-
-	// Tree axis
-	const glm::vec3 axis = p2 - p1;
-
-	// Gram-Schmidt process to create an orthonormal vector
-	glm::vec3 v2 = p1 + glm::vec3 {1.0f, 0.0f, 0.0f};
-	glm::vec3 perp = glm::normalize(v2 - math::project(v2, axis));
-
-	// Generate the rotation matrix
-	glm::mat4 transform(1);
-	transform = glm::rotate(transform, -slice, axis);
-
-	// List of rings
-	Branch rings;
-
-	// Spacial traverser
-	glm::vec3 point = p1;
-
-	// Adding the vertices
-	for (int i = 0; i <= nrings; i++) {
-		// Next ring
-		Ring ring;
-
-		// Save perpendicular
-		glm::vec3 c_perp = perp;// {1, 0, 0};
-
-		float rad = radius(i);
-		for (int j = 0; j < nslices; j++) {
-			glm::vec3 v1 = point + (rad + 0.02f * runit()) * c_perp;
-			c_perp = glm::vec3(transform * glm::vec4(c_perp, 1.0));
-			ring.push_back(v1);
-		}
-
-		// Add the ring
-		rings.push_back(ring);
-
-		// Move along the branch
-		point += axis/(float) nrings;
-	}
-
-	return rings;
-}
-
-// Add branch to vertices
-void add_branch(Mesh::AVertex &vertices, Mesh::AIndices &indices,
-		const Branch &branch)
-{
-	// Add the rings
-	for (int i = 0; i < (int) branch.size() - 1; i++)
-		add_ring(vertices, indices, branch[i], branch[i + 1]);
-}
+	// TODO: static free method or deconstructor?
+};
 
 // Generate the tree skeleton
-// TODO: later implement tropisms, etc
-// NOTE: only draws the branchs that steam from the current trunk
-Branch generate_tree(Mesh::AVertex &vertices, Mesh::AIndices &indices,
-		const glm::vec3 &base,
+// TODO: Later, base the parameters of creation
+//	on real life studies (e.g. height, age, tropisms, etc.)
+Skeleton *generate_skeleton(const glm::vec3 &base,
 		const glm::vec3 &up,
-		float height,
-		float tradius,
+		float length,
+		float rad_i,
+		float rad_f,
 		int max_iterations = 2)
 {
-	// At least two branches
-	size_t nbranches = (rand() % 2) + 2;
-
-	// Draw the base
-	add_annotation(new SVA3(mesh::wireframe_sphere(base, tradius)), {1.0, 1.0, 0.5});
+	// Constants
+	static const float pi = acos(-1);	// TODO: put in math header
+	static const float sk = 1.5f;		// Saddle point weight on base branch
 	
-	// Stopping point
-	if (height < 0.2 || max_iterations <= 0) {
-		// TODO: these are actually leaves
-		return {};
+	// Stopping point, branch turns into leaves:
+	//	- max number of iterations is reached
+	//	- height is too small
+	//	- radius is too small
+	if (max_iterations <= 0
+			|| length <= 0.2f
+			|| rad_i <= 0.01f) {
+		return new Skeleton {
+			.base = base,
+			.tip = base,
+			.rad_i = 0.0f,
+			.rad_f = 0.0f
+		};
 	}
 
-	const glm::vec3 color = glm::vec3 {1.0f, 0.5f, 1.0f};
-	const glm::vec3 end = base + height * up;
+	// Compute new values
+	glm::vec3 tip = base + length * up;
+	size_t nbranches = (rand() % MAX_BRANCHES) + 1;	// At least 1 branch
 
-	// lines.push_back(ui::Line(base, end, color));
-	add_annotation(new ui::Line(base, end), color);
+	// Initialize
+	Skeleton *out = new Skeleton{
+		.base = base,
+		.tip = tip,
+		.saddle = {0.0, 0.0, 0.0},
+		.rad_i = rad_i,
+		.rad_f = rad_f,
+		.nbranches = nbranches
+	};
 
-	Branch branch = generate_branch(base, end, tradius, 0.6 * tradius);
-	// annotate_ring(annotations, branch[10]);
-
-	float sliceh = height/10.0f;
-
-	// TODO: will need to cull branches that are too close to each other
-	float pi = acos(-1);
-
-	// Store xy angle offset
-	float xy = glm::dot(up, {0, 1, 0});
+	// Iterate through branches
 	for (size_t i = 0; i < nbranches; i++) {
-		// Recurse
+		// New parameters
+		// TODO: need to space the branches out more
 		float xy_angle = pi * runit() / 2;
 		float xz_angle = 2 * pi * runit();
-
+		
 		glm::vec3 nup = math::sph_to_cart(xy_angle, xz_angle);
+		
+		// Height and radius factors
+		float hk = 0.3 * runit() + 0.4;
+		float rk = 0.3 * runit() + 0.4;
 
-		// TODO: store min scale
-		float hk = 0.6 * runit() + 0.4;
-		float nheight = hk * height;
-
-		Branch br = generate_tree(
-			vertices, indices,
-			end, nup,
-			nheight, tradius * 0.6,
+		// Create the next branch and append it
+		Skeleton *br = generate_skeleton(
+			tip, nup,
+			hk * length,
+			rad_f, rad_f * 0.6,
 			max_iterations - 1
 		);
 
-		if (max_iterations <= 1)
-			break;
-
-		// Ensure that the bounding box for the branch is not intersecting
-		float nsliceh = nheight/10.0f;
-		float kheight = nsliceh/2.0f;
-
-		add_branch(vertices, indices, br);
+		out->branches[i] = br;
+		out->saddle += br->tip - tip;
 	}
 
-	return branch;
+	// Average the saddle
+	out->saddle /= sk * (nbranches + 1);
+
+	return out;
 }
 
-Mesh make_tree(const glm::vec3 &base, const glm::vec3 &up, float height, float tradius)
+// Annotate the skeleton
+void annotate_skeleton(Skeleton *sk)
+{
+	// Constants
+	static const glm::vec3 saddles = {1.0f, 0.7f, 0.5f};
+
+	// Annotate current branch
+	add_annotation(new ui::Line(sk->base, sk->tip), lines);
+	add_annotation(new SVA3(mesh::wireframe_sphere(sk->tip, sk->rad_f)), spheres);
+
+	// Only draw saddle if there are branches
+	if (sk->nbranches > 0) {
+		add_annotation(new ui::Line(sk->tip, sk->tip + sk->saddle), saddles);
+		add_annotation(new SVA3(mesh::wireframe_sphere(sk->tip + sk->saddle, 0.1f)), saddles);
+	}
+
+	// Annotate branches
+	for (int i = 0; i < sk->nbranches; i++) {
+		// Draw line to saddle
+		add_annotation(new ui::Line(sk->branches[i]->tip, sk->tip + sk->saddle), saddles);
+
+		annotate_skeleton(sk->branches[i]);
+	}
+}
+
+Mesh make_tree(const glm::vec3 &base, const glm::vec3 &up, float length, float rad_i, float rad_f)
 {
 	Mesh::AVertex vertices;
 	Mesh::AIndices indices;
 
-	std::vector <Ring> rings = generate_tree(vertices, indices, base, up, height, tradius);
-	Logger::notify() << "Finished generating tree\n";
-
-	// Draw the last branch
-	add_branch(vertices, indices, rings);
+	Skeleton *skeleton = generate_skeleton(base, up, length, rad_i, rad_f);
+	annotate_skeleton(skeleton);
 
 	return Mesh(vertices, {}, indices);
 }
@@ -309,7 +269,7 @@ void main_initializer()
 	hit_cube3 = mesh::cuboid({3, -1.0, 0.0}, 10, 1, 10);
 
 	// Construct the tree
-	tree = make_tree({0, -0.5, -2}, {0, 1, 0}, 3.0f, 0.5f);
+	tree = make_tree({0, -0.5, -2}, {0, 1, 0}, 3.0f, 0.5f, 0.2f);
 	
 	// Set the materials
 	hit_cube1.set_material({.color = {0.5, 1.0, 0.5}});
