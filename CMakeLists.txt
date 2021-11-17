@@ -20,6 +20,10 @@ endif()
 
 set(CMAKE_CXX_STANDARD 14)
 
+# Set default compiler flags
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wunused-variable")
+
+# Set debug compiler flags
 if (${CMAKE_BUILD_TYPE} MATCHES Debug)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -Wall -DMERCURY_DEBUG=0")
 endif()
@@ -35,7 +39,6 @@ project(curses)
 
 # Source variables
 set(MERCURY_SOURCE
-	source/camera.cpp
 	source/common.cpp
 	source/init.cpp
 	source/lighting.cpp
@@ -45,6 +48,7 @@ set(MERCURY_SOURCE
 	source/rendering.cpp
 	source/shader.cpp
 
+	source/engine/camera.cpp
 	source/engine/monitors.cpp
 	source/engine/skybox.cpp
 

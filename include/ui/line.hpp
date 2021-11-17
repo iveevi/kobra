@@ -10,7 +10,7 @@ namespace ui {
 
 // Line class (with arrow options)
 // TODO: add corresponding source file
-class Line : public Drawable {				// TODO: inherit from SVA3
+class Line : public SVA3 {
 public:
 	// Public enums
 	enum EndType : uint8_t {
@@ -18,7 +18,6 @@ public:
 		ARROW = 1
 	};
 private:
-	SVA3	_line;
 	EndType	_start_type;
 	EndType	_end_type;
 public:
@@ -28,13 +27,13 @@ public:
 	Line(const glm::vec3 &p1, const glm::vec3 &p2,
 		const glm::vec3 &color = glm::vec3(1.0f, 1.0f, 1.0f),
 		EndType start_type = NONE, EndType end_type = NONE)
-		: _line({
+		: SVA3({
 			p1.x, p1.y, p1.z,
 			p2.x, p2.y, p2.z
 		}, color, GL_LINES), _start_type(start_type),
 		_end_type(end_type) {}
 
-	Line(const std::vector <float> vertices) : _line(vertices) {}
+	Line(const std::vector <float> vertices) : SVA3(vertices) {}
 
 	// TODO: make an mvp class?
 	void set_mvp(const glm::mat4 &model, const glm::mat4 &view, const glm::mat4 &projection) {
@@ -52,7 +51,8 @@ public:
 		shader->set_int("start_mode", _start_type);
 		shader->set_int("end_mode", _end_type);
 
-		_line.draw(shader);
+		// _line.draw(shader);
+		SVA3::draw(shader);
 	}
 };
 

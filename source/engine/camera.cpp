@@ -1,4 +1,4 @@
-#include "../include/camera.hpp"
+#include "include/engine/camera.hpp"
 
 // GLM
 #include <glm/fwd.hpp>

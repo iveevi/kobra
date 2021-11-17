@@ -12,9 +12,7 @@ namespace mercury {
 namespace mesh {
 
 // TODO: sphere mesh generator (icosphere, normal sphere, etc)
-SVA3 wireframe_sphere(const glm::vec3 &, float,
-        const glm::vec3 & = {1.0, 1.0, 1.0},
-        int = 64);
+SVA3 wireframe_sphere(const glm::vec3 &, float, int = 64);
 
 }
 

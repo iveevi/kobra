@@ -6,12 +6,13 @@
 #include <vector>
 
 // Engine headers
+#include "include/drawable.hpp"
 #include "include/shader.hpp"
 
 namespace mercury {
 
 // Skybox class
-class Skybox {
+class Skybox : public Drawable{
 	unsigned int _vao;
 	unsigned int _vbo;
 	unsigned int _tid;
@@ -19,7 +20,7 @@ public:
 	Skybox();
 	Skybox(const std::vector <std::string> &);
 
-	void draw(Shader &);
+	virtual void draw(Shader *) override;
 
 	static const float vertices[];
 };

@@ -12,6 +12,7 @@
 namespace mercury {
 
 // Static variables
+// TODO: clean up
 const float Skybox::vertices[] = {
 	// positions
 	-1.0f,  1.0f, -1.0f,
@@ -107,13 +108,13 @@ Skybox::Skybox(const std::vector <std::string> &sources)
 }
 
 // Draw method
-void Skybox::draw(Shader &shader)
+void Skybox::draw(Shader *shader)
 {
 	// Set depth function
 	glDepthFunc(GL_LEQUAL);
 
 	// Use the shader
-	shader.use();
+	shader->use();
 
 	// Draw the vertex buffer
 	glBindVertexArray(_vao);

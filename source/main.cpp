@@ -10,7 +10,6 @@
 #include <glm/gtc/type_ptr.hpp>
 
 // Engine headers
-#include "include/camera.hpp"
 #include "include/shader.hpp"
 #include "include/model.hpp"
 #include "include/init.hpp"
@@ -19,8 +18,11 @@
 #include "include/rendering.hpp"
 #include "include/varray.hpp"
 
+#include "include/engine/camera.hpp"
 #include "include/engine/monitors.hpp"
 #include "include/engine/skybox.hpp"
+
+#include "include/math/linalg.hpp"
 
 #include "include/mesh/basic.hpp"
 #include "include/mesh/sphere.hpp"
@@ -36,31 +38,45 @@ using namespace mercury;
 // Forward declarations
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
-void process_input(GLFWwindow *window);
-
-// Settings
-const unsigned int SCR_WIDTH = 800;
-const unsigned int SCR_HEIGHT = 600;
+void process_input(GLFWwindow *window, float);
 
 // Camera
 mercury::Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
 
-// Variables for mouse movement
-float lastX = SCR_WIDTH / 2.0f;
-float lastY = SCR_HEIGHT / 2.0f;
-bool firstMouse = true;
+// Daemons
+lighting::Daemon ldam;
+rendering::Daemon rdam;
 
-// Variables for timing
-float delta_time = 0.0f;
-float last_frame = 0.0f;
+// Annotations
+std::vector <Drawable *> annotations;
+
+Shader sphere_shader;		// TODO: change to annotation shader
+
+void add_annotation(SVA3 *sva, const glm::vec3 &color)
+{
+	sva->color = color;
+	size_t index = annotations.size();
+	annotations.push_back(sva);
+	rdam.add(annotations[index], &sphere_shader);
+}
+
+void add_annotation(ui::Line *line, const glm::vec3 &color)
+{
+	line->color = color;
+	size_t index = annotations.size();
+	// lines.push_back(*line);
+	annotations.push_back(line);
+	rdam.add(annotations[index], winman.cres.line_shader);
+}
+
+// TODO: these go into a namespace like "tree"
 
 // Random [0, 1]
-float runit()
+inline float runit()
 {
 	return rand()/((float) RAND_MAX);
 }
 
-// TODO: these go into a namespace like "tree"
 using Ring = std::vector <glm::vec3>;
 using Branch = std::vector <Ring>;		// Should be a queue so poping is easier
 
@@ -78,25 +94,6 @@ void add_ring(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 	}
 }
 
-// TODO: Generate fewer vertices, and use more normal maps
-std::vector <ui::Line> lines;
-
-std::vector <SVA3> spheres;		// NOTE: wireframe objects and lines are not considered in lighting...
-std::vector <SVA3> annotations;
-std::vector <SVA3> annotations2;
-
-// Radial spacing constants
-const float rk_max = 2.5f;
-const float rk_min = 1.5f;
-
-// TODO: move this to a glm extra header
-
-// Project v over u
-glm::vec3 project(const glm::vec3 &v, const glm::vec3 &u)
-{
-	return u * glm::dot(v, u)/glm::dot(u, u);
-}
-
 // TODO: return the vector of rings
 Branch generate_branch(
 		const glm::vec3 &p1, const glm::vec3 &p2,
@@ -106,7 +103,6 @@ Branch generate_branch(
 	// Constants
 	const float k_exp = std::log(rad_f/rad_i) / nrings;
 	const float slice = 2 * acos(-1) / nslices;
-	// const float rk = 2.0;					// Radial spacing constant
 
 	// Radius function
 	auto radius = [k_exp, rad_i](float x) -> float {
@@ -114,23 +110,18 @@ Branch generate_branch(
 	};
 
 	// Add the branch line
-	ui::Line line(p1, p2, {0.5f, 0.5f, 0.5f});
-
-	lines.push_back(line);
+	add_annotation(new ui::Line(p1, p2), {0.5f, 0.5f, 0.5f});
 
 	// TODO: global color variables
-	spheres.push_back(mesh::wireframe_sphere(p1, rad_i, {1.0, 1.0, 0.5}));
-	spheres.push_back(mesh::wireframe_sphere(p2, rad_f, {1.0, 1.0, 0.5}));
-	
-	// spheres2.push_back(mesh::wireframe_sphere(p1, rk_max * rad_i));
-	// spheres2.push_back(mesh::wireframe_sphere(p2, rk_max * rad_f));
+	add_annotation(new SVA3(mesh::wireframe_sphere(p1, rad_i)), {0.0, 0.0, 1.0});
+	add_annotation(new SVA3(mesh::wireframe_sphere(p2, rad_f)), {0.0, 0.0, 1.0});
 
 	// Tree axis
 	const glm::vec3 axis = p2 - p1;
 
 	// Gram-Schmidt process to create an orthonormal vector
 	glm::vec3 v2 = p1 + glm::vec3 {1.0f, 0.0f, 0.0f};
-	glm::vec3 perp = glm::normalize(v2 - project(v2, axis));
+	glm::vec3 perp = glm::normalize(v2 - math::project(v2, axis));
 
 	// Generate the rotation matrix
 	glm::mat4 transform(1);
@@ -167,17 +158,6 @@ Branch generate_branch(
 	return rings;
 }
 
-// Spherical coordinates to cartesian
-glm::vec3 sph_to_cart(float xy, float xz)
-{
-	float xr_rad = cos(xy);
-	return glm::vec3(
-		xr_rad * cos(xz),
-		sin(xy),
-		xr_rad * sin(xz)
-	);
-}
-
 // Add branch to vertices
 void add_branch(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 		const Branch &branch)
@@ -185,193 +165,6 @@ void add_branch(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 	// Add the rings
 	for (int i = 0; i < (int) branch.size() - 1; i++)
 		add_ring(vertices, indices, branch[i], branch[i + 1]);
-}
-
-using Interval = std::pair <float, float>;
-
-// Annotate a ring
-void annotate_ring(std::vector <SVA3> &dest, const Ring &ring)
-{
-	Ring cring = ring;
-	cring.push_back(ring[0]);		// Line loop
-	dest.push_back(SVA3(cring));	// TODO: pass drawing mode to sva3
-}
-
-// Project a ring onto a plane
-Ring project(const Ring &ring, const glm::vec3 &center, const glm::vec3 &normal)
-{
-	Ring out;
-
-	glm::vec3 normed = glm::normalize(normal);
-	for (const glm::vec3 &pt : ring) {
-		glm::vec3 vec = pt - center;
-		float length = glm::dot(vec, normed);
-		out.push_back(pt - length * normed);
-	}
-
-	return out;
-}
-
-void shift_ring(Ring &ring, const glm::vec3 &up)
-{
-	for (glm::vec3 &pt : ring)
-		pt += up;
-}
-
-Ring concat_rings(const std::vector <Ring> &rings)
-{
-	Ring out;
-	for (const Ring &ring : rings)
-		out.insert(out.begin(), ring.begin(), ring.end());
-
-	return out;
-}
-
-// Bounding box structure
-struct BoundingBox {
-	glm::vec3 center;
-	glm::vec3 size;
-	glm::vec3 up;
-	glm::vec3 right;
-
-	void annotate() {
-		annotations.push_back(mesh::wireframe_cuboid(
-			center, size, up, {1.0, 1.0, 0.5}
-		));
-	}
-
-	// TODO: put both these methods outside bbox, into header in physics namespace
-	// Return min and max of projection on axis
-	float proj_len(const glm::vec3 &pt, const glm::vec3 &naxis) const
-	{
-		return glm::length(::project(pt, naxis));
-	}
-
-	Interval project(const glm::vec3 &axis) const
-	{
-		float min = std::numeric_limits <float> ::max();
-		float max = -std::numeric_limits <float> ::max();
-        
-		glm::vec3 nup = glm::normalize(up);
-		glm::vec3 nright = glm::normalize(right);
-		glm::vec3 nforward = glm::normalize(glm::cross(nup, nright));
-
-		glm::vec3 xdir = nright * size.x/2.0f;
-		glm::vec3 ydir = nup * size.y/2.0f;
-		glm::vec3 zdir = nforward * size.z/2.0f;
-
-		std::vector <glm::vec3> pts = {
-			center + xdir + ydir + zdir,
-			center - xdir + ydir + zdir,
-			center + xdir - ydir + zdir,
-			center - xdir - ydir + zdir,
-			center + xdir + ydir - zdir,
-			center - xdir + ydir - zdir,
-			center + xdir - ydir - zdir,
-			center - xdir - ydir - zdir
-		};
-
-		for (const glm::vec3 &pt : pts) {
-			float len = proj_len(pt, axis);
-			// Logger::notify() << "\t\t\tlen = " << len << ", pt = " << pt << ", axis = " << axis << ", projction = " << ::project(pt, axis) << "\n";
-			if (len < min)
-				min = len;
-			if (len > max)
-				max = len;
-		}
-
-		return {min, max};
-	}
-};
-
-bool intersecting(const BoundingBox &b1, const BoundingBox &b2)
-{
-	glm::vec3 foward1 = glm::normalize(glm::cross(b1.up, b1.right));
-	glm::vec3 foward2 = glm::normalize(glm::cross(b2.up, b2.right));
-
-	std::vector <glm::vec3> axes {
-		// b1 normals
-		b1.right,
-		b1.up,
-		foward1,
-
-		// b2 normals
-		b2.right,
-		b2.up,
-		foward2,
-
-		// cross products
-		glm::cross(b1.right, b2.right),
-		glm::cross(b1.right, b2.up),
-		glm::cross(b1.right, foward2),
-
-		glm::cross(b1.up, b2.right),
-		glm::cross(b1.up, b2.up),
-		glm::cross(b1.up, foward2),
-
-		glm::cross(foward1, b2.right),
-		glm::cross(foward1, b2.up),
-		glm::cross(foward1, foward2)
-	};
-
-	// Iterate over all axes
-	// Logger::notify() << "\tIntersection function\n";
-	for (const glm::vec3 &axis : axes) {
-		if (axis == glm::vec3(0, 0, 0)) {
-			// Logger::notify() << "\t\tAxis is zero\n";
-			continue;
-		}
-
-		Interval i1 = b1.project(axis);
-		Interval i2 = b2.project(axis);
-
-		// Logger::notify() << "\t\ti1 = " << i1.first << ", " << i1.second << "\ti2 = " << i2.first << ", " << i2.second << "\n";
-
-		if (i1.first > i2.second || i2.first > i1.second)
-			return false;
-	}
-
-	return true;
-}
-
-// Get the bounding box
-BoundingBox get_bounding_box(const Ring &ring1, const Ring &ring2,
-		const glm::vec3 &center, const glm::vec3 &up,
-		float rheight)
-{
-	// TODO: add a helper method for this...
-	glm::vec3 c1 = center - rheight * up/2.0f;
-	glm::vec3 c2 = center + rheight * up/2.0f;
-
-	// First ring
-	float max1 = 0.0f;
-
-	// Logger::notify() << "\tcenter = " << center << ", c1 = " << c1 << ", c2 = " << c2 << std::endl;
-	for (int i = 0; i < (int) ring1.size(); i++) {
-		float d = glm::length(ring1[i] - c1);
-		if (d > max1)
-			max1 = d;
-	}
-
-	// Second ring
-	float max2 = 0.0f;
-
-	for (int i = 0; i < (int) ring2.size(); i++) {
-		float d = glm::length(ring2[i] - c2);
-		if (d > max2)
-			max2 = d;
-	}
-
-	// Add the bounding box
-	float radius = 2 * std::fmax(max1, max2);
-	// Logger::notify() << "\tradius = " << radius << "\n";
-
-	return {
-		center,
-		{radius, rheight, radius},
-		up,
-		{radius, 0, 0}
-	};
 }
 
 // Generate the tree skeleton
@@ -382,13 +175,15 @@ Branch generate_tree(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 		const glm::vec3 &up,
 		float height,
 		float tradius,
-		int max_iterations = 5)
+		int max_iterations = 2)
 {
 	// At least two branches
 	size_t nbranches = (rand() % 2) + 2;
 
+	// Draw the base
+	add_annotation(new SVA3(mesh::wireframe_sphere(base, tradius)), {1.0, 1.0, 0.5});
+	
 	// Stopping point
-	spheres.push_back(mesh::wireframe_sphere(base, tradius, {1.0, 1.0, 0.5}));
 	if (height < 0.2 || max_iterations <= 0) {
 		// TODO: these are actually leaves
 		return {};
@@ -397,51 +192,25 @@ Branch generate_tree(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 	const glm::vec3 color = glm::vec3 {1.0f, 0.5f, 1.0f};
 	const glm::vec3 end = base + height * up;
 
-	lines.push_back(ui::Line(base, end, color));
+	// lines.push_back(ui::Line(base, end, color));
+	add_annotation(new ui::Line(base, end), color);
 
 	Branch branch = generate_branch(base, end, tradius, 0.6 * tradius);
 	// annotate_ring(annotations, branch[10]);
 
 	float sliceh = height/10.0f;
-	Logger::notify() << "max_iterations = " << max_iterations << std::endl;
-	// get_bounding_box(branch[0], branch[1], base + (sliceh/2.0f) * up, up, sliceh);
-
-	// Main bounding box
-	BoundingBox mbbox = get_bounding_box(
-		branch[9], branch[10],
-		base + (height - sliceh/2.0f) * up,
-		up, sliceh
-	);
-	mbbox.annotate();
-
-	// Logger::notify() << "bbox test.\n";
-	// bool b1 = mbbox.is_inside(mbbox.center);
-	// bool b2 = mbbox.is_inside(mbbox.center + mbbox.size/2.0f);
-
-	// Logger::notify() << "\tb1 = " << b1 << ", b2 = " << b2 << "\n";
 
 	// TODO: will need to cull branches that are too close to each other
 	float pi = acos(-1);
-
-	/* Simple bounding box test:
-	 * if the ring's bounding box is
-	 * intersecting the main bounding box,
-	 * (or two branch's bounding boxes are
-	 * intersecting each other), then
-	 * remove the ring from the branch
-	 */
-
-	// Store the last overlappnig rings
-	std::vector <Ring> last;
 
 	// Store xy angle offset
 	float xy = glm::dot(up, {0, 1, 0});
 	for (size_t i = 0; i < nbranches; i++) {
 		// Recurse
-		float xy_angle = pi * runit() / 2; // + xy;
+		float xy_angle = pi * runit() / 2;
 		float xz_angle = 2 * pi * runit();
 
-		glm::vec3 nup = sph_to_cart(xy_angle, xz_angle);
+		glm::vec3 nup = math::sph_to_cart(xy_angle, xz_angle);
 
 		// TODO: store min scale
 		float hk = 0.6 * runit() + 0.4;
@@ -461,44 +230,8 @@ Branch generate_tree(Mesh::AVertex &vertices, Mesh::AIndices &indices,
 		float nsliceh = nheight/10.0f;
 		float kheight = nsliceh/2.0f;
 
-		int len = br.size();
-
-		BoundingBox bbox;
-
-		Branch cbranch = br;		// Copy the branch
-		for (int j = 0; j < len; j++, kheight += nsliceh) {
-			bbox = get_bounding_box(
-				br[j], br[j + 1],
-				end + kheight * nup,
-				nup, nsliceh
-			);
-
-			bool inter = intersecting(mbbox, bbox);
-			Logger::notify() << "Index is [" << i << ", " << j << "]: intersect? " << inter << std::endl;
-			if (intersecting(mbbox, bbox)) {
-				cbranch.erase(cbranch.begin());
-			} else {
-				last.push_back(cbranch[0]);
-				break;
-			}
-		}
-
-		add_branch(vertices, indices, cbranch);
-		bbox.annotate();
+		add_branch(vertices, indices, br);
 	}
-
-	// TODO: properly determine last rings
-
-	if (last.size() <= 0)
-		return branch;
-
-	// Annotate the last rings
-	//for (const Ring &ring : last)
-	//	annotate_ring(annotations, ring);
-
-	Ring proj = project(last[0], end, up);
-	shift_ring(proj, 0.1f * up);
-	annotate_ring(annotations2, proj);
 
 	return branch;
 }
@@ -539,16 +272,9 @@ lighting::DirLight dirlight {
 
 // TODO: color constants and hex strings
 
-// Daemons: TODO: put at the top as global variables
-lighting::Daemon ldam;
-rendering::Daemon rdam;
-
 // Wireframe sphere: TODO: is there a better way than to manually set vertices?
 const glm::vec3 center {1.0, 1.0, 1.0};
 const float radius = 0.2f;
-
-SVA3 wsphere;
-Shader sphere_shader;
 
 void main_initializer()
 {
@@ -596,8 +322,6 @@ void main_initializer()
 	glLineWidth(5.0f);
 
 	// Create the sphere
-	wsphere = mesh::wireframe_sphere(center, radius);
-
 	sphere_shader = Shader(
 		_shader("basic3d.vert"),
 		_shader("basic.frag")
@@ -626,21 +350,26 @@ void main_initializer()
 	ldam.add_object(&hit_cube2);
 	ldam.add_object(&hit_cube3);
 
-	ldam.add_object(&tree);
+	// ldam.add_object(&tree);
+
+	// Add objects to the render daemon
+	rdam.add(&sb, winman.cres.sb_shader);
 }
 
 void main_renderer()
 {
 	// Total time
 	static float time = 0;
+	static float delta_t = 0;
+	static float last_t = 0;
 
 	// Get time stuff
 	float current_frame = glfwGetTime();
-	delta_time = current_frame - last_frame;
-	last_frame = current_frame;
+	delta_t = current_frame - last_t;
+	last_t = current_frame;
 
 	// Process input
-	process_input(mercury::winman.cwin);	// TODO: return movement of camera
+	process_input(mercury::winman.cwin, delta_t);	// TODO: return movement of camera
 
 	// render
 	glClearColor(0.05f, 1.00f, 0.05f, 1.0f);
@@ -656,7 +385,7 @@ void main_renderer()
 	glm::mat4 view = camera.get_view();
 	glm::mat4 projection = glm::perspective(
 		glm::radians(camera.zoom),
-		(float) SCR_WIDTH / (float) SCR_HEIGHT,
+		winman.width / winman.height,
 		0.1f, 100.0f
 	);
 
@@ -668,7 +397,7 @@ void main_renderer()
 		camera.position
 	};
 
-	// Render scene
+	// Lighut and render scene
 	ldam.light();
 	rdam.render();
 
@@ -677,39 +406,22 @@ void main_renderer()
 	sphere_shader.set_mat4("model", model);
 	sphere_shader.set_mat4("view", view);
 	sphere_shader.set_mat4("projection", projection);
-	// wsphere.draw(GL_LINE_STRIP);
 
-	// TODO: make an add annotation function
-	sphere_shader.use();
-	sphere_shader.set_vec3("color", 0.1, 0.5, 1.0);
-	for (SVA3 &sva : spheres)
-		sva.draw(&sphere_shader);
-	
-	sphere_shader.use();
-	sphere_shader.set_vec3("color", 0.9, 0.9, 0.5);
-	for (SVA3 &sva : annotations)
-		sva.draw(&sphere_shader);
-	
-	sphere_shader.use();
-	sphere_shader.set_vec3("color", 1.0, 0.5, 0.5);
-	for (SVA3 &sva : annotations2)
-		sva.draw(&sphere_shader);
-
-	// Draw tree skeleton
-	lines[0].set_mvp(model, view, projection);
-	for (ui::Line &line : lines)
-		line.draw(winman.cres.line_shader);
+	// TODO: make a set_mvp function and helper in winman
+	Shader *lshader = winman.cres.line_shader;
+	lshader->use();
+	lshader->set_mat4("model", model);
+	lshader->set_mat4("view", view);
+	lshader->set_mat4("projection", projection);
 
 	// Draw skybox
 	view = glm::mat4(glm::mat3(camera.get_view()));
 
 	// Set skybox shader properties
-	winman.cres.sb_shader->use();
-	winman.cres.sb_shader->set_mat4("projection", projection);
-	winman.cres.sb_shader->set_mat4("view", view);
-
-	// TODO: use the current shader in the skybox draw method
-	sb.draw(*winman.cres.sb_shader);
+	Shader *sshader = winman.cres.sb_shader;
+	sshader->use();
+	sshader->set_mat4("projection", projection);
+	sshader->set_mat4("view", view);
 }
 
 // Program render loop condition
@@ -740,7 +452,7 @@ int main()
 
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
 // ---------------------------------------------------------------------------------------------------------
-void process_input(GLFWwindow *window)
+void process_input(GLFWwindow *window, float delta_t)
 {
 	if (glfwGetKey(window, GLFW_KEY_BACKSPACE) == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, true);
@@ -750,7 +462,7 @@ void process_input(GLFWwindow *window)
 		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 	}
 
-	float cameraSpeed = 5 * delta_time;
+	float cameraSpeed = 5 * delta_t;
 
 	// Forward motion
 	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
@@ -771,8 +483,12 @@ void process_input(GLFWwindow *window)
 		camera.move(cameraSpeed * camera.up);
 }
 
-// glfw: whenever the mouse moves, this callback is called
-// -------------------------------------------------------
+// Variables for mouse movement
+float lastX = 0.0; // SCR_WIDTH / 2.0f;
+float lastY = 0.0; // SCR_HEIGHT / 2.0f;
+bool firstMouse = true;
+
+// Mouse callback
 void mouse_callback(GLFWwindow* window, double xpos, double ypos)
 {
 	static const float sensitivity = 0.1f;

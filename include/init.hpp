@@ -109,7 +109,7 @@ public:
 	// Loaders
 	void load_font(size_t);
 	void load_skybox(size_t);
-	void load_lines(size_t);
+	void load_lines(size_t);	// TODO: make an auto system to load shaders
 
 	// Initial the specified context
 	//	using the corresponding initializer

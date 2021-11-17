@@ -19,7 +19,6 @@ static void _add_vec3(std::vector <float> &vertices, const glm::vec3 &vec)
 
 SVA3 wireframe_sphere(const glm::vec3 &center,
 		float radius,
-		const glm::vec3 &color,
 		int divisions)
 {
         // Constants
@@ -56,7 +55,7 @@ SVA3 wireframe_sphere(const glm::vec3 &center,
 	}
         
         // Return vertex array object
-        return SVA3(vertices, color);
+        return SVA3(vertices);
 }
 
 }

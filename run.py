@@ -2,11 +2,14 @@
 import argparse
 import os
 
+# TODO: clean file and automate
+
 # Execution modes
 modes = {
     '': './',
     'gdb': 'gdb ',
-    'mdb': './'
+    'mdb': './',
+    'valgrind': 'valgrind '
 }
 
 parser = argparse.ArgumentParser()
@@ -23,7 +26,7 @@ if args.target == 'json':
     os.system('cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 .')
     exit(0);
 
-if args.mode in ['gdb', 'mdb']:
+if args.mode in ['gdb', 'mdb', 'valgrind']:
     os.system('cmake -DCMAKE_BUILD_TYPE=Debug .')
 elif args.mode == '':
     os.system('cmake .')
