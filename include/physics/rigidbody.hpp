@@ -12,12 +12,16 @@ namespace physics {
 // Rigidbody structure
 struct Rigidbody {
 	// Required sub-structures
-	Transform *	transform;
+	Transform *	transform;	// TODO: copies pointer from collider
 	Collider *	collider;
 
 	// Members
 	glm::vec3	velocity;
 	float		mass;
+
+	// Constructors
+	Rigidbody(float, Transform *, Collider *);
+
 	// TODO: account for anglular velocity
 
 	// NOTE: these functions do not account for collisions

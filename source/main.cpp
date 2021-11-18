@@ -82,9 +82,8 @@ Mesh hit_cube3;
 // Rigidbody components
 Transform rb_transform({0, 10, 0});
 
-physics::Rigidbody rb {
-	.transform = &rb_transform
-};
+physics::BoxCollider rb_collider({1, 1, 1}, &rb_transform);
+physics::Rigidbody rb(1.0f, &rb_transform, &rb_collider);
 
 // glm::mat4 *rb_model = new glm::mat4(1.0);
 // glm::vec3 position = {0, 10, 0};
@@ -215,9 +214,9 @@ void main_renderer()
 	delta_t = current_frame - last_t;
 	last_t = current_frame;
 
-	// Update the monitor
+	/* Update the monitor
 	tui::tui.update();
-	tui::tui.update_fps(delta_t);
+	tui::tui.update_fps(delta_t); */
 
 	// Process input
 	process_input(mercury::winman.cwin, delta_t);	// TODO: return movement of camera
@@ -265,6 +264,7 @@ void main_renderer()
 	sshader->set_mat4("view", view);
 
 	// Do physics
+	// Logger::notify() << "Transform position = " << rb_transform.translation << std::endl;
 	/* velocity += delta_t * gravity;
 
 	if (rb_transform.y > 0)
@@ -283,7 +283,7 @@ int main()
 {
 	// Initialize mercury
 	init();
-	tui::tui.init();
+	// tui::tui.init();
 
 	// Set winman bindings
 	winman.set_condition(rcondition);
@@ -295,7 +295,7 @@ int main()
 	winman.run();
 
 	// Terminate GLFW
-	tui::tui.deinit();
+	// tui::tui.deinit();
 	glfwTerminate();
 
 	return 0;

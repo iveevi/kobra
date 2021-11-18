@@ -7,17 +7,17 @@
 namespace mercury {
 
 // Sets translation and rotation to zero, scale to 1
-Transform::Transform() : _translation(glm::vec3(0.0f)),
-                _erot(glm::vec3(0.0f)), _scale(glm::vec3(1.0f)) {}
+Transform::Transform() : translation(glm::vec3(0.0f)),
+                erot(glm::vec3(0.0f)), scale(glm::vec3(1.0f)) {}
 
-Transform::Transform(const glm::vec3 &translation, const glm::vec3 &erot,
-                const glm::vec3 &scale) : _translation(translation),
-                _erot(erot), _scale(scale) {}
+Transform::Transform(const glm::vec3 &t, const glm::vec3 &r,
+                const glm::vec3 &s) : translation(t),
+                erot(r), scale(s) {}
 
 // Methods
-void Transform::move(const glm::vec3 &translation)
+void Transform::move(const glm::vec3 &dpos)
 {
-        _translation += translation;
+        translation += dpos;
 }
 
 // Returns the model matrix
@@ -29,11 +29,11 @@ glm::mat4 Transform::model() const
         
         // Create and return the model matrix
         glm::mat4 model(1.0f);
-        model = glm::translate(model, _translation);
-        model = glm::rotate(model, glm::radians(_erot.x), x_axis);
-        model = glm::rotate(model, glm::radians(_erot.y), y_axis);
-        model = glm::rotate(model, glm::radians(_erot.z), z_axis);
-        model = glm::scale(model, _scale);
+        model = glm::translate(model, translation);
+        model = glm::rotate(model, glm::radians(erot.x), x_axis);
+        model = glm::rotate(model, glm::radians(erot.y), y_axis);
+        model = glm::rotate(model, glm::radians(erot.z), z_axis);
+        model = glm::scale(model, scale);
         return model;
 }
 

@@ -57,6 +57,8 @@ set(MERCURY_SOURCE
 	source/mesh/cuboid.cpp
 	source/mesh/sphere.cpp
 
+	source/physics/aabb.cpp
+	source/physics/collider.cpp
 	source/physics/physics.cpp
 	source/physics/rigidbody.cpp
 

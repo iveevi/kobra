@@ -7,11 +7,10 @@
 namespace mercury {
 
 // Transform struct
-class Transform {
-	glm::vec3	_translation;
-	glm::vec3	_erot;		// Euler angles
-	glm::vec3	_scale;
-public:
+struct Transform {
+	glm::vec3	translation;
+	glm::vec3	erot;		// Euler angles
+	glm::vec3	scale;
 	// Constructors
 	Transform();		// Identity transform
 	Transform(const glm::vec3 &, const glm::vec3 & = {0, 0, 0},
