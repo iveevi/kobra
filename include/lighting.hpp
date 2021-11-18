@@ -78,6 +78,9 @@ class Daemon {
 		Shader phong;
 	} _shaders;
 
+	// Default transform
+	glm::mat4 _default_model = glm::mat4(1.0);
+
 	// Compilers
 	void _compile_color_only();
 	void _compile_phong();
@@ -104,6 +107,7 @@ public:
 
 	// Add an object and specify the shading type
 	void add_object(Mesh *, Shading = FULL_PHONG);
+	void add_object(Mesh *, glm::mat4 *, Shading = FULL_PHONG);
 
 	// Sets the lighting for each object
 	void light();

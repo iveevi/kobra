@@ -9,6 +9,8 @@
 
 namespace mercury {
 
+namespace physics {
+
 // OBB class
 struct OrientedBoundingBox {
         glm::vec3 center;
@@ -110,6 +112,8 @@ using OBB = OrientedBoundingBox;
 
 	return true;
 } */
+
+}
 
 }
 

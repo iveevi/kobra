@@ -52,12 +52,14 @@ std::vector <Drawable *> annotations;
 
 Shader sphere_shader;		// TODO: change to annotation shader
 
-void add_annotation(SVA3 *sva, const glm::vec3 &color)
+void add_annotation(SVA3 *sva, const glm::vec3 &color, glm::mat4 *model = nullptr)
 {
+	static glm::mat4 default_model(1.0);
+
 	sva->color = color;
 	size_t index = annotations.size();
 	annotations.push_back(sva);
-	rdam.add(annotations[index], &sphere_shader);
+	rdam.add(annotations[index], &sphere_shader, (model ? model : &default_model));
 }
 
 void add_annotation(ui::Line *line, const glm::vec3 &color)
@@ -69,152 +71,16 @@ void add_annotation(ui::Line *line, const glm::vec3 &color)
 	rdam.add(annotations[index], winman.cres.line_shader);
 }
 
-// Annotation colors
-glm::vec3 spheres {0.6f, 0.6f, 1.0f};
-glm::vec3 lines {1.0f, 0.6f, 1.0f};
-
-// TODO: these go into a namespace like "tree"
-
-// Random [0, 1]
-inline float runit()
-{
-	return rand()/((float) RAND_MAX);
-}
-
-// Maximum number of branches
-const int MAX_BRANCHES = 4;
-
-// Tree skeleton structure
-struct Skeleton {
-	glm::vec3 base;
-	glm::vec3 tip;
-	glm::vec3 saddle;	// Offset to saddle point
-
-	float rad_i;
-	float rad_f;
-
-	size_t nbranches = 0;
-
-	Skeleton *branches[MAX_BRANCHES];
-
-	// TODO: static free method or deconstructor?
-};
-
-// Generate the tree skeleton
-// TODO: Later, base the parameters of creation
-//	on real life studies (e.g. height, age, tropisms, etc.)
-Skeleton *generate_skeleton(const glm::vec3 &base,
-		const glm::vec3 &up,
-		float length,
-		float rad_i,
-		float rad_f,
-		int max_iterations = 2)
-{
-	// Constants
-	static const float pi = acos(-1);	// TODO: put in math header
-	static const float sk = 1.5f;		// Saddle point weight on base branch
-	
-	// Stopping point, branch turns into leaves:
-	//	- max number of iterations is reached
-	//	- height is too small
-	//	- radius is too small
-	if (max_iterations <= 0
-			|| length <= 0.2f
-			|| rad_i <= 0.01f) {
-		return new Skeleton {
-			.base = base,
-			.tip = base,
-			.rad_i = 0.0f,
-			.rad_f = 0.0f
-		};
-	}
-
-	// Compute new values
-	glm::vec3 tip = base + length * up;
-	size_t nbranches = (rand() % MAX_BRANCHES) + 1;	// At least 1 branch
-
-	// Initialize
-	Skeleton *out = new Skeleton{
-		.base = base,
-		.tip = tip,
-		.saddle = {0.0, 0.0, 0.0},
-		.rad_i = rad_i,
-		.rad_f = rad_f,
-		.nbranches = nbranches
-	};
-
-	// Iterate through branches
-	for (size_t i = 0; i < nbranches; i++) {
-		// New parameters
-		// TODO: need to space the branches out more
-		float xy_angle = pi * runit() / 2;
-		float xz_angle = 2 * pi * runit();
-		
-		glm::vec3 nup = math::sph_to_cart(xy_angle, xz_angle);
-		
-		// Height and radius factors
-		float hk = 0.3 * runit() + 0.4;
-		float rk = 0.3 * runit() + 0.4;
-
-		// Create the next branch and append it
-		Skeleton *br = generate_skeleton(
-			tip, nup,
-			hk * length,
-			rad_f, rad_f * 0.6,
-			max_iterations - 1
-		);
-
-		out->branches[i] = br;
-		out->saddle += br->tip - tip;
-	}
-
-	// Average the saddle
-	out->saddle /= sk * (nbranches + 1);
-
-	return out;
-}
-
-// Annotate the skeleton
-void annotate_skeleton(Skeleton *sk)
-{
-	// Constants
-	static const glm::vec3 saddles = {1.0f, 0.7f, 0.5f};
-
-	// Annotate current branch
-	add_annotation(new ui::Line(sk->base, sk->tip), lines);
-	add_annotation(new SVA3(mesh::wireframe_sphere(sk->tip, sk->rad_f)), spheres);
-
-	// Only draw saddle if there are branches
-	if (sk->nbranches > 0) {
-		add_annotation(new ui::Line(sk->tip, sk->tip + sk->saddle), saddles);
-		add_annotation(new SVA3(mesh::wireframe_sphere(sk->tip + sk->saddle, 0.1f)), saddles);
-	}
-
-	// Annotate branches
-	for (int i = 0; i < sk->nbranches; i++) {
-		// Draw line to saddle
-		add_annotation(new ui::Line(sk->branches[i]->tip, sk->tip + sk->saddle), saddles);
-
-		annotate_skeleton(sk->branches[i]);
-	}
-}
-
-Mesh make_tree(const glm::vec3 &base, const glm::vec3 &up, float length, float rad_i, float rad_f)
-{
-	Mesh::AVertex vertices;
-	Mesh::AIndices indices;
-
-	Skeleton *skeleton = generate_skeleton(base, up, length, rad_i, rad_f);
-	annotate_skeleton(skeleton);
-
-	return Mesh(vertices, {}, indices);
-}
-
 // Render function for main window
 Mesh hit_cube1;
 Mesh hit_cube2;
 Mesh hit_cube3;
-Mesh tree;
+
+// Rigidbody components
+glm::mat4 *rb_model = new glm::mat4(1.0);
+glm::vec3 position = {0, 5, 0};
+glm::vec3 velocity;
+glm::vec3 gravity {0, -9.81, 0};
 
 // Skybox
 Skybox sb;
@@ -264,19 +130,14 @@ void main_initializer()
 	winman.load_lines(0);
 
 	// Meshes
-	hit_cube1 = mesh::cuboid({0.5, 0, 0.5}, 1, 1, 1);
+	hit_cube1 = mesh::cuboid({0, 0, 0}, 1, 1, 1);
 	hit_cube2 = mesh::cuboid({3, 0.5, 0.0}, 1, 2, 1);
 	hit_cube3 = mesh::cuboid({3, -1.0, 0.0}, 10, 1, 10);
-
-	// Construct the tree
-	tree = make_tree({0, -0.5, -2}, {0, 1, 0}, 3.0f, 0.5f, 0.2f);
 	
 	// Set the materials
 	hit_cube1.set_material({.color = {0.5, 1.0, 0.5}});
 	hit_cube2.set_material({.color = {1.0, 0.5, 0.5}});
 	hit_cube3.set_material({.color = {0.9, 0.9, 0.9}});
-
-	tree.set_material({.color = {1.0, 0.8, 0.5}});
 
 	// Set line width
 	glLineWidth(5.0f);
@@ -306,7 +167,7 @@ void main_initializer()
 
 	ldam.add_light(dirlight);
 
-	ldam.add_object(&hit_cube1);
+	ldam.add_object(&hit_cube1, rb_model);
 	ldam.add_object(&hit_cube2);
 	ldam.add_object(&hit_cube3);
 
@@ -314,6 +175,19 @@ void main_initializer()
 
 	// Add objects to the render daemon
 	rdam.add(&sb, winman.cres.sb_shader);
+
+	// Annotations
+	add_annotation(new SVA3(mesh::wireframe_cuboid({0, 0, 0}, {1, 1, 1})), {1.0, 1.0, 0.5}, rb_model);
+	add_annotation(new SVA3(mesh::wireframe_cuboid({3, -1, 0}, {10, 1, 10})), {1.0, 1.0, 0.5});
+}
+
+// TODO: into linalg
+glm::mat4 _mk_model(const glm::vec3 &translation = {0, 0, 0}, const glm::vec3 &scale = {1, 1, 1})
+{
+	glm::mat4 model = glm::mat4(1.0f);
+	model = glm::translate(model, translation);
+	model = glm::scale(model, scale);		// TODO: what is the basis of this computation?
+	return model;
 }
 
 void main_renderer()
@@ -328,6 +202,10 @@ void main_renderer()
 	delta_t = current_frame - last_t;
 	last_t = current_frame;
 
+	// Update the monitor
+	tui::tui.update();
+	tui::tui.update_fps(delta_t);
+
 	// Process input
 	process_input(mercury::winman.cwin, delta_t);	// TODO: return movement of camera
 
@@ -337,11 +215,7 @@ void main_renderer()
 
 	// TODO: rerender all this only if the camera has moved
 
-	// Create model, view, projection matrices
-	glm::mat4 model = glm::mat4(1.0f);
-	model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f));
-	model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f));		// TODO: what is the basis of this computation?
-
+	// View and projection matrices
 	glm::mat4 view = camera.get_view();
 	glm::mat4 projection = glm::perspective(
 		glm::radians(camera.zoom),
@@ -351,7 +225,7 @@ void main_renderer()
 
 	// Set lighting daemon uniforms
 	ldam.uniforms = {
-		model,
+		_mk_model(),
 		view,
 		projection,
 		camera.position
@@ -363,16 +237,9 @@ void main_renderer()
 
 	// Draw sphere		TODO: seriously some way to check that uniforms have been set
 	sphere_shader.use();	// TODO: make into a common shader
-	sphere_shader.set_mat4("model", model);
+	sphere_shader.set_mat4("model", _mk_model());
 	sphere_shader.set_mat4("view", view);
 	sphere_shader.set_mat4("projection", projection);
-
-	// TODO: make a set_mvp function and helper in winman
-	Shader *lshader = winman.cres.line_shader;
-	lshader->use();
-	lshader->set_mat4("model", model);
-	lshader->set_mat4("view", view);
-	lshader->set_mat4("projection", projection);
 
 	// Draw skybox
 	view = glm::mat4(glm::mat3(camera.get_view()));
@@ -382,6 +249,14 @@ void main_renderer()
 	sshader->use();
 	sshader->set_mat4("projection", projection);
 	sshader->set_mat4("view", view);
+
+	// Do physics
+	velocity += delta_t * gravity;
+
+	if (position.y > 0)
+		position += delta_t * velocity;
+	
+	*rb_model = _mk_model(position);
 }
 
 // Program render loop condition
@@ -394,6 +269,7 @@ int main()
 {
 	// Initialize mercury
 	init();
+	tui::tui.init();
 
 	// Set winman bindings
 	winman.set_condition(rcondition);
@@ -405,6 +281,7 @@ int main()
 	winman.run();
 
 	// Terminate GLFW
+	tui::tui.deinit();
 	glfwTerminate();
 
 	return 0;

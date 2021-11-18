@@ -205,6 +205,23 @@ void Daemon::add_object(Mesh *mesh, Shading type)
 	}
 }
 
+void Daemon::add_object(Mesh *mesh, glm::mat4 *model, Shading type)
+{
+	_robjs.push_back({mesh, type});
+	
+	// Compiled the appropriate shader
+	switch (type) {
+	case COLOR_ONLY:
+		_compile_color_only();
+		_rdaemon->add(mesh, &_shaders.basic, model);
+		break;
+	case FULL_PHONG:
+		_compile_phong();
+		_rdaemon->add(mesh, &_shaders.phong, model);
+		break;
+	}
+}
+
 // Set the common shader uniforms
 void Daemon::_set_shader_uniforms()
 {

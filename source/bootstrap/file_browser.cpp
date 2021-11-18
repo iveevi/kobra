@@ -37,15 +37,18 @@ void proc_res(DIR *res)
 {
 	dirent *dp;
 	while ((dp = readdir(res))) {
-		if (dp->d_namlen < 4)
+		std::string file = dp->d_name;
+
+		size_t len = file.length();
+		if (file.length() < 4)
 			continue;
 
-		const char *ext	= &dp->d_name[dp->d_namlen - 4];
+		std::string ext = file.substr(len - 4);
 		Logger::warn() << "\t\text = " << ext << "\n";
 
-		if (strcmp(".obj", ext) == 0)
+		if (ext == ".obj")
 			Logger::ok("Object file.");
-		else if (strcmp(".mtl", ext) == 0)
+		else if (ext == ".mtl")
 			Logger::ok("Material file.");
 	}
 }
@@ -53,7 +56,7 @@ void proc_res(DIR *res)
 int main()
 {
 	// Logger::start();
-	init();
+	init(false);
 
 	Logger::ok("Starting file browser.");
 
@@ -67,9 +70,11 @@ int main()
 
 	dirent *dp;
 	while ((dp = readdir(pdir))) {
-		Logger::warn() << "\t" << dp->d_name << "\n";
+		std::string file = dp->d_name;
 
-		if (strcmp("res", dp->d_name) == 0) {
+		Logger::warn() << "\t" << file << "\n";
+
+		if (file == "res") {
 			Logger::warn() << "\t\tFOUND RES\n";
 
 			std::string rdir = project + "/res";
@@ -77,11 +82,11 @@ int main()
 			proc_res(res);
 			closedir(res);
 		}
+
+		if (file.length() > 4 && file.substr(file.length() - 3) == ".hg")
+			Logger::ok("Mercury configuration file");
 	}
 	closedir(pdir);
-
-	while (!glfwWindowShouldClose(mercury::cwin.window)) {
-	}
 }
 
 void mouse_callback(GLFWwindow*, double, double) {}
