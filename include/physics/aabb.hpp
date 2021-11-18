@@ -4,6 +4,9 @@
 // GLM headers
 #include <glm/glm.hpp>
 
+// Engine headers
+#include "include/rendering.hpp"
+
 namespace mercury {
 
 namespace physics {
@@ -14,7 +17,8 @@ struct AxisAlignedBoundingBox {
 	glm::vec3 center;
 	glm::vec3 size;
 
-	// TODO: annotate
+	// Methods
+	void annotate(rendering::Daemon &, Shader *);
 
 	// Check intersecting
 	bool intersects(const AxisAlignedBoundingBox &) const;

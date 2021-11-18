@@ -19,12 +19,13 @@ void Daemon::update(float delta_t)
                 // TODO: later partition the space and check only those
                 bool inter = false;
                 for (Rigidbody *other : _rbs) {
-                        if (rb == other && intersects(rb->collider, other->collider)) {
+                        if (rb != other && intersects(rb->collider, other->collider)) {
                                 inter = true;
                                 break;
                         }
                 }
 
+                Logger::notify() << "intersects? " << std::boolalpha << inter << "\n";
                 if (!inter) {
                         rb->add_force(rb->mass * gravity, delta_t);
                         rb->transform->move(rb->velocity * delta_t);

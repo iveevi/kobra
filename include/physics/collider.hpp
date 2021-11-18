@@ -7,7 +7,6 @@
 // Engine headers
 #include "include/transform.hpp"
 #include "include/rendering.hpp"
-#include "include/lighting.hpp"
 #include "include/physics/aabb.hpp"
 
 namespace mercury {
@@ -45,7 +44,7 @@ struct BoxCollider : public Collider {
 	BoxCollider(const glm::vec3 &, const glm::vec3 &, Transform *);
 
 	// Methods
-	void annotate(lighting::Daemon &) const;
+	void annotate(rendering::Daemon &, Shader *) const;
 
 	// Virtual overrides
 	virtual AABB aabb() const override;
