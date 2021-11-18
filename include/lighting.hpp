@@ -12,6 +12,7 @@
 #include "include/shader.hpp"
 #include "include/rendering.hpp"
 #include "include/material.hpp"
+#include "include/transform.hpp"
 
 namespace mercury {
 
@@ -107,7 +108,7 @@ public:
 
 	// Add an object and specify the shading type
 	void add_object(Mesh *, Shading = FULL_PHONG);
-	void add_object(Mesh *, glm::mat4 *, Shading = FULL_PHONG);
+	void add_object(Mesh *, Transform *, Shading = FULL_PHONG);
 
 	// Sets the lighting for each object
 	void light();

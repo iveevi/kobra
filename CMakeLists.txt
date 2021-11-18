@@ -21,7 +21,7 @@ endif()
 set(CMAKE_CXX_STANDARD 14)
 
 # Set default compiler flags
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wunused-variable")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wunused-variable -fno-rtti")
 
 # Set debug compiler flags
 if (${CMAKE_BUILD_TYPE} MATCHES Debug)
@@ -47,14 +47,18 @@ set(MERCURY_SOURCE
 	source/mouse_bus.cpp
 	source/rendering.cpp
 	source/shader.cpp
+	source/transform.cpp
 
 	source/engine/camera.cpp
 	source/engine/monitors.cpp
 	source/engine/skybox.cpp
 
 	source/mesh/basic.cpp
-	source/mesh/sphere.cpp
 	source/mesh/cuboid.cpp
+	source/mesh/sphere.cpp
+
+	source/physics/physics.cpp
+	source/physics/rigidbody.cpp
 
 	source/ui/button.cpp
 	source/ui/pure_rect.cpp

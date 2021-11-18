@@ -11,6 +11,7 @@
 #include "include/logger.hpp"
 #include "include/drawable.hpp"
 #include "include/shader.hpp"
+#include "include/transform.hpp"
 
 namespace mercury {
 
@@ -23,11 +24,11 @@ class Daemon {
         using DMap = std::unordered_map <Drawable *, Resource>;
 
         // Default model: TODO: make a transform
-        glm::mat4			_default_model = glm::mat4(1.0);
+        Transform			_default_transform;
 
         // Drawable maps
         DMap <Shader *>			_shader_map;
-        DMap <glm::mat4 *>		_model_map;             // TODO: change to transforms map
+        DMap <Transform *>		_transform_map;
 
         // All drawables
         std::vector <Drawable *>        _drawables;
@@ -36,7 +37,7 @@ class Daemon {
         void _render(Drawable *);
 public:
         void add(Drawable *, Shader *);
-        void add(Drawable *, Shader *, glm::mat4 *);
+        void add(Drawable *, Shader *, Transform *);
 
         void render();
 };

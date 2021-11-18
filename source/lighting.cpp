@@ -205,7 +205,7 @@ void Daemon::add_object(Mesh *mesh, Shading type)
 	}
 }
 
-void Daemon::add_object(Mesh *mesh, glm::mat4 *model, Shading type)
+void Daemon::add_object(Mesh *mesh, Transform *transform, Shading type)
 {
 	_robjs.push_back({mesh, type});
 	
@@ -213,11 +213,11 @@ void Daemon::add_object(Mesh *mesh, glm::mat4 *model, Shading type)
 	switch (type) {
 	case COLOR_ONLY:
 		_compile_color_only();
-		_rdaemon->add(mesh, &_shaders.basic, model);
+		_rdaemon->add(mesh, &_shaders.basic, transform);
 		break;
 	case FULL_PHONG:
 		_compile_phong();
-		_rdaemon->add(mesh, &_shaders.phong, model);
+		_rdaemon->add(mesh, &_shaders.phong, transform);
 		break;
 	}
 }

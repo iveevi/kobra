@@ -18,6 +18,8 @@
 #include "include/rendering.hpp"
 #include "include/varray.hpp"
 
+#include "include/physics/physics.hpp"
+
 #include "include/engine/camera.hpp"
 #include "include/engine/monitors.hpp"
 #include "include/engine/skybox.hpp"
@@ -44,22 +46,23 @@ void process_input(GLFWwindow *window, float);
 mercury::Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
 
 // Daemons
-lighting::Daemon ldam;
-rendering::Daemon rdam;
+lighting::Daemon	ldam;
+rendering::Daemon	rdam;
+physics::Daemon		pdam;
 
 // Annotations
 std::vector <Drawable *> annotations;
 
 Shader sphere_shader;		// TODO: change to annotation shader
 
-void add_annotation(SVA3 *sva, const glm::vec3 &color, glm::mat4 *model = nullptr)
+void add_annotation(SVA3 *sva, const glm::vec3 &color, Transform *transform = nullptr)
 {
-	static glm::mat4 default_model(1.0);
+	static Transform default_transform;
 
 	sva->color = color;
 	size_t index = annotations.size();
 	annotations.push_back(sva);
-	rdam.add(annotations[index], &sphere_shader, (model ? model : &default_model));
+	rdam.add(annotations[index], &sphere_shader, (transform ? transform : &default_transform));
 }
 
 void add_annotation(ui::Line *line, const glm::vec3 &color)
@@ -77,8 +80,15 @@ Mesh hit_cube2;
 Mesh hit_cube3;
 
 // Rigidbody components
-glm::mat4 *rb_model = new glm::mat4(1.0);
-glm::vec3 position = {0, 5, 0};
+Transform rb_transform({0, 10, 0});
+
+physics::Rigidbody rb {
+	.transform = &rb_transform
+};
+
+// glm::mat4 *rb_model = new glm::mat4(1.0);
+// glm::vec3 position = {0, 10, 0};
+
 glm::vec3 velocity;
 glm::vec3 gravity {0, -9.81, 0};
 
@@ -167,7 +177,7 @@ void main_initializer()
 
 	ldam.add_light(dirlight);
 
-	ldam.add_object(&hit_cube1, rb_model);
+	ldam.add_object(&hit_cube1, &rb_transform);
 	ldam.add_object(&hit_cube2);
 	ldam.add_object(&hit_cube3);
 
@@ -176,8 +186,11 @@ void main_initializer()
 	// Add objects to the render daemon
 	rdam.add(&sb, winman.cres.sb_shader);
 
+	// Physics objects
+	pdam.add_rb(&rb);
+
 	// Annotations
-	add_annotation(new SVA3(mesh::wireframe_cuboid({0, 0, 0}, {1, 1, 1})), {1.0, 1.0, 0.5}, rb_model);
+	add_annotation(new SVA3(mesh::wireframe_cuboid({0, 0, 0}, {1, 1, 1})), {1.0, 1.0, 0.5}, &rb_transform);
 	add_annotation(new SVA3(mesh::wireframe_cuboid({3, -1, 0}, {10, 1, 10})), {1.0, 1.0, 0.5});
 }
 
@@ -232,6 +245,7 @@ void main_renderer()
 	};
 
 	// Lighut and render scene
+	pdam.update(delta_t);
 	ldam.light();
 	rdam.render();
 
@@ -251,12 +265,12 @@ void main_renderer()
 	sshader->set_mat4("view", view);
 
 	// Do physics
-	velocity += delta_t * gravity;
+	/* velocity += delta_t * gravity;
 
-	if (position.y > 0)
+	if (rb_transform.y > 0)
 		position += delta_t * velocity;
 	
-	*rb_model = _mk_model(position);
+	*rb_model = _mk_model(position); */
 }
 
 // Program render loop condition
