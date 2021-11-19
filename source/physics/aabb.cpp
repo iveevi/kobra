@@ -10,11 +10,11 @@ namespace physics {
 bool AABB::intersects(const AABB &other) const
 {
 	// Edges
-	glm::vec3 emax = center + size;
-	glm::vec3 emin = center - size;
+	glm::vec3 emax = center + size/2.0f;
+	glm::vec3 emin = center - size/2.0f;
 	
-	glm::vec3 omax = other.center + other.size;
-	glm::vec3 omin = other.center - other.size;
+	glm::vec3 omax = other.center + other.size/2.0f;
+	glm::vec3 omin = other.center - other.size/2.0f;
 
 	/* Logger::notify() << "AABB coordinates:\n";
 	Logger::notify() << "\temax = " << emax.x << ", " << emax.y << ", " << emax.z << "\n";

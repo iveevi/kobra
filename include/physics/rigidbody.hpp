@@ -2,25 +2,20 @@
 #define RIGIDBODY_H_
 
 // Engine headers
-#include "include/transform.hpp"
-#include "include/physics/collider.hpp"
+#include "include/physics/collisionbody.hpp"
 
 namespace mercury {
 
 namespace physics {
 
 // Rigidbody structure
-struct Rigidbody {
-	// Required sub-structures
-	Transform *	transform;	// TODO: copies pointer from collider
-	Collider *	collider;
-
+struct RigidBody : public CollisionBody {
 	// Members
 	glm::vec3	velocity;
 	float		mass;
 
 	// Constructors
-	Rigidbody(float, Transform *, Collider *);
+	RigidBody(float, Transform *, Collider *);
 
 	// TODO: account for anglular velocity
 

@@ -43,7 +43,7 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void process_input(GLFWwindow *window, float);
 
 // Camera
-mercury::Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
+mercury::Camera camera(glm::vec3(0.0f, 4.0f, 10.0f));
 
 // Daemons
 lighting::Daemon	ldam;
@@ -84,14 +84,14 @@ Mesh hit_cube2;
 Mesh hit_cube3;
 
 // Rigidbody components
-Transform rb_transform({0, 1.5, 0}); //, {30, 30, 30});
+Transform rb_transform({0, 10, 0}, {30, 30, 30});
 Transform floor_transform({0, -1, 0}); //, {0, 0, -10});
 
 physics::BoxCollider rb_collider({1, 1, 1}, &rb_transform);
 physics::BoxCollider floor_collider({10, 1, 10}, &floor_transform);
 
-physics::Rigidbody rb(1.0f, &rb_transform, &rb_collider);
-physics::Rigidbody fl(1.0f, &floor_transform, &floor_collider);
+physics::RigidBody rb(1.0f, &rb_transform, &rb_collider);
+physics::RigidBody fl(1.0f, &floor_transform, &floor_collider);
 
 // glm::mat4 *rb_model = new glm::mat4(1.0);
 // glm::vec3 position = {0, 10, 0};
@@ -193,8 +193,8 @@ void main_initializer()
 	// Add objects to the render daemon
 	rdam.add(&sb, winman.cres.sb_shader);
 
-	physics::AABB box1 = rb_collider.aabb();
-	box1.annotate(rdam, &sphere_shader);
+	// physics::AABB box1 = rb_collider.aabb();
+	// box1.annotate(rdam, &sphere_shader);
 	
 	physics::AABB box2 = floor_collider.aabb();
 	box2.annotate(rdam, &sphere_shader);
@@ -203,11 +203,14 @@ void main_initializer()
 
 	// Physics objects
 	pdam.add_rb(&rb);
-	pdam.add_rb(&fl);
+	pdam.add_cb(&fl);
 
 	// Annotations
-	rb_collider.annotate(rdam, &sphere_shader);
-	floor_collider.annotate(rdam, &sphere_shader);
+	// rb_collider.annotate(rdam, &sphere_shader);
+	// floor_collider.annotate(rdam, &sphere_shader);
+
+	// add_annotation(new SVA3(mesh::wireframe_cuboid({0, 0, 0}, {15, 0.1, 15})), {0.5, 1.0, 1.0});
+	// add_annotation(new SVA3(mesh::wireframe_sphere({0, 0, 0}, 0.1)), {0.5, 1.0, 1.0});
 }
 
 // TODO: into linalg
@@ -288,6 +291,10 @@ void main_renderer()
 		position += delta_t * velocity;
 	
 	*rb_model = _mk_model(position); */
+	physics::AABB ab = rb_collider.aabb();
+	SVA3 box = mesh::wireframe_cuboid(ab.center, ab.size);
+	box.color = {1.0, 1.0, 0.5};
+	box.draw(&sphere_shader);
 }
 
 // Program render loop condition

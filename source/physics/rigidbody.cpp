@@ -5,11 +5,11 @@ namespace mercury {
 namespace physics {
 
 // Constructors
-Rigidbody::Rigidbody(float m, Transform *t, Collider *c)
-	: mass(m), transform(t), collider(c) {}
+RigidBody::RigidBody(float m, Transform *t, Collider *c)
+	: CollisionBody(t, c), mass(m) {}
 
 // Methods
-void Rigidbody::add_force(const glm::vec3 &force, float delta_t)
+void RigidBody::add_force(const glm::vec3 &force, float delta_t)
 {
 	// Semi-implicit euler integration
 	velocity += delta_t * force/mass;
