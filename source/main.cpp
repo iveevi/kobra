@@ -196,7 +196,7 @@ bool same_direction(const glm::vec3 &v1, const glm::vec3 &v2)
 // Simplex stages (TODO: should be these be Simplex methods?)
 bool line_simplex(Simplex &simplex, glm::vec3 &dir)
 {
-	Logger::warn() << "SIMPLEX-Line stage.\n";
+	// Logger::warn() << "SIMPLEX-Line stage.\n";
 	glm::vec3 a = simplex[0];
 	glm::vec3 b = simplex[1];
 
@@ -215,7 +215,7 @@ bool line_simplex(Simplex &simplex, glm::vec3 &dir)
 
 bool triangle_simplex(Simplex &simplex, glm::vec3 &dir)
 {
-	Logger::warn() << "SIMPLEX-Triangle stage.\n";
+	// Logger::warn() << "SIMPLEX-Triangle stage.\n";
 	glm::vec3 a = simplex[0];
 	glm::vec3 b = simplex[1];
 	glm::vec3 c = simplex[2];
@@ -253,7 +253,7 @@ bool triangle_simplex(Simplex &simplex, glm::vec3 &dir)
 
 bool tetrahedron_simplex(Simplex &simplex, glm::vec3 &dir)
 {
-	Logger::warn() << "SIMPLEX-Tetrahedron stage.\n";
+	// Logger::warn() << "SIMPLEX-Tetrahedron stage.\n";
 	glm::vec3 a = simplex[0];
 	glm::vec3 b = simplex[1];
 	glm::vec3 c = simplex[2];
@@ -266,27 +266,27 @@ bool tetrahedron_simplex(Simplex &simplex, glm::vec3 &dir)
 
 	glm::vec3 abc = glm::cross(ab, ac);
 	glm::vec3 acd = glm::cross(ac, ad);
-	glm::vec3 adb = glm::cross(ab, ad);
+	glm::vec3 adb = glm::cross(ad, ab);
 
 	if (same_direction(abc, ao)) {
 		simplex = {a, b, c};
-		Logger::warn() << "\tSIMPLEX-Tetrahedron SUB-stage: abc.\n";
+		// Logger::warn() << "\tSIMPLEX-Tetrahedron SUB-stage: abc.\n";
 		return triangle_simplex(simplex, dir);
 	}
 		
 	if (same_direction(acd, ao)) {
 		simplex = {a, c, d};
-		Logger::warn() << "\tSIMPLEX-Tetrahedron SUB-stage: acd.\n";
+		// Logger::warn() << "\tSIMPLEX-Tetrahedron SUB-stage: acd.\n";
 		return triangle_simplex(simplex, dir);
 	}
  
 	if (same_direction(adb, ao)) {
 		simplex = {a, d, b};
-		Logger::warn() << "\tSIMPLEX-Tetrahedron SUB-stage: adb.\n";
+		// Logger::warn() << "\tSIMPLEX-Tetrahedron SUB-stage: adb.\n";
 		return triangle_simplex(simplex, dir);
 	}
 
-	Logger::warn() << "\tSIMPLEX-Tetrahedron Stage COMPLETED\n";
+	// Logger::warn() << "\tSIMPLEX-Tetrahedron Stage COMPLETED\n";
 
 	return true;
 }
@@ -309,7 +309,7 @@ bool next_simplex(Simplex &simplex, glm::vec3 &dir)
 
 bool gjk(const Collider *a, const Collider *b)
 {
-	Logger::notify() << "Inside GJK function.\n";
+	// Logger::notify() << "Inside GJK function.\n";
 
 	Collider::Vertices va = a->vertices();
 	Collider::Vertices vb = b->vertices();
@@ -326,8 +326,8 @@ bool gjk(const Collider *a, const Collider *b)
 	dir = -s;
 
 	size_t i = 0;
-	while (true) {
-		Logger::notify() << "\tDirection = " << dir << "\n";
+	while (i++ < 100) {
+		// Logger::notify() << "\tDirection = " << dir << "\n";
 		
 		// Support
 		s = support(dir, va, vb);
@@ -340,6 +340,8 @@ bool gjk(const Collider *a, const Collider *b)
 		if (next_simplex(simplex, dir))
 			return true;
 	}
+
+	Logger::fatal_error("GJK failed to converge.");
 }
 
 void main_initializer()
@@ -435,7 +437,7 @@ void main_initializer()
 
 	// add_annotation(new SVA3(mesh::wireframe_cuboid({0, 0, 0}, {15, 0.1, 15})), {0.5, 1.0, 1.0});
 	// add_annotation(new SVA3(mesh::wireframe_sphere({0, 0, 0}, 0.1)), {0.5, 1.0, 1.0});
-	Logger::notify() << "GJK RESULT = " << std::boolalpha << gjk(&t2_collider, &floor_collider) << std::endl;
+	// Logger::notify() << "GJK RESULT = " << std::boolalpha << gjk(&t2_collider, &floor_collider) << std::endl;
 	// Logger::notify() << "GJK RESULT (2) = " << std::boolalpha << gjk(&rb_collider, &floor_collider) << std::endl;
 	// Logger::notify() << "GJK RESULT (3) = " << std::boolalpha << gjk(&t2_collider, &rb_collider) << std::endl;
 }
@@ -597,13 +599,13 @@ void process_input(GLFWwindow *window, float delta_t)
 
 	// Rotating a box
 	if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
-		t2.rotate(0.01f * glm::vec3(0, 0, 1));
+		t2.rotate(0.05f * glm::vec3(0, 0, 1));
 		bool k = gjk(&t2_collider, &floor_collider);
 		Logger::notify() << "GJK RESULT = " << std::boolalpha << k << std::endl;
 	}
 
 	if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
-		t2.rotate(-0.01f * glm::vec3(0, 0, 1));
+		t2.rotate(-0.05f * glm::vec3(0, 0, 1));
 		bool k = gjk(&t2_collider, &floor_collider);
 		Logger::notify() << "GJK RESULT = " << std::boolalpha << k << std::endl;
 	}
