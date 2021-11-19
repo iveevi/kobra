@@ -14,7 +14,18 @@ Collider::Collider(Transform *tptr) : transform(tptr) {}
 bool intersects(Collider *a, Collider *b)
 {
 	// TODO: should aabb be cached?
-	return intersects(a->aabb(), b->aabb());
+	bool aabb_test = intersects(a->aabb(), b->aabb());
+
+	// First pass
+	if (!aabb_test)
+		return false;
+	
+	// TODO: add a function pointer to colliders
+	// which acts as a custom intersection test
+	// (i.e. for sphere colliders) -> by default is nullptr
+
+	// Now onto more complicated tests
+	return true;
 }
 
 // Box Collider
@@ -41,25 +52,7 @@ void BoxCollider::annotate(rendering::Daemon &rdam, Shader *shader) const
 
 AABB BoxCollider::aabb() const
 {
-	glm::mat4 model = transform->model();
-	glm::vec3 ncenter = glm::vec3(model * glm::vec4(center, 1.0f));
-	glm::vec3 nsize = size * transform->scale/2.0f;			// Only consdider scale
-
-	// All vertices
-	glm::vec3 nright = glm::normalize(glm::vec3(model * glm::vec4 {1.0, 0.0, 0.0, 0.0}));
-	glm::vec3 nup = glm::normalize(glm::vec3(model * glm::vec4 {0.0, 1.0, 0.0, 0.0}));
-	glm::vec3 nforward = glm::normalize(glm::vec3(model * glm::vec4 {0.0, 0.0, 1.0, 0.0}));
-
-	std::vector <glm::vec3> vertices {
-		ncenter + nright * nsize.x + nup * nsize.y + nforward * nsize.z,
-		ncenter + nright * nsize.x + nup * nsize.y - nforward * nsize.z,
-		ncenter + nright * nsize.x - nup * nsize.y + nforward * nsize.z,
-		ncenter + nright * nsize.x - nup * nsize.y - nforward * nsize.z,
-		ncenter - nright * nsize.x + nup * nsize.y + nforward * nsize.z,
-		ncenter - nright * nsize.x + nup * nsize.y - nforward * nsize.z,
-		ncenter - nright * nsize.x - nup * nsize.y + nforward * nsize.z,
-		ncenter - nright * nsize.x - nup * nsize.y - nforward * nsize.z
-	};
+	Vertices verts = vertices();
 
 	// Max and min axial coordinates
 	float max_x, max_y, max_z;
@@ -73,7 +66,7 @@ AABB BoxCollider::aabb() const
 	Logger::notify() << "--> mins: <" << min_x << ", " << min_y << ", " << min_z << ">\n";
 	Logger::notify() << "--> maxs: <" << max_x << ", " << max_y << ", " << max_z << ">\n"; */
 	
-	for (auto &v : vertices) {
+	for (auto &v : verts) {
 		// Logger::notify() << "\tVertex: " << v.x << ", " << v.y << ", " << v.z << "\n";
 		if (v.x > max_x) max_x = v.x;
 		if (v.y > max_y) max_y = v.y;
@@ -108,6 +101,30 @@ AABB BoxCollider::aabb() const
 
 	// Return AABB
 	return AABB {box_center, box_size};
+}
+
+Collider::Vertices BoxCollider::vertices() const
+{
+	glm::mat4 model = transform->model();
+	glm::vec3 ncenter = glm::vec3(model * glm::vec4(center, 1.0f));
+	glm::vec3 nsize = size * transform->scale/2.0f;			// Only consdider scale
+
+	// All vertices
+	glm::vec3 nright = glm::normalize(glm::vec3(model * glm::vec4 {1.0, 0.0, 0.0, 0.0}));
+	glm::vec3 nup = glm::normalize(glm::vec3(model * glm::vec4 {0.0, 1.0, 0.0, 0.0}));
+	glm::vec3 nforward = glm::normalize(glm::vec3(model * glm::vec4 {0.0, 0.0, 1.0, 0.0}));
+
+	// TODO: cache these
+	return {
+		ncenter + nright * nsize.x + nup * nsize.y + nforward * nsize.z,
+		ncenter + nright * nsize.x + nup * nsize.y - nforward * nsize.z,
+		ncenter + nright * nsize.x - nup * nsize.y + nforward * nsize.z,
+		ncenter + nright * nsize.x - nup * nsize.y - nforward * nsize.z,
+		ncenter - nright * nsize.x + nup * nsize.y + nforward * nsize.z,
+		ncenter - nright * nsize.x + nup * nsize.y - nforward * nsize.z,
+		ncenter - nright * nsize.x - nup * nsize.y + nforward * nsize.z,
+		ncenter - nright * nsize.x - nup * nsize.y - nforward * nsize.z
+	};
 }
 
 }

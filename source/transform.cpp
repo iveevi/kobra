@@ -20,6 +20,11 @@ void Transform::move(const glm::vec3 &dpos)
         translation += dpos;
 }
 
+void Transform::rotate(const glm::vec3 &drot)
+{
+        erot += drot;
+}
+
 // Returns the model matrix
 glm::mat4 Transform::model() const
 {

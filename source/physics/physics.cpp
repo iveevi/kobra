@@ -23,18 +23,18 @@ void Daemon::update(float delta_t)
         for (RigidBody *rb : _rbs) {    // Only loop through rigid bodies
                 // For now, check that rb is not colliding with anything
                 // TODO: later partition the space and check only those
+                // TODO: need to check if the collision body is active (default yes)
+                
                 bool inter = false;
                 for (CollisionBody *other : _cbs) {
-                        if (rb != other && intersects(rb->collider, other->collider))
-                        {
+                        if (rb != other && intersects(rb->collider, other->collider)) {
                                 inter = true;
                                 break;
                         }
                 }
 
                 Logger::notify() << "intersects? " << std::boolalpha << inter << "\n";
-                if (!inter)
-                {
+                if (!inter) {
                         rb->add_force(rb->mass * gravity, delta_t);
                         rb->transform->move(rb->velocity * delta_t);
                 }

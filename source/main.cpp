@@ -43,7 +43,7 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void process_input(GLFWwindow *window, float);
 
 // Camera
-mercury::Camera camera(glm::vec3(0.0f, 4.0f, 10.0f));
+mercury::Camera camera(glm::vec3(5.0f, 0.0f, 10.0f));
 
 // Daemons
 lighting::Daemon	ldam;
@@ -85,12 +85,15 @@ Mesh hit_cube3;
 
 // Rigidbody components
 Transform rb_transform({0, 10, 0}, {30, 30, 30});
-Transform floor_transform({0, -1, 0}); //, {0, 0, -10});
+Transform t2({6, -2, 0}, {0, 0, 93});
+Transform floor_transform({0, -1, 0}, {0, 0, -10});
 
 physics::BoxCollider rb_collider({1, 1, 1}, &rb_transform);
+physics::BoxCollider t2_collider({1, 2, 1}, &t2);
 physics::BoxCollider floor_collider({10, 1, 10}, &floor_transform);
 
 physics::RigidBody rb(1.0f, &rb_transform, &rb_collider);
+physics::RigidBody t2_rb(1.0f, &t2, &t2_collider);
 physics::RigidBody fl(1.0f, &floor_transform, &floor_collider);
 
 // glm::mat4 *rb_model = new glm::mat4(1.0);
@@ -118,6 +121,226 @@ lighting::DirLight dirlight {
 // Wireframe sphere: TODO: is there a better way than to manually set vertices?
 const glm::vec3 center {1.0, 1.0, 1.0};
 const float radius = 0.2f;
+
+// Collision detection
+using namespace physics;
+
+// GJK Simplex
+class Simplex {
+	glm::vec3	_points[4];
+	size_t		_size;
+public:
+	Simplex() : _size(0) {}
+
+	// Assign with initializer list
+	Simplex &operator=(std::initializer_list <glm::vec3> il) {
+		_size = 0;
+		for (const glm::vec3 &pt : il)
+			_points[_size++] = pt;
+		
+		return *this;
+	}
+
+	// Size
+	size_t size() const {
+		return _size;
+	}
+
+	// Push vector
+	void push(const glm::vec3 &v) {
+		// Cycle the points
+		_points[3] = _points[2];
+		_points[2] = _points[1];
+		_points[1] = _points[0];
+		_points[0] = v;
+
+		// Cap the index
+		_size = std::min(_size + 1, 4UL);
+	}
+
+	// Indexing
+	const glm::vec3 &operator[](size_t index) const {
+		return _points[index];
+	}
+};
+
+// TODO: implement as a virtual function for colliders (resolved sphere collider issues)
+glm::vec3 support(const glm::vec3 &dir, const Collider::Vertices &vertices)
+{
+	glm::vec3 vmax;
+
+	float dmax = -std::numeric_limits <float> ::max();
+	for (const glm::vec3 &v : vertices) {
+		float d = glm::dot(dir, v);
+
+		if (d > dmax) {
+			dmax = d;
+			vmax = v;
+		}
+	}
+
+	return vmax;
+}
+
+glm::vec3 support(const glm::vec3 &dir, const Collider::Vertices &vs1, const Collider::Vertices &vs2)
+{
+	return support(dir, vs1) - support(-dir, vs2);
+}
+
+// Check if vectors are in the same direction (TODO: put in linalg)
+bool same_direction(const glm::vec3 &v1, const glm::vec3 &v2)
+{
+	return glm::dot(v1, v2) > 0;
+}
+
+// Simplex stages (TODO: should be these be Simplex methods?)
+bool line_simplex(Simplex &simplex, glm::vec3 &dir)
+{
+	Logger::warn() << "SIMPLEX-Line stage.\n";
+	glm::vec3 a = simplex[0];
+	glm::vec3 b = simplex[1];
+
+	glm::vec3 ab = b - a;
+	glm::vec3 ao = -a;
+
+	if (same_direction(ab, ao)) {
+		dir = glm::cross(glm::cross(ab, ao), ab);
+	} else {
+		simplex = {a};
+		dir = ab;
+	}
+
+	return false;
+}
+
+bool triangle_simplex(Simplex &simplex, glm::vec3 &dir)
+{
+	Logger::warn() << "SIMPLEX-Triangle stage.\n";
+	glm::vec3 a = simplex[0];
+	glm::vec3 b = simplex[1];
+	glm::vec3 c = simplex[2];
+
+	glm::vec3 ab = b - a;
+	glm::vec3 ac = c - a;
+	glm::vec3 ao = -a;
+
+	glm::vec3 abc = glm::cross(ab, ac);
+
+	if (same_direction(glm::cross(abc, ac), ao)) {
+		if (same_direction(ac, ao)) {
+			simplex = {a, c};
+			dir = glm::cross(glm::cross(ac, ao), ac);
+		} else {
+			simplex = {a, b};
+			return line_simplex(simplex, dir);
+		}
+	} else {
+		if (same_direction(glm::cross(ab, abc), ao)) {
+			simplex = {a, b};
+			return line_simplex(simplex, dir);
+		} else {
+			if (same_direction(abc, ao)) {
+				dir = abc;
+			} else {
+				simplex = {a, b, c};
+				dir = -abc;
+			}
+		}
+	}
+
+	return false;
+}
+
+bool tetrahedron_simplex(Simplex &simplex, glm::vec3 &dir)
+{
+	Logger::warn() << "SIMPLEX-Tetrahedron stage.\n";
+	glm::vec3 a = simplex[0];
+	glm::vec3 b = simplex[1];
+	glm::vec3 c = simplex[2];
+	glm::vec3 d = simplex[3];
+
+	glm::vec3 ab = b - a;
+	glm::vec3 ac = c - a;
+	glm::vec3 ad = d - a;
+	glm::vec3 ao = -a;
+
+	glm::vec3 abc = glm::cross(ab, ac);
+	glm::vec3 acd = glm::cross(ac, ad);
+	glm::vec3 adb = glm::cross(ab, ad);
+
+	if (same_direction(abc, ao)) {
+		simplex = {a, b, c};
+		Logger::warn() << "\tSIMPLEX-Tetrahedron SUB-stage: abc.\n";
+		return triangle_simplex(simplex, dir);
+	}
+		
+	if (same_direction(acd, ao)) {
+		simplex = {a, c, d};
+		Logger::warn() << "\tSIMPLEX-Tetrahedron SUB-stage: acd.\n";
+		return triangle_simplex(simplex, dir);
+	}
+ 
+	if (same_direction(adb, ao)) {
+		simplex = {a, d, b};
+		Logger::warn() << "\tSIMPLEX-Tetrahedron SUB-stage: adb.\n";
+		return triangle_simplex(simplex, dir);
+	}
+
+	Logger::warn() << "\tSIMPLEX-Tetrahedron Stage COMPLETED\n";
+
+	return true;
+}
+
+// Update the simplex (TODO: method)
+bool next_simplex(Simplex &simplex, glm::vec3 &dir)
+{
+	// Cases for each simplex size
+	switch (simplex.size()) {
+	case 2:
+		return line_simplex(simplex, dir);
+	case 3:
+		return triangle_simplex(simplex, dir);
+	case 4:
+		return tetrahedron_simplex(simplex, dir);
+	}
+
+	return false;
+}
+
+bool gjk(const Collider *a, const Collider *b)
+{
+	Logger::notify() << "Inside GJK function.\n";
+
+	Collider::Vertices va = a->vertices();
+	Collider::Vertices vb = b->vertices();
+
+	// Simplex
+	Simplex simplex;
+
+	// First direction and support
+	glm::vec3 dir {1.0f, 0.0f, 0.0f};
+	glm::vec3 s = support(dir, va, vb);
+	simplex.push(s);
+
+	// Next direction
+	dir = -s;
+
+	size_t i = 0;
+	while (true) {
+		Logger::notify() << "\tDirection = " << dir << "\n";
+		
+		// Support
+		s = support(dir, va, vb);
+
+		// Check for no intersection
+		if (glm::dot(s, dir) <= 0.0f)
+			return false;
+		
+		simplex.push(s);
+		if (next_simplex(simplex, dir))
+			return true;
+	}
+}
 
 void main_initializer()
 {
@@ -148,7 +371,7 @@ void main_initializer()
 
 	// Meshes
 	hit_cube1 = mesh::cuboid({0, 0, 0}, 1, 1, 1);
-	hit_cube2 = mesh::cuboid({3, 1.5, 0.0}, 1, 2, 1);
+	hit_cube2 = mesh::cuboid({0, 0, 0}, 1, 2, 1);
 	hit_cube3 = mesh::cuboid({0, 0, 0}, 10, 1, 10);	// TODO: size only function
 	
 	// Set the materials
@@ -185,7 +408,7 @@ void main_initializer()
 	ldam.add_light(dirlight);
 
 	ldam.add_object(&hit_cube1, &rb_transform);
-	ldam.add_object(&hit_cube2);
+	ldam.add_object(&hit_cube2, &t2);
 	ldam.add_object(&hit_cube3, &floor_transform);
 
 	// ldam.add_object(&tree);
@@ -202,8 +425,9 @@ void main_initializer()
 	// Logger::notify() << "INTERSECTS: " << std::boolalpha << box1.intersects(box2) << "\n";
 
 	// Physics objects
-	pdam.add_rb(&rb);
-	pdam.add_cb(&fl);
+	// pdam.add_rb(&rb);
+	// pdam.add_rb(&t2_rb);
+	// pdam.add_cb(&fl);
 
 	// Annotations
 	// rb_collider.annotate(rdam, &sphere_shader);
@@ -211,6 +435,9 @@ void main_initializer()
 
 	// add_annotation(new SVA3(mesh::wireframe_cuboid({0, 0, 0}, {15, 0.1, 15})), {0.5, 1.0, 1.0});
 	// add_annotation(new SVA3(mesh::wireframe_sphere({0, 0, 0}, 0.1)), {0.5, 1.0, 1.0});
+	Logger::notify() << "GJK RESULT = " << std::boolalpha << gjk(&t2_collider, &floor_collider) << std::endl;
+	// Logger::notify() << "GJK RESULT (2) = " << std::boolalpha << gjk(&rb_collider, &floor_collider) << std::endl;
+	// Logger::notify() << "GJK RESULT (3) = " << std::boolalpha << gjk(&t2_collider, &rb_collider) << std::endl;
 }
 
 // TODO: into linalg
@@ -283,18 +510,29 @@ void main_renderer()
 	sshader->set_mat4("projection", projection);
 	sshader->set_mat4("view", view);
 
-	// Do physics
-	// Logger::notify() << "Transform position = " << rb_transform.translation << std::endl;
-	/* velocity += delta_t * gravity;
-
-	if (rb_transform.y > 0)
-		position += delta_t * velocity;
+	// Draw bounding boxes
+	physics::AABB ab;
+	SVA3 box;
 	
-	*rb_model = _mk_model(position); */
-	physics::AABB ab = rb_collider.aabb();
-	SVA3 box = mesh::wireframe_cuboid(ab.center, ab.size);
+	ab = rb_collider.aabb();
+	box = mesh::wireframe_cuboid(ab.center, ab.size);
 	box.color = {1.0, 1.0, 0.5};
 	box.draw(&sphere_shader);
+	
+	ab = t2_collider.aabb();
+	box = mesh::wireframe_cuboid(ab.center, ab.size);
+	box.color = {1.0, 1.0, 0.5};
+	box.draw(&sphere_shader);
+
+	if (gjk(&t2_collider, &floor_collider)) {
+		hit_cube2.set_material({
+			.color = {1.0, 0.0, 0.0}
+		});
+	} else {
+		hit_cube2.set_material({
+			.color = {0.0, 0.0, 1.0}
+		});
+	}
 }
 
 // Program render loop condition
@@ -356,6 +594,19 @@ void process_input(GLFWwindow *window, float delta_t)
 		camera.move(-cameraSpeed * camera.up);
 	if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
 		camera.move(cameraSpeed * camera.up);
+
+	// Rotating a box
+	if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+		t2.rotate(0.01f * glm::vec3(0, 0, 1));
+		bool k = gjk(&t2_collider, &floor_collider);
+		Logger::notify() << "GJK RESULT = " << std::boolalpha << k << std::endl;
+	}
+
+	if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+		t2.rotate(-0.01f * glm::vec3(0, 0, 1));
+		bool k = gjk(&t2_collider, &floor_collider);
+		Logger::notify() << "GJK RESULT = " << std::boolalpha << k << std::endl;
+	}
 }
 
 // Variables for mouse movement

@@ -17,6 +17,7 @@ namespace physics {
 struct Collider {
 	// Aliases	
 	using Interval = std::pair <float, float>;
+	using Vertices = std::vector <glm::vec3>;
 
 	// Members
 	Transform *transform;
@@ -25,7 +26,12 @@ struct Collider {
 	Collider(Transform *);
 
 	// Get the AABB
+	// TODO: we really only need a support(direction) function
+	// to find furthest points on each aligned axis
 	virtual AABB aabb() const = 0;
+
+	// Get a list of vertices
+	virtual Vertices vertices() const = 0;
 
 	// TODO: interval across SAT axis
 };
@@ -48,6 +54,7 @@ struct BoxCollider : public Collider {
 
 	// Virtual overrides
 	virtual AABB aabb() const override;
+	virtual Vertices vertices() const override;
 };
 
 }

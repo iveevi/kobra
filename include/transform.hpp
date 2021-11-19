@@ -18,6 +18,7 @@ struct Transform {
 
 	// Methods
 	void move(const glm::vec3 &);
+	void rotate(const glm::vec3 &);
 
 	glm::mat4 model() const;
 };
