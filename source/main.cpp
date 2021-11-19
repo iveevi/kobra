@@ -162,6 +162,26 @@ public:
 	const glm::vec3 &operator[](size_t index) const {
 		return _points[index];
 	}
+
+	// Vertices
+	Collider::Vertices vertices() const {
+		Collider::Vertices v;
+		for (size_t i = 0; i < _size; i++)
+			v.push_back(_points[i]);
+		return v;
+	}
+
+	// As SVA3
+	SVA3 sva() const {
+		std::vector <glm::vec3> verts {
+			_points[0], _points[1], _points[2], _points[0],
+			_points[1], _points[3], _points[2], _points[0],
+			_points[1], _points[2], _points[3], _points[0],
+			_points[2], _points[3], _points[0], _points[0]
+		};
+		
+		return SVA3(verts);
+	}
 };
 
 // TODO: implement as a virtual function for colliders (resolved sphere collider issues)
@@ -307,15 +327,12 @@ bool next_simplex(Simplex &simplex, glm::vec3 &dir)
 	return false;
 }
 
-bool gjk(const Collider *a, const Collider *b)
+bool gjk(Simplex &simplex, const Collider *a, const Collider *b)
 {
 	// Logger::notify() << "Inside GJK function.\n";
 
 	Collider::Vertices va = a->vertices();
 	Collider::Vertices vb = b->vertices();
-
-	// Simplex
-	Simplex simplex;
 
 	// First direction and support
 	glm::vec3 dir {1.0f, 0.0f, 0.0f};
@@ -341,7 +358,214 @@ bool gjk(const Collider *a, const Collider *b)
 			return true;
 	}
 
+	// Should not get here
 	Logger::fatal_error("GJK failed to converge.");
+	return false;
+}
+
+// EPA algorithm
+glm::vec3 polytope_center(const Collider::Vertices &vertices)
+{
+	glm::vec3 center {0.0f, 0.0f, 0.0f};
+	for (const glm::vec3 &v : vertices)
+		center += v;
+	return center / (float) vertices.size();
+}
+
+// Get the normals for each face
+struct NormalInfo {
+	glm::vec3 normal;
+	glm::uvec3 face;
+	float distance;
+
+	std::vector <glm::vec3> nfaces;
+};
+
+NormalInfo face_normals(const Collider::Vertices &vertices, const std::vector <glm::uvec3> &faces)
+{
+	// List of all normals
+	std::vector <glm::vec3> normals;
+
+	// Minimum info
+	glm::uvec3 minf = {0, 0, 0};
+	glm::vec3 minn = {0.0f, 0.0f, 0.0f};
+	float mind = std::numeric_limits <float> ::max();
+
+	for (const glm::uvec3 &face : faces) {
+		glm::vec3 a = vertices[face[0]];
+		glm::vec3 b = vertices[face[1]];
+		glm::vec3 c = vertices[face[2]];
+
+		glm::vec3 ab = b - a;
+		glm::vec3 ac = c - a;
+		glm::vec3 n = glm::cross(ab, ac);
+
+		// TODO: we can check if the normal is reversed,
+		// and then recerse it if needed to avoid having to check it later
+		float d = glm::dot(n, a);	// TODO: Should be with the center, right?
+
+		if (d < mind) {
+			mind = d;
+			minf = face;
+			minn = n;
+		}
+
+		normals.push_back(n);
+	}
+
+	return {minn, minf, mind, normals};
+}
+
+// Check that the normals are facing the right direction (TODO: some linalg function)
+bool check_normals(const Collider::Vertices &vertices, const std::vector <glm::uvec3> &faces, const std::vector <glm::vec3> &normals)
+{
+	glm::vec3 center = polytope_center(vertices);
+
+	for (size_t i = 0; i < faces.size(); i++) {
+		glm::vec3 sample = vertices[faces[i].x] - center;
+		if (glm::dot(sample, normals[i]) < 0.0f)
+			return false;
+	}
+
+	return true;
+}
+
+// Check if a face faces a vertex
+bool faces_vertex(const glm::vec3 face[3], const glm::vec3 &normal, const glm::vec3 &vertex)
+{
+	// NOTE: the first vertex was always used to compute the normal
+	return glm::dot(normal, vertex - face[0]) < 0.0f;
+}
+
+// Expand a polytope with the new vertex
+void expand_polytope(Collider::Vertices &vertices,
+		std::vector <glm::uvec3> &faces,
+		const std::vector <glm::vec3> &normals,
+		const glm::vec3 &svert)
+{
+	// Edge structure
+	struct Edge {
+		unsigned int a;
+		unsigned int b;
+
+		bool operator==(const Edge &other) const {
+			return (a == other.a) && (b == other.b);
+		}
+	};
+
+	// Edge list
+	std::vector <Edge> edges;
+
+	// Get array of edges in a face
+	auto get_edges = [&] (const glm::uvec3 &face) {
+		Edge e1 {face[0], face[1]};
+		Edge e2 {face[1], face[2]};
+		Edge e3 {face[2], face[0]};
+
+		return std::vector <Edge> {e1, e2, e3};
+	};
+
+	// TODO: we are not going to remove vertices from
+	// the polytope right now. Should this be considered?
+
+	// Iterate over all faces
+	for (size_t i = 0; i < faces.size(); i++) {
+		// Face
+		glm::vec3 vface[3] = {
+			vertices[faces[i].x],
+			vertices[faces[i].y],
+			vertices[faces[i].z]
+		};
+
+		// Check if the face faces the new vertex
+		if (!faces_vertex(vface, normals[i], svert))
+			continue;
+
+		// Get iterator at this posiiton and remove it
+		auto it = faces.begin() + i;
+		faces.erase(it);
+
+		// Get edges
+		glm::uvec3 f = faces[i];
+		Edge iface[3] = {
+			Edge {f.x, f.y},
+			Edge {f.y, f.z},
+			Edge {f.z, f.x}
+		};
+		
+		// Check edges
+		for (size_t i = 0; i < 3; i++) {
+			Edge e = iface[i];
+
+			auto itr = std::find(edges.begin(), edges.end(), e);
+			if (itr == edges.end())
+				edges.erase(itr);	
+			else
+				edges.push_back(e);
+		}
+
+		// Account for the shift in indices
+		i--;
+	}
+
+	// Create the new triangles
+	size_t svi = vertices.size();
+	vertices.push_back(svert);
+	for (const Edge &e : edges) {
+		faces.push_back(
+			{e.a, e.b, svi}
+		);
+	}
+}
+
+glm::vec3 mtv(Simplex &simplex, Collider *a, Collider *b)
+{
+	static const size_t maxi = 100;
+
+	Collider::Vertices polytope = simplex.vertices();
+	std::vector <glm::uvec3> faces {
+		{0, 1, 2},
+		{0, 3, 1},
+		{0, 2, 3},
+		{1, 3, 2}
+	};
+
+	// TODO: set a loop counter a backup notifier for infinite loops
+	size_t i = 0;
+	while (true) {
+		// One interation of EPA
+		NormalInfo ninfo = face_normals(polytope, faces);
+
+		/* Logger::notify() << "EPA index: " << nfaces.second << "\n";
+		for (const glm::vec3 &n : nfaces.first)
+			Logger::notify() << "\tNormal: " << n << "\n"; */
+
+		/* Print all points in the simplex
+		Logger::notify() << "Simplex points: ";
+		for (const glm::vec3 &v : simplex.vertices())
+			Logger::notify() << "\tPoint: " << v << "\n"; */
+		
+		// Get the furthest point from the normal
+		glm::vec3 svert = support(ninfo.normal, a->vertices(), b->vertices());
+		// Logger::notify() << "Support point: " << svert << "\n";
+
+		float sdist = glm::dot(svert, ninfo.normal);
+
+		/* Logger::notify() << "Min distance: " << ninfo.distance << "\n";
+		Logger::notify() << "Support distance: " << sdist << "\n"; */
+
+		if (fabs(sdist - ninfo.distance) < 0.1f) {
+			// Logger::notify() << "Terminate EPA, normal is = " << ninfo.normal << "\n";
+			return ninfo.distance * glm::normalize(ninfo.normal);
+		}
+
+		expand_polytope(polytope, faces, ninfo.nfaces, svert);
+		
+		if (i++ > maxi)
+			Logger::error("MTV Algorithm has exceed [maxi] iterations");
+	}
+
+	return {0, 0, 0};
 }
 
 void main_initializer()
@@ -410,8 +634,8 @@ void main_initializer()
 	ldam.add_light(dirlight);
 
 	ldam.add_object(&hit_cube1, &rb_transform);
-	ldam.add_object(&hit_cube2, &t2);
-	ldam.add_object(&hit_cube3, &floor_transform);
+	//ldam.add_object(&hit_cube2, &t2);
+	//ldam.add_object(&hit_cube3, &floor_transform);
 
 	// ldam.add_object(&tree);
 
@@ -437,9 +661,18 @@ void main_initializer()
 
 	// add_annotation(new SVA3(mesh::wireframe_cuboid({0, 0, 0}, {15, 0.1, 15})), {0.5, 1.0, 1.0});
 	// add_annotation(new SVA3(mesh::wireframe_sphere({0, 0, 0}, 0.1)), {0.5, 1.0, 1.0});
-	// Logger::notify() << "GJK RESULT = " << std::boolalpha << gjk(&t2_collider, &floor_collider) << std::endl;
 	// Logger::notify() << "GJK RESULT (2) = " << std::boolalpha << gjk(&rb_collider, &floor_collider) << std::endl;
 	// Logger::notify() << "GJK RESULT (3) = " << std::boolalpha << gjk(&t2_collider, &rb_collider) << std::endl;
+	
+	Simplex simplex;
+	Logger::notify() << "GJK RESULT = " << std::boolalpha << gjk(simplex, &t2_collider, &floor_collider) << std::endl;
+	add_annotation(new SVA3(simplex.sva()), {0.5, 1.0, 1.0});
+	glm::vec3 t = mtv(simplex, &t2_collider, &floor_collider);
+
+	Logger::warn() << "MTV = " << t << "\n";
+
+	t2.move(-t);
+	Logger::notify() << "GJK RESULT (AGAIN) = " << std::boolalpha << gjk(simplex, &t2_collider, &floor_collider) << std::endl;
 }
 
 // TODO: into linalg
@@ -526,7 +759,7 @@ void main_renderer()
 	box.color = {1.0, 1.0, 0.5};
 	box.draw(&sphere_shader);
 
-	if (gjk(&t2_collider, &floor_collider)) {
+	/* if (gjk(&t2_collider, &floor_collider)) {
 		hit_cube2.set_material({
 			.color = {1.0, 0.0, 0.0}
 		});
@@ -534,7 +767,7 @@ void main_renderer()
 		hit_cube2.set_material({
 			.color = {0.0, 0.0, 1.0}
 		});
-	}
+	} */
 }
 
 // Program render loop condition
@@ -598,17 +831,11 @@ void process_input(GLFWwindow *window, float delta_t)
 		camera.move(cameraSpeed * camera.up);
 
 	// Rotating a box
-	if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+	if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
 		t2.rotate(0.05f * glm::vec3(0, 0, 1));
-		bool k = gjk(&t2_collider, &floor_collider);
-		Logger::notify() << "GJK RESULT = " << std::boolalpha << k << std::endl;
-	}
 
-	if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+	if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
 		t2.rotate(-0.05f * glm::vec3(0, 0, 1));
-		bool k = gjk(&t2_collider, &floor_collider);
-		Logger::notify() << "GJK RESULT = " << std::boolalpha << k << std::endl;
-	}
 }
 
 // Variables for mouse movement
