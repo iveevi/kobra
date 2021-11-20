@@ -281,13 +281,6 @@ bool gjk(Simplex &simplex, const Collider *a, const Collider *b)
 }
 
 // EPA algorithm
-glm::vec3 polytope_center(const Collider::Vertices &vertices)
-{
-	glm::vec3 center {0.0f, 0.0f, 0.0f};
-	for (const glm::vec3 &v : vertices)
-		center += v;
-	return center / (float) vertices.size();
-}
 
 // Get the normals for each face
 struct FaceInfo {
@@ -309,17 +302,10 @@ FaceInfo closest_face(const Collider::Vertices &vertices, const std::vector <glm
 	glm::vec3 minn = {0.0f, 0.0f, 0.0f};
 	float mind = std::numeric_limits <float> ::max();
 
-	glm::vec3 center = polytope_center(vertices);
-
-	Logger::notify() << "Looping through faces:\n";
 	for (const glm::uvec3 &face : faces) {
 		glm::vec3 a = vertices[face[0]];
 		glm::vec3 b = vertices[face[1]];
 		glm::vec3 c = vertices[face[2]];
-		
-		Logger::warn() << "\ta: " << a.x << ", " << a.y << ", " << a.z << "\n";
-		Logger::warn() << "\tb: " << b.x << ", " << b.y << ", " << b.z << "\n";
-		Logger::warn() << "\tc: " << c.x << ", " << c.y << ", " << c.z << "\n\n";
 
 		glm::vec3 ab = b - a;
 		glm::vec3 ac = c - a;
@@ -342,20 +328,6 @@ FaceInfo closest_face(const Collider::Vertices &vertices, const std::vector <glm
 	}
 
 	return {minf, minn, mind, normals};
-}
-
-// Check that the normals are facing the right direction (TODO: some linalg function)
-bool check_normals(const Collider::Vertices &vertices, const std::vector <glm::uvec3> &faces, const std::vector <glm::vec3> &normals)
-{
-	glm::vec3 center = polytope_center(vertices);
-
-	for (size_t i = 0; i < faces.size(); i++) {
-		glm::vec3 sample = vertices[faces[i].x] - center;
-		if (glm::dot(sample, normals[i]) < 0.0f)
-			return false;
-	}
-
-	return true;
 }
 
 // Check if a face faces a vertex
@@ -446,27 +418,6 @@ void expand_polytope(Collider::Vertices &vertices,
 	}
 }
 
-void draw_polytope(const Collider::Vertices &polytope,
-		const std::vector <glm::uvec3> &faces,
-		rendering::Daemon *rdam, Shader *shader,
-		const glm::vec3 &color = {0, 1, 1})
-{
-	// Draw the polytope
-	if (rdam) {
-		SVA3 *sva = new SVA3(polytope, faces);
-		sva->color = color;
-		rdam->add(sva, shader);
-	}
-}
-
-void draw_line(const glm::vec3 &a, const glm::vec3 &b,
-		rendering::Daemon *rdam, Shader *shader,
-		const glm::vec3 &color = {0, 0, 1})
-{
-	SVA3 *line = new SVA3({a, b}, color);
-	rdam->add(line, shader);
-}
-
 glm::vec3 project_origin(const glm::vec3 vert, const glm::vec3 &n)
 {
 	glm::vec3 v = -vert;
@@ -474,22 +425,8 @@ glm::vec3 project_origin(const glm::vec3 vert, const glm::vec3 &n)
 	return - d * n;
 }
 
-glm::vec3 mtv(Simplex &simplex, Collider *a, Collider *b,
-		rendering::Daemon *rdam, Shader *shader)
+glm::vec3 mtv(Simplex &simplex, Collider *a, Collider *b)
 {
-	// static const size_t maxi = 10;
-
-	// Minimum distance encountered
-	//	deals with infinte loops
-	//	from numerical instabilities
-	struct {
-		float		d = std::numeric_limits <float> ::max();
-		glm::vec3	n = {0, 0, 0};
-		size_t		i = 0;		// Number of iterations
-	} min;
-
-	// Logger::notify() << "MTV Algorithm.\n";
-
 	Collider::Vertices polytope = simplex.vertices();
 	std::vector <glm::uvec3> faces {
 		{0, 1, 2},
@@ -499,107 +436,39 @@ glm::vec3 mtv(Simplex &simplex, Collider *a, Collider *b,
 	};
 
 	// TODO: set a loop counter a backup notifier for infinite loops
-	size_t i = 0;
+	Logger::warn("MTV LOOP:");
+
+	float dprev = -1.0f;
 	while (true) {
 		// Get the closest face in the polytope
 		FaceInfo fi = closest_face(polytope, faces);
-
-		// Get the projection of the origin onto the face
-		// glm::vec3 v = project_origin(polytope[fi.face.x], fi.normal);
 
 		// Support in the direction of the normal of the closest face
 		glm::vec3 s = support(fi.normal, a, b);
 		
 		// Compare the distance between the projection and the support
 		float d = glm::dot(s, fi.normal);
-		if (fabs(d - fi.distance) < 1e-4f) {
-			// Success, now returns the MTV
-			Logger::warn() << "Found the convergent support!\n";
-			draw_polytope(polytope, faces, rdam, shader);
-
-			glm::vec3 pa = polytope[fi.face.x];
-
-			glm::vec3 a = project_origin(polytope[fi.face.x], fi.normal);
-			glm::vec3 b = project_origin(s, fi.normal);
-
-			Logger::warn() << "\tmtv A = " << a.x << ", " << a.y << ", " << a.z << "\n";
-			Logger::warn() << "\tmtv B = " << b.x << ", " << b.y << ", " << b.z << "\n";
-
-			// Draw closest face
-			Mesh::AVertex vs {
-				{.position = polytope[fi.face.x]},
-				{.position = polytope[fi.face.y]},
-				{.position = polytope[fi.face.z]}
-			};
-
-			Logger::error() << "\tpolytope[x] = " << polytope[fi.face.x].x << ", " << polytope[fi.face.x].y << ", " << polytope[fi.face.x].z << "\n";
-			Logger::error() << "\tpolytope[y] = " << polytope[fi.face.y].x << ", " << polytope[fi.face.y].y << ", " << polytope[fi.face.y].z << "\n";
-			Logger::error() << "\tpolytope[z] = " << polytope[fi.face.z].x << ", " << polytope[fi.face.z].y << ", " << polytope[fi.face.z].z << "\n";
-
-			Mesh::AIndices is {0, 1, 2};
-
-			Mesh *mtri = new Mesh(vs, {}, is);
-			mtri->set_material({.color = {1, 0, 0}});
-			rdam->add(mtri, shader);
-
-			draw_line({0, 0, 0}, a, rdam, shader);
-			draw_line({0, 0, 0}, pa, rdam, shader, {1, 0.7, 0});
-			draw_line(pa, pa + 10.0f * fi.normal, rdam, shader, {1, 0.7, 0});
-
+		// Logger::notify() << "\tdistance = " << d << std::endl;
+		
+		// Success, now returns the MTV
+		if (fabs(d - fi.distance) < 1e-4f)
 			return project_origin(s, fi.normal);
-		}
 
-		/* One interation of EPA
-		NormalInfo ninfo = face_normals(polytope, faces);
-		bool checked = check_normals(polytope, faces, ninfo.nfaces);
-
-		Logger::notify() << "Iteration " << i++ << ":\n";
-		Logger::notify() << "\tninfo.normal = " << ninfo.normal.x << ", " << ninfo.normal.y << ", " << ninfo.normal.z << "\n";
-		Logger::notify() << "\tninfo.distance = " << ninfo.distance << "\n";
-
-		glm::vec3 svert = support(ninfo.normal, a, b);
-
-		Logger::notify() << "\tsvert = " << svert.x << ", " << svert.y << ", " << svert.z << "\n";
-		Logger::notify() << "\tmin distance = " << ninfo.distance << "\n";
-		
-		float sdist = glm::dot(svert, ninfo.normal);
-
-		Logger::notify() << "\tsdist = " << sdist << "\n";
-		Logger::notify() << "\tdifference = " << sdist - ninfo.distance << "\n\n";
-
-		if (fabs(sdist - ninfo.distance) < 0.00001f) {
-			draw_polytope(polytope, faces, rdam, shader);
-			Logger::notify() << "Terminate EPA, normal is = " << ninfo.normal.x
-				<< ", " << ninfo.normal.y << ", " << ninfo.normal.z << ".\n";
-			return ninfo.distance * glm::normalize(ninfo.normal);
-		}
-		
-		// Secondary option
-		float d = sdist - ninfo.distance;
-		if (d < min.d) {
-			min.d = d;
-			min.n = ninfo.normal;
-			min.i = 0;
-		} else if (fabs(d - min.d) < 0.00001f) {	// Assuming that ninfo is the same
-			min.i++;
-
-			// If many iterations have passed, just return
-			if (min.i > 10) {
-				Logger::warn() << "EPA: Looped multiple times, distance = " << ninfo.distance << ".\n";
-				Logger::warn() << "\tdelta d = " << d << ", min.d = " << min.d << ".\n";
-				return ninfo.distance * glm::normalize(ninfo.normal);
-			}
-		} */
+		// Check if entering loop
+		if (fabs(d - dprev) < 1e-4f)	// TODO: store epsilon
+			return project_origin(s, fi.normal); // Just return it
 
 		expand_polytope(polytope, faces, fi.normals, s);
+
+		// Set previous distances
+		dprev = d;
 	}
 
 	return {0, 0, 0};
 }
 
 // Intersection between two colliders
-Collision intersects(Collider *a, Collider *b,
-		rendering::Daemon *rdam, Shader *shader)
+Collision intersects(Collider *a, Collider *b)
 {
 	// TODO: should aabb be cached?
 	bool aabb_test = intersects(a->aabb(), b->aabb());
@@ -611,7 +480,7 @@ Collision intersects(Collider *a, Collider *b,
 	// Now do GJK
 	Simplex simplex;
 	if (gjk(simplex, a, b))
-		return {mtv(simplex, a, b, rdam, shader), true};
+		return {mtv(simplex, a, b), true};
 
 	// Now onto more complicated tests
 	return {{}, false};

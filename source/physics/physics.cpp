@@ -16,7 +16,7 @@ void Daemon::add_cobject(CollisionObject* co, float mass)
 void Daemon::update(float delta_t)
 {
         static const glm::vec3 gravity{0.0f, -9.81f, 0.0f};
-        static const float dt = 1.0f / 600.0f;                   // Fixed timestep: TODO: this is not enough...
+        static const float dt = 1.0f / 1000.0f;                   // Fixed timestep: TODO: this is not enough...
 
         // TODO: repeat the physics while there is delta_t left
 
@@ -35,12 +35,9 @@ void Daemon::update(float delta_t)
                         
                         // TODO: deal with both sides of the collision
                         if (s.co->type == CollisionObject::Type::DYNAMIC) {
-                                // s.co->transform->move(c.mtv);
+                                s.co->transform->move(-c.mtv);
+                                s.p = -0.8f * glm::length(s.p) * glm::normalize(c.mtv);
                                 // s.p = glm::length(s.p) * glm::normalize(c.mtv);
-                                Logger::notify() << "Collision happened: mtv = " << c.mtv.x << ", " << c.mtv.y << ", " << c.mtv.z << std::endl;
-                                Logger::notify() << "Position = " << s.co->transform->translation.x << ", " << s.co->transform->translation.y << ", " << s.co->transform->translation.z << std::endl;
-                                std::cin.get();
-                                s.p = -s.p;
                         }
                 }
 
@@ -52,16 +49,17 @@ void Daemon::update(float delta_t)
 
         // Apply momentums
         // Logger::warn() << "Moving state objects:\n";
+        // TODO: some way to turn logs on and off
         for (size_t i = 0; i < _state.size(); i++) {
                 State &s = _state[i];
                 
-                Logger::notify() << "\ti = " << i << "\n";
+                /* Logger::notify() << "\ti = " << i << "\n";
                 Logger::error() << "\t\ts.p = " << s.p.x << ", " << s.p.y << ", " << s.p.z << "\n";
-                Logger::error() << "\t\ts.v before = " << s.v.x << ", " << s.v.y << ", " << s.v.z << "\n";
+                Logger::error() << "\t\ts.v before = " << s.v.x << ", " << s.v.y << ", " << s.v.z << "\n"; */
 
                 s.v = s.p * s.inv_mass;
 
-                Logger::error() << "\t\ts.v after = " << s.v.x << ", " << s.v.y << ", " << s.v.z << "\n";
+                // Logger::error() << "\t\ts.v after = " << s.v.x << ", " << s.v.y << ", " << s.v.z << "\n";
 
                 s.co->transform->move(s.v * dt);
         }
