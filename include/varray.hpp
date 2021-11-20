@@ -57,6 +57,30 @@ struct StaticVA : public VertexArray <fields> {
 		}
 		return data;
 	}
+
+	void _push(std::vector <float> &vertices, const glm::vec3 &v) {
+		vertices.push_back(v.x);
+		vertices.push_back(v.y);
+		vertices.push_back(v.z);
+	}
+
+	std::vector <float> flatten(const std::vector <glm::vec3> &vertices,
+		const std::vector <glm::uvec3> &indices) {
+		std::vector <float> data;
+		for (const auto &i : indices) {
+			// Push triples of points for triangles
+			_push(data, vertices[i.x]);
+			_push(data, vertices[i.y]);
+
+			_push(data, vertices[i.y]);
+			_push(data, vertices[i.z]);
+
+			_push(data, vertices[i.z]);
+			_push(data, vertices[i.x]);
+		}
+
+		return data;
+	}
 public:
 	// TODO: pass draw mode as well
 	StaticVA() {}
@@ -66,6 +90,12 @@ public:
 		const glm::vec3 &color = {1.0, 1.0, 1.0},
 		GLenum mode = GL_LINE_STRIP)
 		: StaticVA(flatten(verts), color, mode) {}
+	
+	// Must be GL_LINES
+	StaticVA(const std::vector <glm::vec3> &verts,
+		const std::vector <glm::uvec3> &indices,
+		const glm::vec3 &color = {1.0, 1.0, 1.0})
+		: StaticVA(flatten(verts, indices), color, GL_LINES) {}
 
 	StaticVA(const std::vector <float> &verts,
 		const glm::vec3 &color = {1.0, 1.0, 1.0},

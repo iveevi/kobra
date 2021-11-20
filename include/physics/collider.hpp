@@ -107,7 +107,8 @@ public:
 };
 
 // Intersection between two colliders
-Collision intersects(Collider *, Collider *);
+// TODO: remove extra debugging parameters
+Collision intersects(Collider *, Collider *, rendering::Daemon * = nullptr, Shader * = nullptr);
 
 }
 

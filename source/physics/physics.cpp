@@ -35,6 +35,11 @@ void Daemon::update(float delta_t)
                         
                         // TODO: deal with both sides of the collision
                         if (s.co->type == CollisionObject::Type::DYNAMIC) {
+                                // s.co->transform->move(c.mtv);
+                                // s.p = glm::length(s.p) * glm::normalize(c.mtv);
+                                Logger::notify() << "Collision happened: mtv = " << c.mtv.x << ", " << c.mtv.y << ", " << c.mtv.z << std::endl;
+                                Logger::notify() << "Position = " << s.co->transform->translation.x << ", " << s.co->transform->translation.y << ", " << s.co->transform->translation.z << std::endl;
+                                std::cin.get();
                                 s.p = -s.p;
                         }
                 }
@@ -46,7 +51,7 @@ void Daemon::update(float delta_t)
         }
 
         // Apply momentums
-        Logger::warn() << "Moving state objects:\n";
+        // Logger::warn() << "Moving state objects:\n";
         for (size_t i = 0; i < _state.size(); i++) {
                 State &s = _state[i];
                 

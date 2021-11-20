@@ -84,7 +84,7 @@ Mesh hit_cube2;
 Mesh hit_cube3;
 
 // Collision object components
-Transform t1({0, 10, 0}, {30, 30, 30});
+Transform t1({0, 0.328947, 0}, {30, 30, 30});
 Transform t2({5.5, 3, 0}, {0, 0, 60});
 Transform t3({0, -1, 0}, {0, 0, -10});
 
@@ -191,14 +191,24 @@ void main_initializer()
 	rdam.add(&sb, winman.cres.sb_shader);
 
 	// Physics objects
-	pdam.add_cobject(&t1_co, 1);
-	pdam.add_cobject(&t2_co, 1);
-	pdam.add_cobject(&t3_co, 1);
+	// pdam.add_cobject(&t1_co, 1);
+	// pdam.add_cobject(&t2_co, 1);
+	// pdam.add_cobject(&t3_co, 1);
 
 	// Annotations
 	t1_collider.annotate(rdam, &sphere_shader);
 	t2_collider.annotate(rdam, &sphere_shader);
 	t3_collider.annotate(rdam, &sphere_shader);
+
+	// Check intersections
+	physics::Collision c = intersects(&t1_collider, &t3_collider, &rdam, &sphere_shader);
+	Logger::notify() << "c.colliding = " << std::boolalpha << c.colliding << "\n";
+	Logger::notify() << "c.mtv = " << c.mtv << "\n";
+	Logger::notify() << "c.mtv norm = " << glm::length(c.mtv) << "\n";
+	t1.move(-c.mtv);
+
+	// Add sphere at the center
+	add_annotation(new SVA3(mesh::wireframe_sphere({0, 0, 0}, 0.1)), {0, 1, 0});
 }
 
 // TODO: into linalg
