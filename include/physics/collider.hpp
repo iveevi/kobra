@@ -25,22 +25,16 @@ struct Collider {
 	// Constructors
 	Collider(Transform *);
 
-	// Get the AABB
-	// TODO: we really only need a support(direction) function
-	// to find furthest points on each aligned axis
-	virtual AABB aabb() const = 0;
+	// Make the AABB (using the virtual support function)
+	AABB aabb() const;
 
-	// Get a list of vertices
-	virtual Vertices vertices() const = 0;
-
-	// TODO: interval across SAT axis
+	virtual glm::vec3 support(const glm::vec3 &) const = 0;
 };
 
-// Default intersects method
-bool intersects(Collider *, Collider *);
-
 // Standard colliders
-struct BoxCollider : public Collider {
+class BoxCollider : public Collider {
+	Vertices	_vertices;
+public:
 	// Members
 	glm::vec3 center;		// NOTE: These are local coordinates
 	glm::vec3 size;			// No need for an up vector, comes from transform
@@ -53,9 +47,65 @@ struct BoxCollider : public Collider {
 	void annotate(rendering::Daemon &, Shader *) const;
 
 	// Virtual overrides
-	virtual AABB aabb() const override;
-	virtual Vertices vertices() const override;
+	virtual glm::vec3 support(const glm::vec3 &) const override;
 };
+
+// Srtucture detailing the result of a collision
+struct Collision {
+	glm::vec3	mtv;
+	bool		colliding;
+};
+
+// Simplex structure for the GJK algorithm
+// TODO: separate into source
+class Simplex {
+	glm::vec3	_points[4];
+	size_t		_size;
+public:
+	Simplex() : _size(0) {}
+
+	// Assign with initializer list
+	Simplex &operator=(std::initializer_list <glm::vec3> il) {
+		_size = 0;
+		for (const glm::vec3 &pt : il)
+			_points[_size++] = pt;
+		
+		return *this;
+	}
+
+	// Size
+	size_t size() const {
+		return _size;
+	}
+
+	// Push vector
+	void push(const glm::vec3 &v) {
+		// Cycle the points
+		_points[3] = _points[2];
+		_points[2] = _points[1];
+		_points[1] = _points[0];
+		_points[0] = v;
+
+		// Cap the index
+		_size = std::min(_size + 1, 4UL);
+	}
+
+	// Indexing
+	const glm::vec3 &operator[](size_t index) const {
+		return _points[index];
+	}
+
+	// Vertices
+	Collider::Vertices vertices() const {
+		Collider::Vertices v;
+		for (size_t i = 0; i < _size; i++)
+			v.push_back(_points[i]);
+		return v;
+	}
+};
+
+// Intersection between two colliders
+Collision intersects(Collider *, Collider *);
 
 }
 

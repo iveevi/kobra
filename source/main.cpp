@@ -43,7 +43,7 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void process_input(GLFWwindow *window, float);
 
 // Camera
-mercury::Camera camera(glm::vec3(5.0f, 0.0f, 10.0f));
+mercury::Camera camera(glm::vec3(0.0f, 1.0f, 7.5f));
 
 // Daemons
 lighting::Daemon	ldam;
@@ -85,7 +85,7 @@ Mesh hit_cube3;
 
 // Rigidbody components
 Transform rb_transform({0, 10, 0}, {30, 30, 30});
-Transform t2({6, -2, 0}, {0, 0, 93});
+Transform t2({5.5, 3, 0}, {0, 0, 60});
 Transform floor_transform({0, -1, 0}, {0, 0, -10});
 
 physics::BoxCollider rb_collider({1, 1, 1}, &rb_transform);
@@ -125,86 +125,10 @@ const float radius = 0.2f;
 // Collision detection
 using namespace physics;
 
-// GJK Simplex
-class Simplex {
-	glm::vec3	_points[4];
-	size_t		_size;
-public:
-	Simplex() : _size(0) {}
-
-	// Assign with initializer list
-	Simplex &operator=(std::initializer_list <glm::vec3> il) {
-		_size = 0;
-		for (const glm::vec3 &pt : il)
-			_points[_size++] = pt;
-		
-		return *this;
-	}
-
-	// Size
-	size_t size() const {
-		return _size;
-	}
-
-	// Push vector
-	void push(const glm::vec3 &v) {
-		// Cycle the points
-		_points[3] = _points[2];
-		_points[2] = _points[1];
-		_points[1] = _points[0];
-		_points[0] = v;
-
-		// Cap the index
-		_size = std::min(_size + 1, 4UL);
-	}
-
-	// Indexing
-	const glm::vec3 &operator[](size_t index) const {
-		return _points[index];
-	}
-
-	// Vertices
-	Collider::Vertices vertices() const {
-		Collider::Vertices v;
-		for (size_t i = 0; i < _size; i++)
-			v.push_back(_points[i]);
-		return v;
-	}
-
-	// As SVA3
-	SVA3 sva() const {
-		std::vector <glm::vec3> verts {
-			_points[0], _points[1], _points[2], _points[0],
-			_points[1], _points[3], _points[2], _points[0],
-			_points[1], _points[2], _points[3], _points[0],
-			_points[2], _points[3], _points[0], _points[0]
-		};
-		
-		return SVA3(verts);
-	}
-};
-
-// TODO: implement as a virtual function for colliders (resolved sphere collider issues)
-glm::vec3 support(const glm::vec3 &dir, const Collider::Vertices &vertices)
+/*
+inline glm::vec3 support(const glm::vec3 &dir, const Collider *a, const Collider *b)
 {
-	glm::vec3 vmax;
-
-	float dmax = -std::numeric_limits <float> ::max();
-	for (const glm::vec3 &v : vertices) {
-		float d = glm::dot(dir, v);
-
-		if (d > dmax) {
-			dmax = d;
-			vmax = v;
-		}
-	}
-
-	return vmax;
-}
-
-glm::vec3 support(const glm::vec3 &dir, const Collider::Vertices &vs1, const Collider::Vertices &vs2)
-{
-	return support(dir, vs1) - support(-dir, vs2);
+	return a->support(dir) - b->support(-dir);
 }
 
 // Check if vectors are in the same direction (TODO: put in linalg)
@@ -331,12 +255,9 @@ bool gjk(Simplex &simplex, const Collider *a, const Collider *b)
 {
 	// Logger::notify() << "Inside GJK function.\n";
 
-	Collider::Vertices va = a->vertices();
-	Collider::Vertices vb = b->vertices();
-
 	// First direction and support
 	glm::vec3 dir {1.0f, 0.0f, 0.0f};
-	glm::vec3 s = support(dir, va, vb);
+	glm::vec3 s = support(dir, a, b); // support(dir, va, vb);
 	simplex.push(s);
 
 	// Next direction
@@ -347,7 +268,8 @@ bool gjk(Simplex &simplex, const Collider *a, const Collider *b)
 		// Logger::notify() << "\tDirection = " << dir << "\n";
 		
 		// Support
-		s = support(dir, va, vb);
+		s = support(dir, a, b);
+		// s = support(dir, va, vb);
 
 		// Check for no intersection
 		if (glm::dot(s, dir) <= 0.0f)
@@ -543,16 +465,16 @@ glm::vec3 mtv(Simplex &simplex, Collider *a, Collider *b)
 		/* Print all points in the simplex
 		Logger::notify() << "Simplex points: ";
 		for (const glm::vec3 &v : simplex.vertices())
-			Logger::notify() << "\tPoint: " << v << "\n"; */
+			Logger::notify() << "\tPoint: " << v << "\n";
 		
 		// Get the furthest point from the normal
-		glm::vec3 svert = support(ninfo.normal, a->vertices(), b->vertices());
+		glm::vec3 svert = support(ninfo.normal, a, b);
 		// Logger::notify() << "Support point: " << svert << "\n";
 
 		float sdist = glm::dot(svert, ninfo.normal);
 
 		/* Logger::notify() << "Min distance: " << ninfo.distance << "\n";
-		Logger::notify() << "Support distance: " << sdist << "\n"; */
+		Logger::notify() << "Support distance: " << sdist << "\n";
 
 		if (fabs(sdist - ninfo.distance) < 0.1f) {
 			// Logger::notify() << "Terminate EPA, normal is = " << ninfo.normal << "\n";
@@ -566,7 +488,7 @@ glm::vec3 mtv(Simplex &simplex, Collider *a, Collider *b)
 	}
 
 	return {0, 0, 0};
-}
+} */
 
 void main_initializer()
 {
@@ -634,8 +556,8 @@ void main_initializer()
 	ldam.add_light(dirlight);
 
 	ldam.add_object(&hit_cube1, &rb_transform);
-	//ldam.add_object(&hit_cube2, &t2);
-	//ldam.add_object(&hit_cube3, &floor_transform);
+	ldam.add_object(&hit_cube2, &t2);
+	ldam.add_object(&hit_cube3, &floor_transform);
 
 	// ldam.add_object(&tree);
 
@@ -648,23 +570,17 @@ void main_initializer()
 	physics::AABB box2 = floor_collider.aabb();
 	box2.annotate(rdam, &sphere_shader);
 
-	// Logger::notify() << "INTERSECTS: " << std::boolalpha << box1.intersects(box2) << "\n";
-
 	// Physics objects
-	// pdam.add_rb(&rb);
-	// pdam.add_rb(&t2_rb);
-	// pdam.add_cb(&fl);
+	pdam.add_rb(&rb);
+	pdam.add_rb(&t2_rb);
+	pdam.add_cb(&fl);
 
 	// Annotations
-	// rb_collider.annotate(rdam, &sphere_shader);
-	// floor_collider.annotate(rdam, &sphere_shader);
+	rb_collider.annotate(rdam, &sphere_shader);
+	t2_collider.annotate(rdam, &sphere_shader);
+	floor_collider.annotate(rdam, &sphere_shader);
 
-	// add_annotation(new SVA3(mesh::wireframe_cuboid({0, 0, 0}, {15, 0.1, 15})), {0.5, 1.0, 1.0});
-	// add_annotation(new SVA3(mesh::wireframe_sphere({0, 0, 0}, 0.1)), {0.5, 1.0, 1.0});
-	// Logger::notify() << "GJK RESULT (2) = " << std::boolalpha << gjk(&rb_collider, &floor_collider) << std::endl;
-	// Logger::notify() << "GJK RESULT (3) = " << std::boolalpha << gjk(&t2_collider, &rb_collider) << std::endl;
-	
-	Simplex simplex;
+	/* Simplex simplex;
 	Logger::notify() << "GJK RESULT = " << std::boolalpha << gjk(simplex, &t2_collider, &floor_collider) << std::endl;
 	add_annotation(new SVA3(simplex.sva()), {0.5, 1.0, 1.0});
 	glm::vec3 t = mtv(simplex, &t2_collider, &floor_collider);
@@ -672,7 +588,7 @@ void main_initializer()
 	Logger::warn() << "MTV = " << t << "\n";
 
 	t2.move(-t);
-	Logger::notify() << "GJK RESULT (AGAIN) = " << std::boolalpha << gjk(simplex, &t2_collider, &floor_collider) << std::endl;
+	Logger::notify() << "GJK RESULT (AGAIN) = " << std::boolalpha << gjk(simplex, &t2_collider, &floor_collider) << std::endl; */
 }
 
 // TODO: into linalg

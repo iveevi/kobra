@@ -24,17 +24,27 @@ void Daemon::update(float delta_t)
                 // For now, check that rb is not colliding with anything
                 // TODO: later partition the space and check only those
                 // TODO: need to check if the collision body is active (default yes)
+                glm::vec3 rbf {0, 0, 0};
                 
                 bool inter = false;
                 for (CollisionBody *other : _cbs) {
-                        if (rb != other && intersects(rb->collider, other->collider)) {
+                        if (rb == other)
+                                continue;
+
+                        // TODO: maybe cache the collision results between colliders?
+                        // then from the user's perpective, becomes simpler
+                        Collision c = intersects(rb->collider, other->collider);
+                        if (c.colliding) {
+                                rbf += c.mtv;
                                 inter = true;
                                 break;
                         }
                 }
 
-                Logger::notify() << "intersects? " << std::boolalpha << inter << "\n";
+                // TODO: put in another function
+                // Logger::notify() << "intersects? " << std::boolalpha << inter << "\n";
                 if (!inter) {
+                        rb->add_force(1000.0f * rbf, delta_t);
                         rb->add_force(rb->mass * gravity, delta_t);
                         rb->transform->move(rb->velocity * delta_t);
                 }

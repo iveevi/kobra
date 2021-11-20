@@ -24,6 +24,8 @@ public:
         void add_rb(RigidBody *);	// Must be called to add rigid bodies to the daemon
 	void add_cb(CollisionBody *);
 
+        // TODO: account for different collision algorithms
+
         // Run physics daemon
         void update(float);
 };
