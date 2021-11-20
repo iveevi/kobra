@@ -305,6 +305,7 @@ NormalInfo face_normals(const Collider::Vertices &vertices, const std::vector <g
 	glm::vec3 minn = {0.0f, 0.0f, 0.0f};
 	float mind = std::numeric_limits <float> ::max();
 
+	glm::vec3 center = polytope_center(vertices);
 	for (const glm::uvec3 &face : faces) {
 		glm::vec3 a = vertices[face[0]];
 		glm::vec3 b = vertices[face[1]];
@@ -314,10 +315,11 @@ NormalInfo face_normals(const Collider::Vertices &vertices, const std::vector <g
 		glm::vec3 ac = c - a;
 		glm::vec3 n = glm::cross(ab, ac);
 
-		// TODO: we can check if the normal is reversed,
-		// and then recerse it if needed to avoid having to check it later
-		float d = glm::dot(n, a);	// TODO: Should be with the center, right?
+		// Flip the normal if necessary
+		if (glm::dot(n, a - center) < 0.0f)
+			n = -n;
 
+		float d = glm::dot(n, a);
 		if (d < mind) {
 			mind = d;
 			minf = face;
@@ -434,7 +436,18 @@ void expand_polytope(Collider::Vertices &vertices,
 
 glm::vec3 mtv(Simplex &simplex, Collider *a, Collider *b)
 {
-	static const size_t maxi = 100;
+	// static const size_t maxi = 10;
+
+	// Minimum distance encountered
+	//	deals with infinte loops
+	//	from numerical instabilities
+	struct {
+		float		d = std::numeric_limits <float> ::max();
+		glm::vec3	n = {0, 0, 0};
+		size_t		i = 0;		// Number of iterations
+	} min;
+
+	// Logger::notify() << "MTV Algorithm.\n";
 
 	Collider::Vertices polytope = simplex.vertices();
 	std::vector <glm::uvec3> faces {
@@ -449,24 +462,32 @@ glm::vec3 mtv(Simplex &simplex, Collider *a, Collider *b)
 	while (true) {
 		// One interation of EPA
 		NormalInfo ninfo = face_normals(polytope, faces);
+		bool checked = check_normals(polytope, faces, ninfo.nfaces);
 
-		/* Logger::notify() << "EPA index: " << nfaces.second << "\n";
-		for (const glm::vec3 &n : nfaces.first)
-			Logger::notify() << "\tNormal: " << n << "\n"; */
+		// Logger::notify() << "\tninfo.normal = " << ninfo.normal.x << ", " << ninfo.normal.y << ", " << ninfo.normal.z << "\n";
+		// Logger::notify() << "\tninfo.distance = " << ninfo.distance << "\n";
 
-		/* Print all points in the simplex
-		Logger::notify() << "Simplex points: ";
-		for (const glm::vec3 &v : simplex.vertices())
-			Logger::notify() << "\tPoint: " << v << "\n"; */
-		
-		// Get the furthest point from the normal
 		glm::vec3 svert = support(ninfo.normal, a, b);
-		// Logger::notify() << "Support point: " << svert << "\n";
 
+		// Logger::notify() << "\tsvert = " << svert.x << ", " << svert.y << ", " << svert.z << "\n";
+		
 		float sdist = glm::dot(svert, ninfo.normal);
+		
+		float d = sdist - ninfo.distance;
+		if (d < min.d) {
+			min.d = d;
+			min.n = ninfo.normal;
+			min.i = 0;
+		} else if (fabs(d - min.d) < 0.00001f) {	// Assuming that ninfo is the same
+			min.i++;
 
-		/* Logger::notify() << "Min distance: " << ninfo.distance << "\n";
-		Logger::notify() << "Support distance: " << sdist << "\n"; */
+			// If many iterations have passed, just return
+			if (min.i > 10)
+				return ninfo.distance * glm::normalize(ninfo.normal);
+		}
+
+		// Logger::notify() << "\tsdist = " << sdist << "\n";
+		// Logger::notify() << "\tdifference = " << sdist - ninfo.distance << "\n\n";
 
 		if (fabs(sdist - ninfo.distance) < 0.1f) {
 			// Logger::notify() << "Terminate EPA, normal is = " << ninfo.normal << "\n";
@@ -476,7 +497,7 @@ glm::vec3 mtv(Simplex &simplex, Collider *a, Collider *b)
 		expand_polytope(polytope, faces, ninfo.nfaces, svert);
 		
 		// if (i++ > maxi)
-		//	Logger::error("MTV Algorithm has exceed [maxi] iterations");
+		//	Logger::fatal_error("MTV Algorithm has exceed [maxi] iterations");
 	}
 
 	return {0, 0, 0};
@@ -490,15 +511,15 @@ Collision intersects(Collider *a, Collider *b)
 
 	// Check AABB first
 	if (!aabb_test)
-		return {.colliding = false};
+		return {{}, false};
 
 	// Now do GJK
 	Simplex simplex;
 	if (gjk(simplex, a, b))
-		return {.colliding = true, .mtv = mtv(simplex, a, b)};
+		return {mtv(simplex, a, b), true};
 
 	// Now onto more complicated tests
-	return {.colliding = false};
+	return {{}, false};
 }
 
 

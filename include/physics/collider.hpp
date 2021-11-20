@@ -25,6 +25,8 @@ struct Collider {
 	// Constructors
 	Collider(Transform *);
 
+	// TODO: some way check if the collider has velocity
+
 	// Make the AABB (using the virtual support function)
 	AABB aabb() const;
 

@@ -18,6 +18,9 @@ void Daemon::add_cb(CollisionBody* cb)
 void Daemon::update(float delta_t)
 {
         static const glm::vec3 gravity{0.0f, -9.81f, 0.0f};
+        static const float dt = 1.0f / 600.0f;                   // Fixed timestep
+
+        // TODO: repeat the physics while there is delta_t left
 
         // TODO: check for collisions
         for (RigidBody *rb : _rbs) {    // Only loop through rigid bodies
@@ -35,19 +38,22 @@ void Daemon::update(float delta_t)
                         // then from the user's perpective, becomes simpler
                         Collision c = intersects(rb->collider, other->collider);
                         if (c.colliding) {
-                                rbf += c.mtv;
+                                rbf -= glm::normalize(c.mtv);
                                 inter = true;
                                 break;
                         }
                 }
 
                 // TODO: put in another function
-                // Logger::notify() << "intersects? " << std::boolalpha << inter << "\n";
                 if (!inter) {
-                        rb->add_force(1000.0f * rbf, delta_t);
-                        rb->add_force(rb->mass * gravity, delta_t);
-                        rb->transform->move(rb->velocity * delta_t);
+                        rb->add_force(rb->mass * gravity, dt);
+                } else {
+                        // Kill velocity for now
+                        rb->velocity = -0.8f * rb->velocity; //{0, 0, 0};
                 }
+
+                // Apply all forces        
+                rb->transform->move(rb->velocity * dt);    // TODO: just have an rb method
         }
 }
 

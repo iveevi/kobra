@@ -1,8 +1,6 @@
 # Set CMake version
 cmake_minimum_required(VERSION 3.14)
 
-# TODO: disable rtti (-fno-rtti)
-
 # Settings
 if (EXISTS "/usr/bin/clang++-10")
 	message("${warning}Using Clang compiler${reset}")
@@ -18,7 +16,7 @@ else()
 	set(CMAKE_CXX_COMPILER "${warning}/usr/local/bin/g++-8${reset}")
 endif()
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 
 # Set default compiler flags
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wunused-variable -fno-rtti")
