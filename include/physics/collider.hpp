@@ -20,7 +20,7 @@ struct Collider {
 	using Vertices = std::vector <glm::vec3>;
 
 	// Members
-	Transform *transform;
+	Transform *	transform = nullptr;
 
 	// Constructors
 	Collider(Transform *);

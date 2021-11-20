@@ -83,24 +83,18 @@ Mesh hit_cube1;
 Mesh hit_cube2;
 Mesh hit_cube3;
 
-// Rigidbody components
-Transform rb_transform({0, 10, 0}, {30, 30, 30});
+// Collision object components
+Transform t1({0, 10, 0}, {30, 30, 30});
 Transform t2({5.5, 3, 0}, {0, 0, 60});
-Transform floor_transform({0, -1, 0}, {0, 0, -10});
+Transform t3({0, -1, 0}, {0, 0, -10});
 
-physics::BoxCollider rb_collider({1, 1, 1}, &rb_transform);
+physics::BoxCollider t1_collider({1, 1, 1}, &t1);
 physics::BoxCollider t2_collider({1, 2, 1}, &t2);
-physics::BoxCollider floor_collider({10, 1, 10}, &floor_transform);
+physics::BoxCollider t3_collider({10, 1, 10}, &t3);
 
-physics::RigidBody rb(1.0f, &rb_transform, &rb_collider);
-physics::RigidBody t2_rb(1.0f, &t2, &t2_collider);
-physics::RigidBody fl(1.0f, &floor_transform, &floor_collider);
-
-// glm::mat4 *rb_model = new glm::mat4(1.0);
-// glm::vec3 position = {0, 10, 0};
-
-glm::vec3 velocity;
-glm::vec3 gravity {0, -9.81, 0};
+physics::CollisionObject t1_co(&t1_collider, physics::CollisionObject::Type::DYNAMIC);
+physics::CollisionObject t2_co(&t2_collider, physics::CollisionObject::Type::DYNAMIC);
+physics::CollisionObject t3_co(&t3_collider);
 
 // Skybox
 Skybox sb;
@@ -187,40 +181,24 @@ void main_initializer()
 
 	ldam.add_light(dirlight);
 
-	ldam.add_object(&hit_cube1, &rb_transform);
+	ldam.add_object(&hit_cube1, &t1);
 	ldam.add_object(&hit_cube2, &t2);
-	ldam.add_object(&hit_cube3, &floor_transform);
+	ldam.add_object(&hit_cube3, &t3);
 
 	// ldam.add_object(&tree);
 
 	// Add objects to the render daemon
 	rdam.add(&sb, winman.cres.sb_shader);
 
-	// physics::AABB box1 = rb_collider.aabb();
-	// box1.annotate(rdam, &sphere_shader);
-	
-	physics::AABB box2 = floor_collider.aabb();
-	box2.annotate(rdam, &sphere_shader);
-
 	// Physics objects
-	pdam.add_rb(&rb);
-	pdam.add_rb(&t2_rb);
-	pdam.add_cb(&fl);
+	pdam.add_cobject(&t1_co, 1);
+	pdam.add_cobject(&t2_co, 1);
+	pdam.add_cobject(&t3_co, 1);
 
 	// Annotations
-	rb_collider.annotate(rdam, &sphere_shader);
+	t1_collider.annotate(rdam, &sphere_shader);
 	t2_collider.annotate(rdam, &sphere_shader);
-	floor_collider.annotate(rdam, &sphere_shader);
-
-	/* Simplex simplex;
-	Logger::notify() << "GJK RESULT = " << std::boolalpha << gjk(simplex, &t2_collider, &floor_collider) << std::endl;
-	add_annotation(new SVA3(simplex.sva()), {0.5, 1.0, 1.0});
-	glm::vec3 t = mtv(simplex, &t2_collider, &floor_collider);
-
-	Logger::warn() << "MTV = " << t << "\n";
-
-	t2.move(-t);
-	Logger::notify() << "GJK RESULT (AGAIN) = " << std::boolalpha << gjk(simplex, &t2_collider, &floor_collider) << std::endl; */
+	t3_collider.annotate(rdam, &sphere_shader);
 }
 
 // TODO: into linalg
@@ -297,7 +275,7 @@ void main_renderer()
 	physics::AABB ab;
 	SVA3 box;
 	
-	ab = rb_collider.aabb();
+	ab = t1_collider.aabb();
 	box = mesh::wireframe_cuboid(ab.center, ab.size);
 	box.color = {1.0, 1.0, 0.5};
 	box.draw(&sphere_shader);
@@ -306,16 +284,11 @@ void main_renderer()
 	box = mesh::wireframe_cuboid(ab.center, ab.size);
 	box.color = {1.0, 1.0, 0.5};
 	box.draw(&sphere_shader);
-
-	/* if (gjk(&t2_collider, &floor_collider)) {
-		hit_cube2.set_material({
-			.color = {1.0, 0.0, 0.0}
-		});
-	} else {
-		hit_cube2.set_material({
-			.color = {0.0, 0.0, 1.0}
-		});
-	} */
+	
+	ab = t3_collider.aabb();
+	box = mesh::wireframe_cuboid(ab.center, ab.size);
+	box.color = {1.0, 1.0, 0.5};
+	box.draw(&sphere_shader);
 }
 
 // Program render loop condition

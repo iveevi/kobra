@@ -57,9 +57,8 @@ set(MERCURY_SOURCE
 
 	source/physics/aabb.cpp
 	source/physics/collider.cpp
-	source/physics/collisionbody.cpp
+	source/physics/collision_object.cpp
 	source/physics/physics.cpp
-	source/physics/rigidbody.cpp
 
 	source/ui/button.cpp
 	source/ui/pure_rect.cpp

@@ -4,56 +4,61 @@ namespace mercury {
 
 namespace physics {
 
-void Daemon::add_rb(RigidBody* rb)
+void Daemon::add_cobject(CollisionObject* co, float mass)
 {
-        _rbs.push_back(rb);
-        _cbs.push_back(rb);
-}
-
-void Daemon::add_cb(CollisionBody* cb)
-{
-        _cbs.push_back(cb);
+        _state.push_back(State {
+                .mass = mass,
+                .inv_mass = 1.0f / mass,
+                .co = co
+        });
 }
 
 void Daemon::update(float delta_t)
 {
         static const glm::vec3 gravity{0.0f, -9.81f, 0.0f};
-        static const float dt = 1.0f / 600.0f;                   // Fixed timestep
+        static const float dt = 1.0f / 600.0f;                   // Fixed timestep: TODO: this is not enough...
 
         // TODO: repeat the physics while there is delta_t left
 
-        // TODO: check for collisions
-        for (RigidBody *rb : _rbs) {    // Only loop through rigid bodies
-                // For now, check that rb is not colliding with anything
-                // TODO: later partition the space and check only those
-                // TODO: need to check if the collision body is active (default yes)
-                glm::vec3 rbf {0, 0, 0};
-                
-                bool inter = false;
-                for (CollisionBody *other : _cbs) {
-                        if (rb == other)
-                                continue;
+        // TODO: setup a state vector and matrix
+        for (size_t i = 0; i < _state.size(); i++) {
+                State &s = _state[i];
 
-                        // TODO: maybe cache the collision results between colliders?
-                        // then from the user's perpective, becomes simpler
-                        Collision c = intersects(rb->collider, other->collider);
-                        if (c.colliding) {
-                                rbf -= glm::normalize(c.mtv);
-                                inter = true;
-                                break;
+                // To avoid duplicate handling, only check for
+                // collisions past the current index
+                for (size_t j = i + 1; j < _state.size(); j++) {
+                        State &t = _state[j];
+                        
+                        Collision c = intersects(s.co->collider, t.co->collider);
+                        if (!c.colliding)
+                                continue;
+                        
+                        // TODO: deal with both sides of the collision
+                        if (s.co->type == CollisionObject::Type::DYNAMIC) {
+                                s.p = -s.p;
                         }
                 }
 
-                // TODO: put in another function
-                if (!inter) {
-                        rb->add_force(rb->mass * gravity, dt);
-                } else {
-                        // Kill velocity for now
-                        rb->velocity = -0.8f * rb->velocity; //{0, 0, 0};
+                // Add other forces
+                if (s.co->type == CollisionObject::Type::DYNAMIC) {
+                        s.p += s.mass * gravity * dt;
                 }
+        }
 
-                // Apply all forces        
-                rb->transform->move(rb->velocity * dt);    // TODO: just have an rb method
+        // Apply momentums
+        Logger::warn() << "Moving state objects:\n";
+        for (size_t i = 0; i < _state.size(); i++) {
+                State &s = _state[i];
+                
+                Logger::notify() << "\ti = " << i << "\n";
+                Logger::error() << "\t\ts.p = " << s.p.x << ", " << s.p.y << ", " << s.p.z << "\n";
+                Logger::error() << "\t\ts.v before = " << s.v.x << ", " << s.v.y << ", " << s.v.z << "\n";
+
+                s.v = s.p * s.inv_mass;
+
+                Logger::error() << "\t\ts.v after = " << s.v.x << ", " << s.v.y << ", " << s.v.z << "\n";
+
+                s.co->transform->move(s.v * dt);
         }
 }
 

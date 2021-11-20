@@ -5,8 +5,8 @@
 #include <vector>
 
 // Engine headers
-#include "include/physics/collisionbody.hpp"
-#include "include/physics/rigidbody.hpp"
+#include "include/physics/collision_object.hpp"
+// #include "include/physics/rigidbody.hpp"
 
 namespace mercury {
 
@@ -14,17 +14,31 @@ namespace physics {
 
 // Physics daemon
 class Daemon {
-        // List of rigid bodies
-        std::vector <RigidBody *>	_rbs;
+        // State object
+        struct State {
+                // Physical properties
+                float mass;
+                float inv_mass;
+
+                // Dynamics attributes
+                glm::vec3 v;            // Linear velocity
+                glm::vec3 p;            // Linear momentum
+
+                glm::vec3 w;            // Angular velocity
+                glm::vec3 L;            // Angular momentum
+
+                // Collision object
+                CollisionObject* co;
+        };
 
         // List of all objects with colliders
-        std::vector <CollisionBody *>	_cbs;
+        std::vector <State>	_state;
 public:
         // Adding collision bodies to the daemon
-        void add_rb(RigidBody *);	// Must be called to add rigid bodies to the daemon
-	void add_cb(CollisionBody *);
+	void add_cobject(CollisionObject *, float);	// TODO: add other properties (as a struct)
 
         // TODO: account for different collision algorithms
+        // TODO: account for different integration methods (euler, verlet, etc.)
 
         // Run physics daemon
         void update(float);
