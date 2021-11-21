@@ -63,12 +63,15 @@ private:
 
 	Material	_material;
 
+	bool		_wireframe = false;
+
 	void _init();
 public:
 	Mesh();
 	Mesh(const AVertex &, const ATexture &, const AIndices &);
 	
 	void set_material(const Material &);
+	void set_wireframe(bool = true);
 
 	virtual void draw(Shader *) override;
 };

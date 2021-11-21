@@ -4,10 +4,11 @@
 // Engine headers
 #include "include/common.hpp"
 #include "include/physics/collider.hpp"
-#include "include/mesh/cuboid.hpp"
 
 // TODO: remove later
 #include "include/model.hpp"
+#include "include/mesh/cuboid.hpp"
+#include "include/mesh/sphere.hpp"
 
 namespace mercury {
 
@@ -422,10 +423,50 @@ glm::vec3 project_origin(const glm::vec3 vert, const glm::vec3 &n)
 {
 	glm::vec3 v = -vert;
 	float d = glm::dot(n, v);
-	return - d * n;
+	return -d * n;
 }
 
-glm::vec3 mtv(Simplex &simplex, Collider *a, Collider *b)
+glm::vec3 barycentric(const glm::vec3 &a, const glm::vec3 &b, const glm::vec3 &c, const glm::vec3 &p)
+{
+	glm::vec3 v0 = b - a;
+	glm::vec3 v1 = c - a;
+	glm::vec3 v2 = p - a;
+
+	float d00 = glm::dot(v0, v0);
+	float d01 = glm::dot(v0, v1);
+	float d11 = glm::dot(v1, v1);
+	
+	float d20 = glm::dot(v2, v0);
+	float d21 = glm::dot(v2, v1);
+	
+	float denom = d00 * d11 - d01 * d01;
+
+	float v = (d11 * d20 - d01 * d21) / denom;
+	float w = (d00 * d21 - d01 * d20) / denom;
+
+	return glm::vec3 {1.0f - v - w, v, w};
+}
+
+glm::vec3 tri_support(const glm::vec3 &a, const glm::vec3 &b, const glm::vec3 &c, const glm::vec3 &n)
+{
+	float d0 = glm::dot(n, a);
+	float d1 = glm::dot(n, b);
+	float d2 = glm::dot(n, c);
+
+	if (d0 > d1) {
+		if (d2 > d0)
+			return c;
+
+		return a;
+	}
+
+	if (d2 > d1)
+		return c;
+	
+	return b;
+}
+
+MTV mtv(Simplex &simplex, Collider *a, Collider *b, rendering::Daemon *rdam, Shader *shader)
 {
 	Collider::Vertices polytope = simplex.vertices();
 	std::vector <glm::uvec3> faces {
@@ -448,15 +489,49 @@ glm::vec3 mtv(Simplex &simplex, Collider *a, Collider *b)
 		
 		// Compare the distance between the projection and the support
 		float d = glm::dot(s, fi.normal);
-		// Logger::notify() << "\tdistance = " << d << std::endl;
+		Logger::notify() << "\tdistance = " << d << std::endl;
+		Logger::notify() << "\tfi.distance = " << fi.distance << std::endl;
 		
 		// Success, now returns the MTV
-		if (fabs(d - fi.distance) < 1e-4f)
-			return project_origin(s, fi.normal);
+		if (fabs(d - fi.distance) < 1e-4f) {
+			Logger::notify() << "MTV SUCCESS (MAIN)" << std::endl;
+			glm::vec3 t = project_origin(s, fi.normal);
+			
+			glm::vec3 pa = polytope[fi.face.x];
+			glm::vec3 pb = polytope[fi.face.y];
+			glm::vec3 pc = polytope[fi.face.z];
+
+			glm::vec3 sa1 = a->support(pa);
+			glm::vec3 sa2 = a->support(pb);
+			glm::vec3 sa3 = a->support(pc);
+
+			/* Annotate points
+			SVA3 *p1 = new SVA3(mesh::wireframe_sphere(sa1, 0.1f));
+			SVA3 *p2 = new SVA3(mesh::wireframe_sphere(sa2, 0.1f));
+			SVA3 *p3 = new SVA3(mesh::wireframe_sphere(sa3, 0.1f));
+			p1->color = {0, 1, 0};
+			p2->color = {0, 1, 0};
+			p3->color = {0, 1, 0};
+
+			rdam->add(p1, shader);
+			rdam->add(p2, shader);
+			rdam->add(p3, shader); */
+
+			glm::vec3 bary = barycentric(pa, pb, pc, t);
+
+			glm::vec3 ca = sa1 * bary.x + sa2 * bary.y + sa3 * bary.z;			
+
+			return {t, ca, {0, 0, 0}};
+		}
 
 		// Check if entering loop
-		if (fabs(d - dprev) < 1e-4f)	// TODO: store epsilon
-			return project_origin(s, fi.normal); // Just return it
+		if (fabs(d - dprev) < 1e-4f) {	// TODO: store epsilon
+			Logger::notify() << "MTV SUCCESS (SECONDARY)" << std::endl;
+			glm::vec3 t = project_origin(s, fi.normal); // Just return it
+			glm::vec3 ca = a->support(-fi.normal);
+			glm::vec3 cb = b->support(fi.normal);
+			return {t, ca, cb};
+		}
 
 		expand_polytope(polytope, faces, fi.normals, s);
 
@@ -464,26 +539,40 @@ glm::vec3 mtv(Simplex &simplex, Collider *a, Collider *b)
 		dprev = d;
 	}
 
-	return {0, 0, 0};
+	return {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
 }
 
 // Intersection between two colliders
-Collision intersects(Collider *a, Collider *b)
+Collision intersects(Collider *a, Collider *b, rendering::Daemon *rdam, Shader *shader)
 {
 	// TODO: should aabb be cached?
 	bool aabb_test = intersects(a->aabb(), b->aabb());
 
 	// Check AABB first
 	if (!aabb_test)
-		return {{}, false};
+		return Collision {.colliding = false};
 
 	// Now do GJK
 	Simplex simplex;
-	if (gjk(simplex, a, b))
-		return {mtv(simplex, a, b), true};
+	if (gjk(simplex, a, b)) {
+		// Get centroid of simplex
+		glm::vec3 centroid = simplex.centroid();
+
+		MTV t = mtv(simplex, a, b, rdam, shader);
+		// glm::vec3 as = a->support(-t);
+		// glm::vec3 bs = b->support(t);
+
+		// TODO: just return one collision point
+		return Collision {
+			.mtv = t.mtv,
+			.contact_a = t.contact_a,
+			.contact_b = t.contact_b,		// TODO: do we need bs?
+			.colliding = true
+		};
+	}
 
 	// Now onto more complicated tests
-	return {{}, false};
+	return Collision {.colliding = false};
 }
 
 

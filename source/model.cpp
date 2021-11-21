@@ -169,9 +169,25 @@ void Mesh::set_material(const Material &material)
 	_material = material;
 }
 
+void Mesh::set_wireframe(bool wireframe)
+{
+	_wireframe = wireframe;
+}
+
 // TODO: clean
 void Mesh::draw(Shader *shader)
 {
+	// Check wireframe
+	float width;
+	int mode;
+
+	glGetFloatv(GL_LINE_WIDTH, &width);
+	glGetIntegerv(GL_POLYGON_MODE, &mode);
+	if (_wireframe) {
+		glLineWidth(1.0f);
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+	}
+
 	// Use the shader first
 	shader->use();
 	shader->set_vec3("color", _material.color);
@@ -212,6 +228,12 @@ void Mesh::draw(Shader *shader)
 
 	// always good practice to set everything back to defaults once configured.
 	glActiveTexture(GL_TEXTURE0);
+	
+	// Reset wireframe
+	if (_wireframe) {
+		glLineWidth(width);
+		glPolygonMode(GL_FRONT_AND_BACK, mode);
+	}
 }
 
 // Model functions

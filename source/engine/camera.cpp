@@ -35,7 +35,7 @@ void Camera::_update_vecs()
 			cos(glm::radians(_yaw)) * cos(glm::radians(_pitch)),
 			sin(glm::radians(_pitch)),
 			sin(glm::radians(_yaw)) * cos(glm::radians(_pitch))
-			)
+		)
 	);
 
 	right = glm::normalize(glm::cross(front, world_up));

@@ -10,29 +10,7 @@
 #include <glm/gtc/type_ptr.hpp>
 
 // Engine headers
-#include "include/shader.hpp"
-#include "include/model.hpp"
-#include "include/init.hpp"
-#include "include/logger.hpp"
-#include "include/lighting.hpp"
-#include "include/rendering.hpp"
-#include "include/varray.hpp"
-
-#include "include/physics/physics.hpp"
-
-#include "include/engine/camera.hpp"
-#include "include/engine/monitors.hpp"
-#include "include/engine/skybox.hpp"
-
-#include "include/math/linalg.hpp"
-
-#include "include/mesh/basic.hpp"
-#include "include/mesh/sphere.hpp"
-#include "include/mesh/cuboid.hpp"
-
-#include "include/ui/text.hpp"
-#include "include/ui/ui_layer.hpp"
-#include "include/ui/line.hpp"
+#include "include/mercury.hpp"
 
 // Using declarations
 using namespace mercury;
@@ -85,9 +63,9 @@ Mesh hit_cube3;
 
 // Collision object components
 // TODO: need to fix bug when t1 is at low y (~0.32)
-Transform t1({-4, 10, 0}, {30, 30, 30});
-Transform t2({5.5, 3, 0}, {0, 0, 60});
-Transform t3({0, -1, 0}, {0, 0, -10});
+Transform t1({-4, 10, 0}, glm::radians(glm::vec3 {30, 30, 30}));
+Transform t2({5.5, 14, 0}, glm::radians(glm::vec3 {0, 0, 90}));
+Transform t3({0, -1, 0});
 
 physics::BoxCollider t1_collider({1, 1, 1}, &t1);
 physics::BoxCollider t2_collider({1, 2, 1}, &t2);
@@ -154,6 +132,9 @@ void main_initializer()
 	hit_cube2.set_material({.color = {1.0, 0.5, 0.5}});
 	hit_cube3.set_material({.color = {0.9, 0.9, 0.9}});
 
+	hit_cube1.set_wireframe();
+	hit_cube2.set_wireframe();
+
 	// Set line width
 	glLineWidth(5.0f);
 
@@ -193,7 +174,7 @@ void main_initializer()
 
 	// Physics objects
 	pdam.add_cobject(&t1_co, 1);
-	// pdam.add_cobject(&t2_co, 1);
+	pdam.add_cobject(&t2_co, 1);
 	pdam.add_cobject(&t3_co, 1);
 
 	// Annotations
@@ -260,7 +241,7 @@ void main_renderer()
 	};
 
 	// Lighut and render scene
-	pdam.update(delta_t);
+	pdam.update(delta_t, &rdam, &sphere_shader);
 	ldam.light();
 	rdam.render();
 
@@ -279,7 +260,7 @@ void main_renderer()
 	sshader->set_mat4("projection", projection);
 	sshader->set_mat4("view", view);
 
-	// Draw bounding boxes
+	/* Draw bounding boxes
 	physics::AABB ab;
 	SVA3 box;
 	
@@ -296,7 +277,7 @@ void main_renderer()
 	ab = t3_collider.aabb();
 	box = mesh::wireframe_cuboid(ab.center, ab.size);
 	box.color = {1.0, 1.0, 0.5};
-	box.draw(&sphere_shader);
+	box.draw(&sphere_shader); */
 }
 
 // Program render loop condition

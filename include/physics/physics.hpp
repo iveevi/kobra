@@ -13,6 +13,7 @@ namespace mercury {
 namespace physics {
 
 // Physics daemon
+// TODO: add an rdam as a member variable for optional annotations
 class Daemon {
         // State object
         struct State {
@@ -20,12 +21,18 @@ class Daemon {
                 float mass;
                 float inv_mass;
 
+                float intertia;
+                float inv_inertia;
+
                 // Dynamics attributes
                 glm::vec3 v;            // Linear velocity
                 glm::vec3 p;            // Linear momentum
 
                 glm::vec3 w;            // Angular velocity
-                glm::vec3 L;            // Angular momentum
+                glm::vec3 l;            // Angular momentum
+
+                // Skip physics
+                bool skip;
 
                 // Collision object
                 CollisionObject* co;
@@ -41,7 +48,7 @@ public:
         // TODO: account for different integration methods (euler, verlet, etc.)
 
         // Run physics daemon
-        void update(float);
+        void update(float, rendering::Daemon *, Shader *);
 };
 
 }

@@ -55,7 +55,16 @@ public:
 // Srtucture detailing the result of a collision
 struct Collision {
 	glm::vec3	mtv;
+	glm::vec3	contact_a;
+	glm::vec3	contact_b;
 	bool		colliding;
+};
+
+// MTV return
+struct MTV {
+	glm::vec3	mtv;
+	glm::vec3	contact_a;
+	glm::vec3	contact_b;
 };
 
 // Simplex structure for the GJK algorithm
@@ -97,6 +106,14 @@ public:
 		return _points[index];
 	}
 
+	// Return centroid
+	glm::vec3 centroid() const {
+		glm::vec3 c = glm::vec3(0.0f);
+		for (size_t i = 0; i < _size; i++)
+			c += _points[i];
+		return c / (float) _size;
+	}
+
 	// Vertices
 	Collider::Vertices vertices() const {
 		Collider::Vertices v;
@@ -108,7 +125,7 @@ public:
 
 // Intersection between two colliders
 // TODO: remove extra debugging parameters
-Collision intersects(Collider *, Collider *);
+Collision intersects(Collider *, Collider *, rendering::Daemon *, Shader *);
 
 }
 

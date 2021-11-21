@@ -71,6 +71,8 @@ public:
 		CMap *character_map;
 	} cres;
 
+	// TODO: array of shaders, with enum index
+
 	// TODO: change this...
 	MouseBus mouse_handler;
 

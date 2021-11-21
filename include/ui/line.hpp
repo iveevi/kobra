@@ -2,6 +2,7 @@
 #define LINE_H_
 
 // Engine headers
+#include "include/init.hpp"
 #include "include/varray.hpp"
 
 namespace mercury {
