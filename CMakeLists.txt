@@ -69,15 +69,6 @@ set(MERCURY_SOURCE
 	glad/glad.c
 )
 
-set(MERCURY_LIBS
-	glfw
-	freetype
-	OpenGL::GL
-	${CMAKE_DL_LIBS}
-	${ASSIMP_LIBRARY}
-	ncurses
-)
-
 # Adding sources
 add_executable(mercury
 	source/main.cpp
@@ -105,6 +96,7 @@ include_directories(.
 	thirdparty/assimp/include
 	thirdparty/freetype2/include
 	thirdparty/glm
+	/usr/include/bullet
 )
 
 # Import CMake modules
@@ -115,6 +107,21 @@ find_library(ASSIMP_LIBRARY
 	NAMES assimp
 	HINTS ${PROJECT_SOURCE_DIR}/thirdparty/assimp/bin
 	REQUIRED
+)
+
+find_package(Bullet REQUIRED)
+
+# Set libraries
+set(MERCURY_LIBS
+	glfw
+	freetype
+	OpenGL::GL
+	${CMAKE_DL_LIBS}
+	${ASSIMP_LIBRARY}
+	ncurses
+	BulletCollision
+	BulletDynamics
+	LinearMath
 )
 
 # Link libraries

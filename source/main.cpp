@@ -12,6 +12,8 @@
 // Engine headers
 #include "include/mercury.hpp"
 
+#include <btBulletDynamicsCommon.h>
+
 // Using declarations
 using namespace mercury;
 
@@ -27,6 +29,8 @@ mercury::Camera camera(glm::vec3(0.0f, 1.0f, 7.5f));
 lighting::Daemon	ldam;
 rendering::Daemon	rdam;
 physics::Daemon		pdam;
+
+btDiscreteDynamicsWorld* dynamicsWorld;
 
 // Annotations
 std::vector <Drawable *> annotations;
@@ -95,6 +99,83 @@ lighting::DirLight dirlight {
 const glm::vec3 center {1.0, 1.0, 1.0};
 const float radius = 0.2f;
 
+struct BulletDebugger : public btIDebugDraw {
+	int dbmode;
+
+	void drawLine(const btVector3 &from, const btVector3 &to, const btVector3 &color) override {
+		glm::vec3 from_glm {from.x(), from.y(), from.z()};
+		glm::vec3 to_glm {to.x(), to.y(), to.z()};
+		glm::vec3 color_glm {color.x(), color.y(), color.z()};
+
+		ui::Line line(from_glm, to_glm, color_glm);
+		line.draw(&sphere_shader);
+	}
+
+	void drawContactPoint(const btVector3 &PointOnB, const btVector3 &normalOnB, btScalar distance, int lifeTime, const btVector3 &color) override {
+		glm::vec3 point_glm {PointOnB.x(), PointOnB.y(), PointOnB.z()};
+		glm::vec3 normal_glm {normalOnB.x(), normalOnB.y(), normalOnB.z()};
+		glm::vec3 color_glm {color.x(), color.y(), color.z()};
+
+		ui::Line line(point_glm, point_glm + normal_glm, color_glm);
+		line.draw(&sphere_shader);
+	}
+
+	void reportErrorWarning(const char *warningString) override {
+		Logger::error() << " BULLET: " << warningString << std::endl;
+	}
+
+	void draw3dText(const btVector3 &location, const char *textString) override {}
+
+	void setDebugMode(int debugMode) override {
+		dbmode = debugMode;
+	}
+
+	int getDebugMode() const override {
+		return dbmode;
+	}
+};
+
+// TODO: add custom vector class for casting between glm vec and btVector3
+// and also quaternions
+btAlignedObjectArray<btCollisionShape*> collisionShapes;
+btCollisionObject *add_body(float m, const glm::vec3 &dim, Transform *transform)
+{
+	// TODO: multiply size by scale?
+	btCollisionShape* groundShape = new btBoxShape(btVector3(btScalar(dim.x/2), btScalar(dim.y/2), btScalar(dim.z/2)));
+
+	collisionShapes.push_back(groundShape);
+
+	btTransform groundTransform;
+	groundTransform.setIdentity();
+
+	glm::vec3 t = transform->translation;
+	glm::quat q = transform->orient;
+	groundTransform.setOrigin(btVector3(t.x, t.y, t.z));
+	groundTransform.setRotation(btQuaternion(q.x, q.y, q.z, q.w));
+
+	btScalar mass(m);
+
+	//rigidbody is dynamic if and only if mass is non zero, otherwise static
+	bool isDynamic = (mass != 0.f);
+
+	btVector3 localInertia(0, 0, 0);
+	if (isDynamic)
+		groundShape->calculateLocalInertia(mass, localInertia);
+
+	//using motionstate is optional, it provides interpolation capabilities, and only synchronizes 'active' objects
+	btDefaultMotionState* myMotionState = new btDefaultMotionState(groundTransform);
+	btRigidBody::btRigidBodyConstructionInfo rbInfo(mass, myMotionState, groundShape, localInertia);
+	btRigidBody* body = new btRigidBody(rbInfo);
+
+	//add the body to the dynamics world
+	dynamicsWorld->addRigidBody(body);
+	return body;
+}
+
+btCollisionObject *co1;
+btCollisionObject *co2;
+btCollisionObject *co3;
+
 void main_initializer()
 {
 	// Uncap FPS
@@ -132,8 +213,8 @@ void main_initializer()
 	hit_cube2.set_material({.color = {1.0, 0.5, 0.5}});
 	hit_cube3.set_material({.color = {0.9, 0.9, 0.9}});
 
-	hit_cube1.set_wireframe();
-	hit_cube2.set_wireframe();
+	// hit_cube1.set_wireframe();
+	// hit_cube2.set_wireframe();
 
 	// Set line width
 	glLineWidth(5.0f);
@@ -172,10 +253,10 @@ void main_initializer()
 	// Add objects to the render daemon
 	rdam.add(&sb, winman.cres.sb_shader);
 
-	// Physics objects
+	/* Physics objects
 	pdam.add_cobject(&t1_co, 1);
 	pdam.add_cobject(&t2_co, 1);
-	pdam.add_cobject(&t3_co, 1);
+	pdam.add_cobject(&t3_co, 1); */
 
 	// Annotations
 	t1_collider.annotate(rdam, &sphere_shader);
@@ -188,6 +269,10 @@ void main_initializer()
 	Logger::notify() << "c.mtv = " << c.mtv << "\n";
 	Logger::notify() << "c.mtv norm = " << glm::length(c.mtv) << "\n";
 	t1.move(-c.mtv); */
+
+	co1 = add_body(1, {1, 1, 1}, &t1);
+	co2 = add_body(1, {1, 2, 1}, &t2);
+	co3 = add_body(0, {10, 1, 10}, &t3);
 }
 
 // TODO: into linalg
@@ -241,7 +326,9 @@ void main_renderer()
 	};
 
 	// Lighut and render scene
-	pdam.update(delta_t, &rdam, &sphere_shader);
+	// pdam.update(delta_t, &rdam, &sphere_shader);
+	dynamicsWorld->stepSimulation(delta_t, 10);	// TODO: update transforms in the physics daemon
+	dynamicsWorld->debugDrawWorld();
 	ldam.light();
 	rdam.render();
 
@@ -278,6 +365,23 @@ void main_renderer()
 	box = mesh::wireframe_cuboid(ab.center, ab.size);
 	box.color = {1.0, 1.0, 0.5};
 	box.draw(&sphere_shader); */
+	btVector3 p;
+	btQuaternion q;
+	
+	p = co1->getWorldTransform().getOrigin();
+	q = co1->getWorldTransform().getRotation();
+	t1.translation = {p.getX(), p.getY(), p.getZ()};
+	t1.orient = {q.getW(), q.getX(), q.getY(), q.getZ()};
+
+	p = co2->getWorldTransform().getOrigin();
+	q = co2->getWorldTransform().getRotation();
+	t2.translation = {p.getX(), p.getY(), p.getZ()};
+	t2.orient = {q.getW(), q.getX(), q.getY(), q.getZ()};
+	
+	p = co3->getWorldTransform().getOrigin();
+	q = co3->getWorldTransform().getRotation();
+	t3.translation = {p.getX(), p.getY(), p.getZ()};
+	t3.orient = {q.getW(), q.getX(), q.getY(), q.getZ()};
 }
 
 // Program render loop condition
@@ -291,6 +395,25 @@ int main()
 	// Initialize mercury
 	init();
 	// tui::tui.init();
+
+	///collision configuration contains default setup for memory, collision setup. Advanced users can create their own configuration.
+	btDefaultCollisionConfiguration* collisionConfiguration = new btDefaultCollisionConfiguration();
+
+	///use the default collision dispatcher. For parallel processing you can use a diffent dispatcher (see Extras/BulletMultiThreaded)
+	btCollisionDispatcher* dispatcher = new btCollisionDispatcher(collisionConfiguration);
+
+	///btDbvtBroadphase is a good general purpose broadphase. You can also try out btAxis3Sweep.
+	btBroadphaseInterface* overlappingPairCache = new btDbvtBroadphase();
+
+	///the default constraint solver. For parallel processing you can use a different solver (see Extras/BulletMultiThreaded)
+	btSequentialImpulseConstraintSolver* solver = new btSequentialImpulseConstraintSolver;
+
+	dynamicsWorld = new btDiscreteDynamicsWorld(dispatcher, overlappingPairCache, solver, collisionConfiguration);
+	dynamicsWorld->setGravity(btVector3(0, -10, 0));
+	
+	BulletDebugger *debugger = new BulletDebugger();
+	debugger->setDebugMode(btIDebugDraw::DBG_DrawWireframe);
+	dynamicsWorld->setDebugDrawer(debugger);
 
 	// Set winman bindings
 	winman.set_condition(rcondition);
