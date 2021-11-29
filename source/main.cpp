@@ -11,6 +11,7 @@
 
 // Engine headers
 #include "include/mercury.hpp"
+#include "include/math/compat.hpp"
 
 #include <btBulletDynamicsCommon.h>
 
@@ -71,13 +72,13 @@ Transform t1({-4, 10, 0}, glm::radians(glm::vec3 {30, 30, 30}));
 Transform t2({5.5, 14, 0}, glm::radians(glm::vec3 {0, 0, 90}));
 Transform t3({0, -1, 0});
 
-physics::BoxCollider t1_collider({1, 1, 1}, &t1);
+/* physics::BoxCollider t1_collider({1, 1, 1}, &t1);
 physics::BoxCollider t2_collider({1, 2, 1}, &t2);
 physics::BoxCollider t3_collider({10, 1, 10}, &t3);
 
 physics::CollisionObject t1_co(&t1_collider, physics::CollisionObject::Type::DYNAMIC);
 physics::CollisionObject t2_co(&t2_collider, physics::CollisionObject::Type::DYNAMIC);
-physics::CollisionObject t3_co(&t3_collider);
+physics::CollisionObject t3_co(&t3_collider); */
 
 // Skybox
 Skybox sb;
@@ -117,7 +118,7 @@ struct BulletDebugger : public btIDebugDraw {
 		glm::vec3 color_glm {color.x(), color.y(), color.z()};
 
 		ui::Line line(point_glm, point_glm + normal_glm, color_glm);
-		line.draw(&sphere_shader);
+		line.draw(winman.cres.line_shader);
 	}
 
 	void reportErrorWarning(const char *warningString) override {
@@ -138,20 +139,20 @@ struct BulletDebugger : public btIDebugDraw {
 // TODO: add custom vector class for casting between glm vec and btVector3
 // and also quaternions
 btAlignedObjectArray<btCollisionShape*> collisionShapes;
-btCollisionObject *add_body(float m, const glm::vec3 &dim, Transform *transform)
+btCollisionObject *add_body(float m, const vec3 &dim, Transform *transform)
 {
 	// TODO: multiply size by scale?
-	btCollisionShape* groundShape = new btBoxShape(btVector3(btScalar(dim.x/2), btScalar(dim.y/2), btScalar(dim.z/2)));
+	btCollisionShape* groundShape = new btBoxShape(dim/2);
 
 	collisionShapes.push_back(groundShape);
 
 	btTransform groundTransform;
 	groundTransform.setIdentity();
 
-	glm::vec3 t = transform->translation;
-	glm::quat q = transform->orient;
-	groundTransform.setOrigin(btVector3(t.x, t.y, t.z));
-	groundTransform.setRotation(btQuaternion(q.x, q.y, q.z, q.w));
+	vec3 t = transform->translation;
+	quat q = transform->orient;
+	groundTransform.setOrigin(t);
+	groundTransform.setRotation(q);
 
 	btScalar mass(m);
 
@@ -252,23 +253,6 @@ void main_initializer()
 
 	// Add objects to the render daemon
 	rdam.add(&sb, winman.cres.sb_shader);
-
-	/* Physics objects
-	pdam.add_cobject(&t1_co, 1);
-	pdam.add_cobject(&t2_co, 1);
-	pdam.add_cobject(&t3_co, 1); */
-
-	// Annotations
-	t1_collider.annotate(rdam, &sphere_shader);
-	t2_collider.annotate(rdam, &sphere_shader);
-	t3_collider.annotate(rdam, &sphere_shader);
-
-	/* Check intersections
-	physics::Collision c = intersects(&t1_collider, &t3_collider);
-	Logger::notify() << "c.colliding = " << std::boolalpha << c.colliding << "\n";
-	Logger::notify() << "c.mtv = " << c.mtv << "\n";
-	Logger::notify() << "c.mtv norm = " << glm::length(c.mtv) << "\n";
-	t1.move(-c.mtv); */
 
 	co1 = add_body(1, {1, 1, 1}, &t1);
 	co2 = add_body(1, {1, 2, 1}, &t2);

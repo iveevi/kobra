@@ -6,24 +6,27 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/quaternion.hpp>
 
+// Engine headers
+#include "include/math/compat.hpp"
+
 namespace mercury {
 
 // Transform struct
 struct Transform {
-	glm::vec3	translation;
+	vec3	translation;
 	// glm::vec3	erot;		// Euler angles
-	glm::vec3	scale;
-	glm::quat	orient;
+	vec3	scale;
+	quat	orient;
 
 	// Constructors
 	Transform();		// Identity transform
-	Transform(const glm::vec3 &, const glm::vec3 & = {0, 0, 0},
-			const glm::vec3 & = {1, 1, 1});
+	Transform(const vec3 &, const vec3 & = {0, 0, 0},
+			const vec3 & = {1, 1, 1});
 
 	// Methods
-	void move(const glm::vec3 &);
-	void rotate(const glm::vec3 &);
-	void rotate(const glm::quat &);
+	void move(const vec3 &);
+	void rotate(const vec3 &);
+	void rotate(const quat &);
 
 	glm::mat4 model() const;
 };

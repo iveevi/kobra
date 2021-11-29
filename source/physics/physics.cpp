@@ -132,7 +132,7 @@ void Daemon::update(float delta_t, rendering::Daemon *rdam, Shader *shader)
         }
 
         // Apply momentums
-        // TODO: some way to turn logs on and off
+        /* TODO: some way to turn logs on and off
         Logger::warn() << "Moving state objects:\n";
         for (size_t i = 0; i < _state.size(); i++) {
                 State &s = _state[i];
@@ -165,7 +165,7 @@ void Daemon::update(float delta_t, rendering::Daemon *rdam, Shader *shader)
                 s.co->transform->rotate(deltaRotation(s.w, dt));
                 // s.co->transform->orient += q;
                 // s.co->transform->orient = glm::normalize(s.co->transform->orient);
-        }
+        } */
 }
 
 }
