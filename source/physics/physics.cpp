@@ -19,35 +19,37 @@ Daemon::Daemon()
 	_world->setDebugDrawer(_debugger);
 }
 
-btRigidBody *Daemon::add(float mass, Transform *transform, btCollisionShape *cshape)
+btRigidBody *Daemon::add(CollisionObject cobj)
 {
-        // Add collision shape
-	_cshapes.push_back(cshape);
-
         // Create the transform
+	// TODO: a method to convert transform to btTransform
 	btTransform gtr;
 	
 	gtr.setIdentity();
-	gtr.setOrigin(transform->translation);
-	gtr.setRotation(transform->orient);
+	gtr.setOrigin(cobj.tr->translation);
+	gtr.setRotation(cobj.tr->orient);
 
         // Create the rigid body
-	btScalar btmass(mass);
+	btScalar btmass(cobj.mass);
 
         // Check dynamic or static
 	bool is_dynamic = (btmass != 0.0f);
 
 	btVector3 loc_inert(0, 0, 0);
 	if (is_dynamic)
-		cshape->calculateLocalInertia(mass, loc_inert);
+		cobj.shape->calculateLocalInertia(btmass, loc_inert);
 
         // Set motion state stuff
 	btDefaultMotionState* mstate = new btDefaultMotionState(gtr);
-	btRigidBody::btRigidBodyConstructionInfo rb_info(btmass, mstate, cshape, loc_inert);
+	btRigidBody::btRigidBodyConstructionInfo rb_info(btmass, mstate, cobj.shape, loc_inert);
 	btRigidBody* body = new btRigidBody(rb_info);
 
         // Add the rigid body to the world
 	_world->addRigidBody(body);
+        
+	// Add collision object
+	cobj.body = body;
+	_cobjs.push_back(cobj);
 
 	// TOOD: stop returning
 	return body;
@@ -57,6 +59,14 @@ void Daemon::update(float delta_t)
 {
 	_world->stepSimulation(delta_t, 10);
 	_world->debugDrawWorld();
+
+	// TODO: a method to convert btTransform to our Transform
+	for (const auto &cobj : _cobjs) {
+		btVector3 p = cobj.body->getWorldTransform().getOrigin();
+		btQuaternion q = cobj.body->getWorldTransform().getRotation();
+		cobj.tr->translation = {p.getX(), p.getY(), p.getZ()};
+		cobj.tr->orient = {q.getW(), q.getX(), q.getY(), q.getZ()};
+	}
 }
 
 }

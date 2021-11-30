@@ -55,9 +55,6 @@ set(MERCURY_SOURCE
 	source/mesh/cuboid.cpp
 	source/mesh/sphere.cpp
 
-	source/physics/aabb.cpp
-	# source/physics/collider.cpp
-	source/physics/collision_object.cpp
 	source/physics/physics.cpp
 
 	source/ui/button.cpp
@@ -97,6 +94,7 @@ include_directories(.
 	thirdparty/freetype2/include
 	thirdparty/glm
 	/usr/include/bullet
+	/usr/local/include/bullet
 )
 
 # Import CMake modules

@@ -63,19 +63,10 @@ Mesh hit_cube1;
 Mesh hit_cube2;
 Mesh hit_cube3;
 
-// Collision object components
 // TODO: need to fix bug when t1 is at low y (~0.32)
 Transform t1({-4, 10, 0}, glm::radians(glm::vec3 {30, 30, 30}));
 Transform t2({5.5, 14, 0}, glm::radians(glm::vec3 {0, 0, 90}));
-Transform t3({0, -1, 0});
-
-/* physics::BoxCollider t1_collider({1, 1, 1}, &t1);
-physics::BoxCollider t2_collider({1, 2, 1}, &t2);
-physics::BoxCollider t3_collider({10, 1, 10}, &t3);
-
-physics::CollisionObject t1_co(&t1_collider, physics::CollisionObject::Type::DYNAMIC);
-physics::CollisionObject t2_co(&t2_collider, physics::CollisionObject::Type::DYNAMIC);
-physics::CollisionObject t3_co(&t3_collider); */
+Transform t3({0, -1, 0}, glm::radians(glm::vec3(0, 0, 10)));
 
 // Skybox
 Skybox sb;
@@ -92,51 +83,23 @@ lighting::DirLight dirlight {
 };
 
 // TODO: color constants and hex strings
+physics::CollisionObject co1 {
+	new btBoxShape(vec3 {1, 1, 1}/2),
+	&t1,
+	1
+};
 
-// Wireframe sphere: TODO: is there a better way than to manually set vertices?
-const glm::vec3 center {1.0, 1.0, 1.0};
-const float radius = 0.2f;
+physics::CollisionObject co2 {
+	new btBoxShape(vec3 {1, 2, 1}/2),
+	&t2,
+	1
+};
 
-// TODO: add custom vector class for casting between glm vec and btVector3
-// and also quaternions
-btAlignedObjectArray<btCollisionShape*> collisionShapes;
-btCollisionObject *add_body(float m, const vec3 &dim, Transform *transform)
-{
-	// TODO: multiply size by scale?
-	btCollisionShape* groundShape = new btBoxShape(dim/2);
-
-	collisionShapes.push_back(groundShape);
-
-	btTransform groundTransform;
-	groundTransform.setIdentity();
-
-	vec3 t = transform->translation;
-	quat q = transform->orient;
-	groundTransform.setOrigin(t);
-	groundTransform.setRotation(q);
-
-	btScalar mass(m);
-
-	//rigidbody is dynamic if and only if mass is non zero, otherwise static
-	bool isDynamic = (mass != 0.f);
-
-	btVector3 localInertia(0, 0, 0);
-	if (isDynamic)
-		groundShape->calculateLocalInertia(mass, localInertia);
-
-	//using motionstate is optional, it provides interpolation capabilities, and only synchronizes 'active' objects
-	btDefaultMotionState* myMotionState = new btDefaultMotionState(groundTransform);
-	btRigidBody::btRigidBodyConstructionInfo rbInfo(mass, myMotionState, groundShape, localInertia);
-	btRigidBody* body = new btRigidBody(rbInfo);
-
-	//add the body to the dynamics world
-	dynamicsWorld->addRigidBody(body);
-	return body;
-}
-
-btCollisionObject *co1;
-btCollisionObject *co2;
-btCollisionObject *co3;
+physics::CollisionObject co3 {
+	new btBoxShape(vec3 {10, 1, 10}/2),
+	&t3,
+	0
+};
 
 void main_initializer()
 {
@@ -215,17 +178,9 @@ void main_initializer()
 	// Add objects to the render daemon
 	rdam.add(&sb, winman.cres.sb_shader);
 
-	/* co1 = add_body(1, {1, 1, 1}, &t1);
-	co2 = add_body(1, {1, 2, 1}, &t2);
-	co3 = add_body(0, {10, 1, 10}, &t3); */
-
-	btCollisionShape* gs1 = new btBoxShape(vec3 {1, 1, 1}/2);
-	btCollisionShape* gs2 = new btBoxShape(vec3 {1, 2, 1}/2);
-	btCollisionShape* gs3 = new btBoxShape(vec3 {10, 1, 10}/2);
-
-	co1 = pdam.add(1, &t1, gs1);
-	co2 = pdam.add(1, &t2, gs2);
-	co3 = pdam.add(0, &t3, gs3);
+	pdam.add(co1);
+	pdam.add(co2);
+	pdam.add(co3);
 }
 
 // TODO: into linalg
@@ -299,25 +254,6 @@ void main_renderer()
 	sshader->use();
 	sshader->set_mat4("projection", projection);
 	sshader->set_mat4("view", view);
-	
-	// Update transforms
-	btVector3 p;
-	btQuaternion q;
-	
-	p = co1->getWorldTransform().getOrigin();
-	q = co1->getWorldTransform().getRotation();
-	t1.translation = {p.getX(), p.getY(), p.getZ()};
-	t1.orient = {q.getW(), q.getX(), q.getY(), q.getZ()};
-
-	p = co2->getWorldTransform().getOrigin();
-	q = co2->getWorldTransform().getRotation();
-	t2.translation = {p.getX(), p.getY(), p.getZ()};
-	t2.orient = {q.getW(), q.getX(), q.getY(), q.getZ()};
-	
-	p = co3->getWorldTransform().getOrigin();
-	q = co3->getWorldTransform().getRotation();
-	t3.translation = {p.getX(), p.getY(), p.getZ()};
-	t3.orient = {q.getW(), q.getX(), q.getY(), q.getZ()};
 }
 
 // Program render loop condition

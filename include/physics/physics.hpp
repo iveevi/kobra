@@ -54,6 +54,18 @@ struct BulletDebugger : public btIDebugDraw {
 };
 
 // TODO: collider classes, which has reference to transform?
+struct CollisionObject {
+	btCollisionShape	*shape;
+	btRigidBody		*body;
+	Transform		*tr;
+	float			mass;
+
+	// Constructors
+	CollisionObject(btCollisionShape *cshape, Transform *ctr, float cmass)
+			: shape(cshape), tr(ctr), mass(cmass) {}
+
+	// TODO: deconstructor
+};
 
 // Physics daemon
 class Daemon {
@@ -66,14 +78,14 @@ class Daemon {
         btIDebugDraw *				_debugger;
 
 	// Array of collision objects
-	std::vector <btCollisionShape *>	_cshapes;
+	std::vector <CollisionObject>		_cobjs;
 public:
         // Constructor
         Daemon();
 
         // Adding collision bodies to the daemon
 	// TODO: rename to add_rb?
-	btRigidBody *add(float, Transform *, btCollisionShape *);
+	btRigidBody *add(CollisionObject);
 
         // Run physics daemon
         void update(float);
