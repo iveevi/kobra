@@ -5,50 +5,78 @@
 #include <vector>
 
 // Engine headers
-#include "include/physics/collision_object.hpp"
+// #include "include/physics/collision_object.hpp"
 // #include "include/physics/rigidbody.hpp"
+#include "include/ui/line.hpp"
+#include "include/transform.hpp"
+
+#include <btBulletDynamicsCommon.h>
 
 namespace mercury {
 
 namespace physics {
 
+// Bullet physics debugging
+struct BulletDebugger : public btIDebugDraw {
+	int dbmode;
+
+	void drawLine(const btVector3 &from, const btVector3 &to, const btVector3 &color) override {
+		glm::vec3 from_glm {from.x(), from.y(), from.z()};
+		glm::vec3 to_glm {to.x(), to.y(), to.z()};
+		glm::vec3 color_glm {color.x(), color.y(), color.z()};
+
+		ui::Line line(from_glm, to_glm, color_glm);
+		line.draw(winman.cres.line_shader);
+	}
+
+	void drawContactPoint(const btVector3 &PointOnB, const btVector3 &normalOnB, btScalar distance, int lifeTime, const btVector3 &color) override {
+		glm::vec3 point_glm {PointOnB.x(), PointOnB.y(), PointOnB.z()};
+		glm::vec3 normal_glm {normalOnB.x(), normalOnB.y(), normalOnB.z()};
+		glm::vec3 color_glm {color.x(), color.y(), color.z()};
+
+		ui::Line line(point_glm, point_glm + normal_glm, color_glm);
+		line.draw(winman.cres.line_shader);
+	}
+
+	void reportErrorWarning(const char *wstr) override {
+		Logger::error() << " (BULLET) " << wstr << '\n';
+	}
+
+	void draw3dText(const btVector3 &location, const char *textString) override {}
+
+	void setDebugMode(int debugMode) override {
+		dbmode = debugMode;
+	}
+
+	int getDebugMode() const override {
+		return dbmode;
+	}
+};
+
+// TODO: collider classes, which has reference to transform?
+
 // Physics daemon
-// TODO: add an rdam as a member variable for optional annotations
 class Daemon {
-        // State object
-        struct State {
-                // Physical properties
-                float mass;
-                float inv_mass;
+        // Bullet physics world stuff
+        btDefaultCollisionConfiguration *	_cconfig;
+        btCollisionDispatcher *			_dispatcher;
+        btBroadphaseInterface *			_broadphase;
+        btSequentialImpulseConstraintSolver *	_solver;
+        btDiscreteDynamicsWorld *		_world;
+        btIDebugDraw *				_debugger;
 
-                float intertia;
-                float inv_inertia;
-
-                // Dynamics attributes
-                glm::vec3 v;            // Linear velocity
-                glm::vec3 p;            // Linear momentum
-
-                glm::vec3 w;            // Angular velocity
-                glm::vec3 l;            // Angular momentum
-
-                // Skip physics
-                bool skip;
-
-                // Collision object
-                CollisionObject* co;
-        };
-
-        // List of all objects with colliders
-        std::vector <State>	_state;
+	// Array of collision objects
+	std::vector <btCollisionShape *>	_cshapes;
 public:
-        // Adding collision bodies to the daemon
-	void add_cobject(CollisionObject *, float);	// TODO: add other properties (as a struct)
+        // Constructor
+        Daemon();
 
-        // TODO: account for different collision algorithms
-        // TODO: account for different integration methods (euler, verlet, etc.)
+        // Adding collision bodies to the daemon
+	// TODO: rename to add_rb?
+	btRigidBody *add(float, Transform *, btCollisionShape *);
 
         // Run physics daemon
-        void update(float, rendering::Daemon *, Shader *);
+        void update(float);
 };
 
 }

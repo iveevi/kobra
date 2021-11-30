@@ -11,9 +11,6 @@
 
 // Engine headers
 #include "include/mercury.hpp"
-#include "include/math/compat.hpp"
-
-#include <btBulletDynamicsCommon.h>
 
 // Using declarations
 using namespace mercury;
@@ -99,42 +96,6 @@ lighting::DirLight dirlight {
 // Wireframe sphere: TODO: is there a better way than to manually set vertices?
 const glm::vec3 center {1.0, 1.0, 1.0};
 const float radius = 0.2f;
-
-struct BulletDebugger : public btIDebugDraw {
-	int dbmode;
-
-	void drawLine(const btVector3 &from, const btVector3 &to, const btVector3 &color) override {
-		glm::vec3 from_glm {from.x(), from.y(), from.z()};
-		glm::vec3 to_glm {to.x(), to.y(), to.z()};
-		glm::vec3 color_glm {color.x(), color.y(), color.z()};
-
-		ui::Line line(from_glm, to_glm, color_glm);
-		line.draw(&sphere_shader);
-	}
-
-	void drawContactPoint(const btVector3 &PointOnB, const btVector3 &normalOnB, btScalar distance, int lifeTime, const btVector3 &color) override {
-		glm::vec3 point_glm {PointOnB.x(), PointOnB.y(), PointOnB.z()};
-		glm::vec3 normal_glm {normalOnB.x(), normalOnB.y(), normalOnB.z()};
-		glm::vec3 color_glm {color.x(), color.y(), color.z()};
-
-		ui::Line line(point_glm, point_glm + normal_glm, color_glm);
-		line.draw(winman.cres.line_shader);
-	}
-
-	void reportErrorWarning(const char *warningString) override {
-		Logger::error() << " BULLET: " << warningString << std::endl;
-	}
-
-	void draw3dText(const btVector3 &location, const char *textString) override {}
-
-	void setDebugMode(int debugMode) override {
-		dbmode = debugMode;
-	}
-
-	int getDebugMode() const override {
-		return dbmode;
-	}
-};
 
 // TODO: add custom vector class for casting between glm vec and btVector3
 // and also quaternions
@@ -254,9 +215,17 @@ void main_initializer()
 	// Add objects to the render daemon
 	rdam.add(&sb, winman.cres.sb_shader);
 
-	co1 = add_body(1, {1, 1, 1}, &t1);
+	/* co1 = add_body(1, {1, 1, 1}, &t1);
 	co2 = add_body(1, {1, 2, 1}, &t2);
-	co3 = add_body(0, {10, 1, 10}, &t3);
+	co3 = add_body(0, {10, 1, 10}, &t3); */
+
+	btCollisionShape* gs1 = new btBoxShape(vec3 {1, 1, 1}/2);
+	btCollisionShape* gs2 = new btBoxShape(vec3 {1, 2, 1}/2);
+	btCollisionShape* gs3 = new btBoxShape(vec3 {10, 1, 10}/2);
+
+	co1 = pdam.add(1, &t1, gs1);
+	co2 = pdam.add(1, &t2, gs2);
+	co3 = pdam.add(0, &t3, gs3);
 }
 
 // TODO: into linalg
@@ -310,9 +279,9 @@ void main_renderer()
 	};
 
 	// Lighut and render scene
-	// pdam.update(delta_t, &rdam, &sphere_shader);
-	dynamicsWorld->stepSimulation(delta_t, 10);	// TODO: update transforms in the physics daemon
-	dynamicsWorld->debugDrawWorld();
+	/* dynamicsWorld->stepSimulation(delta_t, 10);	// TODO: update transforms in the physics daemon
+	dynamicsWorld->debugDrawWorld(); */
+	pdam.update(delta_t);
 	ldam.light();
 	rdam.render();
 
@@ -330,25 +299,8 @@ void main_renderer()
 	sshader->use();
 	sshader->set_mat4("projection", projection);
 	sshader->set_mat4("view", view);
-
-	/* Draw bounding boxes
-	physics::AABB ab;
-	SVA3 box;
 	
-	ab = t1_collider.aabb();
-	box = mesh::wireframe_cuboid(ab.center, ab.size);
-	box.color = {1.0, 1.0, 0.5};
-	box.draw(&sphere_shader);
-	
-	ab = t2_collider.aabb();
-	box = mesh::wireframe_cuboid(ab.center, ab.size);
-	box.color = {1.0, 1.0, 0.5};
-	box.draw(&sphere_shader);
-	
-	ab = t3_collider.aabb();
-	box = mesh::wireframe_cuboid(ab.center, ab.size);
-	box.color = {1.0, 1.0, 0.5};
-	box.draw(&sphere_shader); */
+	// Update transforms
 	btVector3 p;
 	btQuaternion q;
 	
@@ -380,7 +332,7 @@ int main()
 	init();
 	// tui::tui.init();
 
-	///collision configuration contains default setup for memory, collision setup. Advanced users can create their own configuration.
+	/* collision configuration contains default setup for memory, collision setup. Advanced users can create their own configuration.
 	btDefaultCollisionConfiguration* collisionConfiguration = new btDefaultCollisionConfiguration();
 
 	///use the default collision dispatcher. For parallel processing you can use a diffent dispatcher (see Extras/BulletMultiThreaded)
@@ -393,11 +345,11 @@ int main()
 	btSequentialImpulseConstraintSolver* solver = new btSequentialImpulseConstraintSolver;
 
 	dynamicsWorld = new btDiscreteDynamicsWorld(dispatcher, overlappingPairCache, solver, collisionConfiguration);
-	dynamicsWorld->setGravity(btVector3(0, -10, 0));
+	// dynamicsWorld->setGravity(btVector3(0, -10, 0));
 	
-	BulletDebugger *debugger = new BulletDebugger();
+	physics::BulletDebugger *debugger = new physics::BulletDebugger();
 	debugger->setDebugMode(btIDebugDraw::DBG_DrawWireframe);
-	dynamicsWorld->setDebugDrawer(debugger);
+	dynamicsWorld->setDebugDrawer(debugger); */
 
 	// Set winman bindings
 	winman.set_condition(rcondition);

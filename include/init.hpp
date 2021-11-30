@@ -68,6 +68,7 @@ public:
 		Shader *text_shader;
 		Shader *sb_shader;
 		Shader *line_shader;
+		Shader *sphere_shader;
 		CMap *character_map;
 	} cres;
 

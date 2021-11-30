@@ -13,6 +13,7 @@
 #include "include/engine/skybox.hpp"
 
 #include "include/math/linalg.hpp"
+#include "include/math/compat.hpp"
 
 #include "include/mesh/basic.hpp"
 #include "include/mesh/sphere.hpp"
