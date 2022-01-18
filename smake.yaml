@@ -1,0 +1,16 @@
+default_compiler: clang++
+default_standard: c++17
+
+builds:
+  - mercury_release:
+    - sources: 'main.cpp, source/vulkan.cpp'
+    - idirs: 'vendor/glm,
+      include'
+    - libraries: GLFW, vulkan
+
+targets:
+  - mercury:
+    - builds:
+      - default: mercury_release
+    - postbuilds:
+      - default: '{}'
