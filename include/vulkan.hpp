@@ -4,10 +4,12 @@
 // Standard headers
 #include <optional>
 #include <set>
+#include <string>
 #include <vector>
 
 // GLFW and Vulkan
 #define GLFW_INCLUDE_VULKAN
+
 #include <GLFW/glfw3.h>
 
 extern const bool enableValidationLayers;
@@ -21,8 +23,8 @@ extern VkResult CreateDebugUtilsMessengerEXT(VkInstance, const VkDebugUtilsMesse
 extern void DestroyDebugUtilsMessengerEXT(VkInstance, VkDebugUtilsMessengerEXT, const VkAllocationCallbacks *);
 
 struct QueueFamilyIndices {
-    std::optional<uint32_t> graphicsFamily;
-    std::optional<uint32_t> presentFamily;
+    std::optional <uint32_t> graphicsFamily;
+    std::optional <uint32_t> presentFamily;
 
     bool isComplete() {
         return graphicsFamily.has_value() && presentFamily.has_value();
@@ -60,12 +62,12 @@ struct Vulkan {
 	VkPipeline graphicsPipeline;
 
 	VkCommandPool commandPool;
-	std::vector<VkCommandBuffer> commandBuffers;
+	std::vector <VkCommandBuffer> commandBuffers;
 
-	std::vector<VkSemaphore> imageAvailableSemaphores;
-	std::vector<VkSemaphore> renderFinishedSemaphores;
-	std::vector<VkFence> inFlightFences;
-	std::vector<VkFence> imagesInFlight;
+	std::vector <VkSemaphore> imageAvailableSemaphores;
+	std::vector <VkSemaphore> renderFinishedSemaphores;
+	std::vector <VkFence> inFlightFences;
+	std::vector <VkFence> imagesInFlight;
 
 	// TODO: these two should be in the engine class, not this one
 	size_t currentFrame = 0;
@@ -99,8 +101,15 @@ struct Vulkan {
         QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
         std::vector<const char *> getRequiredExtensions();
         bool checkValidationLayerSupport();
-        static std::vector<char> readFile(const std::string &filename);
-        static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData, void *pUserData);
+
+        static std::vector <char> read(const std::string &filename);
+	
+	static VKAPI_ATTR VkBool32 VKAPI_CALL
+	debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT
+		messageSeverity, VkDebugUtilsMessageTypeFlagsEXT
+		messageType, const
+		VkDebugUtilsMessengerCallbackDataEXT
+		*pCallbackData, void *pUserData);
 };
 
 #endif

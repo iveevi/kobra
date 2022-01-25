@@ -6,7 +6,16 @@ builds:
     - sources: 'main.cpp, source/vulkan.cpp'
     - idirs: 'vendor/glm,
       include'
-    - libraries: GLFW, vulkan
+    - libraries: glfw, vulkan
+  - experimental:
+    - sources: 'experimental/main.cpp, glad/src/glad.c'
+    - idirs: 'glad/include, thirdparty/glm'
+    - libraries: glfw, dl
+  - experimental_debug:
+    - sources: 'experimental/main.cpp, glad/src/glad.c'
+    - idirs: 'glad/include, thirdparty/glm'
+    - libraries: glfw, dl
+    - flags: '-g'
 
 targets:
   - mercury:
@@ -14,3 +23,11 @@ targets:
       - default: mercury_release
     - postbuilds:
       - default: '{}'
+  - exp:
+    - modes: 'gdb'
+    - builds:
+      - default: experimental
+      - gdb: experimental_debug
+    - postbuilds:
+      - default: '{}'
+      - gdb: 'gdb {}'

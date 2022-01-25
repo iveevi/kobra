@@ -1,7 +1,10 @@
 // Standard headers
+#include <algorithm>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 
+// Engine headers
 #include "vulkan.hpp"
 
 void Vulkan::initVulkan(GLFWwindow *win)
@@ -793,8 +796,7 @@ bool Vulkan::checkValidationLayerSupport()
 
 		for (const auto &layerProperties : availableLayers)
 		{
-			if (strcmp(layerName, layerProperties.layerName) == 0)
-			{
+			if (std::strcmp(layerName, layerProperties.layerName) == 0) {
 				layerFound = true;
 				break;
 			}
