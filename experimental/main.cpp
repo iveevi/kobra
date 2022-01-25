@@ -5,6 +5,9 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
+// GLM headers
+#include <glm/gtc/matrix_transform.hpp>
+
 // Headers
 #include "object.hpp"
 
@@ -16,26 +19,23 @@ const int WINDOW_HEIGHT = 600;
 struct Camera {
         // Camera position
         vec3 position;
-        float distance; // Distance from the film to the center of the camera
+
+        // FOV
+        float fov;
 
         // Orientation
         vec3 front;
         vec3 up;
-
-        // Frustum angles
-        float hangle;
-        float vangle;
+        vec3 right;
 };
 
 Camera camera {
-        vec3(0.0f, 0.0f, -10.0f),
-        1.0f,
+        vec3(0.0f, 0.0f, 0.0f),
+        90.0f,
         
         vec3(0.0f, 0.0f, 1.0f),
         vec3(0.0f, 1.0f, 0.0f),
-        
-        45.0f,
-        45.0f
+        vec3(1.0f, 0.0f, 0.0f)
 };
 
 // Pixel ubffer data
@@ -47,10 +47,30 @@ struct uvec4 {
 };
 
 // Keyboard callback
+bool rerender = true;
+
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
         if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
                 glfwSetWindowShouldClose(window, GL_TRUE);
+
+        // Move camera
+        float camera_speed = 0.5f;
+        if (key == GLFW_KEY_W) {
+                camera.position += camera.front * camera_speed;
+                rerender = true;
+        } else if (key == GLFW_KEY_S) {
+                camera.position -= camera.front * camera_speed;
+                rerender = true;
+        }
+
+        if (key == GLFW_KEY_A) {
+                camera.position += camera.right * camera_speed;
+                rerender = true;
+        } else if (key == GLFW_KEY_D) {
+                camera.position -= camera.right * camera_speed;
+                rerender = true;
+        }
 }
 
 // Initilize GLFW
@@ -87,13 +107,29 @@ int nobjs = 4;
 
 Object *objects[] = {
         new Sphere(vec3(0.0f, 0.0f, 4.0f), 1.0f),
-        new Sphere(vec3(3.0f, 0.0f, 5.0f), 3.0f),
+        new Sphere(vec3(3.0f, 0.0f, 3.0f), 3.0f),
         new Sphere(vec3(6.0f, -2.0f, 5.0f), 6.0f),
         new Sphere(vec3(6.0f, 3.0f, 10.0f), 2.0f)
 };
 
 // Initialize the pixel buffer
 uvec4 *init_pixels(const uvec4 &base)
+{
+        // TODO: color buffer for each unique object (by address)
+        uvec4 *out = new uvec4[WINDOW_WIDTH * WINDOW_HEIGHT];
+        for (int i = 0; i < WINDOW_WIDTH * WINDOW_HEIGHT; i++)
+                out[i] = base;
+
+        return out;
+}
+
+void clear(uvec4 *pixels, const uvec4 &base)
+{
+        for (int i = 0; i < WINDOW_WIDTH * WINDOW_HEIGHT; i++)
+                pixels[i] = base;
+}
+
+void render(uvec4 *pixels)
 {
         // Color wheel
         static uvec4 colors[] = {
@@ -117,58 +153,65 @@ uvec4 *init_pixels(const uvec4 &base)
                         cid = 0;
         }
 
-        // TODO: color buffer for each unique object (by address)
-        uvec4 *out = new uvec4[WINDOW_WIDTH * WINDOW_HEIGHT];
-        
-        /* for (int i = 0; i < WINDOW_WIDTH * WINDOW_HEIGHT; i++)
-                out[i] = base; */
-        
-        // Iterate over the pixels and generate rays
+        // Aspect ratio
+        float scale = glm::tan(glm::radians(0.5f * camera.fov));
+        float aspect = (float) WINDOW_WIDTH / (float) WINDOW_HEIGHT;
+
+        // Camera matrix
+        mat4 camera_matrix = glm::identity <mat4> ();
+
+        // Iterate over the pixels
         for (int y = 0; y < WINDOW_HEIGHT; y++) {
                 for (int x = 0; x < WINDOW_WIDTH; x++) {
-                        // Calculate the ray direction
-                        vec3 direction = vec3(
-                                (2.0f * (x + 0.5f) / WINDOW_WIDTH - 1.0f) * tan(camera.vangle / 2.0f * M_PI / 180.0f),
-                                (2.0f * (y + 0.5f) / WINDOW_HEIGHT - 1.0f) * tan(camera.hangle / 2.0f * M_PI / 180.0f),
-                                -1.0f
-                        );
-                        
-                        // Normalize the direction
-                        direction = normalize(direction);
+                        // NDC coordinates
+                        float nx = (x + 0.5f) / (float) WINDOW_WIDTH;
+                        float ny = (y + 0.5f) / (float) WINDOW_HEIGHT;
 
-                        // Create the ray
+                        // Camera coordinates
+                        float cx = (2.0f * nx - 1.0f) * aspect * scale;
+                        float cy = (1.0f - 2.0f * ny) * scale;
+
+                        // Final pixel coordinates
+                        // vec3 p = camera.position + camera.front * cx + camera.up * cy;
+                        vec3 p = vec3(cx, cy, -1.0f) + camera.position;
+
+                        // Construct the ray
                         Ray ray {
                                 camera.position,
-                                direction
+                                glm::normalize(p - camera.position)
                         };
 
-                        // Set initial color
-                        out[y * WINDOW_WIDTH + x] = base;
+                        // Find the closest object
+                        vec3 intersection;
                         
-                        // Iterate over all objects
-                        vec3 pos;
+                        int iclose = -1;
+                        float dclose = std::numeric_limits <float> ::max();
 
-                        // TODO: find the closest object
                         for (int i = 0; i < nobjs; i++) {
-                                // Calculate the intersection
-                                bool inter = objects[i]->intersect(ray, pos);
-                                
-                                // If the ray intersects the object
-                                if (inter) {
-                                        // Calculate the pixel color
-                                        out[y * WINDOW_WIDTH + x] = colors[obj_colors[i]];
-
-                                        // Break the loop
-                                        break;
+                                if (objects[i]->intersect(ray, intersection)) {
+                                        float d = glm::length(intersection - camera.position);
+                                        if (d < dclose) {
+                                                dclose = d;
+                                                iclose = i;
+                                        }
                                 }
+                        }
+
+                        // If there is an intersection
+                        if (iclose != -1) {
+                                // Color the pixel
+                                pixels[y * WINDOW_WIDTH + x] = colors[obj_colors[iclose]];
                         }
                 }
         }
 
+        // Free memory
         delete[] obj_colors;
 
-        return out;
+        // TODO: anti aliasing pass, plus any post processing
 }
+
+// TODO: imgui monitor
 
 // Main function
 int main()
@@ -176,13 +219,22 @@ int main()
         GLFWwindow *window = init_glfw();
 
         // Initialize the pixel buffer and texture
-        uvec4 base = {255, 255, 255, 255};
+        uvec4 base = {50, 50, 50, 255};
         uvec4 *pixels = init_pixels(base);
+        
+        // Render to the pixel buffer
+        render(pixels);
 
         while (!glfwWindowShouldClose(window)) {
-                // Clear the screen
-                glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-                glClear(GL_COLOR_BUFFER_BIT);
+                // Render the pixels if needed
+                if (rerender) {
+                        // Render the pixels
+                        clear(pixels, base);
+                        render(pixels);
+
+                        // Update the texture
+                        rerender = false;
+                }
 
                 // Render the texture
                 glDrawPixels(

@@ -9,7 +9,7 @@ struct vec3 {
 };
 
 // Operators
-vec3 operator+(const vec3& a, const vec3& b) {
+inline vec3 operator+(const vec3& a, const vec3& b) {
         vec3 c;
         c.x = a.x + b.x;
         c.y = a.y + b.y;
@@ -17,7 +17,7 @@ vec3 operator+(const vec3& a, const vec3& b) {
         return c;
 }
 
-vec3 operator-(const vec3& a, const vec3& b) {
+inline vec3 operator-(const vec3& a, const vec3& b) {
         vec3 c;
         c.x = a.x - b.x;
         c.y = a.y - b.y;

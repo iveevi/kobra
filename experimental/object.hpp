@@ -17,6 +17,8 @@ struct Ray {
 // NOTE: shapes/objects are represented as support functions
 struct Object {
         virtual vec3 support(const vec3 &) const = 0;
+
+        // TODO: return float distance
 	virtual bool intersect(const Ray &, vec3 &) const = 0;
 };
 
