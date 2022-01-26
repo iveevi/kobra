@@ -11,6 +11,7 @@
 // Headers
 #include "object.hpp"
 #include "light.hpp"
+#include "camera.hpp"
 
 // Window size
 const int WINDOW_WIDTH = 800;
@@ -22,77 +23,14 @@ std::ostream &operator<<(std::ostream &os, const vec3 &v)
         return os << "<" << v.x << ", " << v.y << ", " << v.z << ">";
 }
 
-// Camera information
-// TODO: inherit from model class which has orientation and position
-struct Camera {
-        // Camera position
-        vec3 position;
-
-        // Orientation
-        vec3 front;
-        vec3 up;
-        vec3 right;
-
-        // FOV and resolution
-        float fov;
-        float width;
-        float height;
-
-        // Computation helpers
-        float aspect;
-        float scale;
-
-        // Constructors
-        Camera(const vec3& position, const vec3& front, const vec3& up,
-                        float fov, float width, float height)
-                        : position(position), front(front), up(up),
-                        fov(fov), width(width), height(height) {
-                right = glm::cross(front, up);
-                
-                scale = glm::tan(glm::radians(0.5f * fov));
-                aspect = width/height;
-        }
-
-        // Create ray from normalized device coordinates
-        Ray ray(float nx, float ny) const {
-                // Camera coordinates
-                float cx = (2.0f * nx - 1.0f) * aspect * scale;
-                float cy = (1.0f - 2.0f * ny) * scale;
-
-                // Final pixel coordinates in terms of orientation
-                // vec3 p = vec3(cx, cy, -1.0f) + position;
-                vec3 p = position - front
-                        + right * cx + up * cy;
-
-                // Construct the ray
-                return Ray {
-                        position,
-                        glm::normalize(p - position)
-                };
-        }
-
-        // Rotate the camera along a given axis
-        void rotate(float angle, const vec3& axis) {
-                // Make the rotation matrix
-                mat4 rotation = glm::rotate(mat4(1.0f), angle, axis);
-
-                // Rotate the axial vectors
-                front = glm::vec3(rotation * glm::vec4(front, 0.0f));
-                up = glm::vec3(rotation * glm::vec4(up, 0.0f));
-
-                // Recompute the right vector
-                right = glm::cross(front, up);
-        }
-};
-
 Camera camera {
-        vec3(0.0f, 0.0f, 0.0f),
-        vec3(0.0f, 0.0f, 1.0f),
-        vec3(0.0f, 1.0f, 0.0f),
+        Transform {vec3(0.0f, 0.0f, -4.0f)},
  
-        90.0f,
-        (float) WINDOW_WIDTH,
-        (float) WINDOW_HEIGHT
+        Tunings {
+                WINDOW_WIDTH,
+                WINDOW_HEIGHT,
+                90.0f
+        }
 };
 
 // Pixel ubffer data
@@ -120,43 +58,6 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 {
         if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
                 glfwSetWindowShouldClose(window, GL_TRUE);
-
-        // Move camera
-        float camera_speed = 0.5f;
-        if (key == GLFW_KEY_W) {
-                camera.position += camera.front * camera_speed;
-                rerender = true;
-        } else if (key == GLFW_KEY_S) {
-                camera.position -= camera.front * camera_speed;
-                rerender = true;
-        }
-
-        if (key == GLFW_KEY_A) {
-                camera.position += camera.right * camera_speed;
-                rerender = true;
-        } else if (key == GLFW_KEY_D) {
-                camera.position -= camera.right * camera_speed;
-                rerender = true;
-        }
-
-        // Rotate camera
-        float camera_rotation_speed = 0.05f;
-
-        if (key == GLFW_KEY_LEFT) {
-                camera.rotate(camera_rotation_speed, camera.up);
-                rerender = true;
-        } else if (key == GLFW_KEY_RIGHT) {
-                camera.rotate(-camera_rotation_speed, camera.up);
-                rerender = true;
-        }
-
-        if (key == GLFW_KEY_UP) {
-                camera.rotate(camera_rotation_speed, camera.right);
-                rerender = true;
-        } else if (key == GLFW_KEY_DOWN) {
-                camera.rotate(-camera_rotation_speed, camera.right);
-                rerender = true;
-        }
 }
 
 // Initilize GLFW
@@ -245,6 +146,7 @@ void render(uvec4 *pixels)
         }
 
         // Iterate over the pixels
+        glm::vec3 cpos = camera.transform.position;
         for (int y = 0; y < WINDOW_HEIGHT; y++) {
                 for (int x = 0; x < WINDOW_WIDTH; x++) {
                         // NDC coordinates
@@ -263,7 +165,7 @@ void render(uvec4 *pixels)
 
                         for (int i = 0; i < nobjs; i++) {
                                 if (objects[i]->intersect(ray, intersection)) {
-                                        float d = glm::length(intersection - camera.position);
+                                        float d = glm::length(intersection - cpos);
                                         if (d < dclose) {
                                                 dclose = d;
                                                 iclose = i;

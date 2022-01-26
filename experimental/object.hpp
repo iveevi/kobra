@@ -4,15 +4,12 @@
 // Linear algebra
 #include <glm/glm.hpp>
 
+// Engine headers
+#include "ray.hpp"
+
 // Aliases
 using glm::vec3;
 using glm::mat4;
-
-// Ray object
-struct Ray {
-	vec3 origin;
-	vec3 direction;
-};
 
 // NOTE: shapes/objects are represented as support functions
 struct Object {

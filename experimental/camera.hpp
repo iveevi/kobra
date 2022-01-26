@@ -1,84 +1,61 @@
 #ifndef CAMERA_H_
 #define CAMERA_H_
 
+// GLM headers
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
 // Engine headers
+#include "ray.hpp"
 #include "transform.hpp"
 
-// Ray structure
-struct Ray {
-        glm::vec3 origin;
-        glm::vec3 direction;
-};
-
 // Camera properties
-struct Tunings {
+class Tunings {
+        float _radians(float degrees) {
+                return degrees * (M_PI / 180.0f);
+        }
+public:
         float fov;
+        float scale;
         float aspect;
-        float near;
-        float far;
 
-        Tunings() : fov(0.0f), aspect(0.0f),
-                        near(0.0f), far(0.0f) {}
+        // TODO: add lens attributes
+        Tunings() : fov(90.0f), aspect(1.0f) {
+                scale = tan(_radians(fov) * 0.5f);
+        }
 
         Tunings(float fov, float width, float height)
-                        : fov(fov), aspect(width / height),
-                        near(0.1f), far(100.0f) {}
+                        : fov(fov), aspect(width / height) {
+                scale = tan(_radians(fov) * 0.5f);
+        }
 };
 
 // Camera class
 class Camera {
-        // Transforms
-        // TODO: inhert
-        Transform transform;
-        Transform camera_to_raster;
-        Transform raster_to_camera;
-
-        // Camera parameters
+        // Camera properties
         Tunings tunings;
-        
-        // Screen space differentials
-        glm::vec3 dx;
-        glm::vec3 dy;
-
-        // Generate perspective transform
-        static Transform _perspective(float fov, float aspect, float near, float far) {
-                glm::mat4 perspective = glm::perspective(fov, aspect, near, far);
-                return Transform(perspective);
-        }
 public:
-        // Constructor with position, front and up vectors
-        Camera(glm::vec3 position, glm::vec3 front, glm::vec3 up, const Tunings& tns)
-                        : tunings(tns) {
-                // Set camera position
-                transform.translate(position);
+        // Public member variables
+        Transform transform;
 
-                // Set camera orientation
-                transform.look_at(front, up);
+        // Constructors
+        Camera();
+        Camera(const Transform& trans, const Tunings& tns)
+                        : transform(trans), tunings(tns) {}
 
-                // Set camera to raster transform
-                camera_to_raster = _perspective(
-                        tunings.fov, tunings.aspect,
-                        tunings.near, tunings.far
-                );
-
-                // Set raster to camera Transform
-                raster_to_camera = camera_to_raster.inverse();
-
-                // Calculate screen space differentials
-                glm::vec3 ux {1.0f, 0.0f, 0.0f};
-                glm::vec3 uy {0.0f, 1.0f, 0.0f};
-
-                dx = raster_to_camera.mul_pt(ux);
-                dy = raster_to_camera.mul_pt(uy);
-        }
-
-        // Generate a ray from the camera to the given pixel
+        // Ray generation
         Ray ray(float nx, float ny) const {
-                glm::vec3 film_pt {nx, ny, 0.0f};
-                glm::vec3 camera_pt = raster_to_camera(film_pt);
+                float cx = (nx * 2.0f - 1.0f) * tunings.scale * tunings.aspect;
+                float cy = (1.0f - ny * 2.0f) * tunings.scale;
+
+                glm::vec3 dir = transform.position
+                        + cx * transform.right
+                        + cy * transform.up
+                        - transform.forward;
+
                 return Ray {
-                        glm::vec3 {0.0f},
-                        glm::normalize(camera_pt)
+                        transform.position,
+                        glm::normalize(dir)
                 };
         }
 };

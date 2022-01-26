@@ -1,53 +1,33 @@
 #ifndef TRANSFORM_H_
 #define TRANSFORM_H_
 
-// Use glm for matrix math
+// Standard headers
+#include <iostream>
+
+// GLM headers
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 
-class Transform {
-        glm::mat4 mat;
-        glm::mat4 inv;
-public:
-        // Constuctors
-        Transform() :mat(1), inv(1) {}
-        Transform(const glm::mat4 &m) : mat(m), inv(glm::inverse(m)) {}
-        Transform(const glm::mat4 &m, const glm::mat4 &i) : mat(m), inv(i) {}
+// Transform class
+struct Transform {
+        // Basic properties
+        glm::vec3 position;
+        glm::quat rotation;
+        glm::vec3 scale;
 
-        // Operators
-        Transform operator*(const Transform &t) const {
-                return Transform(mat * t.mat, t.inv * inv);
-        }
+        // Directions
+        glm::vec3 forward;
+        glm::vec3 up;
+        glm::vec3 right;
 
-        // Multiply as a vector
-        glm::vec3 mul_vec(const glm::vec3 &v) const {
-                return glm::vec3(mat * glm::vec4(v, 1.0f));
-        }
-
-        // Multiply as a point
-        glm::vec3 mul_pt(const glm::vec3 &v) const {
-                return glm::vec3(mat * glm::vec4(v, 1.0f));
-        }
-
-        // Movement and rotation
-        void translate(const glm::vec3 &v) {
-                mat = glm::translate(mat, v);
-                inv = glm::translate(inv, -v);
-        }
-
-        // Set orientation with lookAt
-        void look_at(const glm::vec3 &front, const glm::vec3 &up) {
-                glm::mat4 rot = glm::lookAt(glm::vec3(0), front, up);
-                mat = rot * mat;
-                inv = glm::inverse(mat);
-        }
-
-        // Invert the transform
-        Transform invert() const {
-                glm::mat4 i_mat = glm::inverse(mat);
-                glm::mat4 i_inv = glm::inverse(inv);
-
-                return Transform(i_mat, i_inv);
-        }
+        // Constructors
+        Transform();
+        Transform(const glm::vec3 &pos) : position {pos},
+                rotation {glm::quat()},
+                scale {1.0, 1.0, 1.0},
+                forward {0.0, 0.0, 1.0},
+                up {0.0, 1.0, 0.0},
+                right {1.0, 0.0, 0.0} {}
 };
 
 #endif
