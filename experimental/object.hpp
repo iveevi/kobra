@@ -28,8 +28,8 @@ struct Renderable {
         // TODO: is this necessary?
         virtual vec3 support(const vec3 &) const = 0;
 
-        // TODO: return float distance
-	virtual bool intersect(const Ray &, vec3 &) const = 0;
+        // Returns distance/time of intersection
+	virtual float intersect(const Ray &) const = 0;
 
         // Get the normal at the given point
         virtual vec3 normal(const vec3 &) const = 0;
@@ -45,23 +45,20 @@ struct Sphere : public virtual Object, public virtual Renderable {
                 return position + radius * glm::normalize(d);
         }
 
-	bool intersect(const Ray &ray, vec3 &pt) const override {
-		vec3 oc = ray.origin - position;
-		float a = glm::dot(ray.direction, ray.direction);
-		float b = 2.0f * glm::dot(oc, ray.direction);
-		float c = glm::dot(oc, oc) - radius * radius;
-		float discriminant = b * b - 4.0f * a * c;
-		if (discriminant < 0.0f) {
-			return false;
-		}
+	float intersect(const Ray &ray) const override {
+                glm::vec3 oc = ray.origin - position;
+                float a = glm::dot(ray.direction, ray.direction);
+                float b = 2.0f * glm::dot(oc, ray.direction);
+                float c = glm::dot(oc, oc) - radius * radius;
+                float discriminant = b * b - 4.0f * a * c;
 
-		float t = (-b - glm::sqrt(discriminant)) / (2.0f * a);
-		if (t < 0.0f) {
-			t = (-b + glm::sqrt(discriminant)) / (2.0f * a);
-		}
+                if (discriminant < 0.0f)
+                        return -1.0f;
 
-		pt = ray.origin + ray.direction * t;
-		return true;
+                float t1 = (-b - glm::sqrt(discriminant)) / (2.0f * a);
+                float t2 = (-b + glm::sqrt(discriminant)) / (2.0f * a);
+
+                return std::min(t1, t2);
 	}
 
         vec3 normal(const vec3 &pt) const override {

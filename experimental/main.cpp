@@ -27,9 +27,9 @@ Camera camera {
         Transform {vec3(0.0f, 0.0f, -4.0f)},
  
         Tunings {
+                90.0f,
                 WINDOW_WIDTH,
-                WINDOW_HEIGHT,
-                90.0f
+                WINDOW_HEIGHT
         }
 };
 
@@ -58,6 +58,24 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 {
         if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
                 glfwSetWindowShouldClose(window, GL_TRUE);
+
+        // Camera movement
+        float speed = 0.5f;
+        if (key == GLFW_KEY_W) {
+                camera.transform.position += camera.transform.forward * speed;
+                rerender = true;
+        } else if (key == GLFW_KEY_S) {
+                camera.transform.position -= camera.transform.forward * speed;
+                rerender = true;
+        }
+
+        if (key == GLFW_KEY_A) {
+                camera.transform.position -= camera.transform.right * speed;
+                rerender = true;
+        } else if (key == GLFW_KEY_D) {
+                camera.transform.position += camera.transform.right * speed;
+                rerender = true;
+        }
 }
 
 // Initilize GLFW
@@ -156,33 +174,19 @@ void render(uvec4 *pixels)
                         Ray ray = camera.ray(nx, ny);
 
                         // Find the closest object
-                        vec3 intersection;
-                        
                         int iclose = -1;
                         float dclose = std::numeric_limits <float> ::max();
-                        vec3 vclose = vec3(0.0f);
-                        vec3 nclose = vec3(0.0f);
 
                         for (int i = 0; i < nobjs; i++) {
-                                if (objects[i]->intersect(ray, intersection)) {
-                                        float d = glm::length(intersection - cpos);
-                                        if (d < dclose) {
-                                                dclose = d;
-                                                iclose = i;
-                                                vclose = intersection;
-                                                nclose = objects[i]->normal(intersection);
-                                        }
+                                float d = objects[i]->intersect(ray);
+                                if (d > 0 && dclose > d) {
+                                        dclose = d;
+                                        iclose = i;
                                 }
                         }
 
                         // If there is an intersection
                         if (iclose != -1) {
-                                vec3 light_pos = lights[0]->position;
-                                vec3 light_dir = glm::normalize(light_pos - vclose);
-
-                                // Compute the color
-                                float diffuse = fmax(glm::dot(nclose, light_dir), 0.0f);
-
                                 // Color the pixel
                                 pixels[y * WINDOW_WIDTH + x] = colors[obj_colors[iclose]];
                         }

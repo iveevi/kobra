@@ -48,10 +48,9 @@ public:
                 float cx = (nx * 2.0f - 1.0f) * tunings.scale * tunings.aspect;
                 float cy = (1.0f - ny * 2.0f) * tunings.scale;
 
-                glm::vec3 dir = transform.position
-                        + cx * transform.right
+                glm::vec3 dir = cx * transform.right
                         + cy * transform.up
-                        - transform.forward;
+                        + transform.forward;
 
                 return Ray {
                         transform.position,
