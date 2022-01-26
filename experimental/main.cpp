@@ -10,32 +10,89 @@
 
 // Headers
 #include "object.hpp"
+#include "light.hpp"
 
 // Window size
 const int WINDOW_WIDTH = 800;
 const int WINDOW_HEIGHT = 600;
 
+// Printing vec3
+std::ostream &operator<<(std::ostream &os, const vec3 &v)
+{
+        return os << "<" << v.x << ", " << v.y << ", " << v.z << ">";
+}
+
 // Camera information
+// TODO: inherit from model class which has orientation and position
 struct Camera {
         // Camera position
         vec3 position;
-
-        // FOV
-        float fov;
 
         // Orientation
         vec3 front;
         vec3 up;
         vec3 right;
+
+        // FOV and resolution
+        float fov;
+        float width;
+        float height;
+
+        // Computation helpers
+        float aspect;
+        float scale;
+
+        // Constructors
+        Camera(const vec3& position, const vec3& front, const vec3& up,
+                        float fov, float width, float height)
+                        : position(position), front(front), up(up),
+                        fov(fov), width(width), height(height) {
+                right = glm::cross(front, up);
+                
+                scale = glm::tan(glm::radians(0.5f * fov));
+                aspect = width/height;
+        }
+
+        // Create ray from normalized device coordinates
+        Ray ray(float nx, float ny) const {
+                // Camera coordinates
+                float cx = (2.0f * nx - 1.0f) * aspect * scale;
+                float cy = (1.0f - 2.0f * ny) * scale;
+
+                // Final pixel coordinates in terms of orientation
+                // vec3 p = vec3(cx, cy, -1.0f) + position;
+                vec3 p = position - front
+                        + right * cx + up * cy;
+
+                // Construct the ray
+                return Ray {
+                        position,
+                        glm::normalize(p - position)
+                };
+        }
+
+        // Rotate the camera along a given axis
+        void rotate(float angle, const vec3& axis) {
+                // Make the rotation matrix
+                mat4 rotation = glm::rotate(mat4(1.0f), angle, axis);
+
+                // Rotate the axial vectors
+                front = glm::vec3(rotation * glm::vec4(front, 0.0f));
+                up = glm::vec3(rotation * glm::vec4(up, 0.0f));
+
+                // Recompute the right vector
+                right = glm::cross(front, up);
+        }
 };
 
 Camera camera {
         vec3(0.0f, 0.0f, 0.0f),
-        90.0f,
-        
         vec3(0.0f, 0.0f, 1.0f),
         vec3(0.0f, 1.0f, 0.0f),
-        vec3(1.0f, 0.0f, 0.0f)
+ 
+        90.0f,
+        (float) WINDOW_WIDTH,
+        (float) WINDOW_HEIGHT
 };
 
 // Pixel ubffer data
@@ -45,6 +102,16 @@ struct uvec4 {
         uint8_t b;
         uint8_t a;
 };
+
+// Basic operations
+inline uvec4 operator*(float s, const uvec4 &v) {
+        return {
+                (uint8_t) (s * v.r),
+                (uint8_t) (s * v.g),
+                (uint8_t) (s * v.b),
+                (uint8_t) (s * v.a)
+        };
+}
 
 // Keyboard callback
 bool rerender = true;
@@ -69,6 +136,25 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
                 rerender = true;
         } else if (key == GLFW_KEY_D) {
                 camera.position -= camera.right * camera_speed;
+                rerender = true;
+        }
+
+        // Rotate camera
+        float camera_rotation_speed = 0.05f;
+
+        if (key == GLFW_KEY_LEFT) {
+                camera.rotate(camera_rotation_speed, camera.up);
+                rerender = true;
+        } else if (key == GLFW_KEY_RIGHT) {
+                camera.rotate(-camera_rotation_speed, camera.up);
+                rerender = true;
+        }
+
+        if (key == GLFW_KEY_UP) {
+                camera.rotate(camera_rotation_speed, camera.right);
+                rerender = true;
+        } else if (key == GLFW_KEY_DOWN) {
+                camera.rotate(-camera_rotation_speed, camera.right);
                 rerender = true;
         }
 }
@@ -103,13 +189,18 @@ GLFWwindow *init_glfw()
 }
 
 // All objects
-int nobjs = 4;
+int nobjs = 5;
 
-Object *objects[] = {
+Renderable *objects[] = {
         new Sphere(vec3(0.0f, 0.0f, 4.0f), 1.0f),
         new Sphere(vec3(3.0f, 0.0f, 3.0f), 3.0f),
         new Sphere(vec3(6.0f, -2.0f, 5.0f), 6.0f),
-        new Sphere(vec3(6.0f, 3.0f, 10.0f), 2.0f)
+        new Sphere(vec3(6.0f, 3.0f, 10.0f), 2.0f),
+        new Sphere(vec3(6.0f, 3.0f, -4.0f), 2.0f),
+};
+
+Object *lights[] = {
+        new PointLight(vec3(0.0f, 0.0f, 0.0f))
 };
 
 // Initialize the pixel buffer
@@ -153,13 +244,6 @@ void render(uvec4 *pixels)
                         cid = 0;
         }
 
-        // Aspect ratio
-        float scale = glm::tan(glm::radians(0.5f * camera.fov));
-        float aspect = (float) WINDOW_WIDTH / (float) WINDOW_HEIGHT;
-
-        // Camera matrix
-        mat4 camera_matrix = glm::identity <mat4> ();
-
         // Iterate over the pixels
         for (int y = 0; y < WINDOW_HEIGHT; y++) {
                 for (int x = 0; x < WINDOW_WIDTH; x++) {
@@ -167,25 +251,15 @@ void render(uvec4 *pixels)
                         float nx = (x + 0.5f) / (float) WINDOW_WIDTH;
                         float ny = (y + 0.5f) / (float) WINDOW_HEIGHT;
 
-                        // Camera coordinates
-                        float cx = (2.0f * nx - 1.0f) * aspect * scale;
-                        float cy = (1.0f - 2.0f * ny) * scale;
-
-                        // Final pixel coordinates
-                        // vec3 p = camera.position + camera.front * cx + camera.up * cy;
-                        vec3 p = vec3(cx, cy, -1.0f) + camera.position;
-
-                        // Construct the ray
-                        Ray ray {
-                                camera.position,
-                                glm::normalize(p - camera.position)
-                        };
+                        Ray ray = camera.ray(nx, ny);
 
                         // Find the closest object
                         vec3 intersection;
                         
                         int iclose = -1;
                         float dclose = std::numeric_limits <float> ::max();
+                        vec3 vclose = vec3(0.0f);
+                        vec3 nclose = vec3(0.0f);
 
                         for (int i = 0; i < nobjs; i++) {
                                 if (objects[i]->intersect(ray, intersection)) {
@@ -193,12 +267,20 @@ void render(uvec4 *pixels)
                                         if (d < dclose) {
                                                 dclose = d;
                                                 iclose = i;
+                                                vclose = intersection;
+                                                nclose = objects[i]->normal(intersection);
                                         }
                                 }
                         }
 
                         // If there is an intersection
                         if (iclose != -1) {
+                                vec3 light_pos = lights[0]->position;
+                                vec3 light_dir = glm::normalize(light_pos - vclose);
+
+                                // Compute the color
+                                float diffuse = fmax(glm::dot(nclose, light_dir), 0.0f);
+
                                 // Color the pixel
                                 pixels[y * WINDOW_WIDTH + x] = colors[obj_colors[iclose]];
                         }
