@@ -1,6 +1,11 @@
 // Standard headers
 #include <iostream>
 
+// ImGui headers
+#include <imgui.h>
+#include <backends/imgui_impl_glfw.h>
+#include <backends/imgui_impl_opengl3.h>
+
 // Grapihcs headers
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -79,7 +84,7 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 }
 
 // Initilize GLFW
-GLFWwindow *init_glfw()
+GLFWwindow *init_graphics()
 {
         // Initilize GLFW
         glfwInit();
@@ -103,7 +108,17 @@ GLFWwindow *init_glfw()
                 fprintf(stderr, "Failed to initialize GLAD\n");
                 exit(EXIT_FAILURE);
         }
-        
+
+        // Initialize ImGui
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGuiIO &io = ImGui::GetIO();
+
+        ImGui::StyleColorsDark();
+
+        ImGui_ImplGlfw_InitForOpenGL(window, true);
+        ImGui_ImplOpenGL3_Init("#version 330");
+
         return window;
 }
 
@@ -137,6 +152,22 @@ void clear(uvec4 *pixels, const uvec4 &base)
 {
         for (int i = 0; i < WINDOW_WIDTH * WINDOW_HEIGHT; i++)
                 pixels[i] = base;
+}
+
+// Convert color to discetized grey scale value
+uvec4 dcgrey(const uvec4 &color)
+{
+        // Discrete steps
+        static const int steps = 16;
+
+        // Get grey scale vector
+        uint8_t grey = (color.r + color.g + color.b) / 3;
+
+        // Discretize (remove remainder)
+        grey = grey - (grey % steps);
+
+        // Return color
+        return uvec4 {grey, grey, grey, color.a};
 }
 
 void render(uvec4 *pixels)
@@ -198,7 +229,8 @@ void render(uvec4 *pixels)
                                 float diffuse = glm::max(glm::dot(n, l), 0.0f);
 
                                 // Color the pixel
-                                pixels[y * WINDOW_WIDTH + x] = diffuse * colors[obj_colors[iclose]];
+                                uvec4 fcolor = diffuse * colors[obj_colors[iclose]];
+                                pixels[y * WINDOW_WIDTH + x] = dcgrey(fcolor);
                         }
                 }
         }
@@ -214,7 +246,7 @@ void render(uvec4 *pixels)
 // Main function
 int main()
 {
-        GLFWwindow *window = init_glfw();
+        GLFWwindow *window = init_graphics();
 
         // Initialize the pixel buffer and texture
         uvec4 base = {200, 200, 200, 255};
@@ -242,6 +274,21 @@ int main()
                         GL_UNSIGNED_BYTE,
                         pixels
                 );
+
+                // Display ImGui fps counter
+                // TODO: monitor function
+                {
+                        ImGui_ImplOpenGL3_NewFrame();
+                        ImGui_ImplGlfw_NewFrame();
+                        ImGui::NewFrame();
+
+                        ImGui::Begin("Monitor");
+                        ImGui::Text("%.1f fps", ImGui::GetIO().Framerate);
+                        ImGui::End();
+
+                        ImGui::Render();
+                        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+                }
 
                 // Swap the buffers
                 glfwSwapBuffers(window);

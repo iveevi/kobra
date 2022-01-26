@@ -8,8 +8,18 @@ builds:
       include'
     - libraries: glfw, vulkan
   - experimental:
-    - sources: 'experimental/main.cpp, glad/src/glad.c'
-    - idirs: 'glad/include, thirdparty/glm'
+    - sources: 'experimental/main.cpp,
+      thirdparty/imgui/imgui.cpp,
+      thirdparty/imgui/imgui_draw.cpp,
+      thirdparty/imgui/imgui_demo.cpp,
+      thirdparty/imgui/imgui_widgets.cpp,
+      thirdparty/imgui/imgui_tables.cpp,
+      thirdparty/imgui/backends/imgui_impl_glfw.cpp,
+      thirdparty/imgui/backends/imgui_impl_opengl3.cpp,
+      glad/src/glad.c'
+    - idirs: 'glad/include,
+      thirdparty/glm,
+      thirdparty/imgui'
     - libraries: glfw, dl
   - experimental_debug:
     - sources: 'experimental/main.cpp, glad/src/glad.c'
