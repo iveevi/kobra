@@ -175,6 +175,8 @@ void render(uvec4 *pixels)
 
                         // Find the closest object
                         int iclose = -1;
+
+                        // TODO: change to tclose
                         float dclose = std::numeric_limits <float> ::max();
 
                         for (int i = 0; i < nobjs; i++) {
@@ -187,8 +189,16 @@ void render(uvec4 *pixels)
 
                         // If there is an intersection
                         if (iclose != -1) {
+                                // Get point of intersection
+                                vec3 p = ray.at(dclose);
+
+                                // Calculate diffuse
+                                vec3 n = objects[iclose]->normal(p);
+                                vec3 l = glm::normalize(lights[0]->position - p);
+                                float diffuse = glm::max(glm::dot(n, l), 0.0f);
+
                                 // Color the pixel
-                                pixels[y * WINDOW_WIDTH + x] = colors[obj_colors[iclose]];
+                                pixels[y * WINDOW_WIDTH + x] = diffuse * colors[obj_colors[iclose]];
                         }
                 }
         }
@@ -207,7 +217,7 @@ int main()
         GLFWwindow *window = init_glfw();
 
         // Initialize the pixel buffer and texture
-        uvec4 base = {50, 50, 50, 255};
+        uvec4 base = {200, 200, 200, 255};
         uvec4 *pixels = init_pixels(base);
         
         // Render to the pixel buffer
