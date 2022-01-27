@@ -3,7 +3,8 @@ default_standard: c++17
 
 builds:
   - mercury_release:
-    - sources: 'main.cpp, source/vulkan.cpp'
+    - sources: 'main.cpp,
+      source/logger.cpp'
     - idirs: 'vendor/glm,
       include'
     - libraries: glfw, vulkan

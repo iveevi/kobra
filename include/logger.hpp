@@ -46,7 +46,7 @@ class Logger {
 	static std::ostream &_main_fatal_error() {
 		mtx.lock();
 		if (console) *os << log_fatal_error();
-		*os << "[TAMBIENT: " << time() << ": FATAL ERROR] ";
+		*os << "[MERCURY: " << time() << ": FATAL ERROR] ";
 		if (console) *os << log_reset();
 		if (!console) os->flush();
 		mtx.unlock();
@@ -61,7 +61,7 @@ class Logger {
 	static std::ostream &_main_ok() {
 		mtx.lock();
 		if (console) *os << log_ok();
-		*os << "[TAMBIENT: " << time() << "] ";
+		*os << "[MERCURY: " << time() << "] ";
 		if (console) *os << log_reset();
 		if (!console) os->flush();
 		mtx.unlock();
@@ -71,7 +71,7 @@ class Logger {
 	static std::ostream &_main_error() {
 		mtx.lock();
 		if (console) *os << log_error();
-		*os << "[TAMBIENT: " << time() << "] ";
+		*os << "[MERCURY: " << time() << "] ";
 		if (console) *os << log_reset();
 		if (!console) os->flush();
 		mtx.unlock();
@@ -81,7 +81,7 @@ class Logger {
 	static std::ostream &_main_warn() {
 		mtx.lock();
 		if (console) *os << log_warn();
-		*os << "[TAMBIENT: " << time() << "] ";
+		*os << "[MERCURY: " << time() << "] ";
 		if (console) *os << log_reset();
 		if (!console) os->flush();
 		mtx.unlock();
@@ -91,7 +91,7 @@ class Logger {
 	static std::ostream &_main_notify() {
 		mtx.lock();
 		if (console) *os << log_notify();
-		*os << "[TAMBIENT: " << time() << "] ";
+		*os << "[MERCURY: " << time() << "] ";
 		if (console) *os << log_reset();
 		if (!console) os->flush();
 		mtx.unlock();
