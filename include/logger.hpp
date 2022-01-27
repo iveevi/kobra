@@ -140,6 +140,10 @@ public:
 		warn() << msg << std::endl;
 	}
 
+	static void notify(const char *msg) {
+		notify() << msg << std::endl;
+	}
+
 	static void fatal_error(const char *msg) {
 		_main_fatal_error() << msg << std::endl;
 		exit(-1);
@@ -156,6 +160,10 @@ public:
 
 	static void warn(const std::string &msg) {
 		warn(msg.c_str());
+	}
+
+	static void notify(const std::string &msg) {
+		notify(msg.c_str());
 	}
 
 	// Cached logging

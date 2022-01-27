@@ -1,8 +1,4 @@
-// Standard headers
-#include <exception>
-#include <iostream>
-#include <string>
-#include <vector>
+// #define MERCURY_VALIDATION_LAYERS
 
 #include "backend.hpp"
 
