@@ -48,9 +48,9 @@ private:
 	}
 
 	// Set current window
-	void _set_current(Window win) {
-		glfwMakeContextCurrent(win);
-		this->win = win;
+	void _set_current(Window w) {
+		glfwMakeContextCurrent(w);
+		win = w;
 	}
 public:
 	// Constructor
@@ -68,13 +68,14 @@ public:
 		// TODO: callback to logger
 		glfwSetErrorCallback([](int error, const char *description) {
 			std::cerr << "GLFW Error: " << description << std::endl;
+			throw (-1);
 		});
 
 		// Create window
-		_mk_win(title, width, height);
+		Window w = _mk_win(title, width, height);
 
 		// Set current window
-		_set_current(win);
+		_set_current(w);
 	}
 
 	// Destructor
@@ -93,8 +94,8 @@ public:
 	}
 
 	// Pointer operator
-	Window *operator->() {
-		return &win;
+	Window operator->() {
+		return win;
 	}
 
 	// Indexing operator
