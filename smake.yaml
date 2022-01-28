@@ -8,6 +8,13 @@ builds:
     - idirs: 'vendor/glm,
       include'
     - libraries: glfw, vulkan
+  - mercury_debug:
+    - sources: 'main.cpp,
+      source/logger.cpp'
+    - idirs: 'vendor/glm,
+      include'
+    - libraries: glfw, vulkan
+    - flags: -std=c++17 -g
   - experimental:
     - sources: 'experimental/main.cpp,
       thirdparty/imgui/imgui.cpp,
@@ -30,10 +37,13 @@ builds:
 
 targets:
   - mercury:
+    - modes: 'gdb'
     - builds:
       - default: mercury_release
+      - gdb: mercury_debug
     - postbuilds:
       - default: '{}'
+      - gdb: 'gdb {}'
   - exp:
     - modes: 'gdb'
     - builds:

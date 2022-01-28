@@ -1,4 +1,4 @@
-// #define MERCURY_VALIDATION_LAYERS
+#define MERCURY_VALIDATION_LAYERS
 
 #include "backend.hpp"
 

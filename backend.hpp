@@ -306,6 +306,7 @@ private:
 		if (f != nullptr)
 			return f(instance, create_info, allocator, debug_messenger);
 
+		Logger::warn("[Vulkan] Debug messenger extension not available!");
 		return VK_ERROR_EXTENSION_NOT_PRESENT;
 	}
 
@@ -365,7 +366,7 @@ private:
 
 		// Add validation layers if enabled
 		if (enable_validation_layers)
-			extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+			extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
 		// Return extensions
 		return extensions;
