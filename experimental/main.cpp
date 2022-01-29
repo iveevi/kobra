@@ -28,16 +28,6 @@ std::ostream &operator<<(std::ostream &os, const vec3 &v)
         return os << "<" << v.x << ", " << v.y << ", " << v.z << ">";
 }
 
-Camera camera {
-        Transform {vec3(0.0f, 0.0f, -4.0f)},
- 
-        Tunings {
-                90.0f,
-                WINDOW_WIDTH,
-                WINDOW_HEIGHT
-        }
-};
-
 // Pixel ubffer data
 struct uvec4 {
         uint8_t r;

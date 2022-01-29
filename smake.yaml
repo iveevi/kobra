@@ -4,36 +4,32 @@ default_standard: c++17
 builds:
   - mercury_release:
     - sources: 'main.cpp,
-      source/logger.cpp'
-    - idirs: 'vendor/glm,
-      include'
-    - libraries: glfw, vulkan
-  - mercury_debug:
-    - sources: 'main.cpp,
-      source/logger.cpp'
-    - idirs: 'vendor/glm,
-      include'
-    - libraries: glfw, vulkan
-    - flags: -std=c++17 -g
-  - experimental:
-    - sources: 'experimental/main.cpp,
+      source/vulkan.cpp,
+      source/logger.cpp,
       thirdparty/imgui/imgui.cpp,
       thirdparty/imgui/imgui_draw.cpp,
       thirdparty/imgui/imgui_demo.cpp,
       thirdparty/imgui/imgui_widgets.cpp,
       thirdparty/imgui/imgui_tables.cpp,
       thirdparty/imgui/backends/imgui_impl_glfw.cpp,
-      thirdparty/imgui/backends/imgui_impl_opengl3.cpp,
-      glad/src/glad.c'
-    - idirs: 'glad/include,
-      thirdparty/glm,
+      thirdparty/imgui/backends/imgui_impl_vulkan.cpp'
+    - idirs: 'thirdparty/glm,
       thirdparty/imgui'
-    - libraries: glfw, dl
-  - experimental_debug:
-    - sources: 'experimental/main.cpp, glad/src/glad.c'
-    - idirs: 'glad/include, thirdparty/glm'
-    - libraries: glfw, dl
-    - flags: '-g'
+    - libraries: glfw, vulkan 
+  - mercury_debug:
+    - sources: 'main.cpp,
+      source/logger.cpp,
+      thirdparty/imgui/imgui.cpp,
+      thirdparty/imgui/imgui_draw.cpp,
+      thirdparty/imgui/imgui_demo.cpp,
+      thirdparty/imgui/imgui_widgets.cpp,
+      thirdparty/imgui/imgui_tables.cpp,
+      thirdparty/imgui/backends/imgui_impl_glfw.cpp,
+      thirdparty/imgui/backends/imgui_impl_vulkan.cpp'
+    - idirs: 'thirdparty/glm,
+      thirdparty/imgui'
+    - libraries: glfw, vulkan
+    - flags: '-std=c++17 -g'
 
 targets:
   - mercury:
@@ -41,14 +37,6 @@ targets:
     - builds:
       - default: mercury_release
       - gdb: mercury_debug
-    - postbuilds:
-      - default: '{}'
-      - gdb: 'gdb {}'
-  - exp:
-    - modes: 'gdb'
-    - builds:
-      - default: experimental
-      - gdb: experimental_debug
     - postbuilds:
       - default: '{}'
       - gdb: 'gdb {}'
