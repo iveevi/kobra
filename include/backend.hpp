@@ -216,14 +216,14 @@ private:
 		};
 
 		VkDescriptorSetLayoutBinding compute_bindings[] {
-			compute_bindings_1 //,
-			// compute_bindings_2
+			compute_bindings_1,
+			compute_bindings_2
 		};
 		
 		// Create info
 		VkDescriptorSetLayoutCreateInfo layout_info {
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-			.bindingCount = 1,
+			.bindingCount = 2,
 			.pBindings = &compute_bindings[0]
 		};
 
@@ -1151,7 +1151,7 @@ public:
 	
 	// Allocate a buffer
 	// TODO: pass buffer propreties as a struct
-	Buffer *make_buffer(size_t size, VkBufferUsageFlags usage) {
+	void make_buffer(Buffer &bf, size_t size, VkBufferUsageFlags usage) {
 		// Buffer creation info
 		VkBufferCreateInfo buffer_info {
 			.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -1161,11 +1161,11 @@ public:
 		};
 
 		// Create the buffer
-		VkBuffer buffer;
+		// VkBuffer buffer;
 
 		VkResult result = vkCreateBuffer(
 			device, &buffer_info,
-			nullptr, &buffer
+			nullptr, &bf.buffer
 		);
 
 		if (result != VK_SUCCESS) {
@@ -1176,7 +1176,7 @@ public:
 
 		// Allocate memory for the buffer
 		VkMemoryRequirements mem_reqs;
-		vkGetBufferMemoryRequirements(device, buffer, &mem_reqs);
+		vkGetBufferMemoryRequirements(device, bf.buffer, &mem_reqs);
 
 		VkMemoryAllocateInfo alloc_info {
 			.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -1188,11 +1188,11 @@ public:
 		};
 
 		// Create device memory
-		VkDeviceMemory buffer_memory;
+		// VkDeviceMemory buffer_memory = VK_NULL_HANDLE;
 
 		result = vkAllocateMemory(
 			device, &alloc_info,
-			nullptr, &buffer_memory
+			nullptr, &bf.memory
 		);
 
 		if (result != VK_SUCCESS) {
@@ -1201,20 +1201,12 @@ public:
 		}
 
 		// Bind the buffer to the memory
-		vkBindBufferMemory(device, buffer, buffer_memory, 0);
+		vkBindBufferMemory(device, bf.buffer, bf.memory, 0);
 
-		// Create the buffer object
-		Buffer bf {
-			.buffer = buffer,
-			.memory = buffer_memory,
-			.size = size,
-			.offset = 0
-		};
-
-		// Add the buffer to the list
-		_buffers.push_back(bf);
-
-		return &_buffers.back();
+		// Set the buffer properties
+		bf.size = size;
+		// TODO: bf.usage = usage;
+		bf.offset = 0;
 	}
 
 	// Map data to a buffer

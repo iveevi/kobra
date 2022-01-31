@@ -2,7 +2,7 @@
 
 layout (set = 0, binding = 0, std430) buffer Pixels
 {
-	int pixels[];
+	uint pixels[];
 } frame;
 
 layout (set = 0, binding = 1, std430) buffer World
@@ -15,9 +15,8 @@ layout (set = 0, binding = 1, std430) buffer World
 void main()
 {
 	// Set color to red
-	int color = 0xFFFFFF00;
-	for (int i = 0; i < frame.pixels.length(); i++)
-	{
+	uint color = world.lights;
+	for (int i = 0; i < 800 * 600; i++) {
 		frame.pixels[i] = color;
 	}
 }

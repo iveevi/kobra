@@ -1,6 +1,6 @@
 #define MERCURY_VALIDATION_LAYERS
 #define MERCURY_VALIDATION_ERROR_ONLY
-#define MERCURY_THROW_ERROR
+// #define MERCURY_THROW_ERROR
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -87,8 +87,8 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 }
 
 // Pixel buffer 
-Vulkan::Buffer *pixel_buffer;
-Vulkan::Buffer *world_buffer;
+Vulkan::Buffer pixel_buffer;
+Vulkan::Buffer world_buffer;
 
 // Compute shader
 VkShaderModule compute_shader;
@@ -223,7 +223,7 @@ void cmd_buffer_maker(Vulkan *vk, size_t i) {
 	// Copy buffer to image
 	vkCmdCopyBufferToImage(
 		vk->command_buffers[i],
-		pixel_buffer->buffer,
+		pixel_buffer.buffer,
 		image,
 		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 		1,
@@ -354,46 +354,45 @@ void render(uvec4 *pixels, int width, int height)
 
 void descriptor_set_maker(Vulkan *vulkan, int i)
 {
-	VkDescriptorBufferInfo buffer_descriptor[] = {
-		{
-			.buffer = pixel_buffer->buffer,
-			.offset = 0,
-			.range = pixel_buffer->size
-		},
-		{
-			.buffer = pixel_buffer->buffer,
-			.offset = 0,
-			.range = pixel_buffer->size
-		}
-	};
-
-	VkWriteDescriptorSet pixel_descriptor_write = {
-		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		.dstSet = vulkan->descriptor_sets[i],
-		.dstBinding = 0,
-		.dstArrayElement = 0,
-		.descriptorCount = 1,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.pBufferInfo = &buffer_descriptor[0]
+	VkDescriptorBufferInfo pb_info {
+		.buffer = pixel_buffer.buffer,
+		.offset = 0,
+		.range = pixel_buffer.size
 	};
 	
-	VkWriteDescriptorSet world_descriptor_write = {
+	VkDescriptorBufferInfo wb_info {
+		.buffer = world_buffer.buffer,
+		.offset = 0,
+		.range = world_buffer.size
+	};
+
+	VkWriteDescriptorSet pb_write = {
 		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 		.dstSet = vulkan->descriptor_sets[i],
 		.dstBinding = 0,
 		.dstArrayElement = 0,
 		.descriptorCount = 1,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.pBufferInfo = &buffer_descriptor[1]
+		.pBufferInfo = &pb_info
+	};
+	
+	VkWriteDescriptorSet wb_write = {
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = vulkan->descriptor_sets[i],
+		.dstBinding = 1,
+		.dstArrayElement = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.pBufferInfo = &wb_info
 	};
 
 	VkWriteDescriptorSet writes[] = {
-		pixel_descriptor_write//,
-		// world_descriptor_write
+		pb_write,
+		wb_write
 	};
 
 	vkUpdateDescriptorSets(
-		vulkan->device, 1,
+		vulkan->device, 2,
 		&writes[0],
 		0, nullptr
 	);
@@ -401,13 +400,13 @@ void descriptor_set_maker(Vulkan *vulkan, int i)
 
 // World structure
 struct World {
-	int32_t objects;
-	int32_t lights;
+	uint32_t objects;
+	uint32_t lights;
 };
 
 World world = {
-	.objects = nobjs,
-	.lights = 1
+	.objects = (uint32_t) nobjs,
+	.lights = 0xFFFFFF00
 };
 
 int main()
@@ -415,22 +414,25 @@ int main()
 	// Initialize Vulkan
 	Vulkan vulkan;
 
-        uvec4 base = {200, 200, 200, 255};
+        uvec4 base = {200, 200, 220, 255};
         uvec4 *pixels = init_pixels(800, 600, base);
 	// render(pixels, 800, 600);
 
 	// Pixel data
 	size_t pixel_size = sizeof(uvec4) * 800 * 600;
 
-	VkBufferUsageFlags pixel_usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-	VkBufferUsageFlags world_usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+	VkBufferUsageFlags pixel_usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT
+		| VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+
+	VkBufferUsageFlags world_usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+		| VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
 	// Create buffers
-	pixel_buffer = vulkan.make_buffer(pixel_size, pixel_usage);
-	world_buffer = vulkan.make_buffer(sizeof(World), world_usage);
+	vulkan.make_buffer(pixel_buffer, pixel_size, pixel_usage);
+	vulkan.make_buffer(world_buffer, sizeof(World), world_usage);
 
-	vulkan.map_buffer(pixel_buffer, pixels, pixel_size);
-	// vulkan.map_buffer(world_buffer, &world, sizeof(World));
+	vulkan.map_buffer(&pixel_buffer, pixels, pixel_size);
+	vulkan.map_buffer(&world_buffer, &world, sizeof(World));
 
 	// Compute shader descriptor
 	compute_shader = vulkan.make_shader("shaders/pixel.spv");
