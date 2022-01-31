@@ -1,4 +1,4 @@
-#include "logger.hpp"
+#include "../include/logger.hpp"
 
 // Static members
 std::ostream *Logger::os = &std::cerr;

@@ -21,10 +21,16 @@ struct Object {
         // Constructors
         Object() : position(0.0f) {}
         Object(vec3 pos) : position(pos) {}
+
+	// Virtual destructor
+	virtual ~Object() {}
 };
 
 // Separate interface for those which can be rendered
 struct Renderable {
+	// Virtual destructor
+	virtual ~Renderable() {}
+
         // TODO: is this necessary?
         virtual vec3 support(const vec3 &) const = 0;
 

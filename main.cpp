@@ -1,9 +1,13 @@
 #define MERCURY_VALIDATION_LAYERS
+#define MERCURY_VALIDATION_ERROR_ONLY
+#define MERCURY_THROW_ERROR
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+// Standard headers
 #include <iostream>
+#include <cstring>
 
 // Engine headers
 #include "include/backend.hpp"
@@ -84,9 +88,13 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 
 // Pixel buffer 
 Vulkan::Buffer *pixel_buffer;
+Vulkan::Buffer *world_buffer;
+
+// Compute shader
+VkShaderModule compute_shader;
 
 // Command buffer function per frame index
-auto cmd_buffer_maker = [](Vulkan *vk, size_t i) {
+void cmd_buffer_maker(Vulkan *vk, size_t i) {
 	// Clear color
 	VkClearValue clear_color = {
 		{ {0.0f, 0.0f, 0.0f, 1.0f} }
@@ -111,6 +119,82 @@ auto cmd_buffer_maker = [](Vulkan *vk, size_t i) {
 		&render_pass_info,
 		VK_SUBPASS_CONTENTS_INLINE
 	);
+
+		// Create pipeline
+		VkPipelineLayoutCreateInfo pipeline_layout_info {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+			.setLayoutCount = 1,
+			.pSetLayouts = &vk->descriptor_set_layouts[i],
+			.pushConstantRangeCount = 0,
+			.pPushConstantRanges = nullptr
+		};
+
+		VkPipelineLayout pipeline_layout;
+
+		VkResult res = vkCreatePipelineLayout(
+			vk->device,
+			&pipeline_layout_info,
+			nullptr,
+			&pipeline_layout
+		);
+
+		if (res != VK_SUCCESS) {
+			std::cerr << "Failed to create pipeline layout" << std::endl;
+			return;
+		}
+
+		// Execute compute shader on the pixel buffer
+		VkPipeline pipeline;
+
+		VkComputePipelineCreateInfo compute_pipeline_info {
+			.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+			.stage = {
+				.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+				.stage = VK_SHADER_STAGE_COMPUTE_BIT,
+				.module = compute_shader,
+				.pName = "main"
+			},
+			.layout = pipeline_layout
+		};
+
+		res = vkCreateComputePipelines(
+			vk->device,
+			VK_NULL_HANDLE,
+			1,
+			&compute_pipeline_info,
+			nullptr,
+			&pipeline
+		);
+
+		if (res != VK_SUCCESS) {
+			std::cerr << "Failed to create compute pipeline" << std::endl;
+			return;
+		}
+
+		// Bind pipeline
+		vkCmdBindPipeline(
+			vk->command_buffers[i],
+			VK_PIPELINE_BIND_POINT_COMPUTE,
+			pipeline
+		);
+
+		// Bind buffer
+		vkCmdBindDescriptorSets(
+			vk->command_buffers[i],
+			VK_PIPELINE_BIND_POINT_COMPUTE,
+			pipeline_layout,
+			0,
+			1,
+			vk->descriptor_sets.data(),
+			0,
+			nullptr
+		);
+
+		// Dispatch
+		vkCmdDispatch(
+			vk->command_buffers[i],
+			1, 1, 1
+		);
 
 	vkCmdEndRenderPass(vk->command_buffers[i]);
 		
@@ -268,6 +352,64 @@ void render(uvec4 *pixels, int width, int height)
         // TODO: anti aliasing pass, plus any post processing
 }
 
+void descriptor_set_maker(Vulkan *vulkan, int i)
+{
+	VkDescriptorBufferInfo buffer_descriptor[] = {
+		{
+			.buffer = pixel_buffer->buffer,
+			.offset = 0,
+			.range = pixel_buffer->size
+		},
+		{
+			.buffer = pixel_buffer->buffer,
+			.offset = 0,
+			.range = pixel_buffer->size
+		}
+	};
+
+	VkWriteDescriptorSet pixel_descriptor_write = {
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = vulkan->descriptor_sets[i],
+		.dstBinding = 0,
+		.dstArrayElement = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.pBufferInfo = &buffer_descriptor[0]
+	};
+	
+	VkWriteDescriptorSet world_descriptor_write = {
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = vulkan->descriptor_sets[i],
+		.dstBinding = 0,
+		.dstArrayElement = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.pBufferInfo = &buffer_descriptor[1]
+	};
+
+	VkWriteDescriptorSet writes[] = {
+		pixel_descriptor_write//,
+		// world_descriptor_write
+	};
+
+	vkUpdateDescriptorSets(
+		vulkan->device, 1,
+		&writes[0],
+		0, nullptr
+	);
+}
+
+// World structure
+struct World {
+	int32_t objects;
+	int32_t lights;
+};
+
+World world = {
+	.objects = nobjs,
+	.lights = 1
+};
+
 int main()
 {
 	// Initialize Vulkan
@@ -275,15 +417,27 @@ int main()
 
         uvec4 base = {200, 200, 200, 255};
         uvec4 *pixels = init_pixels(800, 600, base);
-	render(pixels, 800, 600);
+	// render(pixels, 800, 600);
 
 	// Pixel data
-	size_t size = sizeof(uvec4) * 800 * 600;
-	VkBufferUsageFlags usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+	size_t pixel_size = sizeof(uvec4) * 800 * 600;
 
-	// Create a buffer
-	pixel_buffer = vulkan.make_buffer(size, usage);
-	vulkan.map_buffer(pixel_buffer, pixels, size);
+	VkBufferUsageFlags pixel_usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+	VkBufferUsageFlags world_usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+
+	// Create buffers
+	pixel_buffer = vulkan.make_buffer(pixel_size, pixel_usage);
+	world_buffer = vulkan.make_buffer(sizeof(World), world_usage);
+
+	vulkan.map_buffer(pixel_buffer, pixels, pixel_size);
+	// vulkan.map_buffer(world_buffer, &world, sizeof(World));
+
+	// Compute shader descriptor
+	compute_shader = vulkan.make_shader("shaders/pixel.spv");
+
+	// Buffer descriptor
+	for (int i = 0; i < vulkan.swch_images.size(); i++)
+		descriptor_set_maker(&vulkan, i);
 
 	// Set keyboard callback
 	glfwSetKeyCallback(vulkan.window, key_callback);
@@ -292,13 +446,13 @@ int main()
 	while (!glfwWindowShouldClose(vulkan.window)) {
 		glfwPollEvents();
 
-		// Regenerate the image
+		/* Regenerate the image
 		if (rerender) {
 			clear(pixels, 800, 600, base);
 			render(pixels, 800, 600);
 			vulkan.map_buffer(pixel_buffer, pixels, size);
 			rerender = false;
-		}
+		} */
 
 		vulkan.frame();
 	}

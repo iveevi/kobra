@@ -4,11 +4,12 @@
 // Standard headers
 #include <cstring>
 #include <exception>
+#include <fstream>
+#include <functional>
 #include <iostream>
 #include <optional>
 #include <string>
 #include <vector>
-#include <functional>
 
 // TODO: remove the glad diretcory/deps
 // GLFW and Vulkan
@@ -28,11 +29,11 @@ const uint32_t HEIGHT = 600;
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
-const std::vector <const char*> validationLayers = {
+const std::vector <const char *> validationLayers = {
 	"VK_LAYER_KHRONOS_validation"
 };
 
-const std::vector <const char*> deviceExtensions = {
+const std::vector <const char *> deviceExtensions = {
 	VK_KHR_SWAPCHAIN_EXTENSION_NAME
 };
 
@@ -52,7 +53,11 @@ public:
 	};
 
 	// Aliases
-	using CommandBufferMaker = std::function <void (Vulkan *, size_t)>;
+	using Glob = std::vector <char>;
+	using CommandBufferMaker = void (*)(Vulkan *, size_t);
+
+	using DS = VkDescriptorSet;
+	using DSLayout = VkDescriptorSetLayout;
 
 	/////////////////////
 	// Exposed members //
@@ -63,7 +68,6 @@ public:
 
 	// Vulkan basic context
 	VkInstance instance;
-	VkDebugUtilsMessengerEXT _debug_messenger;
 	
 	VkSurfaceKHR surface;
 
@@ -97,7 +101,14 @@ public:
 
 	// Miscellaneous
 	VkAllocationCallbacks *		allocator = nullptr;
+	
+	// Descriptor pool
 	VkDescriptorPool		descriptor_pool;
+
+	// Descriptor sets
+	DSLayout			ds_layout;
+	std::vector <DSLayout>		descriptor_set_layouts;
+	std::vector <DS>		descriptor_sets;
 private:
 
 	// Internal structures
@@ -118,6 +129,12 @@ private:
 		std::vector <VkSurfaceFormatKHR>	formats;
 		std::vector <VkPresentModeKHR>		presentModes;
 	};
+	
+	//////////////////////////////
+	// Private member variables //
+	//////////////////////////////
+	
+	VkDebugUtilsMessengerEXT _debug_messenger;
 
 	// Frame and window variables
 	size_t				current_frame = 0;
@@ -174,7 +191,52 @@ private:
 		_mk_command_pool();
 		_mk_command_buffers();
 		createSyncObjects();
+		_mk_desciptor_set_layout();
 		_mk_descriptor_pool();
+		_mk_descriptor_sets();
+	}
+
+	// TODO: modifiable by the user
+	void _mk_desciptor_set_layout() {
+		// Binding info
+		VkDescriptorSetLayoutBinding compute_bindings_1 {
+			.binding = 0,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.descriptorCount = 1,
+			.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+			.pImmutableSamplers = nullptr
+		};
+
+		VkDescriptorSetLayoutBinding compute_bindings_2 {
+			.binding = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.descriptorCount = 1,
+			.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+			.pImmutableSamplers = nullptr
+		};
+
+		VkDescriptorSetLayoutBinding compute_bindings[] {
+			compute_bindings_1 //,
+			// compute_bindings_2
+		};
+		
+		// Create info
+		VkDescriptorSetLayoutCreateInfo layout_info {
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+			.bindingCount = 1,
+			.pBindings = &compute_bindings[0]
+		};
+
+		// Create the descriptor set layout
+		VkResult result = vkCreateDescriptorSetLayout(
+			device, &layout_info,
+			allocator, &ds_layout
+		);
+
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan] Failed to create descriptor set layout!");
+			throw (-1);
+		}
 	}
 
 	void _mk_descriptor_pool() {
@@ -210,7 +272,31 @@ private:
 		);
 
 		if (result != VK_SUCCESS) {
-			Logger::error("[Vulkan] Failed to create descriptor pool");
+			throw(-1);
+		}
+	}
+
+	void _mk_descriptor_sets() {
+		// Descriptor set layouts
+		descriptor_set_layouts.resize(swch_images.size(), ds_layout);
+
+		// Descriptor set creation info
+		VkDescriptorSetAllocateInfo alloc_info = {
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+			.descriptorPool = descriptor_pool,
+			.descriptorSetCount = static_cast <uint32_t>
+				(descriptor_set_layouts.size()),
+			.pSetLayouts = descriptor_set_layouts.data()
+		};
+
+		// Creation
+		descriptor_sets.resize(swch_images.size());
+		VkResult result = vkAllocateDescriptorSets(
+			device, &alloc_info, descriptor_sets.data()
+		);
+
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan] Failed to allocate descriptor sets");
 			throw(-1);
 		}
 	}
@@ -843,6 +929,66 @@ private:
 		return extensions;
 	}
 
+	////////////////////
+	// Shader modules //
+	////////////////////
+	
+	// Read file glob
+	static Glob _read_file(const std::string &path) {
+		std::ifstream file(path, std::ios::ate | std::ios::binary);
+
+		// Check that the file exists
+		if (!file.is_open()) {
+			Logger::error() << __PRETTY_FUNCTION__
+				<< ": Failed to open file: "
+				<< path << std::endl;
+			return {};
+		}
+
+		// Get the file size
+		size_t fsize = file.tellg();
+		file.seekg(0);
+
+		// Allocate memory for the file
+		Glob buffer(fsize);
+
+		// Read the file
+		file.read(buffer.data(), fsize);
+		file.close();
+
+		return buffer;
+	}
+
+	// Create a shader from glob
+	VkShaderModule _mk_shader_module(const Glob &code) {
+		// Creation info
+		VkShaderModuleCreateInfo create_info {
+			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+			.codeSize = code.size(),
+			.pCode = reinterpret_cast
+				<const uint32_t*> (code.data())
+		};
+
+		// Create the shader module
+		VkShaderModule shader_module;
+
+		VkResult result = vkCreateShaderModule(
+			device, &create_info,
+			nullptr, &shader_module
+		);
+
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan] Failed to create shader module");
+			return VK_NULL_HANDLE;
+		}
+
+		return shader_module;
+	}
+
+	/////////////////////////////////////
+	// Debugging and validation layers //
+	/////////////////////////////////////
+
 	bool _check_validation_layer_support() {
 		uint32_t layerCount;
 		vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
@@ -909,9 +1055,23 @@ private:
 		if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
 			Logger::error() << "[Vulkan Validation Layer] "
 				<< pCallbackData->pMessage << std::endl;
+
+#ifdef MERCURY_THROW_ERROR
+
+			throw std::runtime_error("[Vulkan Validation Layer] "
+				"An error occured in the validation layer");
+
+#endif
+
 		} else {
+
+#ifndef MERCURY_VALIDATION_ERROR_ONLY
+
 			Logger::notify() << "[Vulkan Validation Layer] "
 				<< pCallbackData->pMessage << std::endl;
+
+#endif
+
 		}
 
 		return VK_FALSE;
@@ -931,7 +1091,7 @@ public:
 	void frame();
 
 	// Set command buffer for each frame
-	void set_command_buffers(const CommandBufferMaker &cbm) {
+	void set_command_buffers(CommandBufferMaker cbm) {
 		// Resize command buffers
 		command_buffers.resize(swch_framebuffers.size());
 
@@ -981,9 +1141,13 @@ public:
 	////////////////////////
 	// Allocation methods //
 	////////////////////////
-
-	// TODO: add a method/interface to pass
-	// the buffer to the user (i.e. Vulkan::Buffer *bf = vulkan.make_buffer())
+	
+	// Allocate shader
+	// TODO: wrap in struct?
+	VkShaderModule make_shader(const std::string &path) {
+		Glob g = _read_file(path);
+		return _mk_shader_module(g);
+	}
 	
 	// Allocate a buffer
 	// TODO: pass buffer propreties as a struct
@@ -1072,6 +1236,9 @@ public:
 		// Unmap the buffer
 		vkUnmapMemory(device, buffer->memory);
 	}
+
+	// Getters
+	VkPhysicalDeviceProperties phdev_props() const;
 
 	// Other methods
 	void idle() const {

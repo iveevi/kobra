@@ -58,23 +58,23 @@ void Vulkan::frame()
 
 	// Create information
 	VkSubmitInfo submit_info {
-		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO
-		.waitSemaphoreCount = 1;
-		.pWaitSemaphores = wait_semaphores;
-		.pWaitDstStageMask = wait_stages;
+		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+		.waitSemaphoreCount = 1,
+		.pWaitSemaphores = wait_semaphores,
+		.pWaitDstStageMask = wait_stages,
 
-		.commandBufferCount = 1;
-		.pCommandBuffers = &command_buffers[image_index];
+		.commandBufferCount = 1,
+		.pCommandBuffers = &command_buffers[image_index],
 
-		.signalSemaphoreCount = 1;
-		.pSignalSemaphores = signal_semaphores;
+		.signalSemaphoreCount = 1,
+		.pSignalSemaphores = signal_semaphores
 	};
 
 	// Submit the command buffer
 	vkResetFences(device, 1, &in_flight_fences[current_frame]);
 	
-	VkResult result = vkQueueSubmit(
-		graphics_queue, 1, &submitInfo,
+	result = vkQueueSubmit(
+		graphics_queue, 1, &submit_info,
 		in_flight_fences[current_frame]
 	);
 
@@ -89,7 +89,7 @@ void Vulkan::frame()
 	VkPresentInfoKHR present_info {
 		.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
 		.waitSemaphoreCount = 1,
-		.pWaitSemaphores = signalSemaphores,
+		.pWaitSemaphores = signal_semaphores,
 
 		.swapchainCount = 1,
 		.pSwapchains = swchs,
@@ -110,4 +110,20 @@ void Vulkan::frame()
 
 	// Get the next frame index
 	current_frame = (current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
+}
+
+/////////////
+// Getters //
+/////////////
+
+VkPhysicalDeviceProperties Vulkan::phdev_props() const
+{
+	// Create the properties struct
+	VkPhysicalDeviceProperties props;
+
+	// Get the properties
+	vkGetPhysicalDeviceProperties(physical_device, &props);
+
+	// Return the properties
+	return props;
 }
