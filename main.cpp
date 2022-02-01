@@ -402,26 +402,31 @@ void descriptor_set_maker(Vulkan *vulkan, int i)
 struct World {
 	uint32_t objects;
 	uint32_t lights;
+	uint32_t backgound;
 
 	uint32_t width = 800;
-	uint32_t height= 600;
+	uint32_t height = 600;
 
-	float cam[3] = {
-		0.0f, 0.0f, -15.0f
-	};
+	alignas(16) glm::vec3 camera_position = glm::vec3(0.0f, 0.0f, -15.0f);
 
 	float fov = camera.tunings.fov;
 	float scale = camera.tunings.scale;
 	float aspect = camera.tunings.aspect;
 
-	float data[4] = {
-		0.0f, 0.0f, 0.0f, 1.0f
-	};
+	float *data;
 };
 
 World world = {
 	.objects = (uint32_t) nobjs,
-	.lights = 0xFF0000
+	.lights = 1,
+	.backgound = 0x202020,
+	.data = new float[] {
+		0.0f, 0.0f, 4.0f, 1.0f,
+		3.0f, 0.0f, 3.0f, 3.0f,
+		6.0f, -2.0f, 5.0f, 6.0f,
+		6.0f, 3.0f, 10.0f, 2.0f,
+		6.0f, 3.0f, -4.0f, 2.0f
+	}
 };
 
 int main()
@@ -434,6 +439,8 @@ int main()
 
 	// Pixel data
 	size_t pixel_size = sizeof(uvec4) * 800 * 600;
+	size_t world_size = sizeof(World) - sizeof(float *)
+		+ sizeof(float) * nobjs * 4;
 
 	VkBufferUsageFlags pixel_usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT
 		| VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;

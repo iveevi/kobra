@@ -1,5 +1,7 @@
 #version 430
 
+#include "ray.glsl"
+
 // TODO: replace version with command line argument
 // TODO: header system
 
@@ -12,6 +14,7 @@ layout (set = 0, binding = 1, std430) buffer World
 {
 	uint objects;
 	uint lights;
+	uint background;
 
 	uint width;
 	uint height;
@@ -28,27 +31,6 @@ layout (set = 0, binding = 1, std430) buffer World
 
 	float data[];
 } world;
-
-// Ray structure
-struct Ray {
-	vec3 origin;
-	vec3 direction;
-};
-
-// Create a ray from the camera
-Ray createRay(vec2 uv)
-{
-	float cx = (2.0 * uv.x - 1.0) * world.aspect * world.scale;
-	float cy = (1.0 - 2.0 * uv.y) * world.scale;
-
-	vec3 right = vec3(1.0, 0.0, 0.0);
-	vec3 up = vec3(0.0, 1.0, 0.0);
-	vec3 forward = vec3(0.0, 0.0, 1.0);
-
-	vec3 direction = cx * right + cy * up + forward;
-
-	return Ray(world.camera, normalize(direction));
-}
 
 // Sphere intersection with ray
 struct Sphere {
@@ -85,15 +67,15 @@ void main()
 
 			vec2 uv = vec2(x + 0.5, y + 0.5) / vec2(world.width, world.height);
 
-			Ray ray = createRay(uv);
+			Ray ray = make_ray(uv, world.camera, world.scale, world.aspect);
 
 			float t = intersect(Sphere(vec3(0.0, 0.0, 0.0), 6.0), ray);
 
-			if (t >= 0.0) {
+			// color = world.background;
+			if (t >= 0.0)
 				color = sphere_color;
-			} else {
-				color = world.lights;
-			}
+			else
+				color = world.background;
 
 			frame.pixels[index] = color;
 		}
