@@ -402,11 +402,26 @@ void descriptor_set_maker(Vulkan *vulkan, int i)
 struct World {
 	uint32_t objects;
 	uint32_t lights;
+
+	uint32_t width = 800;
+	uint32_t height= 600;
+
+	float cam[3] = {
+		0.0f, 0.0f, -15.0f
+	};
+
+	float fov = camera.tunings.fov;
+	float scale = camera.tunings.scale;
+	float aspect = camera.tunings.aspect;
+
+	float data[4] = {
+		0.0f, 0.0f, 0.0f, 1.0f
+	};
 };
 
 World world = {
 	.objects = (uint32_t) nobjs,
-	.lights = 0xFFFFFF00
+	.lights = 0xFF0000
 };
 
 int main()
@@ -416,7 +431,6 @@ int main()
 
         uvec4 base = {200, 200, 220, 255};
         uvec4 *pixels = init_pixels(800, 600, base);
-	// render(pixels, 800, 600);
 
 	// Pixel data
 	size_t pixel_size = sizeof(uvec4) * 800 * 600;
@@ -447,15 +461,6 @@ int main()
 	vulkan.set_command_buffers(cmd_buffer_maker);
 	while (!glfwWindowShouldClose(vulkan.window)) {
 		glfwPollEvents();
-
-		/* Regenerate the image
-		if (rerender) {
-			clear(pixels, 800, 600, base);
-			render(pixels, 800, 600);
-			vulkan.map_buffer(pixel_buffer, pixels, size);
-			rerender = false;
-		} */
-
 		vulkan.frame();
 	}
 

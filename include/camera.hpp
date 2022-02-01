@@ -31,11 +31,11 @@ public:
 };
 
 // Camera class
-class Camera {
+struct Camera {
         // Camera properties
         Tunings tunings;
-public:
-        // Public member variables
+        
+	// Public member variables
         Transform transform;
 
         // Constructors
