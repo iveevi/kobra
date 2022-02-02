@@ -1,5 +1,10 @@
+// Intersection structure
+struct Intersection {
+	float	time;
+	vec3	normal;
+};
 
-float intersect(Sphere s, Ray r)
+float _intersect_t(Sphere s, Ray r)
 {
 	vec3 oc = r.origin - s.center;
 	float a = dot(r.direction, r.direction);
@@ -14,4 +19,20 @@ float intersect(Sphere s, Ray r)
 	float t2 = (-b + sqrt(d)) / (2.0 * a);
 
 	return min(t1, t2);
+}
+
+// Return full information
+Intersection intersects(Sphere s, Ray r)
+{
+	float t = _intersect_t(s, r);
+	vec3 n = vec3(0, 0, 0);
+
+	// If no, intersection, dont bother with normal
+	if (t < 0.0)
+		return Intersection(t, n);
+
+	// Calculate the normal
+	n = normalize(r.origin + r.direction * t - s.center);
+
+	return Intersection(t, n);
 }

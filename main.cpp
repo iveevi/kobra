@@ -58,38 +58,11 @@ Camera camera {
         }
 };
 
-// Keyboard callback
-// TODO: in class
-bool rerender = true;
-
-void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
-{
-        if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-                glfwSetWindowShouldClose(window, GL_TRUE);
-
-        // Camera movement
-        float speed = 0.5f;
-        if (key == GLFW_KEY_W) {
-                camera.transform.position += camera.transform.forward * speed;
-                rerender = true;
-        } else if (key == GLFW_KEY_S) {
-                camera.transform.position -= camera.transform.forward * speed;
-                rerender = true;
-        }
-
-        if (key == GLFW_KEY_A) {
-                camera.transform.position -= camera.transform.right * speed;
-                rerender = true;
-        } else if (key == GLFW_KEY_D) {
-                camera.transform.position += camera.transform.right * speed;
-                rerender = true;
-        }
-}
-
 // Pixel buffer 
 Vulkan::Buffer pixel_buffer;
 Vulkan::Buffer world_buffer;
 Vulkan::Buffer object_buffer;
+Vulkan::Buffer light_buffer;
 
 // Compute shader
 VkShaderModule compute_shader;
@@ -196,7 +169,7 @@ void cmd_buffer_maker(Vulkan *vk, size_t i) {
 	// Dispatch
 	vkCmdDispatch(
 		vk->command_buffers[i],
-		50, 50, 1
+		400, 400, 1
 	);
 		
 	// Get image at current index
@@ -259,13 +232,6 @@ Object *lights[] = {
         new PointLight(vec3(0.0f, 0.0f, 0.0f))
 };
 
-// Initialize the pixel buffer
-void clear(uvec4 *pixels, int width, int height, const uvec4 &base)
-{
-        for (int i = 0; i < width * height; i++)
-                pixels[i] = base;
-}
-
 // Convert color to discetized grey scale value
 uvec4 dcgrey(const uvec4 &color)
 {
@@ -280,77 +246,6 @@ uvec4 dcgrey(const uvec4 &color)
 
         // Return color
         return uvec4 {grey, grey, grey, color.a};
-}
-
-void render(uvec4 *pixels, int width, int height)
-{
-        // Color wheel
-        static uvec4 colors[] = {
-                {0x00, 0x00, 0xFF, 0xFF},
-                {0x00, 0xFF, 0x00, 0xFF},
-                {0x00, 0xFF, 0xFF, 0xFF},
-                {0xFF, 0x00, 0x00, 0xFF},
-                {0xFF, 0x00, 0xFF, 0xFF},
-                {0xFF, 0xFF, 0x00, 0xFF},
-                {0xFF, 0xFF, 0xFF, 0xFF}
-        };
-
-        // Color wheel index
-        int cid = 0;
-
-        // Each object to a color
-        int *obj_colors = new int[nobjs];
-        for (int i = 0; i < nobjs; i++) {
-                obj_colors[i] = cid++;
-                if (cid == 8)
-                        cid = 0;
-        }
-
-        // Iterate over the pixels
-        glm::vec3 cpos = camera.transform.position;
-        for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                        // NDC coordinates
-                        float nx = (x + 0.5f) / (float) width;
-                        float ny = (y + 0.5f) / (float) height;
-
-                        Ray ray = camera.ray(nx, ny);
-
-                        // Find the closest object
-                        int iclose = -1;
-
-                        // TODO: change to tclose
-                        float dclose = std::numeric_limits <float> ::max();
-
-                        for (int i = 0; i < nobjs; i++) {
-                                float d = objects[i]->intersect(ray);
-                                if (d > 0 && dclose > d) {
-                                        dclose = d;
-                                        iclose = i;
-                                }
-                        }
-
-                        // If there is an intersection
-                        if (iclose != -1) {
-                                // Get point of intersection
-				glm::vec3 p = ray.at(dclose);
-
-                                // Calculate diffuse
-				glm::vec3 n = objects[iclose]->normal(p);
-				glm::vec3 l = glm::normalize(lights[0]->position - p);
-                                float diffuse = glm::max(glm::dot(n, l), 0.0f);
-
-                                // Color the pixel
-                                uvec4 fcolor = diffuse * colors[obj_colors[iclose]];
-                                pixels[y * width + x] = fcolor; // dcgrey(fcolor);
-                        }
-                }
-        }
-
-        // Free memory
-        delete[] obj_colors;
-
-        // TODO: anti aliasing pass, plus any post processing
 }
 
 void descriptor_set_maker(Vulkan *vulkan, int i)
@@ -371,6 +266,12 @@ void descriptor_set_maker(Vulkan *vulkan, int i)
 		.buffer = object_buffer.buffer,
 		.offset = 0,
 		.range = object_buffer.size
+	};
+
+	VkDescriptorBufferInfo lb_info {
+		.buffer = light_buffer.buffer,
+		.offset = 0,
+		.range = light_buffer.size
 	};
 
 	VkWriteDescriptorSet pb_write = {
@@ -403,19 +304,31 @@ void descriptor_set_maker(Vulkan *vulkan, int i)
 		.pBufferInfo = &ob_info
 	};
 
+	VkWriteDescriptorSet lb_write = {
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = vulkan->descriptor_sets[i],
+		.dstBinding = 3,
+		.dstArrayElement = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.pBufferInfo = &lb_info
+	};
+
 	VkWriteDescriptorSet writes[] = {
 		pb_write,
 		wb_write,
-		ob_write
+		ob_write,
+		lb_write
 	};
 
 	vkUpdateDescriptorSets(
-		vulkan->device, 3,
+		vulkan->device, 4,
 		&writes[0],
 		0, nullptr
 	);
 }
 
+// TODO: rename and initializer list constructor
 struct alignas(16) Aligned {
 	glm::vec4 data;
 };
@@ -436,26 +349,44 @@ struct World {
 	float fov = camera.tunings.fov;
 	float scale = camera.tunings.scale;
 	float aspect = camera.tunings.aspect;
-
-	// TODO: max objects
-	Aligned sphere_position[16];
 };
 
 World world = {
-	.objects = (uint32_t) 1,
+	.objects = 5,
 	.lights = 1,
 	.backgound = 0x202020,
-	.sphere_position {
-		{ {0.0f, 0.0f, 0.0f, 6.0f} }
-	}
 };
+
+// Keyboard callback
+// TODO: in class
+bool rerender = true;
+
+void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
+{
+        if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+                glfwSetWindowShouldClose(window, GL_TRUE);
+
+        // Camera movement
+        float speed = 0.5f;
+        if (key == GLFW_KEY_W) {
+                camera.transform.position += camera.transform.forward * speed;
+                rerender = true;
+        } else if (key == GLFW_KEY_S) {
+                camera.transform.position -= camera.transform.forward * speed;
+                rerender = true;
+        }
+
+        if (key == GLFW_KEY_A) {
+                camera.transform.position -= camera.transform.right * speed;
+                rerender = true;
+        } else if (key == GLFW_KEY_D) {
+                camera.transform.position += camera.transform.right * speed;
+                rerender = true;
+        }
+}
 
 int main()
 {
-	std::cout << "Align of Aligned: " << alignof(Aligned) << std::endl;
-	std::cout << "Sizeof world: " << sizeof(World) << std::endl;
-	std::cout << "Align of vec4: " << alignof(glm::vec4) << std::endl;
-
 	// Initialize Vulkan
 	Vulkan vulkan;
 
@@ -463,13 +394,22 @@ int main()
         uvec4 *pixels = init_pixels(800, 600, base);
 
 	Aligned *objects = new Aligned[16] {
-		{ {0.0, 0.0, 0.0, 3.0} }
+		{ {0.0f, 0.0f, 4.0f, 1.0f} },
+		{ {3.0f, 0.0f, 3.0f, 3.0f } },
+		{ {6.0f, -2.0f, 5.0f, 6.0f } },
+		{ {6.0f, 3.0f, 10.0f, 2.0f} },
+		{ {6.0f, 3.0f, -4.0f, 2.0f} }
+	};
+
+	Aligned *lights = new Aligned[16] {
+		{ {0.0f, 0.0f, 0.0f, 1.0f} }
 	};
 
 	// Pixel data
 	size_t pixel_size = sizeof(uvec4) * 800 * 600;
 	size_t world_size = sizeof(World);
 	size_t object_size = sizeof(Aligned) * 16;
+	size_t light_size = sizeof(Aligned) * 16;
 
 	VkBufferUsageFlags pixel_usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT
 		| VK_BUFFER_USAGE_TRANSFER_SRC_BIT
@@ -481,18 +421,19 @@ int main()
 	VkBufferUsageFlags object_usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT
 		| VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
+	VkBufferUsageFlags light_usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+		| VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+
 	// Create buffers
 	vulkan.make_buffer(pixel_buffer, pixel_size, pixel_usage);
 	vulkan.make_buffer(world_buffer, sizeof(World), world_usage);
 	vulkan.make_buffer(object_buffer, object_size, object_usage);
+	vulkan.make_buffer(light_buffer, light_size, light_usage);
 
 	vulkan.map_buffer(&pixel_buffer, pixels, pixel_size);
 	vulkan.map_buffer(&world_buffer, &world, sizeof(World));
 	vulkan.map_buffer(&object_buffer, objects, object_size);
-
-	std::cout << "Pixel buffer: " << pixel_buffer.size << std::endl;
-	std::cout << "World buffer: " << world_buffer.size << std::endl;
-	std::cout << "Object buffer: " << object_buffer.size << std::endl;
+	vulkan.map_buffer(&light_buffer, lights, light_size);
 
 	// Compute shader descriptor
 	compute_shader = vulkan.make_shader("shaders/pixel.spv");
@@ -507,6 +448,13 @@ int main()
 	vulkan.set_command_buffers(cmd_buffer_maker);
 	while (!glfwWindowShouldClose(vulkan.window)) {
 		glfwPollEvents();
+
+		// Check if data has changed
+		if (rerender) {
+			world.camera_position = camera.transform.position;
+			vulkan.map_buffer(&world_buffer, &world, sizeof(World));
+		}
+
 		vulkan.frame();
 	}
 
