@@ -89,6 +89,7 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 // Pixel buffer 
 Vulkan::Buffer pixel_buffer;
 Vulkan::Buffer world_buffer;
+Vulkan::Buffer object_buffer;
 
 // Compute shader
 VkShaderModule compute_shader;
@@ -190,13 +191,13 @@ void cmd_buffer_maker(Vulkan *vk, size_t i) {
 			nullptr
 		);
 
-		// Dispatch
-		vkCmdDispatch(
-			vk->command_buffers[i],
-			1, 1, 1
-		);
-
 	vkCmdEndRenderPass(vk->command_buffers[i]);
+		
+	// Dispatch
+	vkCmdDispatch(
+		vk->command_buffers[i],
+		50, 50, 1
+	);
 		
 	// Get image at current index
 	VkImage image = vk->swch_images[i];
@@ -365,6 +366,12 @@ void descriptor_set_maker(Vulkan *vulkan, int i)
 		.offset = 0,
 		.range = world_buffer.size
 	};
+	
+	VkDescriptorBufferInfo ob_info {
+		.buffer = object_buffer.buffer,
+		.offset = 0,
+		.range = object_buffer.size
+	};
 
 	VkWriteDescriptorSet pb_write = {
 		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -385,20 +392,37 @@ void descriptor_set_maker(Vulkan *vulkan, int i)
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 		.pBufferInfo = &wb_info
 	};
+	
+	VkWriteDescriptorSet ob_write = {
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = vulkan->descriptor_sets[i],
+		.dstBinding = 2,
+		.dstArrayElement = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.pBufferInfo = &ob_info
+	};
 
 	VkWriteDescriptorSet writes[] = {
 		pb_write,
-		wb_write
+		wb_write,
+		ob_write
 	};
 
 	vkUpdateDescriptorSets(
-		vulkan->device, 2,
+		vulkan->device, 3,
 		&writes[0],
 		0, nullptr
 	);
 }
 
+struct alignas(16) Aligned {
+	glm::vec4 data;
+};
+
 // World structure
+// TODO: refactor to GPU world,
+// store cpu world in another structure that is called World
 struct World {
 	uint32_t objects;
 	uint32_t lights;
@@ -413,47 +437,62 @@ struct World {
 	float scale = camera.tunings.scale;
 	float aspect = camera.tunings.aspect;
 
-	float *data;
+	// TODO: max objects
+	Aligned sphere_position[16];
 };
 
 World world = {
-	.objects = (uint32_t) nobjs,
+	.objects = (uint32_t) 1,
 	.lights = 1,
 	.backgound = 0x202020,
-	.data = new float[] {
-		0.0f, 0.0f, 4.0f, 1.0f,
-		3.0f, 0.0f, 3.0f, 3.0f,
-		6.0f, -2.0f, 5.0f, 6.0f,
-		6.0f, 3.0f, 10.0f, 2.0f,
-		6.0f, 3.0f, -4.0f, 2.0f
+	.sphere_position {
+		{ {0.0f, 0.0f, 0.0f, 6.0f} }
 	}
 };
 
 int main()
 {
+	std::cout << "Align of Aligned: " << alignof(Aligned) << std::endl;
+	std::cout << "Sizeof world: " << sizeof(World) << std::endl;
+	std::cout << "Align of vec4: " << alignof(glm::vec4) << std::endl;
+
 	// Initialize Vulkan
 	Vulkan vulkan;
 
         uvec4 base = {200, 200, 220, 255};
         uvec4 *pixels = init_pixels(800, 600, base);
 
+	Aligned *objects = new Aligned[16] {
+		{ {0.0, 0.0, 0.0, 3.0} }
+	};
+
 	// Pixel data
 	size_t pixel_size = sizeof(uvec4) * 800 * 600;
-	size_t world_size = sizeof(World) - sizeof(float *)
-		+ sizeof(float) * nobjs * 4;
+	size_t world_size = sizeof(World);
+	size_t object_size = sizeof(Aligned) * 16;
 
 	VkBufferUsageFlags pixel_usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT
+		| VK_BUFFER_USAGE_TRANSFER_SRC_BIT
 		| VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
 	VkBufferUsageFlags world_usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT
 		| VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
+	VkBufferUsageFlags object_usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+		| VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+
 	// Create buffers
 	vulkan.make_buffer(pixel_buffer, pixel_size, pixel_usage);
 	vulkan.make_buffer(world_buffer, sizeof(World), world_usage);
+	vulkan.make_buffer(object_buffer, object_size, object_usage);
 
 	vulkan.map_buffer(&pixel_buffer, pixels, pixel_size);
 	vulkan.map_buffer(&world_buffer, &world, sizeof(World));
+	vulkan.map_buffer(&object_buffer, objects, object_size);
+
+	std::cout << "Pixel buffer: " << pixel_buffer.size << std::endl;
+	std::cout << "World buffer: " << world_buffer.size << std::endl;
+	std::cout << "Object buffer: " << object_buffer.size << std::endl;
 
 	// Compute shader descriptor
 	compute_shader = vulkan.make_shader("shaders/pixel.spv");

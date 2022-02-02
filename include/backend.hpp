@@ -191,13 +191,14 @@ private:
 		_mk_command_pool();
 		_mk_command_buffers();
 		createSyncObjects();
-		_mk_desciptor_set_layout();
+		_mk_descriptor_set_layout();
 		_mk_descriptor_pool();
 		_mk_descriptor_sets();
 	}
 
 	// TODO: modifiable by the user
-	void _mk_desciptor_set_layout() {
+	// TODO: method to set default layout, and rebuild descriptor sets
+	void _mk_descriptor_set_layout() {
 		// Binding info
 		VkDescriptorSetLayoutBinding compute_bindings_1 {
 			.binding = 0,
@@ -214,16 +215,26 @@ private:
 			.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 			.pImmutableSamplers = nullptr
 		};
+		
+		VkDescriptorSetLayoutBinding compute_bindings_3 {
+			.binding = 2,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.descriptorCount = 1,
+			.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+			.pImmutableSamplers = nullptr
+		};
 
+		// VkDesciptorSetLayoutBinding
 		VkDescriptorSetLayoutBinding compute_bindings[] {
 			compute_bindings_1,
-			compute_bindings_2
+			compute_bindings_2,
+			compute_bindings_3
 		};
 		
 		// Create info
 		VkDescriptorSetLayoutCreateInfo layout_info {
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-			.bindingCount = 2,
+			.bindingCount = 3,
 			.pBindings = &compute_bindings[0]
 		};
 
