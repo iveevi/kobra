@@ -212,6 +212,8 @@ void cmd_buffer_maker(Vulkan *vk, size_t i) {
 
 	// Show render monitor
 	ImGui::Begin("Render Monitor");
+	// Set size
+	ImGui::SetWindowSize(ImVec2(100, 50));
 	ImGui::Text("fps: %.2f", ImGui::GetIO().Framerate);
 	ImGui::End();
 
@@ -319,6 +321,9 @@ void descriptor_set_maker(Vulkan *vulkan, int i)
 // TODO: rename and initializer list constructor
 struct alignas(16) Aligned {
 	glm::vec4 data;
+
+	Aligned() {}
+	Aligned(const glm::vec4 &d) : data(d) {}
 };
 
 // World structure
@@ -522,20 +527,29 @@ int main()
 	// ImGui IO
 	ImGuiIO &io = ImGui::GetIO();
 
+	VkCommandBuffer imgui_cmd_buffer = vulkan.make_command_buffer();
+
 	// Main render loop
+	float time = 0.0f;
+	float delta_time = 0.01f;
 	while (!glfwWindowShouldClose(vulkan.window)) {
 		glfwPollEvents();
 
-		// Check if data has changed
-		if (rerender) {
-			world.camera_position = camera.transform.position;
-			world.camera_forward = camera.transform.forward;
-			world.camera_right = camera.transform.right;
-			world.camera_up = camera.transform.up;
-			vulkan.map_buffer(&world_buffer, &world, sizeof(World));
-		}
+		// Update world data
+		world.camera_position = camera.transform.position;
+		world.camera_forward = camera.transform.forward;
+		world.camera_right = camera.transform.right;
+		world.camera_up = camera.transform.up;
+		vulkan.map_buffer(&world_buffer, &world, sizeof(World));
+
+		// Update lights
+		lights[0] = glm::vec4 {sin(time) * 7.5f, sin(time) * 10.0f, cos(time) * 0.5f, 1.0f};
+		vulkan.map_buffer(&light_buffer, lights, light_size);
 
 		vulkan.frame();
+
+		// Time
+		time += delta_time;
 	}
 
 	vulkan.idle();

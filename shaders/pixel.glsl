@@ -126,11 +126,16 @@ vec3 color_at(Ray ray)
 			shadow = 1.0;
 		}
 
-		vec3 c = objects.data[hit.object * 2 + 1].xyz;
+		// Diffuse lighting
 		float diff = max(dot(light_dir, hit.normal), 0.0);
 
+		// Specular lighting
+		vec3 view_dir = normalize(world.camera - hit.point);
+		vec3 reflect_dir = reflect(-light_dir, hit.normal);
+		float spec = pow(max(dot(view_dir, reflect_dir), 0.0), 16.0);
+
 		// TODO: different light/shading modes, using ImGui
-		color = c * clamp(diff * (1.0 - 0.9 * shadow) + 0.15, 0.0, 1.0);
+		color = hit.color * clamp((spec + diff) * (1.0 - 0.9 * shadow) + 0.15, 0.0, 1.0);
 
 		// color = vec3(1.0 - shadow);
 		// color = discretize(color, 16.0f);

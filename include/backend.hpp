@@ -1056,8 +1056,8 @@ private:
 		init_info.Device = device;
 		init_info.Queue = graphics_queue;
 		init_info.DescriptorPool = imgui_pool;
-		init_info.MinImageCount = 3;
-		init_info.ImageCount = 3;
+		init_info.MinImageCount = 2;
+		init_info.ImageCount = 2;
 		init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 
 		ImGui_ImplVulkan_Init(&init_info, render_pass);
@@ -1302,6 +1302,29 @@ public:
 	VkShaderModule make_shader(const std::string &path) {
 		Glob g = _read_file(path);
 		return _mk_shader_module(g);
+	}
+
+	// Create a cmmand buffer
+	VkCommandBuffer make_command_buffer() {
+		VkCommandBufferAllocateInfo alloc_info {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+			.commandPool = command_pool,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = 1
+		};
+
+		VkCommandBuffer command_buffer;
+
+		VkResult result = vkAllocateCommandBuffers(
+			device, &alloc_info, &command_buffer
+		);
+
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan] Failed to allocate command buffer!");
+			throw(-1);
+		}
+
+		return command_buffer;
 	}
 	
 	// Allocate a buffer
