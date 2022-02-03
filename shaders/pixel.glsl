@@ -96,6 +96,10 @@ Hit closest_object(Ray ray)
 
 vec3 color_at(Ray ray)
 {
+	// Shadow bias
+	// TODO: why is this so large?
+	float bias = 0.1;
+
 	Hit hit = closest_object(ray);
 	
 	// TODO: pass color as vec3
@@ -107,10 +111,27 @@ vec3 color_at(Ray ray)
 		vec3 light_pos = lights.data[0].xyz;
 		vec3 light_dir = normalize(light_pos - hit.point);
 
+		// Calculate shadow factor by tracing path to light
+		float shadow = 0.0;
+
+		// Shadow origin, taking bias into account
+		vec3 shadow_origin = hit.point + hit.normal * bias;
+
+		Ray reverse = Ray(shadow_origin, light_dir);
+		Hit hit_light = closest_object(reverse);
+
+		int obj = hit_light.object;
+		if (obj >= 0) {
+			// Fraction of lights path
+			shadow = 1.0;
+		}
+
 		vec3 c = objects.data[hit.object * 2 + 1].xyz;
 		float diff = max(dot(light_dir, hit.normal), 0.0);
 
-		color = c * diff;
+		// TODO: different light/shading modes, using ImGui
+		color = c * clamp(diff * (1.0 - 0.9 * shadow) + 0.15, 0.0, 1.0);
+		// color = vec3(1.0 - shadow);
 	}
 
 	return color;
@@ -118,29 +139,12 @@ vec3 color_at(Ray ray)
 
 void main()
 {
-	// Calculate initial x and y and offset indexes
-	uint sphere_color = 0x00FF00;
-
-	uint colors[] = {
-		0xFF0000,
-		0x00FF00,
-		0x0000FF,
-		0xFFFF00,
-		0x00FFFF,
-		0xFF00FF,
-		0xFFFFFF
-	};
-
-	uint color;
-
 	// Offset from space origin
 	uint y0 = gl_WorkGroupID.y;
 	uint x0 = gl_WorkGroupID.x;
 
 	uint ysize = gl_NumWorkGroups.y;
 	uint xsize = gl_NumWorkGroups.x;
-
-	vec3 light = lights.data[0].xyz;
 
 	for (uint y = y0; y < world.height; y += ysize) {
 		for (uint x = x0; x < world.width; x += xsize) {
@@ -158,8 +162,8 @@ void main()
 			);
 		
 			// Get color at ray
-			color = cast_color(color_at(ray));
-			frame.pixels[index] = color;
+			vec3 color = color_at(ray);
+			frame.pixels[index] = cast_color(color);
 		}
 	}
 }
