@@ -3,6 +3,7 @@
 #include "ray.glsl"
 #include "shapes.glsl"
 #include "intersect.glsl"
+#include "color.glsl"
 
 // TODO: replace version with command line argument
 // TODO: header system
@@ -22,6 +23,9 @@ layout (set = 0, binding = 1, std430) buffer World
 	uint height;
 
 	vec3 camera;
+	vec3 cforward;
+	vec3 cup;
+	vec3 cright;
 
 	// TODO: make a camera structure
 	// plus transform
@@ -53,19 +57,17 @@ struct Hit {
 	int	object;
 	float	time;
 	vec3	point;
-
-	// TODO: should later contain color
-	
-	// TODO:remove this
-	vec3 normal;
+	vec3	normal;
+	vec3	color;
 };
 
 // Get index of cloests object
 Hit closest_object(Ray ray)
 {
 	int min_index = -1;
-	float min_time = 1.0/0.0;
-	vec3 normal = vec3(0.0);
+	
+	// Starting time
+	Intersection mini = Intersection(1.0/0.0, vec3(0.0));
 
 	// Data index
 	uint di = 0;
@@ -77,37 +79,41 @@ Hit closest_object(Ray ray)
 		Sphere sphere = Sphere(p, r);
 
 		Intersection it = intersects(sphere, ray);
-		if (it.time > 0 && it.time < min_time) {
-			min_time = it.time;
+		if (it.time > 0 && it.time < mini.time) {
 			min_index = i;
-			normal = it.normal;
+			mini = it;
 		}
 
-		di++;
+		di += 2;
 	}
 
-	// Hit point using ray
-	vec3 point = ray.origin + ray.direction * min_time;
+	// Color of closest object
+	vec3 color = objects.data[min_index * 2 + 1].xyz;
+	vec3 point = ray.origin + ray.direction * mini.time;
 
-	return Hit(min_index, min_time, point, normal);
+	return Hit(min_index, mini.time, point, mini.normal, color);
 }
 
-// Uint color to vec3 color
-vec3 cast_color(uint c)
+vec3 color_at(Ray ray)
 {
-	return vec3(
-		float(c & 0xFF) / 255.0,
-		float((c >> 8) & 0xFF) / 255.0,
-		float((c >> 16) & 0xFF) / 255.0
-	);
-}
+	Hit hit = closest_object(ray);
+	
+	// TODO: pass color as vec3
+	vec3 color = cast_color(world.background);
+	if (hit.object != -1) {
+		color = hit.color;
 
-// Vec3 color to uint color
-uint cast_color(vec3 c)
-{
-	return uint(c.x * 255.0)
-		| (uint(c.y * 255.0) << 8)
-		| (uint(c.z * 255.0) << 16);
+		// Calculate diffuse lighting
+		vec3 light_pos = lights.data[0].xyz;
+		vec3 light_dir = normalize(light_pos - hit.point);
+
+		vec3 c = objects.data[hit.object * 2 + 1].xyz;
+		float diff = max(dot(light_dir, hit.normal), 0.0);
+
+		color = c * diff;
+	}
+
+	return color;
 }
 
 void main()
@@ -140,27 +146,19 @@ void main()
 		for (uint x = x0; x < world.width; x += xsize) {
 			uint index = y * world.width + x;
 
-			vec2 uv = vec2(x + 0.5, y + 0.5) / vec2(world.width, world.height);
+			vec2 uv = vec2(x + 0.5, y + 0.5)
+				/ vec2(world.width, world.height);
 
-			Ray ray = make_ray(uv, world.camera, world.scale, world.aspect);
-			
-			Hit hit = closest_object(ray);
-			if (hit.object >= 0) {
-				color = colors[hit.object % 7];
-
-				// Calculate diffuse
-				vec3 light_dir = normalize(light - hit.point);
-				float diffuse = max(dot(hit.normal, light_dir), 0.0);
-
-				vec3 c = cast_color(color);
-				c *= diffuse;
-
-				color = cast_color(c);
-			} else {
-				color = world.background;
-			}
-
-			// TODO: convert color from vec3 to uint
+			// Create ray
+			Ray ray = make_ray(
+				uv,
+				world.camera,
+				world.cforward, world.cup, world.cright,
+				world.scale, world.aspect
+			);
+		
+			// Get color at ray
+			color = cast_color(color_at(ray));
 			frame.pixels[index] = color;
 		}
 	}

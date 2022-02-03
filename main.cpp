@@ -232,22 +232,6 @@ Object *lights[] = {
         new PointLight(vec3(0.0f, 0.0f, 0.0f))
 };
 
-// Convert color to discetized grey scale value
-uvec4 dcgrey(const uvec4 &color)
-{
-        // Discrete steps
-        static const int steps = 16;
-
-        // Get grey scale vector
-        uint8_t grey = (color.r + color.g + color.b) / 3;
-
-        // Discretize (remove remainder)
-        grey = grey - (grey % steps);
-
-        // Return color
-        return uvec4 {grey, grey, grey, color.a};
-}
-
 void descriptor_set_maker(Vulkan *vulkan, int i)
 {
 	VkDescriptorBufferInfo pb_info {
@@ -345,10 +329,15 @@ struct World {
 	uint32_t height = 600;
 
 	alignas(16) glm::vec3 camera_position = glm::vec3(0.0f, 0.0f, -15.0f);
+	alignas(16) glm::vec3 camera_forward = glm::vec3(0.0f, 0.0f, 1.0f);
+	alignas(16) glm::vec3 camera_up = glm::vec3(0.0f, 1.0f, 0.0f);
+	alignas(16) glm::vec3 camera_right = glm::vec3(1.0f, 0.0f, 0.0f);
 
 	float fov = camera.tunings.fov;
 	float scale = camera.tunings.scale;
 	float aspect = camera.tunings.aspect;
+
+	// TODO: store indices for objects and lights
 };
 
 World world = {
@@ -383,6 +372,55 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
                 camera.transform.position += camera.transform.right * speed;
                 rerender = true;
         }
+
+	if (key == GLFW_KEY_E) {
+		camera.transform.position += camera.transform.up * speed;
+		rerender = true;
+	} else if (key == GLFW_KEY_Q) {
+		camera.transform.position -= camera.transform.up * speed;
+		rerender = true;
+	}
+}
+
+// Mouse movement callback
+void mouse_callback(GLFWwindow *window, double xpos, double ypos)
+{
+	static bool first_mouse = true;
+	static float last_x = WIDTH / 2.0f;
+	static float last_y = HEIGHT / 2.0f;
+	static const float sensitivity = 0.001f;
+
+	if (first_mouse) {
+		first_mouse = false;
+		last_x = xpos;
+		last_y = ypos;
+		return;
+	}
+
+	// Store pitch and yaw
+	static float pitch = 0.0f;
+	static float yaw = 0.0f;
+
+	float xoffset = xpos - last_x;
+	float yoffset = ypos - last_y;
+
+	xoffset *= sensitivity;
+	yoffset *= sensitivity;
+
+	yaw += xoffset;
+	pitch += yoffset;
+
+	if (pitch > 89.0f)
+		pitch = 89.0f;
+	else if (pitch < -89.0f)
+		pitch = -89.0f;
+
+	camera.transform.set_euler(pitch, yaw);
+
+	last_x = xpos;
+	last_y = ypos;
+	
+	rerender = true;
 }
 
 int main()
@@ -395,10 +433,19 @@ int main()
 
 	Aligned *objects = new Aligned[16] {
 		{ {0.0f, 0.0f, 4.0f, 1.0f} },
+		{ {0.1f, 0.5f, 0.2f, 0.0f} },
+		
 		{ {3.0f, 0.0f, 3.0f, 3.0f } },
+		{ {0.9f, 0.5f, 0.2f, 0.0f} },
+		
 		{ {6.0f, -2.0f, 5.0f, 6.0f } },
+		{ {0.4f, 0.4f, 0.9f, 0.0f} },
+		
 		{ {6.0f, 3.0f, 10.0f, 2.0f} },
-		{ {6.0f, 3.0f, -4.0f, 2.0f} }
+		{ {0.5f, 0.1f, 0.6f, 0.0f} },
+		
+		{ {6.0f, 3.0f, -4.0f, 2.0f} },
+		{ {0.6f, 0.5f, 0.3f, 0.0f} }
 	};
 
 	Aligned *lights = new Aligned[16] {
@@ -445,6 +492,12 @@ int main()
 	// Set keyboard callback
 	glfwSetKeyCallback(vulkan.window, key_callback);
 
+	// Mouse options
+	glfwSetInputMode(vulkan.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+	// Set mouse callback
+	glfwSetCursorPosCallback(vulkan.window, mouse_callback);
+
 	vulkan.set_command_buffers(cmd_buffer_maker);
 	while (!glfwWindowShouldClose(vulkan.window)) {
 		glfwPollEvents();
@@ -452,6 +505,9 @@ int main()
 		// Check if data has changed
 		if (rerender) {
 			world.camera_position = camera.transform.position;
+			world.camera_forward = camera.transform.forward;
+			world.camera_right = camera.transform.right;
+			world.camera_up = camera.transform.up;
 			vulkan.map_buffer(&world_buffer, &world, sizeof(World));
 		}
 

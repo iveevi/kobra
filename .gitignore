@@ -1,5 +1,6 @@
-*.out
 *.ini
+*.out
+*.spv
 .cache
 .smake
 compile_commands.json
