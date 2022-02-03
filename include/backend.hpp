@@ -1005,6 +1005,136 @@ private:
 		return shader_module;
 	}
 
+	//////////////////////////
+	// ImGui initialization //
+	//////////////////////////
+	
+	void _init_imgui() {
+		// Create descriptor pool
+		VkDescriptorPoolSize pool_sizes[] {
+			{ VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
+			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
+			{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
+			{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
+			{ VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
+			{ VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
+			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
+			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
+			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
+			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
+			{ VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 }
+		};
+
+		VkDescriptorPoolCreateInfo pool_info = {};
+		pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+		pool_info.maxSets = 1000;
+		pool_info.poolSizeCount = std::size(pool_sizes);
+		pool_info.pPoolSizes = pool_sizes;
+
+		VkDescriptorPool imgui_pool;
+		VkResult result = vkCreateDescriptorPool(
+			device, &pool_info,
+			nullptr, &imgui_pool
+		);
+
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan-ImGui] Failed to create descriptor pool");
+			return;
+		}
+
+		// Initialize the ImGui context
+		ImGui::CreateContext();
+
+		// Initialize the ImGui for Vulkan renderer
+		ImGui_ImplGlfw_InitForVulkan(window, true);
+
+		//this initializes imgui for Vulkan
+		ImGui_ImplVulkan_InitInfo init_info = {};
+		init_info.Instance = instance;
+		init_info.PhysicalDevice = physical_device;
+		init_info.Device = device;
+		init_info.Queue = graphics_queue;
+		init_info.DescriptorPool = imgui_pool;
+		init_info.MinImageCount = 3;
+		init_info.ImageCount = 3;
+		init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+
+		ImGui_ImplVulkan_Init(&init_info, render_pass);
+
+		// Start a new, single use command buffer
+		// TODO: make a method for immediate command buffers
+		VkCommandBufferAllocateInfo alloc_info = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+			.commandPool = command_pool,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = 1
+		};
+
+		VkCommandBuffer command_buffer;
+		result = vkAllocateCommandBuffers(
+			device, &alloc_info, &command_buffer
+		);
+
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan-ImGui] Failed to allocate command buffer");
+			return;
+		}
+
+		// Start recording the command buffer
+		VkCommandBufferBeginInfo begin_info = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+			.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+		};
+
+		result = vkBeginCommandBuffer(command_buffer, &begin_info);
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan-ImGui] Failed to begin command buffer");
+			return;
+		}
+
+		// Create font textures
+		ImGui_ImplVulkan_CreateFontsTexture(command_buffer);
+
+		// End recording the command buffer
+		result = vkEndCommandBuffer(command_buffer);
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan-ImGui] Failed to end command buffer");
+			return;
+		}
+
+		// Submit the command buffer
+		VkSubmitInfo submit_info = {
+			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+			.commandBufferCount = 1,
+			.pCommandBuffers = &command_buffer
+		};
+
+		result = vkQueueSubmit(graphics_queue, 1, &submit_info, VK_NULL_HANDLE);
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan-ImGui] Failed to submit command buffer");
+			return;
+		}
+
+		// Wait for the command buffer to finish
+		vkQueueWaitIdle(graphics_queue);
+
+		// Destroy the command buffer
+		// TODO: deletion queue function
+		vkFreeCommandBuffers(device, command_pool, 1, &command_buffer);
+
+		//clear font textures from cpu data
+		ImGui_ImplVulkan_DestroyFontUploadObjects();
+
+		/* add the destroy the imgui created structures
+		// TODO: also add a deletion queue
+		_mainDeletionQueue.push_function([=]() {
+
+				vkDestroyDescriptorPool(_device, imguiPool, nullptr);
+				ImGui_ImplVulkan_Shutdown();
+				}); */
+	}
+
 	/////////////////////////////////////
 	// Debugging and validation layers //
 	/////////////////////////////////////
@@ -1101,6 +1231,9 @@ public:
 	Vulkan() {
 		initWindow();
 		initVulkan();
+		_init_imgui();
+		Logger::ok("[Vulkan] ImGui initialized");
+		Logger::ok("[Vulkan] Vulkan instance completely initialized");
 	}
 
 	~Vulkan() {
@@ -1142,7 +1275,8 @@ public:
 			// Begin recording
 			result = vkBeginCommandBuffer(command_buffers[i], &begin_info);
 			if (result != VK_SUCCESS) {
-				Logger::error("[Vulkan] Failed to begin recording command buffer!");
+				Logger::error("[Vulkan] Failed to begin"
+					" recording command buffer!");
 				throw(-1);
 			}
 
@@ -1152,7 +1286,8 @@ public:
 			// End recording
 			result = vkEndCommandBuffer(command_buffers[i]);
 			if (result != VK_SUCCESS) {
-				Logger::error("[Vulkan] Failed to end recording command buffer!");
+				Logger::error("[Vulkan] Failed to end"
+					" recording command buffer!");
 				throw(-1);
 			}
 		}

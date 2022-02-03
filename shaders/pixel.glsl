@@ -131,7 +131,9 @@ vec3 color_at(Ray ray)
 
 		// TODO: different light/shading modes, using ImGui
 		color = c * clamp(diff * (1.0 - 0.9 * shadow) + 0.15, 0.0, 1.0);
+
 		// color = vec3(1.0 - shadow);
+		// color = discretize(color, 16.0f);
 	}
 
 	return color;

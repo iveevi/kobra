@@ -52,7 +52,7 @@ Camera camera {
 	},
  
         Tunings {
-                90.0f,
+                45.0f,
                 800,
                 600
         }
@@ -203,6 +203,25 @@ void cmd_buffer_maker(Vulkan *vk, size_t i) {
 		1,
 		&buffer_copy_region
 	);
+
+	// ImGui new frame
+	// TODO: method
+	ImGui_ImplVulkan_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
+	ImGui::NewFrame();
+
+	// Show render monitor
+	ImGui::Begin("Render Monitor");
+	ImGui::Text("fps: %.2f", ImGui::GetIO().Framerate);
+	ImGui::End();
+
+	// Render ImGui
+	ImGui::Render();
+
+	ImGui_ImplVulkan_RenderDrawData(
+		ImGui::GetDrawData(),
+		vk->command_buffers[i]
+	);
 };
 
 // Initialize the pixel buffer
@@ -216,21 +235,6 @@ uvec4 *init_pixels(int width, int height, const uvec4 &base)
 
 	return pixels;
 }
-
-// All objects
-int nobjs = 5;
-
-Renderable *objects[] = {
-        new Sphere(vec3(0.0f, 0.0f, 4.0f), 1.0f),
-        new Sphere(vec3(3.0f, 0.0f, 3.0f), 3.0f),
-        new Sphere(vec3(6.0f, -2.0f, 5.0f), 6.0f),
-        new Sphere(vec3(6.0f, 3.0f, 10.0f), 2.0f),
-        new Sphere(vec3(6.0f, 3.0f, -4.0f), 2.0f),
-};
-
-Object *lights[] = {
-        new PointLight(vec3(0.0f, 0.0f, 0.0f))
-};
 
 void descriptor_set_maker(Vulkan *vulkan, int i)
 {
@@ -349,6 +353,7 @@ World world = {
 // Keyboard callback
 // TODO: in class
 bool rerender = true;
+bool mouse_tracking = true;
 
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
@@ -380,6 +385,14 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 		camera.transform.position -= camera.transform.up * speed;
 		rerender = true;
 	}
+
+	// Tab to toggle cursor visibility
+	static bool cursor_visible = false;
+	if (key == GLFW_KEY_TAB && action == GLFW_PRESS) {
+		cursor_visible = !cursor_visible;
+		mouse_tracking = !mouse_tracking;
+		glfwSetInputMode(window, GLFW_CURSOR, cursor_visible ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
+	}
 }
 
 // Mouse movement callback
@@ -389,6 +402,9 @@ void mouse_callback(GLFWwindow *window, double xpos, double ypos)
 	static float last_x = WIDTH / 2.0f;
 	static float last_y = HEIGHT / 2.0f;
 	static const float sensitivity = 0.001f;
+
+	if (!mouse_tracking)
+		return;
 
 	if (first_mouse) {
 		first_mouse = false;
@@ -447,8 +463,8 @@ int main()
 		{ {6.0f, 3.0f, -4.0f, 2.0f} },
 		{ {0.6f, 0.5f, 0.3f, 0.0f} },
 
-		{ {0.0f, 0.0f, 0.0f, 0.0f} },
-		{ {1.0f, 1.0f, 1.0f, 1.0f} }
+		{ {0.0f, -0.25f, 0.0f, 0.2f} },
+		{ {1.0f, 0.5f, 1.0f, 1.0f} }
 	};
 
 	Aligned *lights = new Aligned[16] {
@@ -502,6 +518,11 @@ int main()
 	glfwSetCursorPosCallback(vulkan.window, mouse_callback);
 
 	vulkan.set_command_buffers(cmd_buffer_maker);
+
+	// ImGui IO
+	ImGuiIO &io = ImGui::GetIO();
+
+	// Main render loop
 	while (!glfwWindowShouldClose(vulkan.window)) {
 		glfwPollEvents();
 
