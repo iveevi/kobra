@@ -54,7 +54,9 @@ public:
 
 	// Aliases
 	using Glob = std::vector <char>;
+
 	using CommandBufferMaker = void (*)(Vulkan *, size_t);
+	using DeletionTask = std::function <void (Vulkan *)>;	// TODO: Is this Vulkan object needed?
 
 	using DS = VkDescriptorSet;
 	using DSLayout = VkDescriptorSetLayout;
@@ -143,6 +145,9 @@ private:
 	// Storage of allocated structures
 	// for easier cleanup
 	std::vector <Buffer>		_buffers;
+
+	// Queue of destructor tasks
+	std::vector <DeletionTask>	_deletion_tasks;
 
 #ifdef MERCURY_VALIDATION_LAYERS
 
@@ -351,8 +356,21 @@ private:
 	}
 
 	void cleanup() {
+		// Destroy the swapchain
 		_cleanup_swapchain();
 
+		// Destroy descriptor pool
+		vkDestroyDescriptorPool(device, descriptor_pool, nullptr);
+
+		// Destroy descriptor set layouts
+		for (auto layout : descriptor_set_layouts)
+			vkDestroyDescriptorSetLayout(device, layout, nullptr);
+
+		// Destroy descriptor sets
+		for (auto set : descriptor_sets)
+			vkFreeDescriptorSets(device, descriptor_pool, 1, &set);
+
+		// Destroy synchronization objects
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 			vkDestroySemaphore(device, render_finished_semaphores[i], nullptr);
 			vkDestroySemaphore(device, image_available_semaphores[i], nullptr);
@@ -361,11 +379,19 @@ private:
 
 		vkDestroyCommandPool(device, command_pool, nullptr);
 
-		_cleanup_buffers();
+		// Run all deletion tasks
+		for (auto &task : _deletion_tasks)
+			task(this);
+
+		// _cleanup_buffers();
+
 		vkDestroyDevice(device, nullptr);
 
 		if (enable_validation_layers) {
-			_delete_debug_messenger(instance, _debug_messenger, nullptr);
+			_delete_debug_messenger(
+				instance, _debug_messenger,
+				nullptr
+			);
 		}
 
 		vkDestroySurfaceKHR(instance, surface, nullptr);
@@ -559,7 +585,8 @@ private:
 		createInfo.imageColorSpace = surfaceFormat.colorSpace;
 		createInfo.imageExtent = extent;
 		createInfo.imageArrayLayers = 1;
-		createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+		createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
+			| VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
 		QueueFamilyIndices indices = _find_queue_families(physical_device);
 		uint32_t queueFamilyIndices[] = {indices.graphics.value(), indices.present.value()};
@@ -1240,6 +1267,11 @@ public:
 		cleanup();
 	}
 
+	// Destructor tasks
+	void push_deletion_task(const DeletionTask &task) {
+		_deletion_tasks.push_back(task);
+	}
+
 	// Render a frame
 	void frame();
 
@@ -1338,9 +1370,6 @@ public:
 			.sharingMode = VK_SHARING_MODE_EXCLUSIVE
 		};
 
-		// Create the buffer
-		// VkBuffer buffer;
-
 		VkResult result = vkCreateBuffer(
 			device, &buffer_info,
 			nullptr, &bf.buffer
@@ -1366,8 +1395,6 @@ public:
 		};
 
 		// Create device memory
-		// VkDeviceMemory buffer_memory = VK_NULL_HANDLE;
-
 		result = vkAllocateMemory(
 			device, &alloc_info,
 			nullptr, &bf.memory
@@ -1383,8 +1410,13 @@ public:
 
 		// Set the buffer properties
 		bf.size = size;
-		// TODO: bf.usage = usage;
 		bf.offset = 0;
+	}
+
+	// Destroy a buffer
+	void destroy_buffer(Buffer &bf) {
+		vkDestroyBuffer(device, bf.buffer, nullptr);
+		vkFreeMemory(device, bf.memory, nullptr);
 	}
 
 	// Map data to a buffer

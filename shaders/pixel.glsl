@@ -34,13 +34,18 @@ layout (set = 0, binding = 1, std430) buffer World
 	float fov;
 	float scale;
 	float aspect;
+
+	// TODO: indices for objects, lights, background
 } world;
 
 layout (set = 0, binding = 2, std430) buffer Objects
 {
 	// Object layout:
-	// vec4 descriptor (sphere, plane, mesh, etc. + size and offset)
-	// vec4 color
+	// vec4 descriptor
+	// 	[x] Shape: sphere, plane, mesh, etc.
+	//	[y] Shading: blinn-phong, normal, flat, etc.
+	//	[z, w] Size and offset of object data
+	// vec4 color (TODO: ?)
 	vec4 data[];
 } objects;
 

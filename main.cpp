@@ -204,7 +204,7 @@ void cmd_buffer_maker(Vulkan *vk, size_t i) {
 		&buffer_copy_region
 	);
 
-	// ImGui new frame
+	/* ImGui new frame
 	// TODO: method
 	ImGui_ImplVulkan_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
@@ -223,7 +223,7 @@ void cmd_buffer_maker(Vulkan *vk, size_t i) {
 	ImGui_ImplVulkan_RenderDrawData(
 		ImGui::GetDrawData(),
 		vk->command_buffers[i]
-	);
+	); */
 };
 
 // Initialize the pixel buffer
@@ -453,22 +453,22 @@ int main()
         uvec4 *pixels = init_pixels(800, 600, base);
 
 	Aligned *objects = new Aligned[16] {
-		{ {0.0f, 0.0f, 4.0f, 1.0f} },
+		{ {-1.0f, 0.0f, 4.0f, 1.0f} },
 		{ {0.1f, 0.5f, 0.2f, 0.0f} },
 		
-		{ {3.0f, 0.0f, 3.0f, 3.0f } },
+		{ {0.5f, 5.0f, 3.0f, 3.0f } },
 		{ {0.9f, 0.5f, 0.2f, 0.0f} },
 		
 		{ {6.0f, -2.0f, 5.0f, 6.0f } },
 		{ {0.4f, 0.4f, 0.9f, 0.0f} },
 		
-		{ {6.0f, 3.0f, 10.0f, 2.0f} },
+		{ {6.0f, 3.0f, 11.5f, 2.0f} },
 		{ {0.5f, 0.1f, 0.6f, 0.0f} },
 		
-		{ {6.0f, 3.0f, -4.0f, 2.0f} },
+		{ {6.0f, 3.0f, -2.0f, 2.0f} },
 		{ {0.6f, 0.5f, 0.3f, 0.0f} },
 
-		{ {0.0f, -0.25f, 0.0f, 0.2f} },
+		{ {0.0f, 0.0f, 0.0f, 0.2f} },
 		{ {1.0f, 0.5f, 1.0f, 1.0f} }
 	};
 
@@ -505,6 +505,17 @@ int main()
 	vulkan.map_buffer(&world_buffer, &world, sizeof(World));
 	vulkan.map_buffer(&object_buffer, objects, object_size);
 	vulkan.map_buffer(&light_buffer, lights, light_size);
+
+	// Add all buffers to deletion queue
+	vulkan.push_deletion_task(
+		[&](Vulkan *vk) {
+			vk->destroy_buffer(pixel_buffer);
+			vk->destroy_buffer(world_buffer);
+			vk->destroy_buffer(object_buffer);
+			vk->destroy_buffer(light_buffer);
+			Logger::ok("[main] Deleted buffers");
+		}
+	);
 
 	// Compute shader descriptor
 	compute_shader = vulkan.make_shader("shaders/pixel.spv");
@@ -543,7 +554,12 @@ int main()
 		vulkan.map_buffer(&world_buffer, &world, sizeof(World));
 
 		// Update lights
-		lights[0] = glm::vec4 {sin(time) * 7.5f, sin(time) * 10.0f, cos(time) * 0.5f, 1.0f};
+		float amplitude = 10.0f;
+		lights[0] = glm::vec4 {
+			amplitude * sin(time), 3.0f,
+			amplitude * cos(time), 1.0f
+		};
+
 		vulkan.map_buffer(&light_buffer, lights, light_size);
 
 		vulkan.frame();
