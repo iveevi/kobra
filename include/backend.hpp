@@ -360,11 +360,11 @@ private:
 		_cleanup_swapchain();
 
 		// Destroy descriptor pool
-		vkDestroyDescriptorPool(device, descriptor_pool, nullptr);
+		// vkDestroyDescriptorPool(device, descriptor_pool, nullptr);
 
-		// Destroy descriptor set layouts
+		/* Destroy descriptor set layouts
 		for (auto layout : descriptor_set_layouts)
-			vkDestroyDescriptorSetLayout(device, layout, nullptr);
+			vkDestroyDescriptorSetLayout(device, layout, nullptr); */
 
 		// Destroy descriptor sets
 		for (auto set : descriptor_sets)
@@ -661,12 +661,12 @@ private:
 		VkAttachmentDescription color_attachment {
 			.format = swch_image_format,
 			.samples = VK_SAMPLE_COUNT_1_BIT,
-			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+			.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
 			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
 			.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
 			.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
 			.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-			.finalLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+			.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
 		};
 
 		// Create attachment reference
@@ -1411,6 +1411,11 @@ public:
 		// Set the buffer properties
 		bf.size = size;
 		bf.offset = 0;
+
+		// Log creation
+		Logger::ok() << "[Vulkan] Buffer created (VkBuffer="
+			<< bf.buffer << ", VkDeviceMemory=" << bf.memory
+			<< ", size=" << size << ")\n";
 	}
 
 	// Destroy a buffer
@@ -1437,6 +1442,74 @@ public:
 
 		// Unmap the buffer
 		vkUnmapMemory(device, buffer->memory);
+	}
+	
+	// Create a render pass
+	VkRenderPass make_render_pass(VkImageLayout initial_layout, VkImageLayout final_layout) {
+		// Render pass to return
+		VkRenderPass new_render_pass = VK_NULL_HANDLE;
+
+		// Create attachment description
+		VkAttachmentDescription color_attachment {
+			.format = swch_image_format,
+			.samples = VK_SAMPLE_COUNT_1_BIT,
+			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+			.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+			.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+			.initialLayout = initial_layout,
+			.finalLayout = final_layout
+		};
+
+		// Create attachment reference
+		VkAttachmentReference color_attachment_ref {
+			.attachment = 0,
+			.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+		};
+
+		// Subpasses and dependencies
+		VkSubpassDescription subpass {
+			.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+			.colorAttachmentCount = 1,
+			.pColorAttachments = &color_attachment_ref
+		};
+
+		VkSubpassDependency dependency {
+			.srcSubpass = VK_SUBPASS_EXTERNAL,
+			.dstSubpass = 0,
+			.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			.srcAccessMask = 0,
+			.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
+				| VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+		};
+
+		// Create render pass
+		VkRenderPassCreateInfo render_pass_info {
+			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+			.attachmentCount = 1,
+			.pAttachments = &color_attachment,
+			.subpassCount = 1,
+			.pSubpasses = &subpass,
+			.dependencyCount = 1,
+			.pDependencies = &dependency
+		};
+
+		VkResult result = vkCreateRenderPass(
+			device, &render_pass_info,
+			nullptr, &new_render_pass
+		);
+
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan] Failed to create render pass!");
+			throw(-1);
+		}
+
+		// Log creation
+		Logger::ok() << "[Vulkan] Render pass created (VkRenderPass="
+			<< render_pass << ")\n";
+
+		return new_render_pass;
 	}
 
 	// Getters

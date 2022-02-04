@@ -68,7 +68,73 @@ Vulkan::Buffer light_buffer;
 VkShaderModule compute_shader;
 
 // Command buffer function per frame index
-void cmd_buffer_maker(Vulkan *vk, size_t i) {
+void cmd_buffer_maker(Vulkan *vk, size_t i) {	
+	// Get image at current index
+	VkImage image = vk->swch_images[i];
+
+	// Transition image layout to present
+	// TODO: method to transition image layout,
+	//	includes pipeline barrier functoin exeution
+	VkImageMemoryBarrier image_memory_barrier {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+		.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+		.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT,
+		.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+		.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		.image = image,
+		.subresourceRange = {
+			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.baseMipLevel = 0,
+			.levelCount = 1,
+			.baseArrayLayer = 0,
+			.layerCount = 1
+		}
+	};
+
+	vkCmdPipelineBarrier(
+		vk->command_buffers[i],
+		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+		VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+		0,
+		0,
+		nullptr,
+		0,
+		nullptr,
+		1,
+		&image_memory_barrier
+	);
+
+	// Buffer copy regions
+	VkBufferImageCopy buffer_copy_region {
+		.bufferOffset = 0,
+		.bufferRowLength = 0,
+		.bufferImageHeight = 0,
+		.imageSubresource = {
+			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.mipLevel = 0,
+			.baseArrayLayer = 0,
+			.layerCount = 1
+		},
+		.imageOffset = {0, 0, 0},
+		.imageExtent = {
+			vk->swch_extent.width,
+			vk->swch_extent.height,
+			1
+		}
+	};
+
+	// Copy buffer to image
+	vkCmdCopyBufferToImage(
+		vk->command_buffers[i],
+		pixel_buffer.buffer,
+		image,
+		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		1,
+		&buffer_copy_region
+	);
+
 	// Clear color
 	VkClearValue clear_color = {
 		{ {0.0f, 0.0f, 0.0f, 1.0f} }
@@ -83,8 +149,8 @@ void cmd_buffer_maker(Vulkan *vk, size_t i) {
 			.offset = {0, 0},
 			.extent = vk->swch_extent
 		},
-		.clearValueCount = 1,
-		.pClearValues = &clear_color
+		.clearValueCount = 0,
+		.pClearValues = nullptr
 	};
 
 	// Render pass creation
@@ -164,6 +230,27 @@ void cmd_buffer_maker(Vulkan *vk, size_t i) {
 			nullptr
 		);
 
+		// ImGui new frame
+		// TODO: method
+		ImGui_ImplVulkan_NewFrame();
+		ImGui_ImplGlfw_NewFrame();
+		ImGui::NewFrame();
+
+		// Show render monitor
+		ImGui::Begin("Render Monitor");
+		// Set size
+		ImGui::SetWindowSize(ImVec2(100, 50));
+		ImGui::Text("fps: %.2f", ImGui::GetIO().Framerate);
+		ImGui::End();
+
+		// Render ImGui
+		ImGui::Render();
+
+		ImGui_ImplVulkan_RenderDrawData(
+			ImGui::GetDrawData(),
+			vk->command_buffers[i]
+		);
+
 	vkCmdEndRenderPass(vk->command_buffers[i]);
 		
 	// Dispatch
@@ -171,64 +258,11 @@ void cmd_buffer_maker(Vulkan *vk, size_t i) {
 		vk->command_buffers[i],
 		400, 400, 1
 	);
-		
-	// Get image at current index
-	VkImage image = vk->swch_images[i];
 
-	// Buffer copy regions
-	VkBufferImageCopy buffer_copy_region {
-		.bufferOffset = 0,
-		.bufferRowLength = 0,
-		.bufferImageHeight = 0,
-		.imageSubresource = {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-			.mipLevel = 0,
-			.baseArrayLayer = 0,
-			.layerCount = 1
-		},
-		.imageOffset = {0, 0, 0},
-		.imageExtent = {
-			vk->swch_extent.width,
-			vk->swch_extent.height,
-			1
-		}
-	};
-
-	// Copy buffer to image
-	vkCmdCopyBufferToImage(
-		vk->command_buffers[i],
-		pixel_buffer.buffer,
-		image,
-		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		1,
-		&buffer_copy_region
-	);
-
-	/* ImGui new frame
-	// TODO: method
-	ImGui_ImplVulkan_NewFrame();
-	ImGui_ImplGlfw_NewFrame();
-	ImGui::NewFrame();
-
-	// Show render monitor
-	ImGui::Begin("Render Monitor");
-	// Set size
-	ImGui::SetWindowSize(ImVec2(100, 50));
-	ImGui::Text("fps: %.2f", ImGui::GetIO().Framerate);
-	ImGui::End();
-
-	// Render ImGui
-	ImGui::Render();
-
-	ImGui_ImplVulkan_RenderDrawData(
-		ImGui::GetDrawData(),
-		vk->command_buffers[i]
-	); */
-
-	// Transition image layout to present
+	/* Transition image layout to present
 	// TODO: method to transition image layout,
 	//	includes pipeline barrier functoin exeution
-	VkImageMemoryBarrier image_memory_barrier {
+	image_memory_barrier = VkImageMemoryBarrier {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
 		.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
 		.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT,
@@ -257,7 +291,7 @@ void cmd_buffer_maker(Vulkan *vk, size_t i) {
 		nullptr,
 		1,
 		&image_memory_barrier
-	);
+	); */
 }
 
 // Initialize the pixel buffer
@@ -554,6 +588,14 @@ int main()
 	// Compute shader descriptor
 	compute_shader = vulkan.make_shader("shaders/pixel.spv");
 
+	// Add shader to deletion queue'
+	vulkan.push_deletion_task(
+		[&](Vulkan *vk) {
+			vkDestroyShaderModule(vk->device, compute_shader, nullptr);
+			Logger::ok("[main] Deleted compute shader");
+		}
+	);
+
 	// Buffer descriptor
 	for (int i = 0; i < vulkan.swch_images.size(); i++)
 		descriptor_set_maker(&vulkan, i);
@@ -596,6 +638,7 @@ int main()
 
 		vulkan.map_buffer(&light_buffer, lights, light_size);
 
+		// Show frame
 		vulkan.frame();
 
 		// Time
