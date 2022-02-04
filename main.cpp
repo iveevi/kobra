@@ -224,7 +224,41 @@ void cmd_buffer_maker(Vulkan *vk, size_t i) {
 		ImGui::GetDrawData(),
 		vk->command_buffers[i]
 	); */
-};
+
+	// Transition image layout to present
+	// TODO: method to transition image layout,
+	//	includes pipeline barrier functoin exeution
+	VkImageMemoryBarrier image_memory_barrier {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+		.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+		.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT,
+		.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		.image = image,
+		.subresourceRange = {
+			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.baseMipLevel = 0,
+			.levelCount = 1,
+			.baseArrayLayer = 0,
+			.layerCount = 1
+		}
+	};
+
+	vkCmdPipelineBarrier(
+		vk->command_buffers[i],
+		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+		VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+		0,
+		0,
+		nullptr,
+		0,
+		nullptr,
+		1,
+		&image_memory_barrier
+	);
+}
 
 // Initialize the pixel buffer
 uvec4 *init_pixels(int width, int height, const uvec4 &base)
