@@ -43,13 +43,55 @@ void Vulkan::frame()
 	// Mark the image as in use by this frame
 	images_in_flight[image_index] = in_flight_fences[current_frame];
 
+	// Fill out imgui command buffer and render pass
+	begin_command_buffer(imgui_cmd_buffer);
+
+	// Begin the render pass
+	begin_render_pass(
+		imgui_cmd_buffer,
+		swch_framebuffers[image_index],
+		imgui_render_pass,
+		swch_extent,
+		0, nullptr
+	);
+
+		// ImGui new frame
+		// TODO: method
+		ImGui_ImplVulkan_NewFrame();
+		ImGui_ImplGlfw_NewFrame();
+		ImGui::NewFrame();
+
+		// Show render monitor
+		ImGui::Begin("Render Monitor");
+		ImGui::Text("fps: %.1f", ImGui::GetIO().Framerate);
+		ImGui::End();
+
+		// ImGui::ShowDemoWindow();
+
+		ImGui::EndFrame();
+		ImGui::Render();
+
+		// Render ImGui
+		ImGui_ImplVulkan_RenderDrawData(
+			ImGui::GetDrawData(),
+			imgui_cmd_buffer
+			// vulkan.command_buffers[0]
+		);
+
+	// End the render pass
+	end_render_pass(imgui_cmd_buffer);
+
+	// End the command buffer
+	end_command_buffer(imgui_cmd_buffer);
+
 	// Frame submission and synchronization info
 	VkSemaphore wait_semaphores[] = {
 		image_available_semaphores[current_frame]
 	};
 
 	VkPipelineStageFlags wait_stages[] = {
-		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+		VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
 	};
 
 	VkSemaphore signal_semaphores[] = {
@@ -57,6 +99,7 @@ void Vulkan::frame()
 	};
 
 	// Create information
+	// TODO: method
 	VkSubmitInfo submit_info {
 		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
 		.waitSemaphoreCount = 1,
@@ -76,6 +119,30 @@ void Vulkan::frame()
 	result = vkQueueSubmit(
 		graphics_queue, 1, &submit_info,
 		in_flight_fences[current_frame]
+	);
+
+	if (result != VK_SUCCESS) {
+		Logger::error("[Vulkan] Failed to submit draw command buffer!");
+		throw (-1);
+	}
+
+	// Wait for the first command buffer to finish
+	vkQueueWaitIdle(graphics_queue);
+
+	// Submit ImGui command buffer
+	// submit_info.pWaitSemaphores = &imgui_semaphore;
+	// submit_info.pWaitDstStageMask = &wait_stages[1];
+	submit_info.waitSemaphoreCount = 0;
+	submit_info.pCommandBuffers = &imgui_cmd_buffer;
+
+	// Submit the command buffer
+	vkResetFences(device, 1, &imgui_fence);
+
+	// Logger::warn() << "[Vulkan] Submitting ImGui command buffer...\n";
+	// Logger::warn() << "[Vulkan] ImGui Semaphore = " << imgui_semaphore << "\n";
+	result = vkQueueSubmit(
+		graphics_queue, 1, &submit_info,
+		imgui_fence
 	);
 
 	if (result != VK_SUCCESS) {

@@ -16,36 +16,6 @@
 #include "include/camera.hpp"
 #include "include/logger.hpp"
 
-// Pixel type
-struct uvec4 {
-	uint8_t b;
-	uint8_t g;
-	uint8_t r;
-	uint8_t a;
-
-	// Defaut constructor
-	uvec4() : b(0), g(0), r(0), a(255) {}
-
-	// Construtor as RGB
-	uvec4(uint8_t r, uint8_t g, uint8_t b)
-		: r(r), g(g), b(b), a(255) {}
-	
-	// Constructor as RGBA
-	uvec4(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
-		: r(r), g(g), b(b), a(a) {}
-};
-
-// Basic operations
-inline uvec4 operator*(float s, const uvec4 &v)
-{
-        return {
-                (uint8_t) (s * v.r),
-                (uint8_t) (s * v.g),
-                (uint8_t) (s * v.b),
-                (uint8_t) (s * v.a)
-        };
-}
-
 Camera camera {
         Transform {
 		glm::vec3(0.0f, 0.0f, -4.0f)
@@ -134,11 +104,6 @@ void cmd_buffer_maker(Vulkan *vk, size_t i) {
 		1,
 		&buffer_copy_region
 	);
-
-	// Clear color
-	VkClearValue clear_color = {
-		{ {0.0f, 0.0f, 0.0f, 1.0f} }
-	};
 	
 	// Render pass creation info
 	VkRenderPassBeginInfo render_pass_info {
@@ -230,27 +195,6 @@ void cmd_buffer_maker(Vulkan *vk, size_t i) {
 			nullptr
 		);
 
-		// ImGui new frame
-		// TODO: method
-		ImGui_ImplVulkan_NewFrame();
-		ImGui_ImplGlfw_NewFrame();
-		ImGui::NewFrame();
-
-		// Show render monitor
-		ImGui::Begin("Render Monitor");
-		// Set size
-		ImGui::SetWindowSize(ImVec2(100, 50));
-		ImGui::Text("fps: %.2f", ImGui::GetIO().Framerate);
-		ImGui::End();
-
-		// Render ImGui
-		ImGui::Render();
-
-		ImGui_ImplVulkan_RenderDrawData(
-			ImGui::GetDrawData(),
-			vk->command_buffers[i]
-		);
-
 	vkCmdEndRenderPass(vk->command_buffers[i]);
 		
 	// Dispatch
@@ -258,52 +202,6 @@ void cmd_buffer_maker(Vulkan *vk, size_t i) {
 		vk->command_buffers[i],
 		400, 400, 1
 	);
-
-	/* Transition image layout to present
-	// TODO: method to transition image layout,
-	//	includes pipeline barrier functoin exeution
-	image_memory_barrier = VkImageMemoryBarrier {
-		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-		.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
-		.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT,
-		.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-		.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-		.image = image,
-		.subresourceRange = {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-			.baseMipLevel = 0,
-			.levelCount = 1,
-			.baseArrayLayer = 0,
-			.layerCount = 1
-		}
-	};
-
-	vkCmdPipelineBarrier(
-		vk->command_buffers[i],
-		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-		VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-		0,
-		0,
-		nullptr,
-		0,
-		nullptr,
-		1,
-		&image_memory_barrier
-	); */
-}
-
-// Initialize the pixel buffer
-uvec4 *init_pixels(int width, int height, const uvec4 &base)
-{
-	uvec4 *pixels = new uvec4[width * height];
-
-	for (int i = 0; i < width * height; i++) {
-		pixels[i] = base;
-	}
-
-	return pixels;
 }
 
 void descriptor_set_maker(Vulkan *vulkan, int i)
@@ -512,14 +410,24 @@ void mouse_callback(GLFWwindow *window, double xpos, double ypos)
 	rerender = true;
 }
 
+// ImGui command buffer and render pass
+/* TODO: class objects
+VkCommandBuffer imgui_command_buffer;
+VkRenderPass imgui_render_pass; */
+
 int main()
 {
 	// Initialize Vulkan
 	Vulkan vulkan;
 
-        uvec4 base = {200, 200, 220, 255};
-        uvec4 *pixels = init_pixels(800, 600, base);
+	/* Create imgui cmd buffer and render pass
+	imgui_command_buffer = vulkan.make_command_buffer();
+	imgui_render_pass = vulkan.make_render_pass(
+		VK_ATTACHMENT_LOAD_OP_LOAD,
+		VK_ATTACHMENT_STORE_OP_STORE
+	); */
 
+	// Pixel initialization
 	Aligned *objects = new Aligned[16] {
 		{ {-1.0f, 0.0f, 4.0f, 1.0f} },
 		{ {0.1f, 0.5f, 0.2f, 0.0f} },
@@ -545,7 +453,7 @@ int main()
 	};
 
 	// Pixel data
-	size_t pixel_size = sizeof(uvec4) * 800 * 600;
+	size_t pixel_size = 4 * sizeof(char) * 800 * 600;
 	size_t world_size = sizeof(World);
 	size_t object_size = sizeof(Aligned) * 16;
 	size_t light_size = sizeof(Aligned) * 16;
@@ -569,7 +477,6 @@ int main()
 	vulkan.make_buffer(object_buffer, object_size, object_usage);
 	vulkan.make_buffer(light_buffer, light_size, light_usage);
 
-	vulkan.map_buffer(&pixel_buffer, pixels, pixel_size);
 	vulkan.map_buffer(&world_buffer, &world, sizeof(World));
 	vulkan.map_buffer(&object_buffer, objects, object_size);
 	vulkan.map_buffer(&light_buffer, lights, light_size);
@@ -604,17 +511,15 @@ int main()
 	glfwSetKeyCallback(vulkan.window, key_callback);
 
 	// Mouse options
-	glfwSetInputMode(vulkan.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	// glfwSetInputMode(vulkan.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	// Set mouse callback
-	glfwSetCursorPosCallback(vulkan.window, mouse_callback);
-
+	// glfwSetCursorPosCallback(vulkan.window, mouse_callback);
+	
 	vulkan.set_command_buffers(cmd_buffer_maker);
 
 	// ImGui IO
 	ImGuiIO &io = ImGui::GetIO();
-
-	VkCommandBuffer imgui_cmd_buffer = vulkan.make_command_buffer();
 
 	// Main render loop
 	float time = 0.0f;

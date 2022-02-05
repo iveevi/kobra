@@ -797,7 +797,6 @@ private:
 			.commandBufferCount = (uint32_t) command_buffers.size()
 		};
 
-
 		// Allocate the command buffers
 		VkResult result = vkAllocateCommandBuffers(
 			device, &alloc_info, command_buffers.data()
@@ -1035,7 +1034,15 @@ private:
 	//////////////////////////
 	// ImGui initialization //
 	//////////////////////////
-	
+
+	// TODO: separate from this backend class
+	VkDescriptorPool imgui_pool;
+	VkCommandPool imgui_cmd_pool;
+	VkCommandBuffer imgui_cmd_buffer;
+	VkRenderPass imgui_render_pass;
+	VkSemaphore imgui_semaphore;
+	VkFence imgui_fence;
+
 	void _init_imgui() {
 		// Create descriptor pool
 		VkDescriptorPoolSize pool_sizes[] {
@@ -1059,7 +1066,6 @@ private:
 		pool_info.poolSizeCount = std::size(pool_sizes);
 		pool_info.pPoolSizes = pool_sizes;
 
-		VkDescriptorPool imgui_pool;
 		VkResult result = vkCreateDescriptorPool(
 			device, &pool_info,
 			nullptr, &imgui_pool
@@ -1153,13 +1159,19 @@ private:
 		//clear font textures from cpu data
 		ImGui_ImplVulkan_DestroyFontUploadObjects();
 
-		/* add the destroy the imgui created structures
-		// TODO: also add a deletion queue
-		_mainDeletionQueue.push_function([=]() {
+		// Create command buffer and render pass
+		imgui_cmd_pool = make_command_pool(
+			VK_COMMAND_POOL_CREATE_TRANSIENT_BIT
+			| VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
+		);
+		imgui_cmd_buffer = make_command_buffer(imgui_cmd_pool);
+		imgui_render_pass = make_render_pass(
+			VK_ATTACHMENT_LOAD_OP_LOAD,
+			VK_ATTACHMENT_STORE_OP_STORE
+		);
 
-				vkDestroyDescriptorPool(_device, imguiPool, nullptr);
-				ImGui_ImplVulkan_Shutdown();
-				}); */
+		imgui_semaphore = make_semaphore();
+		imgui_fence = make_fence();
 	}
 
 	/////////////////////////////////////
@@ -1336,11 +1348,12 @@ public:
 		return _mk_shader_module(g);
 	}
 
-	// Create a cmmand buffer
-	VkCommandBuffer make_command_buffer() {
+	// Create a command buffer
+	// TODO: pass level
+	VkCommandBuffer make_command_buffer(VkCommandPool cmd_pool) {
 		VkCommandBufferAllocateInfo alloc_info {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-			.commandPool = command_pool,
+			.commandPool = cmd_pool,
 			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 			.commandBufferCount = 1
 		};
@@ -1357,6 +1370,47 @@ public:
 		}
 
 		return command_buffer;
+	}
+
+	// Start and end recording a command buffer
+	void begin_command_buffer(VkCommandBuffer command_buffer) {
+		VkCommandBufferBeginInfo begin_info {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
+		};
+
+		VkResult result = vkBeginCommandBuffer(command_buffer, &begin_info);
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan] Failed to begin"
+				" recording command buffer!");
+			throw(-1);
+		}
+	}
+
+	void end_command_buffer(VkCommandBuffer command_buffer) {
+		VkResult result = vkEndCommandBuffer(command_buffer);
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan] Failed to end"
+				" recording command buffer!");
+			throw(-1);
+		}
+	}
+
+	// Submit a command buffer
+	void submit_command_buffer(VkCommandBuffer command_buffer) {
+		VkSubmitInfo submit_info {
+			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+			.commandBufferCount = 1,
+			.pCommandBuffers = &command_buffer
+		};
+
+		VkResult result = vkQueueSubmit(
+			graphics_queue, 1, &submit_info, VK_NULL_HANDLE
+		);
+
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan] Failed to submit command buffer!");
+			throw(-1);
+		}
 	}
 	
 	// Allocate a buffer
@@ -1445,7 +1499,10 @@ public:
 	}
 	
 	// Create a render pass
-	VkRenderPass make_render_pass(VkImageLayout initial_layout, VkImageLayout final_layout) {
+	VkRenderPass make_render_pass(VkAttachmentLoadOp load_op,
+			VkAttachmentStoreOp store_op,
+			VkImageLayout initial_layout = VK_IMAGE_LAYOUT_UNDEFINED,
+			VkImageLayout final_layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
 		// Render pass to return
 		VkRenderPass new_render_pass = VK_NULL_HANDLE;
 
@@ -1453,8 +1510,8 @@ public:
 		VkAttachmentDescription color_attachment {
 			.format = swch_image_format,
 			.samples = VK_SAMPLE_COUNT_1_BIT,
-			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+			.loadOp = load_op,
+			.storeOp = store_op,
 			.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
 			.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
 			.initialLayout = initial_layout,
@@ -1510,6 +1567,109 @@ public:
 			<< render_pass << ")\n";
 
 		return new_render_pass;
+	}
+
+	// Start and end a render pass
+	void begin_render_pass(VkCommandBuffer cmd_buffer,
+			VkFramebuffer framebuffer,
+			VkRenderPass render_pass,
+			VkExtent2D extent,
+			uint32_t clear_count,
+			VkClearValue *clear_values) {
+		// Begin the render pass
+		VkRenderPassBeginInfo render_pass_begin_info {
+			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+			.renderPass = render_pass,
+			.framebuffer = framebuffer,
+			.renderArea = {
+				.offset = { 0, 0 },
+				.extent = extent
+			},
+			.clearValueCount = clear_count,
+			.pClearValues = clear_values
+		};
+
+		vkCmdBeginRenderPass(cmd_buffer, &render_pass_begin_info,
+			VK_SUBPASS_CONTENTS_INLINE);
+	}
+
+	void end_render_pass(VkCommandBuffer cmd_buffer) {
+		vkCmdEndRenderPass(cmd_buffer);
+	}
+
+	// Create a command pool
+	VkCommandPool make_command_pool(VkCommandPoolCreateFlags flags) {
+		// Command pool to return
+		VkCommandPool new_command_pool = VK_NULL_HANDLE;
+
+		// Find queue family indices
+		QueueFamilyIndices indices = _find_queue_families(physical_device);
+
+		// Create command pool
+		VkCommandPoolCreateInfo pool_info {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+			.flags = flags,
+			.queueFamilyIndex = indices.graphics.value()
+		};
+
+		VkResult result = vkCreateCommandPool(
+			device, &pool_info,
+			nullptr, &new_command_pool
+		);
+
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan] Failed to create command pool!");
+			throw(-1);
+		}
+
+		return new_command_pool;
+	}
+
+	// Create a semaphore
+	VkSemaphore make_semaphore() {
+		// Semaphore
+		VkSemaphore new_semaphore = VK_NULL_HANDLE;
+
+		// Create semaphore
+		VkSemaphoreCreateInfo semaphore_info {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
+		};
+
+		VkResult result = vkCreateSemaphore(
+			device, &semaphore_info,
+			nullptr, &new_semaphore
+		);
+
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan] Failed to create semaphore!");
+			throw(-1);
+		}
+
+		return new_semaphore;
+	}
+
+	// Create a fence
+	VkFence make_fence(VkFenceCreateFlags flags = 0) {
+		// Fence
+		VkFence new_fence = VK_NULL_HANDLE;
+
+		// Create fence
+		VkFenceCreateInfo fence_info {
+			.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+			.flags = flags
+		};
+
+		VkResult result = vkCreateFence(
+			device, &fence_info,
+			nullptr, &new_fence
+		);
+
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan] Failed to create fence!");
+			throw(-1);
+		}
+
+		return new_fence;
 	}
 
 	// Getters
