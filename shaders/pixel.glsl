@@ -5,8 +5,9 @@
 #include "intersect.glsl"
 #include "color.glsl"
 
+#include "../include/types.h"
+
 // TODO: replace version with command line argument
-// TODO: header system
 
 layout (set = 0, binding = 0, std430) buffer Pixels
 {
@@ -124,8 +125,6 @@ vec3 color_at(Ray ray)
 	// Maximum recursion depth
 	int max_depth = 2;
 	
-	// TODO: pass color as vec3
-	// vec3 color = cast_color(world.background);
 	Hit hit = closest_object(ray);
 	
 	vec3 color = hit.color;

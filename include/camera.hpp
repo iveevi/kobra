@@ -6,7 +6,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 // Engine headers
-#include "ray.hpp"
 #include "transform.hpp"
 
 // Camera properties
@@ -42,21 +41,6 @@ struct Camera {
         Camera();
         Camera(const Transform& trans, const Tunings& tns)
                         : transform(trans), tunings(tns) {}
-
-        // Ray generation
-        Ray ray(float nx, float ny) const {
-                float cx = (nx * 2.0f - 1.0f) * tunings.scale * tunings.aspect;
-                float cy = (1.0f - ny * 2.0f) * tunings.scale;
-
-                glm::vec3 dir = cx * transform.right
-                        + cy * transform.up
-                        + transform.forward;
-
-                return Ray {
-                        transform.position,
-                        glm::normalize(dir)
-                };
-        }
 };
 
 #endif
