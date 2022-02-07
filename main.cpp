@@ -518,7 +518,8 @@ int main()
 	
 	vulkan.set_command_buffers(cmd_buffer_maker);
 
-	// ImGui IO
+	// ImGui and IO
+	vulkan.init_imgui();
 	ImGuiIO &io = ImGui::GetIO();
 
 	// Main render loop

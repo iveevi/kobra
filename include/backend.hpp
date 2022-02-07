@@ -1270,13 +1270,17 @@ public:
 	Vulkan() {
 		initWindow();
 		initVulkan();
-		_init_imgui();
-		Logger::ok("[Vulkan] ImGui initialized");
 		Logger::ok("[Vulkan] Vulkan instance completely initialized");
 	}
 
 	~Vulkan() {
 		cleanup();
+	}
+
+	// Extra initialization
+	void init_imgui() {
+		_init_imgui();
+		Logger::ok("[Vulkan] ImGui initialized");
 	}
 
 	// Destructor tasks

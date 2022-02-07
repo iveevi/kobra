@@ -161,62 +161,7 @@ vec3 color_at(Ray ray)
 
 		// TODO: different light/shading modes, using ImGui
 		color = hit.color * clamp((spec + diff) * (1.0 - 0.9 * shadow) + 0.15, 0.0, 1.0);
-
-		// color = vec3(1.0 - shadow);
-		// color = discretize(color, 16.0f);
-		// color = hit.normal;
 	}
-
-	/* int iter = 0;
-
-	vec3 light_pos = lights.data[0].xyz;
-
-	// Send the first ray
-	Hit hit = closest_object(ray);
-
-	color = vec3(0.0);
-	while (hit.object != -1 && iter < max_depth) {
-		// Get contribution from light
-		vec3 light_dir = normalize(light_pos - hit.point);
-		float diff = max(dot(light_dir, hit.normal), 0.0);
-
-		// Get contribution from reflection
-		vec3 view_dir = normalize(world.camera - hit.point);
-		vec3 reflect_dir = reflect(-light_dir, hit.normal);
-
-		float spec = pow(max(dot(view_dir, reflect_dir), 0.0), 16.0);
-
-		// Calculate shadow factor by tracing path to light
-		float shadow = 0.0;
-
-		// Shadow origin, taking bias into account
-		vec3 shadow_origin = hit.point + hit.normal * bias;
-
-		Ray reverse = Ray(shadow_origin, light_dir);
-		Hit hit_light = closest_object(reverse);
-
-		int obj = hit_light.object;
-		if (obj >= 0) {
-			// Fraction of lights path
-			shadow = 1.0;
-		}
-
-		// Combine contributions
-		color += hit.color * clamp((spec + diff) * (1.0 - 0.9 * shadow) + 0.15, 0.0, 1.0);
-
-		// Send reflection ray
-		vec3 reflect_origin = hit.point + hit.normal * bias;
-		Ray reflect_ray = Ray(reflect_origin, reflect_dir);
-
-		// Get next closest object
-		hit = closest_object(reflect_ray);
-
-		iter++;
-	}
-
-	// If no object was hit, return background color
-	if (iter == 0)
-		color = cast_color(world.background); */
 
 	return color;
 }
