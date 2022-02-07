@@ -129,6 +129,8 @@ void Vulkan::frame()
 	// Wait for the first command buffer to finish
 	vkQueueWaitIdle(graphics_queue);
 
+	Logger::warn() << "[Vulkan] image semaphore = " << image_available_semaphores[current_frame] << std::endl;
+
 	// Submit ImGui command buffer
 	// submit_info.pWaitSemaphores = &imgui_semaphore;
 	// submit_info.pWaitDstStageMask = &wait_stages[1];
@@ -138,8 +140,6 @@ void Vulkan::frame()
 	// Submit the command buffer
 	vkResetFences(device, 1, &imgui_fence);
 
-	// Logger::warn() << "[Vulkan] Submitting ImGui command buffer...\n";
-	// Logger::warn() << "[Vulkan] ImGui Semaphore = " << imgui_semaphore << "\n";
 	result = vkQueueSubmit(
 		graphics_queue, 1, &submit_info,
 		imgui_fence

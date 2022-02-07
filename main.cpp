@@ -511,10 +511,10 @@ int main()
 	glfwSetKeyCallback(vulkan.window, key_callback);
 
 	// Mouse options
-	// glfwSetInputMode(vulkan.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	glfwSetInputMode(vulkan.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	// Set mouse callback
-	// glfwSetCursorPosCallback(vulkan.window, mouse_callback);
+	glfwSetCursorPosCallback(vulkan.window, mouse_callback);
 	
 	vulkan.set_command_buffers(cmd_buffer_maker);
 
@@ -535,9 +535,9 @@ int main()
 		vulkan.map_buffer(&world_buffer, &world, sizeof(World));
 
 		// Update lights
-		float amplitude = 10.0f;
+		float amplitude = 5.0f;
 		lights[0] = glm::vec4 {
-			amplitude * sin(time), 3.0f,
+			amplitude * sin(time), 5.0f,
 			amplitude * cos(time), 1.0f
 		};
 
