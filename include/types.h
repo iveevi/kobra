@@ -1,6 +1,11 @@
 #ifndef TYPES_H_
 #define TYPES_H_
 
+// All possible shading types
+const float SHADING_TYPE_NONE		= 0x00000000;
+const float SHADING_TYPE_FLAT		= 0x00000001;
+const float SHADING_TYPE_BLINN_PHONG	= 0x00000002;
+
 // All possible types of objects
 const float OBJECT_TYPES[3] = {
 	float(0x00000000),	// None
@@ -14,15 +19,8 @@ const int OBJT_SPHERE	= 1;
 const int OBJT_PLANE	= 2;
 
 // All possible types of lights
-const float LIGHT_TYPES[3] = {
-	float(0x00000000),	// None
-	float(0x00000010),	// Point
-	float(0x00000020)	// Directional
-};
-
-// Corresponding enumerations
-const int LIGHTT_NONE	= 0;
-const int LIGHTT_POINT	= 1;
-const int LIGHTT_DIR	= 2;
+const float LIGHT_TYPE_NONE		= 0x00000000;
+const float LIGHT_TYPE_POINT		= 0x00000001;
+const float LIGHT_TYPE_DIRECTIONAL	= 0x00000002;
 
 #endif

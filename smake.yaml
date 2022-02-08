@@ -19,6 +19,7 @@ builds:
       thirdparty/imgui/backends/imgui_impl_vulkan.cpp'
     - idirs: 'thirdparty/glm,
       thirdparty/imgui'
+    - flags: '-O3 -std=c++17'
     - libraries: glfw, vulkan 
   - mercury_debug:
     - sources: 'mercury_source,

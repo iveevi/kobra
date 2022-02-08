@@ -18,15 +18,15 @@ layout (set = 0, binding = 1, std430) buffer World
 {
 	uint objects;
 	uint lights;
-	uint background;
+	// uint background;
 
 	uint width;
 	uint height;
 
-	vec3 camera;
-	vec3 cforward;
-	vec3 cup;
-	vec3 cright;
+	vec4 camera;
+	vec4 cforward;
+	vec4 cup;
+	vec4 cright;
 
 	// TODO: make a camera structure
 	// plus transform
@@ -154,12 +154,13 @@ vec3 color_at(Ray ray)
 		float diff = max(dot(light_dir, hit.normal), 0.0);
 
 		// Specular lighting
-		vec3 view_dir = normalize(world.camera - hit.point);
+		vec3 view_dir = normalize(world.camera.xyz - hit.point);
 		vec3 reflect_dir = reflect(-light_dir, hit.normal);
 		float spec = pow(max(dot(view_dir, reflect_dir), 0.0), 16.0);
 
 		// TODO: different light/shading modes, using ImGui
 		color = hit.color * clamp((spec + diff) * (1.0 - 0.9 * shadow) + 0.15, 0.0, 1.0);
+		color = discretize(color, 4);
 	}
 
 	return color;
@@ -190,7 +191,7 @@ const vec2 offsets[MAX_SAMPLES] = {
 };
 
 // TODO: pass as world parameter
-#define SAMPLES 6
+#define SAMPLES 1
 
 void main()
 {
@@ -215,8 +216,8 @@ void main()
 				vec2 uv = point / dimensions;
 				Ray ray = make_ray(
 					uv,
-					world.camera,
-					world.cforward, world.cup, world.cright,
+					world.camera.xyz,
+					world.cforward.xyz, world.cup.xyz, world.cright.xyz,
 					world.scale, world.aspect
 				);
 

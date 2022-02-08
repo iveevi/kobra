@@ -1,161 +1,58 @@
 // Standard headers
-#include <iostream>
 #include <cstring>
+#include <iostream>
 
 // Local headers
 #include "global.hpp"
 
-// Global camera
-Camera camera {
-        Transform {
-		glm::vec3(0.0f, 0.0f, -4.0f)
+// List of objet materials
+Material materials[] {
+	glm::vec3 {0.1f, 0.5f, 0.2f},
+	glm::vec3 {0.9f, 0.5f, 0.2f},
+	glm::vec3 {0.4f, 0.4f, 0.9f},
+	glm::vec3 {0.5f, 0.1f, 0.6f},
+	glm::vec3 {0.6f, 0.5f, 0.3f},
+	glm::vec3 {1.0f, 0.5f, 1.0f}
+};
+
+// List of object transforms
+Transform transforms[] {
+	glm::vec3 {-1.0f, 0.0f, 4.0f},
+	glm::vec3 {0.5f, 5.0f, 3.0f},
+	glm::vec3 {6.0f, -2.0f, 5.0f},
+	glm::vec3 {6.0f, 3.0f, 11.5f},
+	glm::vec3 {6.0f, 3.0f, -2.0f},
+	glm::vec3 {0.0f, 0.0f, 0.0f},
+	glm::vec3 {0.0f, 0.0f, 0.0f}
+};
+		
+World world {
+	// Camera
+	Camera {
+		Transform {
+			glm::vec3(0.0f, 0.0f, -4.0f)
+		},
+	 
+		Tunings {
+			45.0f, 800, 600
+		}
 	},
- 
-        Tunings {
-                45.0f,
-                800,
-                600
-        }
-};
 
-// Aligned structures
-struct alignas(16) aligned_vec3 {
-	glm::vec3 data;
+	// Objects
+	// TODO: later read from file
+	std::vector <World::ObjectPtr> {
+		World::ObjectPtr(new Sphere(1.0f, transforms[0], materials[0])),
+		World::ObjectPtr(new Sphere(3.0f, transforms[1], materials[1])),
+		World::ObjectPtr(new Sphere(6.0f, transforms[2], materials[2])),
+		World::ObjectPtr(new Sphere(2.0f, transforms[3], materials[3])),
+		World::ObjectPtr(new Sphere(2.0f, transforms[4], materials[4])),
+		World::ObjectPtr(new Sphere(0.2f, transforms[5], materials[5]))
+	},
 
-	aligned_vec3() {}
-	aligned_vec3(const glm::vec3 &d) : data(d) {}
-};
-
-struct alignas(16) aligned_vec4 {
-	glm::vec4 data;
-
-	aligned_vec4() {}
-	aligned_vec4(const glm::vec4 &d) : data(d) {}
-};
-
-// Buffer type aliases
-using Buffer = std::vector <aligned_vec4>;
-
-// Object structures
-struct Object {
-	float		id = OBJECT_TYPES[OBJT_NONE];
-	Transform	transform;
-
-	// Object constructors
-	Object() {}
-	Object(float id, const Transform &transform)
-			: id(id), transform(transform) {}
-
-	// Virtual object destructor
-	virtual ~Object() {}
-
-	// Write data to aligned_vec4 buffer (inherited)
-	virtual void write(Buffer &buffer) const = 0;
-
-	// Write full object data
-	void write_to_buffer(Buffer &buffer) {
-		// Push ID, then everythig else
-		buffer.push_back(aligned_vec4 {
-			glm::vec4(id, 0.0, 0.0, 0.0)
-		});
-
-		this->write(buffer);
+	// Lights
+	std::vector <World::LightPtr> {
+		World::LightPtr(new PointLight(transforms[6], 0.0f))
 	}
-};
-
-// Sphere structure
-struct Sphere : Object {
-	float		radius;
-
-	Sphere() {}
-	Sphere(float radius, const Transform &transform)
-			: Object(OBJECT_TYPES[OBJT_SPHERE], transform),
-			radius(radius) {}
-
-	void write(Buffer &buffer) const override {
-		buffer.push_back(aligned_vec4 {
-			glm::vec4(transform.position, radius)
-		});
-	}
-};
-
-// Plane structure
-struct Plane : Object {
-	float		length;
-	float		width;
-
-	Plane() {}
-	Plane(float length, float width, const Transform &transform)
-			: Object(OBJECT_TYPES[OBJT_PLANE], transform),
-			length(length), width(width) {}
-
-	void write(Buffer &buffer) const override {
-		// Position
-		buffer.push_back(aligned_vec4 {
-			glm::vec4(transform.position, 1.0f)
-		});
-
-		// Right, length
-		buffer.push_back(aligned_vec4 {
-			glm::vec4(transform.right, length)
-		});
-
-		// Forward, width
-		buffer.push_back(aligned_vec4 {
-			glm::vec4(transform.forward, width)
-		});
-	}
-};
-
-// Light structure
-struct Light {
-	Transform	transform;
-	float		intensity;
-
-	// Light constructors
-	Light() {}
-	Light(const Transform &transform, float intensity)
-			: transform(transform), intensity(intensity) {}
-
-	// Virtual light destructor
-	virtual ~Light() {}
-
-	// Write data to aligned_vec4 buffer
-	virtual void write(Buffer &buffer) const = 0;
-};
-
-// API friendly world structure
-struct World {
-
-};
-
-// World structur
-// TODO: refactor to GPU world,
-// store cpu world in another structure that is called World
-struct WorldData {
-	uint32_t objects;
-	uint32_t lights;
-	uint32_t backgound;
-
-	uint32_t width = 800;
-	uint32_t height = 600;
-
-	aligned_vec3 camera_position = glm::vec3(0.0f, 0.0f, -15.0f);
-	alignas(16) glm::vec3 camera_forward = glm::vec3(0.0f, 0.0f, 1.0f);
-	alignas(16) glm::vec3 camera_up = glm::vec3(0.0f, 1.0f, 0.0f);
-	alignas(16) glm::vec3 camera_right = glm::vec3(1.0f, 0.0f, 0.0f);
-
-	float fov = camera.tunings.fov;
-	float scale = camera.tunings.scale;
-	float aspect = camera.tunings.aspect;
-
-	// TODO: store indices for objects and lights
-};
-
-WorldData world_data = {
-	.objects = 6,
-	.lights = 1,
-	.backgound = 0x202020,
 };
 
 int main()
@@ -190,7 +87,7 @@ int main()
 
 	// Pixel data
 	size_t pixel_size = 4 * sizeof(char) * 800 * 600;
-	size_t world_size = sizeof(WorldData);
+	size_t world_size = sizeof(GPUWorld);
 	size_t object_size = sizeof(aligned_vec4) * 16;
 	size_t light_size = sizeof(aligned_vec4) * 16;
 
@@ -209,11 +106,11 @@ int main()
 
 	// Create buffers
 	vulkan.make_buffer(pixel_buffer, pixel_size, pixel_usage);
-	vulkan.make_buffer(world_buffer, sizeof(WorldData), world_usage);
+	vulkan.make_buffer(world_buffer, sizeof(GPUWorld), world_usage);
 	vulkan.make_buffer(object_buffer, object_size, object_usage);
 	vulkan.make_buffer(light_buffer, light_size, light_usage);
 
-	vulkan.map_buffer(&world_buffer, &world_data, sizeof(WorldData));
+	// vulkan.map_buffer(&world_buffer, &world_data, sizeof(WorldData));
 	vulkan.map_buffer(&object_buffer, objects, object_size);
 	vulkan.map_buffer(&light_buffer, lights, light_size);
 
@@ -264,12 +161,14 @@ int main()
 	while (!glfwWindowShouldClose(vulkan.window)) {
 		glfwPollEvents();
 
-		// Update world data
+		/* Update world data
 		world_data.camera_position = camera.transform.position;
 		world_data.camera_forward = camera.transform.forward;
 		world_data.camera_right = camera.transform.right;
-		world_data.camera_up = camera.transform.up;
-		vulkan.map_buffer(&world_buffer, &world_data, sizeof(WorldData));
+		world_data.camera_up = camera.transform.up; */
+	
+		GPUWorld gworld = world.dump();
+		vulkan.map_buffer(&world_buffer, &gworld, sizeof(GPUWorld));
 
 		// Update lights
 		float amplitude = 5.0f;

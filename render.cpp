@@ -173,7 +173,7 @@ void cmd_buffer_maker(Vulkan *vk, size_t i) {
 	// Dispatch
 	vkCmdDispatch(
 		vk->command_buffers[i],
-		400, 400, 1
+		1000, 1000, 1
 	);
 }
 
@@ -269,19 +269,19 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
         // Camera movement
         float speed = 0.5f;
         if (key == GLFW_KEY_W)
-                camera.transform.position += camera.transform.forward * speed;
+                world.camera.transform.position += world.camera.transform.forward * speed;
         else if (key == GLFW_KEY_S)
-                camera.transform.position -= camera.transform.forward * speed;
+                world.camera.transform.position -= world.camera.transform.forward * speed;
 
         if (key == GLFW_KEY_A)
-                camera.transform.position -= camera.transform.right * speed;
+                world.camera.transform.position -= world.camera.transform.right * speed;
         else if (key == GLFW_KEY_D)
-                camera.transform.position += camera.transform.right * speed;
+                world.camera.transform.position += world.camera.transform.right * speed;
 
 	if (key == GLFW_KEY_E)
-		camera.transform.position += camera.transform.up * speed;
+		world.camera.transform.position += world.camera.transform.up * speed;
 	else if (key == GLFW_KEY_Q)
-		camera.transform.position -= camera.transform.up * speed;
+		world.camera.transform.position -= world.camera.transform.up * speed;
 
 	// Tab to toggle cursor visibility
 	static bool cursor_visible = false;
@@ -334,7 +334,7 @@ void mouse_callback(GLFWwindow *window, double xpos, double ypos)
 	else if (pitch < -89.0f)
 		pitch = -89.0f;
 
-	camera.transform.set_euler(pitch, yaw);
+	world.camera.transform.set_euler(pitch, yaw);
 
 	last_x = xpos;
 	last_y = ypos;
