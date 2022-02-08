@@ -64,6 +64,7 @@ void Vulkan::frame()
 		// Show render monitor
 		ImGui::Begin("Render Monitor");
 		ImGui::Text("fps: %.1f", ImGui::GetIO().Framerate);
+		ImGui::TreeNode("Profiler");
 		ImGui::End();
 
 		// ImGui::ShowDemoWindow();

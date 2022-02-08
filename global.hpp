@@ -34,6 +34,7 @@ struct alignas(16) aligned_vec4 {
 
 // Buffer type aliases
 using Buffer = std::vector <aligned_vec4>;
+using Indices = std::vector <uint32_t>;
 
 // Material
 struct Material {
@@ -68,10 +69,12 @@ struct Object {
 
 	// Write full object data
 	void write_to_buffer(Buffer &buffer) {
-		// Push ID, then everythig else
+		// Push ID and material, then everything else
 		buffer.push_back(aligned_vec4 {
 			glm::vec4(id, 0.0, 0.0, 0.0)
 		});
+
+		material.write_to_buffer(buffer);
 
 		this->write(buffer);
 	}
@@ -226,24 +229,40 @@ struct World {
 		return world;
 	}
 
-	// Writ object data to buffer
-	void write_objects(Buffer &buffer) const {
-		for (const auto &object : objects)
+	// Write object data to buffer
+	void write_objects(Buffer &buffer, Indices &indices) const {
+		buffer.clear();
+
+		indices.push_back(0);
+		for (const auto &object : objects) {
 			object->write_to_buffer(buffer);
+			indices.push_back(buffer.size());
+		}
+
+		// Pop last index
+		indices.pop_back();
 	}
 
 	// Write light data to buffer
-	void write_lights(Buffer &buffer) const {
-		for (const auto &light : lights)
+	void write_lights(Buffer &buffer, Indices &indices) const {
+		buffer.clear();
+
+		indices.push_back(0);
+		for (const auto &light : lights) {
 			light->write_to_buffer(buffer);
+			indices.push_back(buffer.size());
+		}
+
+		// Pop last index
+		indices.pop_back();
 	}
 };
 
 // Pixel buffers
 extern Vulkan::Buffer pixel_buffer;
 extern Vulkan::Buffer world_buffer;
-extern Vulkan::Buffer object_buffer;
-extern Vulkan::Buffer light_buffer;
+extern Vulkan::Buffer objects_buffer;
+extern Vulkan::Buffer lights_buffer;
 
 // Compute shader
 extern VkShaderModule compute_shader;

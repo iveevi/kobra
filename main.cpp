@@ -55,6 +55,105 @@ World world {
 	}
 };
 
+// Print aligned_vec4
+// TODO: common header
+inline std::ostream& operator<<(std::ostream& os, const glm::vec4 &v)
+{
+	return (os << "(" << v.x << ", " << v.y
+		<< ", " << v.z << ", " << v.w << ")");
+}
+
+inline std::ostream &operator<<(std::ostream &os, const aligned_vec4 &v)
+{
+	return (os << v.data);
+}
+
+// TODO: put the following functions into a alloc.cpp file
+
+// Minimum sizes
+#define INITIAL_OBJECTS	100UL
+#define INITIAL_LIGHTS	100UL
+
+// Size of the world data, including indices
+size_t world_data_size()
+{
+	size_t objects = std::max(world.objects.size(), INITIAL_OBJECTS);
+	size_t lights = std::max(world.lights.size(), INITIAL_LIGHTS);
+
+	return sizeof(World) + 4 * (objects + lights);
+}
+
+// Copy buffer helper
+std::pair <uint8_t *, size_t> map_world_buffer(Buffer &objects, Buffer &lights)
+{
+	// Static (cached) raw memory buffer
+	static uint8_t *buffer = nullptr;
+	static size_t buffer_size = 0;
+
+	// Check buffer resize requirement
+	size_t size = world_data_size();
+
+	// Resize buffer if required
+	if (size > buffer_size) {
+		buffer_size = size;
+		buffer = (uint8_t *) realloc(buffer, buffer_size);
+	}
+
+	// Generate world data and write to buffers
+	Indices indices;
+	world.write_objects(objects, indices);
+	world.write_lights(lights, indices);
+
+	// Copy world and indices
+	memcpy(buffer, &world, sizeof(World));
+	memcpy(buffer + sizeof(World), indices.data(),
+		4 * indices.size());
+
+	// Return pointer to the buffer
+	return {buffer, buffer_size};
+}
+
+// Map all the buffers
+// TODO: deal with resizing buffers
+void map_buffers(Vulkan *vk)
+{
+	// Create and write to buffers
+	Buffer objects;
+	Buffer lights;
+
+	auto wb = map_world_buffer(objects, lights);
+
+	// Map buffers
+	vk->map_buffer(&world_buffer, wb.first, wb.second);
+	vk->map_buffer(&objects_buffer, objects.data(), objects.size());
+	vk->map_buffer(&lights_buffer, lights.data(), lights.size());
+}
+
+// Allocate buffers
+void allocate_buffers(Vulkan &vulkan)
+{
+	// Sizes of objects and lights
+	// are assumed to be the maximum
+	static const size_t MAX_OBJECT_SIZE = sizeof(Sphere);
+	static const size_t MAX_LIGHT_SIZE = sizeof(PointLight);
+
+	// Allocate buffers
+	size_t pixel_size = 4 * 800 * 600;
+	size_t world_size = world_data_size();
+	size_t objects_size = MAX_OBJECT_SIZE * std::max(world.objects.size(), INITIAL_OBJECTS);
+	size_t lights_size = MAX_LIGHT_SIZE * std::max(world.lights.size(), INITIAL_LIGHTS);
+
+	static const VkBufferUsageFlags buffer_usage =
+		VK_BUFFER_USAGE_TRANSFER_DST_BIT
+		| VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+
+	// Create buffers
+	vulkan.make_buffer(pixel_buffer,   pixel_size,   buffer_usage);
+	vulkan.make_buffer(world_buffer,   world_size,   buffer_usage);
+	vulkan.make_buffer(objects_buffer, objects_size, buffer_usage);
+	vulkan.make_buffer(lights_buffer,  lights_size,  buffer_usage);
+}
+
 int main()
 {
 	// Initialize Vulkan
@@ -91,36 +190,19 @@ int main()
 	size_t object_size = sizeof(aligned_vec4) * 16;
 	size_t light_size = sizeof(aligned_vec4) * 16;
 
-	VkBufferUsageFlags pixel_usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT
-		| VK_BUFFER_USAGE_TRANSFER_SRC_BIT
-		| VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-
-	VkBufferUsageFlags world_usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT
-		| VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-
-	VkBufferUsageFlags object_usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT
-		| VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-
-	VkBufferUsageFlags light_usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT
-		| VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-
-	// Create buffers
-	vulkan.make_buffer(pixel_buffer, pixel_size, pixel_usage);
-	vulkan.make_buffer(world_buffer, sizeof(GPUWorld), world_usage);
-	vulkan.make_buffer(object_buffer, object_size, object_usage);
-	vulkan.make_buffer(light_buffer, light_size, light_usage);
+	allocate_buffers(vulkan);
 
 	// vulkan.map_buffer(&world_buffer, &world_data, sizeof(WorldData));
-	vulkan.map_buffer(&object_buffer, objects, object_size);
-	vulkan.map_buffer(&light_buffer, lights, light_size);
+	vulkan.map_buffer(&objects_buffer, objects, object_size);
+	vulkan.map_buffer(&lights_buffer, lights, light_size);
 
 	// Add all buffers to deletion queue
 	vulkan.push_deletion_task(
 		[&](Vulkan *vk) {
 			vk->destroy_buffer(pixel_buffer);
 			vk->destroy_buffer(world_buffer);
-			vk->destroy_buffer(object_buffer);
-			vk->destroy_buffer(light_buffer);
+			vk->destroy_buffer(objects_buffer);
+			vk->destroy_buffer(lights_buffer);
 			Logger::ok("[main] Deleted buffers");
 		}
 	);
@@ -160,12 +242,6 @@ int main()
 	float delta_time = 0.01f;
 	while (!glfwWindowShouldClose(vulkan.window)) {
 		glfwPollEvents();
-
-		/* Update world data
-		world_data.camera_position = camera.transform.position;
-		world_data.camera_forward = camera.transform.forward;
-		world_data.camera_right = camera.transform.right;
-		world_data.camera_up = camera.transform.up; */
 	
 		GPUWorld gworld = world.dump();
 		vulkan.map_buffer(&world_buffer, &gworld, sizeof(GPUWorld));
@@ -177,7 +253,7 @@ int main()
 			amplitude * cos(time), 1.0f
 		};
 
-		vulkan.map_buffer(&light_buffer, lights, light_size);
+		vulkan.map_buffer(&lights_buffer, lights, light_size);
 
 		// Show frame
 		vulkan.frame();

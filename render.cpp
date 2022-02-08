@@ -4,8 +4,8 @@
 // Pixel buffer
 Vulkan::Buffer pixel_buffer;
 Vulkan::Buffer world_buffer;
-Vulkan::Buffer object_buffer;
-Vulkan::Buffer light_buffer;
+Vulkan::Buffer objects_buffer;
+Vulkan::Buffer lights_buffer;
 
 // Compute shader
 VkShaderModule compute_shader;
@@ -192,15 +192,15 @@ void descriptor_set_maker(Vulkan *vulkan, size_t i)
 	};
 	
 	VkDescriptorBufferInfo ob_info {
-		.buffer = object_buffer.buffer,
+		.buffer = objects_buffer.buffer,
 		.offset = 0,
-		.range = object_buffer.size
+		.range = objects_buffer.size
 	};
 
 	VkDescriptorBufferInfo lb_info {
-		.buffer = light_buffer.buffer,
+		.buffer = lights_buffer.buffer,
 		.offset = 0,
-		.range = light_buffer.size
+		.range = lights_buffer.size
 	};
 
 	VkWriteDescriptorSet pb_write = {
