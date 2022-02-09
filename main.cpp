@@ -80,7 +80,7 @@ size_t world_data_size()
 	size_t objects = std::max(world.objects.size(), INITIAL_OBJECTS);
 	size_t lights = std::max(world.lights.size(), INITIAL_LIGHTS);
 
-	return sizeof(World) + 4 * (objects + lights);
+	return sizeof(GPUWorld) + 4 * (objects + lights);
 }
 
 // Copy buffer helper
@@ -104,9 +104,15 @@ std::pair <uint8_t *, size_t> map_world_buffer(Buffer &objects, Buffer &lights)
 	world.write_objects(objects, indices);
 	world.write_lights(lights, indices);
 
+	Logger::ok() << "Objects indices: ";
+	for (auto i : indices)
+		Logger::plain() << i << " ";
+	Logger::plain() << std::endl;
+
 	// Copy world and indices
-	memcpy(buffer, &world, sizeof(World));
-	memcpy(buffer + sizeof(World), indices.data(),
+	GPUWorld gworld = world.dump();
+	memcpy(buffer, &gworld, sizeof(GPUWorld));
+	memcpy(buffer + sizeof(GPUWorld), indices.data(),
 		4 * indices.size());
 
 	// Return pointer to the buffer
@@ -122,6 +128,7 @@ void map_buffers(Vulkan *vk)
 	Buffer lights;
 
 	auto wb = map_world_buffer(objects, lights);
+	Logger::ok() << "World data size: " << wb.second << std::endl;
 
 	// Map buffers
 	vk->map_buffer(&world_buffer, wb.first, wb.second);
@@ -152,6 +159,17 @@ void allocate_buffers(Vulkan &vulkan)
 	vulkan.make_buffer(world_buffer,   world_size,   buffer_usage);
 	vulkan.make_buffer(objects_buffer, objects_size, buffer_usage);
 	vulkan.make_buffer(lights_buffer,  lights_size,  buffer_usage);
+	
+	// Add all buffers to deletion queue
+	vulkan.push_deletion_task(
+		[&](Vulkan *vk) {
+			vk->destroy_buffer(pixel_buffer);
+			vk->destroy_buffer(world_buffer);
+			vk->destroy_buffer(objects_buffer);
+			vk->destroy_buffer(lights_buffer);
+			Logger::ok("[main] Deleted buffers");
+		}
+	);
 }
 
 int main()
@@ -184,28 +202,13 @@ int main()
 		{ {0.0f, 0.0f, 0.0f, 1.0f} }
 	};
 
-	// Pixel data
+	/* Pixel data
 	size_t pixel_size = 4 * sizeof(char) * 800 * 600;
 	size_t world_size = sizeof(GPUWorld);
 	size_t object_size = sizeof(aligned_vec4) * 16;
-	size_t light_size = sizeof(aligned_vec4) * 16;
+	size_t light_size = sizeof(aligned_vec4) * 16; */
 
 	allocate_buffers(vulkan);
-
-	// vulkan.map_buffer(&world_buffer, &world_data, sizeof(WorldData));
-	vulkan.map_buffer(&objects_buffer, objects, object_size);
-	vulkan.map_buffer(&lights_buffer, lights, light_size);
-
-	// Add all buffers to deletion queue
-	vulkan.push_deletion_task(
-		[&](Vulkan *vk) {
-			vk->destroy_buffer(pixel_buffer);
-			vk->destroy_buffer(world_buffer);
-			vk->destroy_buffer(objects_buffer);
-			vk->destroy_buffer(lights_buffer);
-			Logger::ok("[main] Deleted buffers");
-		}
-	);
 
 	// Compute shader descriptor
 	compute_shader = vulkan.make_shader("shaders/pixel.spv");
@@ -243,7 +246,7 @@ int main()
 	while (!glfwWindowShouldClose(vulkan.window)) {
 		glfwPollEvents();
 	
-		GPUWorld gworld = world.dump();
+		/* GPUWorld gworld = world.dump();
 		vulkan.map_buffer(&world_buffer, &gworld, sizeof(GPUWorld));
 
 		// Update lights
@@ -253,7 +256,18 @@ int main()
 			amplitude * cos(time), 1.0f
 		};
 
-		vulkan.map_buffer(&lights_buffer, lights, light_size);
+		vulkan.map_buffer(&lights_buffer, lights, light_size); */
+		
+		float amplitude = 5.0f;
+		glm::vec3 position {
+			amplitude * sin(time), 5.0f,
+			amplitude * cos(time)
+		};
+
+		world.lights[0]->transform.position = position;
+
+		// Update buffers
+		map_buffers(&vulkan);
 
 		// Show frame
 		vulkan.frame();

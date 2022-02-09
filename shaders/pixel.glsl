@@ -1,11 +1,11 @@
 #version 430
 
+#include "../include/types.h"
+
 #include "ray.glsl"
 #include "shapes.glsl"
 #include "intersect.glsl"
 #include "color.glsl"
-
-#include "../include/types.h"
 
 // TODO: replace version with command line argument
 
@@ -37,6 +37,7 @@ layout (set = 0, binding = 1, std430) buffer World
 	float aspect;
 
 	// TODO: indices for objects, lights, background
+	uint indices[];
 } world;
 
 layout (set = 0, binding = 2, std430) buffer Objects
@@ -80,36 +81,63 @@ vec3 background(Ray ray)
 	);
 }
 
+// Intersection between a ray and a sphere
+Intersection intersect_sphere(Ray ray, uint index)
+{
+	// Create sphere from object data
+	vec4 material = objects.data[index + 1];
+	vec4 data = objects.data[index + 2];
+	vec3 center = data.xyz;
+	float radius = data.w;
+
+	Sphere sphere = Sphere(vec3(0.0, 0.0, 4.0), 2.0);
+
+	// Intersect ray with sphere
+	Intersection intersection = intersect_shape(ray, sphere);
+
+	// If intersection is valid, compute color
+	if (intersection.time > 0.0)
+		intersection.color = vec3(1.0, 0.0, 0.0);
+
+	return intersection;
+}
+
+// Get object intersection
+Intersection intersect(Ray ray, uint index)
+{
+	// Check type of the object
+	float id = objects.data[index].x;
+
+	// TODO: some smarter way to do this
+	if (id == OBJECT_TYPE_SPHERE)
+		return intersect_sphere(ray, index);
+	
+	return Intersection(-1.0, vec3(0.0), vec3(0.0));
+}
+
 // Get index of cloests object
 Hit closest_object(Ray ray)
 {
 	int min_index = -1;
 	
 	// Starting time
-	Intersection mini = Intersection(1.0/0.0, vec3(0.0));
-
-	// Data index
-	uint di = 0;
+	Intersection mini = Intersection(1.0/0.0, vec3(0.0), vec3(0.0));
 
 	for (int i = 0; i < world.objects; i++) {
-		vec3 p = objects.data[di].xyz;
-		float r = objects.data[di].w;
+		uint index = world.indices[i];
+		Intersection it = intersect(ray, index);
 
-		Sphere sphere = Sphere(p, r);
-
-		Intersection it = intersects(sphere, ray);
-		if (it.time > 0 && it.time < mini.time) {
+		// Intersection it = intersect_shape(ray, sphere);
+		if (it.time > 0.0 && it.time < mini.time) {
 			min_index = i;
 			mini = it;
 		}
-
-		di += 2;
 	}
 
 	// Color of closest object
 	vec3 color = background(ray);
 	if (min_index >= 0)
-		color = objects.data[min_index * 2 + 1].xyz;
+		color = mini.color;
 
 	vec3 point = ray.origin + ray.direction * mini.time;
 
@@ -129,10 +157,9 @@ vec3 color_at(Ray ray)
 	
 	vec3 color = hit.color;
 	if (hit.object != -1) {
-		color = hit.color;
-
 		// Calculate diffuse lighting
-		vec3 light_pos = lights.data[0].xyz;
+		// TODO: account all lights, after adding flat shading
+		vec3 light_pos = lights.data[0].yzw;
 		vec3 light_dir = normalize(light_pos - hit.point);
 
 		// Calculate shadow factor by tracing path to light
@@ -227,20 +254,6 @@ void main()
 				// Accumulate color
 				sum += color;
 			}
-
-			/*vec2 uv = vec2(x + 0.5, y + 0.5)
-				/ vec2(world.width, world.height);
-
-			// Create ray
-			Ray ray = make_ray(
-				uv,
-				world.camera,
-				world.cforward, world.cup, world.cright,
-				world.scale, world.aspect
-			);
-		
-			// Get color at ray
-			vec3 color = color_at(ray); */
 
 			// Average samples
 			sum /= float(SAMPLES);

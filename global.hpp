@@ -52,7 +52,7 @@ struct Material {
 
 // Object structures
 struct Object {
-	float		id = OBJECT_TYPES[OBJT_NONE];
+	float		id = OBJECT_TYPE_NONE;
 	Transform	transform;
 	Material	material;
 
@@ -86,7 +86,7 @@ struct Sphere : Object {
 
 	Sphere() {}
 	Sphere(float r, const Transform &t, const Material &m)
-			: Object(OBJECT_TYPES[OBJT_SPHERE], t, m),
+			: Object(OBJECT_TYPE_SPHERE, t, m),
 			radius(r) {}
 
 	void write(Buffer &buffer) const override {
@@ -103,7 +103,7 @@ struct Plane : Object {
 
 	Plane() {}
 	Plane(float l, float w, const Transform &t, const Material &m)
-			: Object(OBJECT_TYPES[OBJT_PLANE], t, m),
+			: Object(OBJECT_TYPE_PLANE, t, m),
 			length(l), width(w) {}
 
 	void write(Buffer &buffer) const override {
