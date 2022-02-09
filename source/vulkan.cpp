@@ -96,7 +96,8 @@ void Vulkan::frame()
 	};
 
 	VkSemaphore signal_semaphores[] = {
-		render_finished_semaphores[current_frame]
+		render_finished_semaphores[current_frame],
+		imgui_semaphore
 	};
 
 	// Create information
@@ -130,12 +131,12 @@ void Vulkan::frame()
 	// Wait for the first command buffer to finish
 	vkQueueWaitIdle(graphics_queue);
 
-	Logger::warn() << "[Vulkan] image semaphore = " << image_available_semaphores[current_frame] << std::endl;
-
 	// Submit ImGui command buffer
 	// submit_info.pWaitSemaphores = &imgui_semaphore;
 	// submit_info.pWaitDstStageMask = &wait_stages[1];
 	submit_info.waitSemaphoreCount = 0;
+	// submit_info.signalSemaphoreCount = 0;
+	submit_info.pSignalSemaphores = &imgui_semaphore;
 	submit_info.pCommandBuffers = &imgui_cmd_buffer;
 
 	// Submit the command buffer
@@ -156,7 +157,7 @@ void Vulkan::frame()
 	
 	VkPresentInfoKHR present_info {
 		.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-		.waitSemaphoreCount = 1,
+		.waitSemaphoreCount = 2,
 		.pWaitSemaphores = signal_semaphores,
 
 		.swapchainCount = 1,

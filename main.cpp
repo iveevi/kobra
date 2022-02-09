@@ -25,7 +25,7 @@ Transform transforms[] {
 	glm::vec3 {0.0f, 0.0f, 0.0f},
 	glm::vec3 {0.0f, 0.0f, 0.0f}
 };
-		
+
 World world {
 	// Camera
 	Camera {
@@ -104,11 +104,6 @@ std::pair <uint8_t *, size_t> map_world_buffer(Buffer &objects, Buffer &lights)
 	world.write_objects(objects, indices);
 	world.write_lights(lights, indices);
 
-	Logger::ok() << "Objects indices: ";
-	for (auto i : indices)
-		Logger::plain() << i << " ";
-	Logger::plain() << std::endl;
-
 	// Copy world and indices
 	GPUWorld gworld = world.dump();
 	memcpy(buffer, &gworld, sizeof(GPUWorld));
@@ -128,7 +123,6 @@ void map_buffers(Vulkan *vk)
 	Buffer lights;
 
 	auto wb = map_world_buffer(objects, lights);
-	Logger::ok() << "World data size: " << wb.second << std::endl;
 
 	// Map buffers
 	vk->map_buffer(&world_buffer, wb.first, wb.second);
@@ -155,7 +149,7 @@ void allocate_buffers(Vulkan &vulkan)
 		| VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
 	// Create buffers
-	vulkan.make_buffer(pixel_buffer,   pixel_size,   buffer_usage);
+	vulkan.make_buffer(pixel_buffer,   pixel_size,   buffer_usage | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 	vulkan.make_buffer(world_buffer,   world_size,   buffer_usage);
 	vulkan.make_buffer(objects_buffer, objects_size, buffer_usage);
 	vulkan.make_buffer(lights_buffer,  lights_size,  buffer_usage);
@@ -177,37 +171,7 @@ int main()
 	// Initialize Vulkan
 	Vulkan vulkan;
 
-	// Initialize objects
-	aligned_vec4 *objects = new aligned_vec4[16] {
-		{ {-1.0f, 0.0f, 4.0f, 1.0f} },
-		{ {0.1f, 0.5f, 0.2f, 0.0f} },
-		
-		{ {0.5f, 5.0f, 3.0f, 3.0f } },
-		{ {0.9f, 0.5f, 0.2f, 0.0f} },
-		
-		{ {6.0f, -2.0f, 5.0f, 6.0f } },
-		{ {0.4f, 0.4f, 0.9f, 0.0f} },
-		
-		{ {6.0f, 3.0f, 11.5f, 2.0f} },
-		{ {0.5f, 0.1f, 0.6f, 0.0f} },
-		
-		{ {6.0f, 3.0f, -2.0f, 2.0f} },
-		{ {0.6f, 0.5f, 0.3f, 0.0f} },
-
-		{ {0.0f, 0.0f, 0.0f, 0.2f} },
-		{ {1.0f, 0.5f, 1.0f, 1.0f} }
-	};
-
-	aligned_vec4 *lights = new aligned_vec4[16] {
-		{ {0.0f, 0.0f, 0.0f, 1.0f} }
-	};
-
-	/* Pixel data
-	size_t pixel_size = 4 * sizeof(char) * 800 * 600;
-	size_t world_size = sizeof(GPUWorld);
-	size_t object_size = sizeof(aligned_vec4) * 16;
-	size_t light_size = sizeof(aligned_vec4) * 16; */
-
+	// Initialize the buffers
 	allocate_buffers(vulkan);
 
 	// Compute shader descriptor
@@ -245,18 +209,6 @@ int main()
 	float delta_time = 0.01f;
 	while (!glfwWindowShouldClose(vulkan.window)) {
 		glfwPollEvents();
-	
-		/* GPUWorld gworld = world.dump();
-		vulkan.map_buffer(&world_buffer, &gworld, sizeof(GPUWorld));
-
-		// Update lights
-		float amplitude = 5.0f;
-		lights[0] = glm::vec4 {
-			amplitude * sin(time), 5.0f,
-			amplitude * cos(time), 1.0f
-		};
-
-		vulkan.map_buffer(&lights_buffer, lights, light_size); */
 		
 		float amplitude = 5.0f;
 		glm::vec3 position {
