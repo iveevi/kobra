@@ -132,8 +132,8 @@ void map_buffers(Vulkan *vk)
 
 	// Map buffers
 	vk->map_buffer(&world_buffer, wb.first, wb.second);
-	vk->map_buffer(&objects_buffer, objects.data(), objects.size());
-	vk->map_buffer(&lights_buffer, lights.data(), lights.size());
+	vk->map_buffer(&objects_buffer, objects.data(), sizeof(aligned_vec4) * objects.size());
+	vk->map_buffer(&lights_buffer, lights.data(), sizeof(aligned_vec4) * lights.size());
 }
 
 // Allocate buffers

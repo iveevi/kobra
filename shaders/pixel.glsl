@@ -90,14 +90,14 @@ Intersection intersect_sphere(Ray ray, uint index)
 	vec3 center = data.xyz;
 	float radius = data.w;
 
-	Sphere sphere = Sphere(vec3(0.0, 0.0, 4.0), 2.0);
+	Sphere sphere = Sphere(center, radius);
 
 	// Intersect ray with sphere
 	Intersection intersection = intersect_shape(ray, sphere);
 
 	// If intersection is valid, compute color
 	if (intersection.time > 0.0)
-		intersection.color = vec3(1.0, 0.0, 0.0);
+		intersection.color = material.xyz;
 
 	return intersection;
 }
