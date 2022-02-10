@@ -29,7 +29,9 @@ struct alignas(16) aligned_vec4 {
 
 	aligned_vec4() {}
 	aligned_vec4(const glm::vec4 &d) : data(d) {}
+
 	aligned_vec4(const glm::vec3 &d) : data(d, 0.0f) {}
+	aligned_vec4(const glm::vec3 &d, float w) : data(d, w) {}
 };
 
 // Buffer type aliases
@@ -38,15 +40,19 @@ using Indices = std::vector <uint32_t>;
 
 // Material
 struct Material {
+	// Shading type
+	float shading = SHADING_TYPE_BLINN_PHONG;
+
 	// For now, just a color
 	glm::vec3 color;
 
 	Material() {}
 	Material(const glm::vec3 &c) : color(c) {}
+	Material(const glm::vec3 &c, float s) : shading(s), color(c) {}
 
 	// Write to buffer
 	void write_to_buffer(Buffer &buffer) const {
-		buffer.push_back(aligned_vec4(color));
+		buffer.push_back(aligned_vec4(color, shading));
 	}
 };
 

@@ -3,6 +3,7 @@ struct Intersection {
 	float	time;
 	vec3	normal;
 	vec3	color;
+	float	shading;	// Shading type
 };
 
 float _intersect_t(Sphere s, Ray r)
@@ -30,10 +31,10 @@ Intersection intersect_shape(Ray r, Sphere s)
 
 	// If no, intersection, dont bother with normal
 	if (t < 0.0)
-		return Intersection(t, n, vec3(0.0));
+		return Intersection(t, n, vec3(0.0), SHADING_TYPE_NONE);
 
 	// Calculate the normal
 	n = normalize(r.origin + r.direction * t - s.center);
 
-	return Intersection(t, n, vec3(0.0));
+	return Intersection(t, n, vec3(0.0), SHADING_TYPE_NONE);
 }

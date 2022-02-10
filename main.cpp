@@ -9,10 +9,11 @@
 Material materials[] {
 	glm::vec3 {0.1f, 0.5f, 0.2f},
 	glm::vec3 {0.9f, 0.5f, 0.2f},
-	glm::vec3 {0.4f, 0.4f, 0.9f},
+	{glm::vec3 {0.4f, 0.4f, 0.9f}, SHADING_TYPE_FLAT},
 	glm::vec3 {0.5f, 0.1f, 0.6f},
 	glm::vec3 {0.6f, 0.5f, 0.3f},
-	glm::vec3 {1.0f, 0.5f, 1.0f}
+	glm::vec3 {1.0f, 0.5f, 1.0f},
+	{glm::vec3 {1.0f, 1.0f, 1.0f}, SHADING_TYPE_LIGHT},
 };
 
 // List of object transforms
@@ -22,7 +23,6 @@ Transform transforms[] {
 	glm::vec3 {6.0f, -2.0f, 5.0f},
 	glm::vec3 {6.0f, 3.0f, 11.5f},
 	glm::vec3 {6.0f, 3.0f, -2.0f},
-	glm::vec3 {0.0f, 0.0f, 0.0f},
 	glm::vec3 {0.0f, 0.0f, 0.0f}
 };
 
@@ -41,17 +41,18 @@ World world {
 	// Objects
 	// TODO: later read from file
 	std::vector <World::ObjectPtr> {
+		World::ObjectPtr(new Sphere(0.25f, transforms[0], materials[6])),
 		World::ObjectPtr(new Sphere(1.0f, transforms[0], materials[0])),
 		World::ObjectPtr(new Sphere(3.0f, transforms[1], materials[1])),
 		World::ObjectPtr(new Sphere(6.0f, transforms[2], materials[2])),
 		World::ObjectPtr(new Sphere(2.0f, transforms[3], materials[3])),
 		World::ObjectPtr(new Sphere(2.0f, transforms[4], materials[4])),
-		World::ObjectPtr(new Sphere(0.2f, transforms[5], materials[5]))
+		World::ObjectPtr(new Sphere(8.0f, transforms[5], materials[5]))
 	},
 
 	// Lights
 	std::vector <World::LightPtr> {
-		World::LightPtr(new PointLight(transforms[6], 0.0f))
+		World::LightPtr(new PointLight(transforms[0], 0.0f))
 	}
 };
 
@@ -210,12 +211,13 @@ int main()
 	while (!glfwWindowShouldClose(vulkan.window)) {
 		glfwPollEvents();
 		
-		float amplitude = 5.0f;
+		float amplitude = 7.0f;
 		glm::vec3 position {
-			amplitude * sin(time), 5.0f,
+			amplitude * sin(time), 7.0f,
 			amplitude * cos(time)
 		};
 
+		world.objects[0]->transform.position = position;
 		world.lights[0]->transform.position = position;
 
 		// Update buffers

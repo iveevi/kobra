@@ -66,6 +66,7 @@ struct Hit {
 	vec3	point;
 	vec3	normal;
 	vec3	color;
+	float	shading;	// Shading type
 };
 
 // Background color corresponding to ray
@@ -96,8 +97,10 @@ Intersection intersect_sphere(Ray ray, uint index)
 	Intersection intersection = intersect_shape(ray, sphere);
 
 	// If intersection is valid, compute color
-	if (intersection.time > 0.0)
+	if (intersection.time > 0.0) {
 		intersection.color = material.xyz;
+		intersection.shading = material.w;
+	}
 
 	return intersection;
 }
@@ -112,7 +115,7 @@ Intersection intersect(Ray ray, uint index)
 	if (id == OBJECT_TYPE_SPHERE)
 		return intersect_sphere(ray, index);
 	
-	return Intersection(-1.0, vec3(0.0), vec3(0.0));
+	return Intersection(-1.0, vec3(0.0), vec3(0.0), SHADING_TYPE_NONE);
 }
 
 // Get index of cloests object
@@ -121,7 +124,10 @@ Hit closest_object(Ray ray)
 	int min_index = -1;
 	
 	// Starting time
-	Intersection mini = Intersection(1.0/0.0, vec3(0.0), vec3(0.0));
+	Intersection mini = Intersection(
+		1.0/0.0, vec3(0.0), vec3(0.0),
+		SHADING_TYPE_NONE
+	);
 
 	for (int i = 0; i < world.objects; i++) {
 		uint index = world.indices[i];
@@ -141,7 +147,7 @@ Hit closest_object(Ray ray)
 
 	vec3 point = ray.origin + ray.direction * mini.time;
 
-	return Hit(min_index, mini.time, point, mini.normal, color);
+	return Hit(min_index, mini.time, point, mini.normal, color, mini.shading);
 }
 
 vec3 color_at(Ray ray)
@@ -171,10 +177,21 @@ vec3 color_at(Ray ray)
 		Ray reverse = Ray(shadow_origin, light_dir);
 		Hit hit_light = closest_object(reverse);
 
-		int obj = hit_light.object;
-		if (obj >= 0) {
-			// Fraction of lights path
-			shadow = 1.0;
+		// Check the shading type (lighting....)
+		// TODO: clean
+		if (hit.shading == SHADING_TYPE_LIGHT) {
+			return color;
+		} else if (hit.shading == SHADING_TYPE_FLAT) {
+			// Still need to account for shadows
+			// TODO: method to check for valid shadow hit
+
+			if (hit_light.object >= 0 && hit_light.shading != SHADING_TYPE_LIGHT) {
+				shadow = 1.0;
+			}
+
+			// TODO: ambience variables
+			color *= clamp(1.0 - 0.9 * shadow + 0.15, 0.0, 1.0);
+			return color;
 		}
 
 		// Diffuse lighting
@@ -185,8 +202,15 @@ vec3 color_at(Ray ray)
 		vec3 reflect_dir = reflect(-light_dir, hit.normal);
 		float spec = pow(max(dot(view_dir, reflect_dir), 0.0), 16.0);
 
+		int obj = hit_light.object;
+		if (obj >= 0 && hit_light.shading != SHADING_TYPE_LIGHT) {
+			// Fraction of lights path
+			shadow = 1.0;
+			spec = 0.0;
+		}
+
 		// TODO: different light/shading modes, using ImGui
-		color = hit.color * clamp((spec + diff) * (1.0 - 0.9 * shadow) + 0.15, 0.0, 1.0);
+		color = hit.color * clamp(spec + diff * (1.0 - 0.9 * shadow) + 0.15, 0.0, 1.0);
 		// color = discretize(color, 4);
 	}
 
