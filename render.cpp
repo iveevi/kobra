@@ -6,6 +6,7 @@ Vulkan::Buffer pixel_buffer;
 Vulkan::Buffer world_buffer;
 Vulkan::Buffer objects_buffer;
 Vulkan::Buffer lights_buffer;
+Vulkan::Buffer materials_buffer;
 
 // Compute shader
 VkShaderModule compute_shader;
@@ -202,6 +203,12 @@ void descriptor_set_maker(Vulkan *vulkan, size_t i)
 		.offset = 0,
 		.range = lights_buffer.size
 	};
+	
+	VkDescriptorBufferInfo mt_info {
+		.buffer = materials_buffer.buffer,
+		.offset = 0,
+		.range = materials_buffer.size
+	};
 
 	VkWriteDescriptorSet pb_write = {
 		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -243,15 +250,26 @@ void descriptor_set_maker(Vulkan *vulkan, size_t i)
 		.pBufferInfo = &lb_info
 	};
 
+	VkWriteDescriptorSet mt_write = {
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = vulkan->descriptor_sets[i],
+		.dstBinding = 4,
+		.dstArrayElement = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.pBufferInfo = &mt_info
+	};
+
 	VkWriteDescriptorSet writes[] = {
 		pb_write,
 		wb_write,
 		ob_write,
-		lb_write
+		lb_write,
+		mt_write
 	};
 
 	vkUpdateDescriptorSets(
-		vulkan->device, 4,
+		vulkan->device, 5,
 		&writes[0],
 		0, nullptr
 	);

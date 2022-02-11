@@ -38,16 +38,16 @@ World world {
 		}
 	},
 
-	// Objects
+	// Primitives
 	// TODO: later read from file
-	std::vector <World::ObjectPtr> {
-		World::ObjectPtr(new Sphere(0.25f, transforms[0], materials[6])),
-		World::ObjectPtr(new Sphere(1.0f, transforms[0], materials[0])),
-		World::ObjectPtr(new Sphere(3.0f, transforms[1], materials[1])),
-		World::ObjectPtr(new Sphere(6.0f, transforms[2], materials[2])),
-		World::ObjectPtr(new Sphere(2.0f, transforms[3], materials[3])),
-		World::ObjectPtr(new Sphere(2.0f, transforms[4], materials[4])),
-		World::ObjectPtr(new Sphere(8.0f, transforms[5], materials[5]))
+	std::vector <World::PrimitivePtr> {
+		World::PrimitivePtr(new Sphere(0.25f, transforms[0], materials[6])),
+		World::PrimitivePtr(new Sphere(1.0f, transforms[0], materials[0])),
+		World::PrimitivePtr(new Sphere(3.0f, transforms[1], materials[1])),
+		World::PrimitivePtr(new Sphere(6.0f, transforms[2], materials[2])),
+		World::PrimitivePtr(new Sphere(2.0f, transforms[3], materials[3])),
+		World::PrimitivePtr(new Sphere(2.0f, transforms[4], materials[4])),
+		World::PrimitivePtr(new Sphere(8.0f, transforms[5], materials[5]))
 	},
 
 	// Lights
@@ -72,8 +72,9 @@ inline std::ostream &operator<<(std::ostream &os, const aligned_vec4 &v)
 // TODO: put the following functions into a alloc.cpp file
 
 // Minimum sizes
-#define INITIAL_OBJECTS	100UL
-#define INITIAL_LIGHTS	100UL
+#define INITIAL_OBJECTS		100UL
+#define INITIAL_LIGHTS		100UL
+#define INITIAL_MATERIALS	100UL
 
 // Size of the world data, including indices
 size_t world_data_size()
@@ -85,7 +86,7 @@ size_t world_data_size()
 }
 
 // Copy buffer helper
-std::pair <uint8_t *, size_t> map_world_buffer(Buffer &objects, Buffer &lights)
+std::pair <uint8_t *, size_t> map_world_buffer(Buffer &objects, Buffer &lights, Buffer &materials)
 {
 	// Static (cached) raw memory buffer
 	static uint8_t *buffer = nullptr;
@@ -102,7 +103,7 @@ std::pair <uint8_t *, size_t> map_world_buffer(Buffer &objects, Buffer &lights)
 
 	// Generate world data and write to buffers
 	Indices indices;
-	world.write_objects(objects, indices);
+	world.write_objects(objects, materials, indices);
 	world.write_lights(lights, indices);
 
 	// Copy world and indices
@@ -122,13 +123,27 @@ void map_buffers(Vulkan *vk)
 	// Create and write to buffers
 	Buffer objects;
 	Buffer lights;
+	Buffer materials;
 
-	auto wb = map_world_buffer(objects, lights);
+	auto wb = map_world_buffer(objects, lights, materials);
 
 	// Map buffers
 	vk->map_buffer(&world_buffer, wb.first, wb.second);
 	vk->map_buffer(&objects_buffer, objects.data(), sizeof(aligned_vec4) * objects.size());
 	vk->map_buffer(&lights_buffer, lights.data(), sizeof(aligned_vec4) * lights.size());
+	vk->map_buffer(&materials_buffer, materials.data(), sizeof(Material) * materials.size());
+
+	/* Dump contents of the buffers
+	TODO: ImGui option
+	std::cout << "Objects: " << objects.size() << std::endl;
+	for (size_t i = 0; i < objects.size(); i++)
+		std::cout << objects[i] << std::endl;
+	std::cout << "Lights: " << lights.size() << std::endl;
+	for (size_t i = 0; i < lights.size(); i++)
+		std::cout << lights[i] << std::endl;
+	std::cout << "Materials: " << materials.size() << std::endl;
+	for (size_t i = 0; i < materials.size(); i++)
+		std::cout << materials[i] << std::endl; */
 }
 
 // Allocate buffers
@@ -144,6 +159,7 @@ void allocate_buffers(Vulkan &vulkan)
 	size_t world_size = world_data_size();
 	size_t objects_size = MAX_OBJECT_SIZE * std::max(world.objects.size(), INITIAL_OBJECTS);
 	size_t lights_size = MAX_LIGHT_SIZE * std::max(world.lights.size(), INITIAL_LIGHTS);
+	size_t materials_size = sizeof(Material) * INITIAL_MATERIALS;
 
 	static const VkBufferUsageFlags buffer_usage =
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT
@@ -154,6 +170,7 @@ void allocate_buffers(Vulkan &vulkan)
 	vulkan.make_buffer(world_buffer,   world_size,   buffer_usage);
 	vulkan.make_buffer(objects_buffer, objects_size, buffer_usage);
 	vulkan.make_buffer(lights_buffer,  lights_size,  buffer_usage);
+	vulkan.make_buffer(materials_buffer, materials_size, buffer_usage);
 	
 	// Add all buffers to deletion queue
 	vulkan.push_deletion_task(
@@ -162,6 +179,7 @@ void allocate_buffers(Vulkan &vulkan)
 			vk->destroy_buffer(world_buffer);
 			vk->destroy_buffer(objects_buffer);
 			vk->destroy_buffer(lights_buffer);
+			vk->destroy_buffer(materials_buffer);
 			Logger::ok("[main] Deleted buffers");
 		}
 	);

@@ -56,76 +56,50 @@ struct Material {
 	}
 };
 
-// Object structures
-struct Object {
+// Primitive structures
+struct Primitive {
 	float		id = OBJECT_TYPE_NONE;
 	Transform	transform;
 	Material	material;
 
-	// Object constructors
-	Object() {}
-	Object(float x, const Transform &t, const Material &m)
+	// Primitive constructors
+	Primitive() {}
+	Primitive(float x, const Transform &t, const Material &m)
 			: id(x), transform(t), material(m) {}
 
 	// Virtual object destructor
-	virtual ~Object() {}
+	virtual ~Primitive() {}
 
 	// Write data to aligned_vec4 buffer (inherited)
 	virtual void write(Buffer &buffer) const = 0;
 
 	// Write full object data
-	void write_to_buffer(Buffer &buffer) {
+	void write_to_buffer(Buffer &buffer, uint mati) {
+		float index = *reinterpret_cast <float *> (&mati);
+
 		// Push ID and material, then everything else
 		buffer.push_back(aligned_vec4 {
-			glm::vec4(id, 0.0, 0.0, 0.0)
+			glm::vec4(id, index, 0.0, 0.0)
 		});
 
-		material.write_to_buffer(buffer);
+		// material.write_to_buffer(buffer);
 
 		this->write(buffer);
 	}
 };
 
 // Sphere structure
-struct Sphere : Object {
+struct Sphere : Primitive {
 	float		radius;
 
 	Sphere() {}
 	Sphere(float r, const Transform &t, const Material &m)
-			: Object(OBJECT_TYPE_SPHERE, t, m),
+			: Primitive(OBJECT_TYPE_SPHERE, t, m),
 			radius(r) {}
 
 	void write(Buffer &buffer) const override {
 		buffer.push_back(aligned_vec4 {
 			glm::vec4(transform.position, radius)
-		});
-	}
-};
-
-// Plane structure
-struct Plane : Object {
-	float		length;
-	float		width;
-
-	Plane() {}
-	Plane(float l, float w, const Transform &t, const Material &m)
-			: Object(OBJECT_TYPE_PLANE, t, m),
-			length(l), width(w) {}
-
-	void write(Buffer &buffer) const override {
-		// Position
-		buffer.push_back(aligned_vec4 {
-			glm::vec4(transform.position, 1.0f)
-		});
-
-		// Right, length
-		buffer.push_back(aligned_vec4 {
-			glm::vec4(transform.right, length)
-		});
-
-		// Forward, width
-		buffer.push_back(aligned_vec4 {
-			glm::vec4(transform.forward, width)
 		});
 	}
 };
@@ -198,18 +172,18 @@ struct GPUWorld {
 // API friendly world structure
 // TODO: header
 struct World {
-	using ObjectPtr = std::shared_ptr <Object>;
+	using PrimitivePtr = std::shared_ptr <Primitive>;
 	using LightPtr = std::shared_ptr <Light>;
 
 	// Data
 	Camera			camera;
-	std::vector <ObjectPtr>	objects;
+	std::vector <PrimitivePtr>	objects;
 	std::vector <LightPtr>	lights;
 
 	// World constructor
 	World() {}
 	World(const Camera &camera,
-			const std::vector <ObjectPtr> &objects,
+			const std::vector <PrimitivePtr> &objects,
 			const std::vector <LightPtr> &lights)
 			: camera(camera), objects(objects),
 			lights(lights) {}
@@ -236,12 +210,15 @@ struct World {
 	}
 
 	// Write object data to buffer
-	void write_objects(Buffer &buffer, Indices &indices) const {
+	void write_objects(Buffer &buffer, Buffer &materials, Indices &indices) const {
 		buffer.clear();
+		materials.clear();
 
 		indices.push_back(0);
 		for (const auto &object : objects) {
-			object->write_to_buffer(buffer);
+			uint index = materials.size();
+			object->material.write_to_buffer(materials);
+			object->write_to_buffer(buffer, index);
 			indices.push_back(buffer.size());
 		}
 
@@ -269,6 +246,7 @@ extern Vulkan::Buffer pixel_buffer;
 extern Vulkan::Buffer world_buffer;
 extern Vulkan::Buffer objects_buffer;
 extern Vulkan::Buffer lights_buffer;
+extern Vulkan::Buffer materials_buffer;
 
 // Compute shader
 extern VkShaderModule compute_shader;

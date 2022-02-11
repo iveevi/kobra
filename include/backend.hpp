@@ -237,18 +237,27 @@ private:
 			.pImmutableSamplers = nullptr
 		};
 
+		VkDescriptorSetLayoutBinding compute_bindings_5 {
+			.binding = 4,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.descriptorCount = 1,
+			.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+			.pImmutableSamplers = nullptr
+		};
+
 		// VkDesciptorSetLayoutBinding
 		VkDescriptorSetLayoutBinding compute_bindings[] {
 			compute_bindings_1,
 			compute_bindings_2,
 			compute_bindings_3,
-			compute_bindings_4
+			compute_bindings_4,
+			compute_bindings_5
 		};
 		
 		// Create info
 		VkDescriptorSetLayoutCreateInfo layout_info {
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-			.bindingCount = 4,
+			.bindingCount = 5,
 			.pBindings = &compute_bindings[0]
 		};
 

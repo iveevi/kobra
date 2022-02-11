@@ -59,6 +59,14 @@ layout (set = 0, binding = 3, std430) buffer Lights
 	vec4 data[];
 } lights;
 
+// Array of materials
+layout (set = 0, binding = 4, std430) buffer Materials
+{
+	// Material layout:
+	// vec4 descriptor (color, shading)
+	vec4 data[];
+} materials;
+
 // Closest object information
 struct Hit {
 	int	object;
@@ -86,8 +94,9 @@ vec3 background(Ray ray)
 Intersection intersect_sphere(Ray ray, uint index)
 {
 	// Create sphere from object data
-	vec4 material = objects.data[index + 1];
-	vec4 data = objects.data[index + 2];
+	vec4 prop = objects.data[index];
+	vec4 data = objects.data[index + 1];
+
 	vec3 center = data.xyz;
 	float radius = data.w;
 
@@ -98,8 +107,12 @@ Intersection intersect_sphere(Ray ray, uint index)
 
 	// If intersection is valid, compute color
 	if (intersection.time > 0.0) {
-		intersection.color = material.xyz;
-		intersection.shading = material.w;
+		// Get material index at the second element
+		uint mati = floatBitsToUint(prop.y);
+
+		// Get material from the materials buffer
+		intersection.color = materials.data[mati].xyz;
+		intersection.shading = materials.data[mati].w;
 	}
 
 	return intersection;
