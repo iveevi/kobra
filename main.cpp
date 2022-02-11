@@ -47,7 +47,13 @@ World world {
 		World::PrimitivePtr(new Sphere(6.0f, transforms[2], materials[2])),
 		World::PrimitivePtr(new Sphere(2.0f, transforms[3], materials[3])),
 		World::PrimitivePtr(new Sphere(2.0f, transforms[4], materials[4])),
-		World::PrimitivePtr(new Sphere(8.0f, transforms[5], materials[5]))
+		World::PrimitivePtr(new Sphere(8.0f, transforms[5], materials[5])),
+		World::PrimitivePtr(new Triangle(
+			glm::vec3(0.0f, 0.0f, 0.0f),
+			glm::vec3(0.0f, 1.0f, 0.0f),
+			glm::vec3(1.0f, 0.0f, 0.0f),
+			materials[5]
+		)),
 	},
 
 	// Lights

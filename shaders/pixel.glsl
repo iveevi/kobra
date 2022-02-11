@@ -1,9 +1,10 @@
 #version 430
 
+// TODO: rename file
+
 #include "../include/types.h"
 
 #include "ray.glsl"
-#include "shapes.glsl"
 #include "intersect.glsl"
 #include "color.glsl"
 
@@ -68,6 +69,7 @@ layout (set = 0, binding = 4, std430) buffer Materials
 } materials;
 
 // Closest object information
+// TODO: this should be obslete
 struct Hit {
 	int	object;
 	float	time;
@@ -88,6 +90,33 @@ vec3 background(Ray ray)
 		vec3(0.5, 0.7, 1.0),
 		t
 	);
+}
+
+// Intersection between a ray and a triangle
+Intersection intersect_triangle(Ray ray, uint index)
+{
+	// Create sphere from object data
+	vec4 prop = objects.data[index];
+	vec3 v1 = objects.data[index + 1].xyz;
+	vec3 v2 = objects.data[index + 2].xyz;
+	vec3 v3 = objects.data[index + 3].xyz;
+
+	Triangle triangle = Triangle(v1, v2, v3);
+
+	// Intersect ray with sphere
+	Intersection intersection = intersect_shape(ray, triangle);
+
+	// If intersection is valid, compute color
+	if (intersection.time > 0.0) {
+		// Get material index at the second element
+		uint mati = floatBitsToUint(prop.y);
+
+		// Get material from the materials buffer
+		intersection.color = materials.data[mati].xyz;
+		intersection.shading = materials.data[mati].w;
+	}
+
+	return intersection;
 }
 
 // Intersection between a ray and a sphere
@@ -125,6 +154,8 @@ Intersection intersect(Ray ray, uint index)
 	float id = objects.data[index].x;
 
 	// TODO: some smarter way to do this
+	if (id == OBJECT_TYPE_TRIANGLE)
+		return intersect_triangle(ray, index);
 	if (id == OBJECT_TYPE_SPHERE)
 		return intersect_sphere(ray, index);
 	

@@ -21,7 +21,7 @@ struct Transform {
         glm::vec3 right;
 
         // Constructors
-        Transform();
+        Transform() {}
         Transform(const glm::vec3 &pos) : position {pos},
                 rotation {1.0, 0.0, 0.0, 0.0},
                 scale {1.0, 1.0, 1.0},

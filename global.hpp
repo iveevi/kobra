@@ -88,8 +88,27 @@ struct Primitive {
 	}
 };
 
-// Sphere structure
-struct Sphere : Primitive {
+// Triangle primitive
+struct Triangle : public Primitive {
+	glm::vec3 a;
+	glm::vec3 b;
+	glm::vec3 c;
+
+	Triangle() {}
+	Triangle(const glm::vec3 &a, const glm::vec3 &b, const glm::vec3 &c,
+			const Material &m)
+			: Primitive(OBJECT_TYPE_TRIANGLE, Transform(), m),
+			a(a), b(b), c(c) {}
+
+	void write(Buffer &buffer) const override {
+		buffer.push_back(aligned_vec4(a));
+		buffer.push_back(aligned_vec4(b));
+		buffer.push_back(aligned_vec4(c));
+	}
+};
+
+// Sphere primitive
+struct Sphere : public Primitive {
 	float		radius;
 
 	Sphere() {}
