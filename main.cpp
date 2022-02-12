@@ -9,7 +9,7 @@
 Material materials[] {
 	glm::vec3 {0.1f, 0.5f, 0.2f},
 	glm::vec3 {0.9f, 0.5f, 0.2f},
-	{glm::vec3 {0.4f, 0.4f, 0.9f}, SHADING_TYPE_FLAT},
+	glm::vec3 {0.4f, 0.4f, 0.9f},
 	glm::vec3 {0.5f, 0.1f, 0.6f},
 	glm::vec3 {0.6f, 0.5f, 0.3f},
 	glm::vec3 {1.0f, 0.5f, 1.0f},
@@ -52,6 +52,20 @@ World world {
 			glm::vec3(0.0f, 1.0f, 0.0f),
 			glm::vec3(1.0f, 0.0f, 0.0f),
 			materials[5]
+		)),
+		// Cube mesh
+		World::PrimitivePtr(new Mesh <VERTEX_TYPE_POSITION> (
+			{
+				glm::vec3(0.0f, 0.0f, -1.0f),
+				glm::vec3(1.0f, 0.0f, -1.0f),
+				glm::vec3(1.0f, 1.0f, -1.0f),
+				glm::vec3(0.0f, 1.0f, -1.0)
+			},
+			{
+				0, 1, 2,
+				0, 2, 3
+			},
+			materials[1]
 		))
 	},
 
@@ -113,15 +127,17 @@ std::pair <uint8_t *, size_t> map_world_buffer(Buffer &objects, Buffer &lights, 
 
 	// Copy world and indices
 	GPUWorld gworld = world.dump();
+	gworld.objects = objects.size();
+
 	memcpy(buffer, &gworld, sizeof(GPUWorld));
 	memcpy(buffer + sizeof(GPUWorld), indices.data(),
 		4 * indices.size());
 
 	/* Dump contents of the buffers
 	// TODO: ImGui option
-	std::cout << "Objects: " << objects.size() << std::endl;
+	std::cout << "=== Objects: " << objects.size() << " ===" << std::endl;
 	for (size_t i = 0; i < objects.size(); i++)
-		std::cout << objects[i] << std::endl;
+		std::cout << i << ":\t" << objects[i] << std::endl;
 	std::cout << "Lights: " << lights.size() << std::endl;
 	for (size_t i = 0; i < lights.size(); i++)
 		std::cout << lights[i] << std::endl;
@@ -247,7 +263,6 @@ int main()
 
 	// Main render loop
 	float time = 0.0f;
-	float delta_time = 0.01f;
 	while (!glfwWindowShouldClose(vulkan.window)) {
 		glfwPollEvents();
 		
@@ -267,7 +282,7 @@ int main()
 		vulkan.frame();
 
 		// Time
-		time += delta_time;
+		time += io.DeltaTime;
 	}
 
 	vulkan.idle();

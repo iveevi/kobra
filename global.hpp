@@ -11,117 +11,11 @@
 // Engine headers
 #include "include/backend.hpp"
 #include "include/camera.hpp"
+#include "include/core.hpp"
 #include "include/logger.hpp"
+#include "include/mesh.hpp"
+#include "include/primitive.hpp"
 #include "include/types.h"
-
-// Aligned structures
-// TODO: remove?
-struct alignas(16) aligned_vec3 {
-	glm::vec3 data;
-
-	aligned_vec3() {}
-	aligned_vec3(const glm::vec3 &d) : data(d) {}
-};
-
-// TODO: move to another place
-struct alignas(16) aligned_vec4 {
-	glm::vec4 data;
-
-	aligned_vec4() {}
-	aligned_vec4(const glm::vec4 &d) : data(d) {}
-
-	aligned_vec4(const glm::vec3 &d) : data(d, 0.0f) {}
-	aligned_vec4(const glm::vec3 &d, float w) : data(d, w) {}
-};
-
-// Buffer type aliases
-using Buffer = std::vector <aligned_vec4>;
-using Indices = std::vector <uint32_t>;
-
-// Material
-struct Material {
-	// Shading type
-	float shading = SHADING_TYPE_BLINN_PHONG;
-
-	// For now, just a color
-	glm::vec3 color;
-
-	Material() {}
-	Material(const glm::vec3 &c) : color(c) {}
-	Material(const glm::vec3 &c, float s) : shading(s), color(c) {}
-
-	// Write to buffer
-	void write_to_buffer(Buffer &buffer) const {
-		buffer.push_back(aligned_vec4(color, shading));
-	}
-};
-
-// Primitive structures
-struct Primitive {
-	float		id = OBJECT_TYPE_NONE;
-	Transform	transform;
-	Material	material;
-
-	// Primitive constructors
-	Primitive() {}
-	Primitive(float x, const Transform &t, const Material &m)
-			: id(x), transform(t), material(m) {}
-
-	// Virtual object destructor
-	virtual ~Primitive() {}
-
-	// Write data to aligned_vec4 buffer (inherited)
-	virtual void write(Buffer &buffer) const = 0;
-
-	// Write full object data
-	void write_to_buffer(Buffer &buffer, uint mati) {
-		float index = *reinterpret_cast <float *> (&mati);
-
-		// Push ID and material, then everything else
-		buffer.push_back(aligned_vec4 {
-			glm::vec4(id, index, 0.0, 0.0)
-		});
-
-		// material.write_to_buffer(buffer);
-
-		this->write(buffer);
-	}
-};
-
-// Triangle primitive
-struct Triangle : public Primitive {
-	glm::vec3 a;
-	glm::vec3 b;
-	glm::vec3 c;
-
-	Triangle() {}
-	Triangle(const glm::vec3 &a, const glm::vec3 &b, const glm::vec3 &c,
-			const Material &m)
-			: Primitive(OBJECT_TYPE_TRIANGLE, Transform(), m),
-			a(a), b(b), c(c) {}
-
-	void write(Buffer &buffer) const override {
-		buffer.push_back(aligned_vec4(a));
-		buffer.push_back(aligned_vec4(b));
-		buffer.push_back(aligned_vec4(c));
-	}
-};
-
-// Sphere primitive
-struct Sphere : public Primitive {
-	float		radius;
-
-	Sphere() {}
-	Sphere(float r, const Transform &t, const Material &m)
-			: Primitive(OBJECT_TYPE_SPHERE, t, m),
-			radius(r) {}
-
-	void write(Buffer &buffer) const override {
-		buffer.push_back(aligned_vec4 {
-			glm::vec4(transform.position, radius)
-		});
-	}
-};
 
 // Light structure
 struct Light {
@@ -244,7 +138,7 @@ struct World {
 		for (const auto &object : objects) {
 			uint index = materials.size();
 			object->material.write_to_buffer(materials);
-			object->write_to_buffer(buffer, index);
+			object->write_to_buffer(buffer, indices, index);
 			indices.push_back(buffer.size());
 		}
 

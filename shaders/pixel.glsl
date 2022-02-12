@@ -288,7 +288,7 @@ const vec2 offsets[MAX_SAMPLES] = {
 };
 
 // TODO: pass as world parameter
-#define SAMPLES 1
+#define SAMPLES 4
 
 void main()
 {
