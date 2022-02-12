@@ -183,9 +183,10 @@ struct GPUWorld {
 	aligned_vec4 up;
 	aligned_vec4 right;
 
-	float fov;
+	/* float fov;
 	float scale;
-	float aspect;
+	float aspect; */
+	aligned_vec4 tunings;
 };
 
 // API friendly world structure
@@ -221,9 +222,15 @@ struct World {
 		world.forward = camera.transform.forward;
 		world.up = camera.transform.up;
 		world.right = camera.transform.right;
-		world.fov = camera.tunings.fov;
+
+		/* world.fov = camera.tunings.fov;
 		world.scale = camera.tunings.scale;
-		world.aspect = camera.tunings.aspect;
+		world.aspect = camera.tunings.aspect; */
+		world.tunings = glm::vec3 {
+			camera.tunings.fov,
+			camera.tunings.scale,
+			camera.tunings.aspect
+		};
 
 		return world;
 	}

@@ -33,9 +33,10 @@ layout (set = 0, binding = 1, std430) buffer World
 	// plus transform
 	
 	// fov, scale, aspect
-	float fov;
+	/* float fov;
 	float scale;
-	float aspect;
+	float aspect; */
+	vec4 tunings;
 
 	// TODO: indices for objects, lights, background
 	uint indices[];
@@ -256,6 +257,7 @@ vec3 color_at(Ray ray)
 		// TODO: different light/shading modes, using ImGui
 		color = hit.color * clamp(spec + diff * (1.0 - 0.9 * shadow) + 0.15, 0.0, 1.0);
 		// color = discretize(color, 4);
+		return color;
 	}
 
 	return color;
@@ -313,7 +315,8 @@ void main()
 					uv,
 					world.camera.xyz,
 					world.cforward.xyz, world.cup.xyz, world.cright.xyz,
-					world.scale, world.aspect
+					world.tunings.y,
+					world.tunings.z
 				);
 
 				// Get color

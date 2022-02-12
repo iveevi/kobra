@@ -47,13 +47,12 @@ World world {
 		World::PrimitivePtr(new Sphere(6.0f, transforms[2], materials[2])),
 		World::PrimitivePtr(new Sphere(2.0f, transforms[3], materials[3])),
 		World::PrimitivePtr(new Sphere(2.0f, transforms[4], materials[4])),
-		World::PrimitivePtr(new Sphere(8.0f, transforms[5], materials[5])),
 		World::PrimitivePtr(new Triangle(
 			glm::vec3(0.0f, 0.0f, 0.0f),
 			glm::vec3(0.0f, 1.0f, 0.0f),
 			glm::vec3(1.0f, 0.0f, 0.0f),
 			materials[5]
-		)),
+		))
 	},
 
 	// Lights
@@ -118,6 +117,35 @@ std::pair <uint8_t *, size_t> map_world_buffer(Buffer &objects, Buffer &lights, 
 	memcpy(buffer + sizeof(GPUWorld), indices.data(),
 		4 * indices.size());
 
+	/* Dump contents of the buffers
+	// TODO: ImGui option
+	std::cout << "Objects: " << objects.size() << std::endl;
+	for (size_t i = 0; i < objects.size(); i++)
+		std::cout << objects[i] << std::endl;
+	std::cout << "Lights: " << lights.size() << std::endl;
+	for (size_t i = 0; i < lights.size(); i++)
+		std::cout << lights[i] << std::endl;
+	std::cout << "Materials: " << materials.size() << std::endl;
+	for (size_t i = 0; i < materials.size(); i++)
+		std::cout << materials[i] << std::endl;
+	std::cout << "Indices: " << indices.size() << std::endl;
+	for (size_t i = 0; i < indices.size(); i++)
+		std::cout << indices[i] << std::endl;
+
+	// Dump buffer contents (as uvec4)
+	std::cout << "=== Buffer contents ===" << std::endl;
+	for (size_t i = 0; i < buffer_size; i += 4 * sizeof(uint32_t)) {
+		uint32_t *uptr = (uint32_t *) (buffer + i);
+		float *fptr = (float *) (buffer + i);
+
+		std::cout << uptr[0] << " " << uptr[1] << " "
+			<< uptr[2] << " " << uptr[3]
+			<< " -> ("
+			<< fptr[0] << ", " << fptr[1] << ", "
+			<< fptr[2] << ", " << fptr[3]
+			<< ")" << std::endl;
+	} */
+
 	// Return pointer to the buffer
 	return {buffer, buffer_size};
 }
@@ -138,18 +166,6 @@ void map_buffers(Vulkan *vk)
 	vk->map_buffer(&objects_buffer, objects.data(), sizeof(aligned_vec4) * objects.size());
 	vk->map_buffer(&lights_buffer, lights.data(), sizeof(aligned_vec4) * lights.size());
 	vk->map_buffer(&materials_buffer, materials.data(), sizeof(Material) * materials.size());
-
-	/* Dump contents of the buffers
-	TODO: ImGui option
-	std::cout << "Objects: " << objects.size() << std::endl;
-	for (size_t i = 0; i < objects.size(); i++)
-		std::cout << objects[i] << std::endl;
-	std::cout << "Lights: " << lights.size() << std::endl;
-	for (size_t i = 0; i < lights.size(); i++)
-		std::cout << lights[i] << std::endl;
-	std::cout << "Materials: " << materials.size() << std::endl;
-	for (size_t i = 0; i < materials.size(); i++)
-		std::cout << materials[i] << std::endl; */
 }
 
 // Allocate buffers
