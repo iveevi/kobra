@@ -9,6 +9,7 @@
 #include <memory>
 
 // Engine headers
+#include "include/app.hpp"
 #include "include/backend.hpp"
 #include "include/camera.hpp"
 #include "include/core.hpp"

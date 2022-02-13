@@ -264,6 +264,26 @@ void allocate_buffers(Vulkan &vulkan)
 	);
 }
 
+// App
+class SampleScene : public mercury::App {
+	// TODO: some of these member should be moved back to App
+	VkCommandPool cmd_pool;
+public:
+	// Constructor
+	SampleScene(Vulkan *vk) : mercury::App({
+		.ctx = vk,
+		.width = 800,
+		.height = 600,
+		.name = "Mercury - Sample Scene",
+	}) {
+		// Create command pool
+		cmd_pool = vk->make_command_pool(VK_COMMAND_POOL_CREATE_TRANSIENT_BIT);
+	}
+
+	void frame(const uint32_t &index) override {
+	}
+};
+
 int main()
 {
 	// Redirect logger to file
@@ -283,6 +303,9 @@ int main()
 
 	// Initialize Vulkan
 	Vulkan vulkan;
+
+	// Create sample scene
+	SampleScene scene(&vulkan);
 
 	// Initialize the buffers
 	allocate_buffers(vulkan);

@@ -81,7 +81,7 @@ public:
 	}
 
 	// Pretty print frame
-	static std::string pretty(const Frame &frame, size_t indent = 0) {
+	static std::string pretty(const Frame &frame, double ptime = -1.0f, size_t indent = 0) {
 		static std::string indent_str = "  ";
 
 		std::string str;
@@ -92,14 +92,17 @@ public:
 			istr += indent_str;
 
 		// Print name
-		str += "[" + frame.name + "]: ";
+		str += "[" + frame.name + "] ";
 
 		// Print time
-		str += std::to_string(frame.time) + " us\n";
+		str += std::to_string(frame.time) + " us";
+		if (ptime >= 0.0f)
+			str += " (" + std::to_string(frame.time / ptime * 100.0) + "%)";
+		str += "\n";
 
 		// Print children
 		for (const Frame &child : frame.children)
-			str += istr + "\u2514\u2500 " + pretty(child, indent + 1);
+			str += istr + "\u2514\u2500 " + pretty(child, frame.time, indent + 1);
 
 		return str;
 	}

@@ -1,5 +1,14 @@
 #include "../include/backend.hpp"
 
+// Static member variables
+const std::vector <const char *> Vulkan::device_extensions = {
+	VK_KHR_SWAPCHAIN_EXTENSION_NAME
+};
+
+const std::vector <const char *> Vulkan::validation_layers = {
+	"VK_LAYER_KHRONOS_validation"
+};
+
 ////////////////////
 // Public methods //
 ////////////////////
@@ -64,7 +73,7 @@ void Vulkan::frame()
 		// Show render monitor
 		ImGui::Begin("Render Monitor");
 		ImGui::Text("fps: %.1f", ImGui::GetIO().Framerate);
-		ImGui::TreeNode("Profiler");
+		// ImGui::TreeNode("Profiler");
 		ImGui::End();
 
 		// ImGui::ShowDemoWindow();
@@ -181,6 +190,194 @@ void Vulkan::frame()
 	current_frame = (current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
+////////////////////
+// Buffer methods //
+////////////////////
+
+// Allocate a buffer
+// TODO: pass buffer propreties as a struct
+void Vulkan::make_buffer(Buffer &bf, size_t size, VkBufferUsageFlags usage)
+{
+	// Buffer creation info
+	VkBufferCreateInfo buffer_info {
+		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+		.size = size,
+		.usage = usage,
+		.sharingMode = VK_SHARING_MODE_EXCLUSIVE
+	};
+
+	VkResult result = vkCreateBuffer(
+		device, &buffer_info,
+		nullptr, &bf.buffer
+	);
+
+	if (result != VK_SUCCESS) {
+		Logger::error("[Vulkan] Failed to create buffer!");
+		// TODO: other exception class
+		throw (-1);
+	}
+
+	// Allocate memory for the buffer
+	VkMemoryRequirements mem_reqs;
+	vkGetBufferMemoryRequirements(device, bf.buffer, &mem_reqs);
+
+	VkMemoryAllocateInfo alloc_info {
+		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+		.allocationSize = mem_reqs.size,
+		.memoryTypeIndex = _find_memory_type(
+			mem_reqs.memoryTypeBits,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+		)
+	};
+
+	// Create device memory
+	result = vkAllocateMemory(
+		device, &alloc_info,
+		nullptr, &bf.memory
+	);
+
+	if (result != VK_SUCCESS) {
+		Logger::error("[Vulkan] Failed to allocate buffer memory!");
+		throw (-1);
+	}
+
+	// Bind the buffer to the memory
+	vkBindBufferMemory(device, bf.buffer, bf.memory, 0);
+
+	// Set the buffer properties
+	bf.size = size;
+	bf.offset = 0;
+
+	// Log creation
+	Logger::ok() << "[Vulkan] Buffer created (VkBuffer="
+		<< bf.buffer << ", VkDeviceMemory=" << bf.memory
+		<< ", size=" << size << ")\n";
+}
+
+// Destroy a buffer
+void Vulkan::destroy_buffer(Buffer &bf)
+{
+	vkDestroyBuffer(device, bf.buffer, nullptr);
+	vkFreeMemory(device, bf.memory, nullptr);
+}
+
+// Map data to a buffer
+void Vulkan::map_buffer(Buffer *buffer, void *data, size_t size)
+{
+	// Map the buffer
+	VkResult result = vkMapMemory(
+		device, buffer->memory, 0,
+		size, 0, &buffer->mapped
+	);
+
+	if (result != VK_SUCCESS) {
+		Logger::error("[Vulkan] Failed to map buffer memory!");
+		throw (-1);
+	}
+
+	// Copy the data
+	memcpy(buffer->mapped, data, size);
+
+	// Unmap the buffer
+	vkUnmapMemory(device, buffer->memory);
+}
+
+///////////////////////
+// Swapchain methods //
+///////////////////////
+
+// TODO: should pass number of frames in fligh
+Vulkan::Swapchain Vulkan::make_swapchain(const Surface &surface)
+{
+	// Object to return
+	Swapchain swch;
+
+	SwapchainSupport swch_support = _query_swch_support(physical_device);
+
+	// Select swapchain properties
+	VkSurfaceFormatKHR surface_format = _choose_swch_surface_format(
+		swch_support.formats
+	);
+
+	VkPresentModeKHR present_mode = _choose_swch_present_mode(
+		swch_support.present_modes
+	);
+
+	VkExtent2D extent = _choose_swch_extent(
+		swch_support.capabilities
+	);
+
+	// Set image count
+	uint32_t image_count = swch_support.capabilities.minImageCount + 1;
+	if (swch_support.capabilities.maxImageCount > 0
+			&& image_count > swch_support.capabilities.maxImageCount)
+		image_count = swch_support.capabilities.maxImageCount;
+
+	// Build creation info
+	// TODO: clean up this part
+	VkSwapchainCreateInfoKHR create_info{};
+	create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+	create_info.surface = surface.surface;
+
+	create_info.minImageCount = image_count;
+	create_info.imageFormat = surface_format.format;
+	create_info.imageColorSpace = surface_format.colorSpace;
+	create_info.imageExtent = extent;
+	create_info.imageArrayLayers = 1;
+	create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
+		| VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+
+	QueueFamilyIndices indices = _find_queue_families(physical_device);
+	uint32_t queueFamilyIndices[] = {indices.graphics.value(), indices.present.value()};
+
+	if (indices.graphics != indices.present) {
+		create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+		create_info.queueFamilyIndexCount = 2;
+		create_info.pQueueFamilyIndices = queueFamilyIndices;
+	} else {
+		create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	}
+
+	create_info.preTransform = swch_support.capabilities.currentTransform;
+	create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+	create_info.presentMode = present_mode;
+	create_info.clipped = VK_TRUE;
+
+	// Create the swapchain
+	VkResult result = vkCreateSwapchainKHR(
+		device, &create_info,
+		nullptr, &swch.swch
+	);
+
+	if (result != VK_SUCCESS) {
+		Logger::error("[Vulkan] Failed to create swapchain!");
+		throw (-1);
+	}
+
+	// Resize images
+	vkGetSwapchainImagesKHR(
+		device, swch.swch,
+		&image_count, nullptr
+	);
+
+	swch.images.resize(image_count);
+
+	vkGetSwapchainImagesKHR(
+		device, swch.swch,
+		&image_count, swch.images.data()
+	);
+
+	// Set other properties
+	swch.image_format = surface_format.format;
+	swch.extent = extent;
+
+	// Log creation and return
+	Logger::ok() << "[Vulkan] Swapchain created (VkSwapchain="
+		<< swch.swch << ")" << std::endl;
+
+	return swch;
+}
+
 /////////////
 // Getters //
 /////////////
@@ -195,4 +392,13 @@ VkPhysicalDeviceProperties Vulkan::phdev_props() const
 
 	// Return the properties
 	return props;
+}
+
+///////////////////
+// Other methods //
+///////////////////
+
+void Vulkan::idle() const
+{
+	vkDeviceWaitIdle(device);
 }
