@@ -47,12 +47,7 @@ World world {
 		World::PrimitivePtr(new Sphere(6.0f, transforms[2], materials[2])),
 		World::PrimitivePtr(new Sphere(2.0f, transforms[3], materials[3])),
 		World::PrimitivePtr(new Sphere(2.0f, transforms[4], materials[4])),
-		World::PrimitivePtr(new Triangle(
-			glm::vec3(0.0f, 0.0f, 0.0f),
-			glm::vec3(0.0f, 1.0f, 0.0f),
-			glm::vec3(1.0f, 0.0f, 0.0f),
-			materials[5]
-		)),
+
 		// Cube mesh
 		World::PrimitivePtr(new Mesh <VERTEX_TYPE_POSITION> (
 			{
@@ -66,15 +61,12 @@ World world {
 				glm::vec3(0.0f, 1.0f, 1.0f)
 			},
 			{
-				0, 1, 2,
-				0, 2, 3,
-				4, 5, 6,
-				4, 6, 7,
-				0, 4, 7,
-				0, 7, 3,
-				1, 5, 6,
-				1, 6, 2,
-				0, 1, 5,
+				0, 1, 2,	0, 2, 3,
+				4, 5, 6,	4, 6, 7,
+				0, 4, 7,	0, 7, 3,
+				1, 5, 6,	1, 6, 2,
+				0, 1, 4,	1, 4, 5,
+				2, 6, 7,	2, 7, 3
 			},
 			materials[1]
 		))
@@ -277,12 +269,12 @@ int main()
 	// Redirect logger to file
 	// Logger::switch_file("mercury.log");
 
-	mercury::Model <VERTEX_TYPE_POSITION> model("resources/teapot.obj");
+	mercury::Model <VERTEX_TYPE_POSITION> model("resources/suzanne.obj");
 	model[0] = materials[2];
 
-	world.objects.push_back(std::shared_ptr <mercury::Model <VERTEX_TYPE_POSITION>> (
+	/* world.objects.push_back(std::shared_ptr <mercury::Model <VERTEX_TYPE_POSITION>> (
 		new mercury::Model <VERTEX_TYPE_POSITION> (model)
-	));
+	)); */
 
 	Logger::ok() << "[main] Loaded model with "
 		<< model.mesh_count() << " meshe(s), "
@@ -325,28 +317,43 @@ int main()
 	vulkan.init_imgui();
 	ImGuiIO &io = ImGui::GetIO();
 
+	mercury::Timer timer;
+	mercury::Profiler profiler;
+
 	// Main render loop
 	float time = 0.0f;
 	while (!glfwWindowShouldClose(vulkan.window)) {
-		glfwPollEvents();
-		
-		float amplitude = 7.0f;
-		glm::vec3 position {
-			amplitude * sin(time), 7.0f,
-			amplitude * cos(time)
-		};
+		profiler.frame("Frame");
+			profiler.frame("Polling events");
+				glfwPollEvents();
+			profiler.end();
+			
+			profiler.frame("Updating buffers");
+				float amplitude = 7.0f;
+				glm::vec3 position {
+					amplitude * sin(time), 7.0f,
+					amplitude * cos(time)
+				};
 
-		world.objects[0]->transform.position = position;
-		world.lights[0]->transform.position = position;
+				world.objects[0]->transform.position = position;
+				world.lights[0]->transform.position = position;
 
-		// Update buffers
-		map_buffers(&vulkan);
+				// Update buffers
+				map_buffers(&vulkan);
+			profiler.end();
 
-		// Show frame
-		vulkan.frame();
+			// Show frame
+			profiler.frame("Rendering");
+				vulkan.frame();
+			profiler.end();
 
-		// Time
-		time += io.DeltaTime;
+			// Time
+			time += io.DeltaTime;
+		profiler.end();
+
+		// Show profiler
+		mercury::Profiler::Frame frame = profiler.pop();
+		std::cout << mercury::Profiler::pretty(frame) << std::endl;
 	}
 
 	vulkan.idle();

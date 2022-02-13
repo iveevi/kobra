@@ -16,6 +16,8 @@
 #include "include/mesh.hpp"
 #include "include/model.hpp"
 #include "include/primitive.hpp"
+#include "include/profiler.hpp"
+#include "include/timer.hpp"
 #include "include/types.h"
 
 // Light structure
