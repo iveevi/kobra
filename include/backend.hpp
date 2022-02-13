@@ -445,14 +445,15 @@ private:
 
 	void _mk_instance() {
 		if (enable_validation_layers && !_check_validation_layer_support()) {
-			throw std::runtime_error("validation layers requested, but not available!");
+			Logger::error("[Vulkan] Validation layers requested, but not available");
+			throw -1;
 		}
 
 		VkApplicationInfo appInfo{};
 		appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-		appInfo.pApplicationName = "Hello Triangle";
+		appInfo.pApplicationName = "Mercury";
 		appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-		appInfo.pEngineName = "No Engine";
+		appInfo.pEngineName = "Mercury";
 		appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
 		appInfo.apiVersion = VK_API_VERSION_1_0;
 
@@ -478,7 +479,8 @@ private:
 		}
 
 		if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
-			throw std::runtime_error("failed to create instance!");
+			Logger::error("[Vulkan] Failed to create instance");
+			throw -1;
 		}
 	}
 

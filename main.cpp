@@ -59,11 +59,22 @@ World world {
 				glm::vec3(0.0f, 0.0f, -1.0f),
 				glm::vec3(1.0f, 0.0f, -1.0f),
 				glm::vec3(1.0f, 1.0f, -1.0f),
-				glm::vec3(0.0f, 1.0f, -1.0)
+				glm::vec3(0.0f, 1.0f, -1.0),
+				glm::vec3(0.0f, 0.0f, 1.0f),
+				glm::vec3(1.0f, 0.0f, 1.0f),
+				glm::vec3(1.0f, 1.0f, 1.0f),
+				glm::vec3(0.0f, 1.0f, 1.0f)
 			},
 			{
 				0, 1, 2,
-				0, 2, 3
+				0, 2, 3,
+				4, 5, 6,
+				4, 6, 7,
+				0, 4, 7,
+				0, 7, 3,
+				1, 5, 6,
+				1, 6, 2,
+				0, 1, 5,
 			},
 			materials[1]
 		))
@@ -95,6 +106,12 @@ inline std::ostream &operator<<(std::ostream &os, const aligned_vec4 &v)
 #define INITIAL_LIGHTS		100UL
 #define INITIAL_MATERIALS	100UL
 
+// Sizes of objects and lights
+// are assumed to be the maximum
+static const size_t MAX_OBJECT_SIZE = sizeof(Triangle);
+static const size_t MAX_LIGHT_SIZE = sizeof(PointLight);
+
+
 // Size of the world data, including indices
 size_t world_data_size()
 {
@@ -103,13 +120,16 @@ size_t world_data_size()
 
 	return sizeof(GPUWorld) + 4 * (objects + lights);
 }
-
 // Copy buffer helper
-std::pair <uint8_t *, size_t> map_world_buffer(Buffer &objects, Buffer &lights, Buffer &materials)
+std::pair <uint8_t *, size_t> map_world_buffer(Vulkan *vk, Buffer &objects, Buffer &lights, Buffer &materials)
 {
 	// Static (cached) raw memory buffer
 	static uint8_t *buffer = nullptr;
 	static size_t buffer_size = 0;
+	
+	static const VkBufferUsageFlags buffer_usage =
+		VK_BUFFER_USAGE_TRANSFER_DST_BIT
+		| VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
 	// Check buffer resize requirement
 	size_t size = world_data_size();
@@ -161,6 +181,40 @@ std::pair <uint8_t *, size_t> map_world_buffer(Buffer &objects, Buffer &lights, 
 			<< fptr[2] << ", " << fptr[3]
 			<< ")" << std::endl;
 	} */
+	
+	// Resizing and remaking buffers
+	int resized = 0;
+
+	// World
+	if (size > world_buffer.size) {
+		// Resize vulkan buffer
+		vk->destroy_buffer(world_buffer);
+		vk->make_buffer(world_buffer, buffer_size, buffer_usage);
+		resized++;
+	}
+
+	// Objects
+	if (sizeof(aligned_vec4) * objects.size() > objects_buffer.size) {
+		// Resize vulkan buffer
+		vk->destroy_buffer(objects_buffer);
+		vk->make_buffer(objects_buffer, objects.size() * sizeof(aligned_vec4), buffer_usage);
+		resized++;
+	}
+
+	// Lights
+	if (sizeof(aligned_vec4) * lights.size() > lights_buffer.size) {
+		// Resize vulkan buffer
+		vk->destroy_buffer(lights_buffer);
+		vk->make_buffer(lights_buffer, lights.size() * sizeof(aligned_vec4), buffer_usage);
+		resized++;
+	}
+
+	// Update descriptor sets
+	if (resized) {
+		for (size_t i = 0; i < vk->swch_images.size(); i++)
+			descriptor_set_maker(vk, i);
+		vk->set_command_buffers(cmd_buffer_maker);
+	}
 
 	// Return pointer to the buffer
 	return {buffer, buffer_size};
@@ -175,23 +229,18 @@ void map_buffers(Vulkan *vk)
 	Buffer lights;
 	Buffer materials;
 
-	auto wb = map_world_buffer(objects, lights, materials);
+	auto wb = map_world_buffer(vk, objects, lights, materials);
 
 	// Map buffers
 	vk->map_buffer(&world_buffer, wb.first, wb.second);
 	vk->map_buffer(&objects_buffer, objects.data(), sizeof(aligned_vec4) * objects.size());
-	vk->map_buffer(&lights_buffer, lights.data(), sizeof(aligned_vec4) * lights.size());
 	vk->map_buffer(&materials_buffer, materials.data(), sizeof(Material) * materials.size());
+	vk->map_buffer(&lights_buffer, lights.data(), sizeof(aligned_vec4) * lights.size());
 }
 
 // Allocate buffers
 void allocate_buffers(Vulkan &vulkan)
 {
-	// Sizes of objects and lights
-	// are assumed to be the maximum
-	static const size_t MAX_OBJECT_SIZE = sizeof(Sphere);
-	static const size_t MAX_LIGHT_SIZE = sizeof(PointLight);
-
 	// Allocate buffers
 	size_t pixel_size = 4 * 800 * 600;
 	size_t world_size = world_data_size();
@@ -225,6 +274,21 @@ void allocate_buffers(Vulkan &vulkan)
 
 int main()
 {
+	// Redirect logger to file
+	// Logger::switch_file("mercury.log");
+
+	mercury::Model <VERTEX_TYPE_POSITION> model("resources/teapot.obj");
+	model[0] = materials[2];
+
+	world.objects.push_back(std::shared_ptr <mercury::Model <VERTEX_TYPE_POSITION>> (
+		new mercury::Model <VERTEX_TYPE_POSITION> (model)
+	));
+
+	Logger::ok() << "[main] Loaded model with "
+		<< model.mesh_count() << " meshe(s), "
+		<< model.mesh(0).vertex_count() << " vertices, "
+		<< model.mesh(0).triangle_count() << " triangles" << std::endl;
+
 	// Initialize Vulkan
 	Vulkan vulkan;
 

@@ -14,6 +14,7 @@
 #include "include/core.hpp"
 #include "include/logger.hpp"
 #include "include/mesh.hpp"
+#include "include/model.hpp"
 #include "include/primitive.hpp"
 #include "include/types.h"
 
@@ -136,9 +137,9 @@ struct World {
 
 		indices.push_back(0);
 		for (const auto &object : objects) {
-			uint index = materials.size();
-			object->material.write_to_buffer(materials);
-			object->write_to_buffer(buffer, indices, index);
+			// uint index = materials.size();
+			// object->material.write_to_buffer(materials);
+			object->write_to_buffer(buffer, materials, indices);
 			indices.push_back(buffer.size());
 		}
 

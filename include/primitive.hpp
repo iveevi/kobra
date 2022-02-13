@@ -25,7 +25,24 @@ struct Primitive {
 	virtual void write(Buffer &buffer) const = 0;
 
 	// Write full object data
+	// TODO: pass paramters as a struct
+	virtual void write_to_buffer(Buffer &buffer, Buffer &materials, Indices &indices) {
+		// Deal with material
+		uint mati = materials.size();
+		material.write_to_buffer(materials);
+		float index = *reinterpret_cast <float *> (&mati);
+
+		// Push ID and material, then everything else
+		buffer.push_back(aligned_vec4 {
+			glm::vec4(id, index, 0.0, 0.0)
+		});
+
+		this->write(buffer);
+	}
+
+	// Write full object data, but takes index to material
 	virtual void write_to_buffer(Buffer &buffer, Indices &indices, uint mati) {
+		// Deal with material
 		float index = *reinterpret_cast <float *> (&mati);
 
 		// Push ID and material, then everything else

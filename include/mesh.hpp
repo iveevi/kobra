@@ -40,13 +40,13 @@ template <VertexType T = VERTEX_TYPE_POSITION>
 class Mesh : public Primitive {
 public:
 	// Public aliases
-	using VertexList = std::vector <Vertex<T>>;
+	using VertexList = std::vector <Vertex <T>>;
 private:
 	// List of vertices
-	std::vector <Vertex <T>>	_vertices;
+	VertexList	_vertices;
 
 	// List of indices
-	Indices				_indices;
+	Indices		_indices;
 public:
 	// Constructors
 	Mesh() {}
@@ -55,17 +55,30 @@ public:
 			: _vertices {vertices}, _indices {indices},
 			Primitive {OBJECT_TYPE_NONE, Transform(), material} {}
 
+	// Properties
+	size_t vertex_count() const {
+		return _vertices.size();
+	}
+
+	size_t triangle_count() const {
+		return _indices.size() / 3;
+	}
+
 	// Write mesh to buffer (fake to resolve abstract base class)
 	void write(Buffer &buffer) const override {
 		// Throw
-		throw std::runtime_error("Mesh::write() not implemented");
+		throw std::runtime_error("Mesh::write not implemented");
 	}
 
 	// Write mesh to buffer
 	// TODO: write to both vertex and object buffers
-	void write_to_buffer(Buffer &buffer, Indices &indices, uint mati) override {
+	void write_to_buffer(Buffer &buffer, Buffer &materials, Indices &indices) override {
 		// Remove last index
 		indices.erase(indices.end() - 1);
+
+		// Get index of material and push
+		uint mati = materials.size();
+		material.write_to_buffer(materials);
 
 		// Write each triangle
 		for (size_t i = 0; i < _indices.size(); i += 3) {

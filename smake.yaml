@@ -18,9 +18,10 @@ builds:
       thirdparty/imgui/backends/imgui_impl_glfw.cpp,
       thirdparty/imgui/backends/imgui_impl_vulkan.cpp'
     - idirs: 'thirdparty/glm,
-      thirdparty/imgui'
+      thirdparty/imgui,
+      thirdparty/assimp/include'
     - flags: '-O3 -std=c++17'
-    - libraries: glfw, vulkan 
+    - libraries: glfw, vulkan, assimp 
   - mercury_debug:
     - sources: 'mercury_source,
       thirdparty/imgui/imgui.cpp,
@@ -32,7 +33,7 @@ builds:
       thirdparty/imgui/backends/imgui_impl_vulkan.cpp'
     - idirs: 'thirdparty/glm,
       thirdparty/imgui'
-    - libraries: glfw, vulkan
+    - libraries: glfw, vulkan, assimp
     - flags: '-std=c++17 -g'
 
 targets:
