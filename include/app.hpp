@@ -20,9 +20,9 @@ public:
 
 		std::string name;
 	};
-private:
+protected:
 	// Vulkan context
-	Vulkan *vk;
+	Vulkan *ctx;
 
 	// Surface
 	// TODO: should allow multiple surfaces
@@ -36,13 +36,14 @@ private:
 	size_t frame_index;
 public:
 	// Constructor
-	App(const Info &info) : vk(info.ctx), frame_index(0) {
+	// TODO: constructor for multiple windows?
+	App(const Info &info) : ctx(info.ctx), frame_index(0) {
 		// Create surface
-		surface = vk->make_surface(info.name,info.width, info.height);
+		surface = ctx->make_surface(info.name,info.width, info.height);
 
 		// Create swapchain
 		// TODO: should be passing in window handle into info
-		swapchain = vk->make_swapchain(surface);
+		swapchain = ctx->make_swapchain(surface);
 	}
 
 	// Virtual destructor
@@ -50,14 +51,18 @@ public:
 
 	// Run application
 	void run() {
-		while (!glfwWindowShouldClose(vk->window))
-			frame(frame_index++);
+		while (!glfwWindowShouldClose(ctx->window)) {
+			frame();
 
-		vk->idle();
+			// TODO: mod by max frames in flight
+			frame_index = (frame_index + 1) % 2;
+		}
+
+		ctx->idle();
 	}
 
 	// Frame function (must be implemented by user)
-	virtual void frame(const uint32_t &index) = 0;
+	virtual void frame() = 0;
 };
 
 }

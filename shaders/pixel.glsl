@@ -296,10 +296,13 @@ void main()
 	uint y0 = gl_WorkGroupID.y;
 	uint x0 = gl_WorkGroupID.x;
 
+	// Return if out of bounds
+	if (y0 >= world.height || x0 >= world.width)
+		return;
+
 	uint ysize = gl_NumWorkGroups.y;
 	uint xsize = gl_NumWorkGroups.x;
 
-	// TODO: split into functions
 	vec2 dimensions = vec2(world.width, world.height);
 	for (uint y = y0; y < world.height; y += ysize) {
 		for (uint x = x0; x < world.width; x += xsize) {
@@ -333,4 +336,24 @@ void main()
 			frame.pixels[index] = cast_color(sum);
 		}
 	}
+			
+	/* uint index = y0 * world.width + x0;
+		
+	// Sample ray
+	vec2 point = vec2(x0 + 0.5, y0 + 0.5) + offsets[s];
+
+	vec2 uv = point / dimensions;
+	Ray ray = make_ray(
+		uv,
+		world.camera.xyz,
+		world.cforward.xyz, world.cup.xyz, world.cright.xyz,
+		world.tunings.y,
+		world.tunings.z
+	);
+
+	// Get color
+	vec3 color = color_at(ray);
+
+	// Set pixel color
+	frame.pixels[index] = cast_color(color); */
 }

@@ -180,7 +180,7 @@ extern VkShaderModule compute_shader;
 extern World world;
 
 // Vulkan/GLFW helpers
-void cmd_buffer_maker(Vulkan *, size_t);
+void cmd_buffer_maker(const Vulkan *, size_t);
 void descriptor_set_maker(Vulkan *, size_t);
 
 void key_callback(GLFWwindow *, int, int, int, int);

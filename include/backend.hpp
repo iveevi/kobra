@@ -69,7 +69,8 @@ public:
 	// Aliases
 	using Glob = std::vector <char>;
 
-	using CommandBufferMaker = void (*)(Vulkan *, size_t);
+	// TODO: depreciate this version
+	using CommandBufferMaker = std::function <void (const Vulkan *, size_t)>;
 	using DeletionTask = std::function <void (Vulkan *)>;	// TODO: Is this Vulkan object needed?
 
 	using DS = VkDescriptorSet;
@@ -211,7 +212,7 @@ private:
 
 		_mk_command_pool();
 		_mk_command_buffers();
-		createSyncObjects();
+		_mk_sync_objects();
 		_mk_descriptor_set_layout();
 		_mk_descriptor_pool();
 		_mk_descriptor_sets();
@@ -688,6 +689,9 @@ private:
 		}
 	}
 
+	void _make_image_views(Swapchain &) const;
+
+	// TODO: depreciate
 	void _mk_render_pass() {
 		// Create attachment description
 		VkAttachmentDescription color_attachment {
@@ -746,6 +750,7 @@ private:
 		}
 	}
 
+	// TODO: depreciate
 	void _mk_framebuffers() {
 		swch_framebuffers.resize(swch_image_views.size());
 
@@ -840,7 +845,7 @@ private:
 		}
 	}
 
-	void createSyncObjects() {
+	void _mk_sync_objects() {
 		image_available_semaphores.resize(MAX_FRAMES_IN_FLIGHT);
 		render_finished_semaphores.resize(MAX_FRAMES_IN_FLIGHT);
 		in_flight_fences.resize(MAX_FRAMES_IN_FLIGHT);
@@ -1348,6 +1353,7 @@ public:
 	void frame();
 
 	// Set command buffer for each frame
+	// TODO: depcreiate this overload
 	void set_command_buffers(CommandBufferMaker cbm) {
 		// Resize command buffers
 		command_buffers.resize(swch_framebuffers.size());
@@ -1397,6 +1403,59 @@ public:
 		}
 	}
 
+	void set_command_buffers(const Swapchain &swch,
+			VkCommandPool cpool,
+			std::vector <VkCommandBuffer> &buffers,
+			CommandBufferMaker maker) const {
+		// Resize command buffers
+		buffers.resize(swch.framebuffers.size());
+
+		// Command buffer info
+		VkCommandBufferAllocateInfo alloc_info {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+			.commandPool = cpool,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = (uint32_t) buffers.size()
+		};
+
+		// Allocate the command buffers
+		VkResult result = vkAllocateCommandBuffers(
+			device, &alloc_info,
+			buffers.data()
+		);
+
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan] Failed to allocate command buffers!");
+			throw(-1);
+		}
+
+		for (size_t i = 0; i < command_buffers.size(); i++) {
+			// Command buffer creation info
+			VkCommandBufferBeginInfo begin_info {
+				.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
+			};
+
+			// Begin recording
+			result = vkBeginCommandBuffer(buffers[i], &begin_info);
+			if (result != VK_SUCCESS) {
+				Logger::error("[Vulkan] Failed to begin"
+					" recording command buffer!");
+				throw(-1);
+			}
+
+			// Command buffer generation
+			maker(this, i);
+
+			// End recording
+			result = vkEndCommandBuffer(buffers[i]);
+			if (result != VK_SUCCESS) {
+				Logger::error("[Vulkan] Failed to end"
+					" recording command buffer!");
+				throw(-1);
+			}
+		}
+	}
+
 	////////////////////////
 	// Allocation methods //
 	////////////////////////
@@ -1430,6 +1489,29 @@ public:
 		}
 
 		return command_buffer;
+	}
+
+	// Creating multiple command buffers
+	void make_command_buffers(VkCommandPool command_pool, std::vector <VkCommandBuffer> &buffers, size_t size) const {
+		// Fill command buffer info
+		VkCommandBufferAllocateInfo alloc_info {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+			.commandPool = command_pool,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = static_cast <uint32_t> (size)
+		};
+
+		// Allocate the command buffers
+		VkCommandBuffer command_buffer;
+		VkResult result = vkAllocateCommandBuffers(
+			device, &alloc_info, buffers.data()
+		);
+
+		// Check for errors
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan] Failed to allocate command buffer(s)!");
+			throw(-1);
+		}
 	}
 
 	// Start and end recording a command buffer
@@ -1480,6 +1562,7 @@ public:
 	void map_buffer(Buffer *, void *, size_t);
 	
 	// Create a render pass
+	// TODO: remove this overload
 	VkRenderPass make_render_pass(VkAttachmentLoadOp load_op,
 			VkAttachmentStoreOp store_op,
 			VkImageLayout initial_layout = VK_IMAGE_LAYOUT_UNDEFINED,
@@ -1549,34 +1632,18 @@ public:
 
 		return new_render_pass;
 	}
+	
+	VkRenderPass make_render_pass(const Swapchain &swch,
+		VkAttachmentLoadOp,
+		VkAttachmentStoreOp,
+		VkImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+		VkImageLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) const;
 
 	// Start and end a render pass
-	void begin_render_pass(VkCommandBuffer cmd_buffer,
-			VkFramebuffer framebuffer,
-			VkRenderPass render_pass,
-			VkExtent2D extent,
-			uint32_t clear_count,
-			VkClearValue *clear_values) {
-		// Begin the render pass
-		VkRenderPassBeginInfo render_pass_begin_info {
-			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-			.renderPass = render_pass,
-			.framebuffer = framebuffer,
-			.renderArea = {
-				.offset = { 0, 0 },
-				.extent = extent
-			},
-			.clearValueCount = clear_count,
-			.pClearValues = clear_values
-		};
-
-		vkCmdBeginRenderPass(cmd_buffer, &render_pass_begin_info,
-			VK_SUBPASS_CONTENTS_INLINE);
-	}
-
-	void end_render_pass(VkCommandBuffer cmd_buffer) {
-		vkCmdEndRenderPass(cmd_buffer);
-	}
+	void begin_render_pass(VkCommandBuffer, VkFramebuffer,
+			VkRenderPass, VkExtent2D,
+			uint32_t, VkClearValue *) const;
+	void end_render_pass(VkCommandBuffer cmd_buffer) const;
 
 	// Create a command pool
 	VkCommandPool make_command_pool(VkCommandPoolCreateFlags flags) {
@@ -1681,8 +1748,117 @@ public:
 		return Surface {window, new_surface};
 	}
 
-	// Create a swapchain
+	// Create a swapchain and related functions
 	Swapchain make_swapchain(const Surface &);
+	void make_framebuffers(Swapchain &, VkRenderPass) const;
+
+	// Create a descriptor pool
+	// TODO: pass sizes (and a default) in a struct
+	VkDescriptorPool make_descriptor_pool() const {
+		// Descriptor pool to return
+		VkDescriptorPool new_descriptor_pool = VK_NULL_HANDLE;
+
+		// Pool sizes
+		VkDescriptorPoolSize pool_sizes[] = {
+			{ VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
+			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
+			{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
+			{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
+			{ VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
+			{ VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
+			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
+			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
+			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
+			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
+			{ VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 }
+		};
+
+		// Creation info
+		VkDescriptorPoolCreateInfo pool_info = {
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+			.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
+			.maxSets = 1000 * IM_ARRAYSIZE(pool_sizes),
+			.poolSizeCount = (uint32_t) IM_ARRAYSIZE(pool_sizes),
+			.pPoolSizes = pool_sizes
+		};
+
+		// Creation
+		// TODO: wrap inside a method
+		VkResult result = vkCreateDescriptorPool(
+			device,	&pool_info,
+			allocator, &new_descriptor_pool
+		);
+
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan] Failed to create descriptor pool!");
+			throw(-1);
+		}
+
+		// Log creation and return
+		Logger::ok() << "[Vulkan] Descriptor pool created (VkDescriptorPool="
+			<< new_descriptor_pool << ")\n";
+
+		return new_descriptor_pool;
+	}
+	
+	// Create a descriptor set layout
+	VkDescriptorSetLayout make_descriptor_set_layout(const std::vector <VkDescriptorSetLayoutBinding> &bindings) const {
+		// Descriptor set layout to return
+		VkDescriptorSetLayout new_descriptor_set_layout = VK_NULL_HANDLE;
+
+		// Create info
+		VkDescriptorSetLayoutCreateInfo layout_info {
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+			.bindingCount = (uint32_t) bindings.size(),
+			.pBindings = bindings.data()
+		};
+
+		// Create the descriptor set layout
+		VkResult result = vkCreateDescriptorSetLayout(
+			device, &layout_info,
+			allocator, &new_descriptor_set_layout
+		);
+
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan] Failed to create descriptor set layout!");
+			throw (-1);
+		}
+
+		// Log creation and return
+		Logger::ok() << "[Vulkan] Descriptor set layout created (VkDescriptorSetLayout="
+			<< new_descriptor_set_layout << ")\n";
+		return new_descriptor_set_layout;
+	}
+
+	// Create a descriptor set
+	VkDescriptorSet make_descriptor_set(VkDescriptorPool dpool, VkDescriptorSetLayout dsl) const {
+		// Descriptor set to return
+		VkDescriptorSet new_descriptor_set = VK_NULL_HANDLE;
+
+		// Descriptor set creation info
+		VkDescriptorSetAllocateInfo alloc_info = {
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+			.descriptorPool = dpool,
+			.descriptorSetCount = 1,
+			.pSetLayouts = &dsl
+		};
+
+		// Creation
+		VkResult result = vkAllocateDescriptorSets(
+			device, &alloc_info,
+			&new_descriptor_set
+		);
+
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan] Failed to allocate descriptor sets");
+			throw(-1);
+		}
+
+		// Log creation and return
+		Logger::ok() << "[Vulkan] Descriptor set created (VkDescriptorSet="
+			<< new_descriptor_set << ")\n";
+		return new_descriptor_set;
+	}
 
 	// Getters
 	VkPhysicalDeviceProperties phdev_props() const;

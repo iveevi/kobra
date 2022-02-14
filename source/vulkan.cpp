@@ -286,6 +286,85 @@ void Vulkan::map_buffer(Buffer *buffer, void *data, size_t size)
 // Swapchain methods //
 ///////////////////////
 
+// Fill image views
+void Vulkan::_make_image_views(Swapchain &swch) const
+{
+	// Resize first
+	swch.image_views.resize(swch.images.size());
+
+	// Fill with new image views
+	for (size_t i = 0; i < swch.images.size(); i++) {
+		// Creation info
+		VkImageViewCreateInfo create_info {
+			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+			.image = swch.images[i],
+			.viewType = VK_IMAGE_VIEW_TYPE_2D,
+			.format = swch.image_format,
+			.components = {
+				.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+				.g = VK_COMPONENT_SWIZZLE_IDENTITY,
+				.b = VK_COMPONENT_SWIZZLE_IDENTITY,
+				.a = VK_COMPONENT_SWIZZLE_IDENTITY
+			},
+			.subresourceRange = {
+				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+				.baseMipLevel = 0,
+				.levelCount = 1,
+				.baseArrayLayer = 0,
+				.layerCount = 1
+			}
+		};
+
+		// Create image view
+		VkResult result = vkCreateImageView(
+			device, &create_info,
+			nullptr, &swch.image_views[i]
+		);
+
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan] Failed to create image view!");
+			throw (-1);
+		}
+	}
+}
+
+// Create framebuffers
+void Vulkan::make_framebuffers(Swapchain &swch, VkRenderPass rpass) const
+{
+	// Resize first
+	swch.framebuffers.resize(swch.image_views.size());
+
+	// Fill with new framebuffers
+	for (size_t i = 0; i < swch.image_views.size(); i++) {
+		// Arrange attachments
+		VkImageView attachments[] = {
+			swch.image_views[i]
+		};
+
+		// Create framebuffer
+		VkFramebufferCreateInfo framebuffer_info {
+			.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+			.renderPass = rpass,
+			.attachmentCount = 1,
+			.pAttachments = attachments,
+			.width = swch.extent.width,
+			.height = swch.extent.height,
+			.layers = 1
+		};
+
+		// Safely create framebuffer
+		VkResult result = vkCreateFramebuffer(
+			device, &framebuffer_info,
+			nullptr, &swch.framebuffers[i]
+		);
+
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan] Failed to create framebuffer!");
+			throw(-1);
+		}
+	}
+}
+
 // TODO: should pass number of frames in fligh
 Vulkan::Swapchain Vulkan::make_swapchain(const Surface &surface)
 {
@@ -371,11 +450,121 @@ Vulkan::Swapchain Vulkan::make_swapchain(const Surface &surface)
 	swch.image_format = surface_format.format;
 	swch.extent = extent;
 
+	// Fill out image views
+	_make_image_views(swch);
+
 	// Log creation and return
 	Logger::ok() << "[Vulkan] Swapchain created (VkSwapchain="
 		<< swch.swch << ")" << std::endl;
 
 	return swch;
+}
+
+/////////////////////////
+// Render pass methods //
+/////////////////////////
+
+// Create render pass
+VkRenderPass Vulkan::make_render_pass(const Swapchain &swch,
+		VkAttachmentLoadOp load_op,
+		VkAttachmentStoreOp store_op,
+		VkImageLayout initial_layout,
+		VkImageLayout final_layout) const
+{
+	// Render pass to return
+	VkRenderPass new_render_pass = VK_NULL_HANDLE;
+
+	// Create attachment description
+	VkAttachmentDescription color_attachment {
+		.format = swch.image_format,
+		.samples = VK_SAMPLE_COUNT_1_BIT,
+		.loadOp = load_op,
+		.storeOp = store_op,
+		.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+		.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+		.initialLayout = initial_layout,
+		.finalLayout = final_layout
+	};
+
+	// Create attachment reference
+	VkAttachmentReference color_attachment_ref {
+		.attachment = 0,
+		.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+	};
+
+	// Subpasses and dependencies
+	VkSubpassDescription subpass {
+		.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+		.colorAttachmentCount = 1,
+		.pColorAttachments = &color_attachment_ref
+	};
+
+	VkSubpassDependency dependency {
+		.srcSubpass = VK_SUBPASS_EXTERNAL,
+		.dstSubpass = 0,
+		.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+		.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+		.srcAccessMask = 0,
+		.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
+			| VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+	};
+
+	// Create render pass
+	VkRenderPassCreateInfo render_pass_info {
+		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+		.attachmentCount = 1,
+		.pAttachments = &color_attachment,
+		.subpassCount = 1,
+		.pSubpasses = &subpass,
+		.dependencyCount = 1,
+		.pDependencies = &dependency
+	};
+
+	VkResult result = vkCreateRenderPass(
+		device, &render_pass_info,
+		nullptr, &new_render_pass
+	);
+
+	if (result != VK_SUCCESS) {
+		Logger::error("[Vulkan] Failed to create render pass!");
+		throw(-1);
+	}
+
+	// Log creation
+	Logger::ok() << "[Vulkan] Render pass created (VkRenderPass="
+		<< render_pass << ")\n";
+
+	return new_render_pass;
+}
+
+// Start and end a render pass
+void Vulkan::begin_render_pass(VkCommandBuffer cmd_buffer,
+		VkFramebuffer framebuffer,
+		VkRenderPass render_pass,
+		VkExtent2D extent,
+		uint32_t clear_count,
+		VkClearValue *clear_values) const
+{
+	// Begin the render pass
+	VkRenderPassBeginInfo render_pass_begin_info {
+		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+		.renderPass = render_pass,
+		.framebuffer = framebuffer,
+		.renderArea = {
+			.offset = { 0, 0 },
+			.extent = extent
+		},
+		.clearValueCount = clear_count,
+		.pClearValues = clear_values
+	};
+
+	vkCmdBeginRenderPass(cmd_buffer, &render_pass_begin_info,
+		VK_SUBPASS_CONTENTS_INLINE);
+}
+
+void Vulkan::end_render_pass(VkCommandBuffer cmd_buffer) const
+{
+	vkCmdEndRenderPass(cmd_buffer);
 }
 
 /////////////

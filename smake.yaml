@@ -21,7 +21,7 @@ builds:
       thirdparty/imgui,
       thirdparty/assimp/include'
     - flags: '-O3 -std=c++17'
-    - libraries: glfw, vulkan, assimp 
+    - libraries: glfw, vulkan, assimp, pthread 
   - mercury_debug:
     - sources: 'mercury_source,
       thirdparty/imgui/imgui.cpp,
