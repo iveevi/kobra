@@ -304,7 +304,7 @@ void main()
 	uint xsize = gl_NumWorkGroups.x;
 
 	vec2 dimensions = vec2(world.width, world.height);
-	for (uint y = y0; y < world.height; y += ysize) {
+	/* for (uint y = y0; y < world.height; y += ysize) {
 		for (uint x = x0; x < world.width; x += xsize) {
 			uint index = y * world.width + x;
 			
@@ -335,12 +335,13 @@ void main()
 			// Set pixel color
 			frame.pixels[index] = cast_color(sum);
 		}
-	}
+	} */
 			
-	/* uint index = y0 * world.width + x0;
+	uint index = y0 * world.width + x0;
 		
 	// Sample ray
-	vec2 point = vec2(x0 + 0.5, y0 + 0.5) + offsets[s];
+	// TODO: use z index for sample offset index
+	vec2 point = vec2(x0 + 0.5, y0 + 0.5) + offsets[0];
 
 	vec2 uv = point / dimensions;
 	Ray ray = make_ray(
@@ -355,5 +356,5 @@ void main()
 	vec3 color = color_at(ray);
 
 	// Set pixel color
-	frame.pixels[index] = cast_color(color); */
+	frame.pixels[index] = cast_color(color);
 }

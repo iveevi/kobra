@@ -503,10 +503,9 @@ public:
 
 		// Create sync objects
 		// TODO: use max frames in flight
+		images_in_flight.resize(swapchain.images.size(), VK_NULL_HANDLE);
 		for (size_t i = 0; i < 2; i++) {
 			in_flight_fences.push_back(ctx->make_fence(VK_FENCE_CREATE_SIGNALED_BIT));
-			images_in_flight.push_back(VK_NULL_HANDLE);
-			// images_in_flight.push_back(ctx->make_fence(VK_FENCE_CREATE_SIGNALED_BIT));
 			smph_image_available.push_back(ctx->make_semaphore());
 			smph_render_finished.push_back(ctx->make_semaphore());
 		}
