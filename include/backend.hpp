@@ -54,6 +54,13 @@ public:
 		VkSurfaceKHR	surface;
 	};
 
+	// Logical device structure
+	struct Device {
+		VkDevice	device;
+		VkQueue		graphics_queue;
+		VkQueue		present_queue;
+	};
+
 	// Swapchain structure
 	struct Swapchain {
 		// Variables
@@ -914,6 +921,7 @@ private:
 		return ext;
 	}
 
+	// TODO: depreciate
 	SwapchainSupport _query_swch_support(VkPhysicalDevice device) {
 		SwapchainSupport details;
 
@@ -954,7 +962,49 @@ private:
 
 		return details;
 	}
+	
+	SwapchainSupport _query_swch_support(const VkPhysicalDevice &device, const Surface &surface) const {
+		SwapchainSupport details;
 
+		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+			device, surface.surface,
+			&details.capabilities
+		);
+
+		uint32_t format_count;
+		vkGetPhysicalDeviceSurfaceFormatsKHR(
+			device, surface.surface,
+			&format_count, nullptr
+		);
+
+		if (format_count != 0) {
+			details.formats.resize(format_count);
+			vkGetPhysicalDeviceSurfaceFormatsKHR(
+				device, surface.surface,
+				&format_count,
+				details.formats.data()
+			);
+		}
+
+		uint32_t present_mode_count;
+		vkGetPhysicalDeviceSurfacePresentModesKHR(
+			device, surface.surface,
+			&present_mode_count, nullptr
+		);
+
+		if (present_mode_count != 0) {
+			details.present_modes.resize(present_mode_count);
+			vkGetPhysicalDeviceSurfacePresentModesKHR(
+				device, surface.surface,
+				&present_mode_count,
+				details.present_modes.data()
+			);
+		}
+
+		return details;
+	}
+
+	// TODO: depreciate this overload
 	bool isDeviceSuitable(VkPhysicalDevice device) {
 		QueueFamilyIndices indices = _find_queue_families(device);
 
@@ -969,7 +1019,23 @@ private:
 		return indices && extensionsSupported && swchAdequate;
 	}
 
-	bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
+	bool _check_device_suitability(const VkPhysicalDevice &device, const Surface &surface) const {
+		QueueFamilyIndices indices = _find_queue_families(device, surface);
+
+		bool extensions_supported = checkDeviceExtensionSupport(device);
+		bool swch_adequate = false;
+
+		if (extensions_supported) {
+			SwapchainSupport swch_support = _query_swch_support(device, surface);
+			swch_adequate = !swch_support.formats.empty()
+				&& !swch_support.present_modes.empty();
+		}
+
+		return indices && extensions_supported && swch_adequate;
+	}
+
+	// TODO: refactor
+	bool checkDeviceExtensionSupport(const VkPhysicalDevice &device) const {
 		uint32_t extensionCount;
 		vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
 
@@ -1009,6 +1075,44 @@ private:
 			VkBool32 present_support = false;
 			vkGetPhysicalDeviceSurfaceSupportKHR(
 				device, i, surface,
+				&present_support
+			);
+			
+			if (present_support)
+				indices.present = i;
+
+			// Early quit
+			if (indices)
+				break;
+		}
+
+		return indices;
+	}
+	
+	QueueFamilyIndices _find_queue_families(const VkPhysicalDevice &device, const Surface &surface) const {
+		// Structure to return
+		QueueFamilyIndices indices;
+
+		// Get count and fill vector
+		uint32_t qfc = 0;
+		vkGetPhysicalDeviceQueueFamilyProperties(
+			device, &qfc, nullptr
+		);
+
+		std::vector <VkQueueFamilyProperties> qfs(qfc);
+		vkGetPhysicalDeviceQueueFamilyProperties(
+			device, &qfc, qfs.data()
+		);
+
+		for (int i = 0; i < qfs.size(); i++) {
+			// Check graphics supports
+			if (qfs[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+				indices.graphics = i;
+
+			// Check present support
+			VkBool32 present_support = false;
+			vkGetPhysicalDeviceSurfaceSupportKHR(
+				device, i, surface.surface,
 				&present_support
 			);
 			
@@ -1858,6 +1962,118 @@ public:
 		Logger::ok() << "[Vulkan] Descriptor set created (VkDescriptorSet="
 			<< new_descriptor_set << ")\n";
 		return new_descriptor_set;
+	}
+
+	// Device creation
+	VkPhysicalDevice select_phdev(const Surface &surface) const {
+		// Physical device to return
+		VkPhysicalDevice new_physical_device = VK_NULL_HANDLE;
+	
+		// Get the number of physical devices
+		uint32_t device_count = 0;
+		vkEnumeratePhysicalDevices(
+			instance,
+			&device_count,
+			nullptr
+		);
+
+		if (device_count == 0) {
+			Logger::error("[Vulkan] No physical devices found!");
+			throw(-1);
+		}
+
+		// Get the physical devices
+		std::vector <VkPhysicalDevice> devices(device_count);
+		vkEnumeratePhysicalDevices(
+			instance,
+			&device_count,
+			devices.data()
+		);
+
+		for (const auto &device : devices) {
+			if (_check_device_suitability(device, surface)) {
+				new_physical_device = device;
+				break;
+			}
+		}
+
+		if (new_physical_device == VK_NULL_HANDLE)
+			Logger::warn("[Vulkan] Failed to find a suitable GPU!");
+
+		// Log creation and return
+		Logger::ok() << "[Vulkan] Physical device selected (VkPhysicalDevice="
+			<< new_physical_device << ")\n";
+		return new_physical_device;
+	}
+
+	Device make_device(const VkPhysicalDevice &phdev, const Surface &surface) const {
+		// Device to return
+		Device new_device {
+			.device = VK_NULL_HANDLE,
+			.graphics_queue = VK_NULL_HANDLE,
+			.present_queue = VK_NULL_HANDLE
+		};
+		
+		// Queue family indices
+		QueueFamilyIndices indices = _find_queue_families(phdev, surface);
+
+		std::vector <VkDeviceQueueCreateInfo> queue_create_infos;
+		std::set <uint32_t> unique_queue_families = {
+			indices.graphics.value(),
+			indices.present.value()
+		};
+
+		float queue_priority = 1.0f;
+		for (uint32_t queue_family : unique_queue_families) {
+			VkDeviceQueueCreateInfo queue_create_info {
+				.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+				.queueFamilyIndex = queue_family,
+				.queueCount = 1,
+				.pQueuePriorities = &queue_priority
+			};
+
+			queue_create_infos.push_back(queue_create_info);
+		}
+
+		VkPhysicalDeviceFeatures device_features {};
+		VkDeviceCreateInfo create_info {
+			.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+			.queueCreateInfoCount = (uint32_t) queue_create_infos.size(),
+			.pQueueCreateInfos = queue_create_infos.data(),
+			.enabledExtensionCount = (uint32_t) device_extensions.size(),
+			.ppEnabledExtensionNames = device_extensions.data(),
+			.pEnabledFeatures = &device_features
+		};
+
+		if (enable_validation_layers) {
+			create_info.enabledLayerCount = static_cast <uint32_t> (validation_layers.size());
+			create_info.ppEnabledLayerNames = validation_layers.data();
+		} else {
+			create_info.enabledLayerCount = 0;
+		}
+
+		if (vkCreateDevice(phdev, &create_info, nullptr, &new_device.device) != VK_SUCCESS) {
+			Logger::error("[Vulkan] Failed to create logical device!");
+			throw(-1);
+		}
+
+		// Create the device queues
+		vkGetDeviceQueue(
+			new_device.device,
+			indices.graphics.value(),
+			0, &new_device.graphics_queue
+		);
+
+		vkGetDeviceQueue(
+			new_device.device,
+			indices.present.value(),
+			0, &new_device.present_queue
+		);
+
+		// Log creation and return
+		Logger::ok() << "[Vulkan] Device created (VkDevice="
+			<< new_device.device << ")\n";
+		return new_device;
 	}
 
 	// Getters

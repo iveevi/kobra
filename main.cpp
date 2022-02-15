@@ -277,6 +277,9 @@ void allocate_buffers(Vulkan &vulkan)
 // App
 class SampleScene : public mercury::App {
 	// TODO: some of these member should be moved back to App
+	VkPhysicalDevice		physical_device; // TODO: goes to App
+	Vulkan::Device			device;
+
 	VkRenderPass			render_pass;
 	VkCommandPool			command_pool;
 
@@ -472,6 +475,12 @@ public:
 		.height = 600,
 		.name = "Mercury - Sample Scene",
 	}) {
+		// Select the physical device
+		physical_device = ctx->select_phdev(surface);
+
+		// Create a logical device
+		device = ctx->make_device(physical_device, surface);
+
 		// Create render pass
 		render_pass = ctx->make_render_pass(
 			VK_ATTACHMENT_LOAD_OP_LOAD,
@@ -537,8 +546,10 @@ public:
 		}
 
 		// Update time
-		ImGuiIO &io = ImGui::GetIO();
-		time += io.DeltaTime;
+		// ImGuiIO &io = ImGui::GetIO();
+		// time += io.DeltaTime;
+		time += 0.01f;
+		// TODO: use delta time from App class
 	}
 
 	// Present the frame
@@ -839,17 +850,17 @@ int main()
 	// Redirect logger to file
 	// Logger::switch_file("mercury.log");
 
-	mercury::Model <VERTEX_TYPE_POSITION> model("resources/suzanne.obj");
+	/* mercury::Model <VERTEX_TYPE_POSITION> model("resources/suzanne.obj");
 	model[0] = materials[2];
 
-	/* world.objects.push_back(std::shared_ptr <mercury::Model <VERTEX_TYPE_POSITION>> (
+	world.objects.push_back(std::shared_ptr <mercury::Model <VERTEX_TYPE_POSITION>> (
 		new mercury::Model <VERTEX_TYPE_POSITION> (model)
-	)); */
+	));
 
 	Logger::ok() << "[main] Loaded model with "
 		<< model.mesh_count() << " meshe(s), "
 		<< model.mesh(0).vertex_count() << " vertices, "
-		<< model.mesh(0).triangle_count() << " triangles" << std::endl;
+		<< model.mesh(0).triangle_count() << " triangles" << std::endl; */
 
 	// Initialize Vulkan
 	Vulkan vulkan;
@@ -860,7 +871,7 @@ int main()
 	// Create sample scene
 	SampleScene scene(&vulkan);
 
-	// Compute shader descriptor
+	/* Compute shader descriptor
 	compute_shader = vulkan.make_shader("shaders/pixel.spv");
 
 	// Add shader to deletion queue'
@@ -869,26 +880,7 @@ int main()
 			vkDestroyShaderModule(vk->device, compute_shader, nullptr);
 			Logger::ok("[main] Deleted compute shader");
 		}
-	);
-
-	// Buffer descriptor
-	for (size_t i = 0; i < vulkan.swch_images.size(); i++)
-		descriptor_set_maker(&vulkan, i);
-
-	// Set keyboard callback
-	// glfwSetKeyCallback(vulkan.window, key_callback);
-
-	// Mouse options
-	// glfwSetInputMode(vulkan.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-
-	// Set mouse callback
-	// glfwSetCursorPosCallback(vulkan.window, mouse_callback);
-	
-	vulkan.set_command_buffers(cmd_buffer_maker);
-
-	// ImGui and IO
-	vulkan.init_imgui();
-	ImGuiIO &io = ImGui::GetIO();
+	); */
 
 	scene.update_descriptor_set();
 	scene.update_command_buffers();
