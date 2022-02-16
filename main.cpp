@@ -106,7 +106,7 @@ static const size_t MAX_OBJECT_SIZE = sizeof(Triangle);
 static const size_t MAX_LIGHT_SIZE = sizeof(PointLight);
 
 // App
-class SampleScene : public mercury::App {
+class MercuryApplication : public mercury::App {
 	// TODO: some of these member should be moved back to App
 	VkRenderPass			render_pass;
 	VkCommandPool			command_pool;
@@ -474,7 +474,7 @@ class SampleScene : public mercury::App {
 	}
 public:
 	// Constructor
-	SampleScene(Vulkan *vk) : mercury::App({
+	MercuryApplication(Vulkan *vk) : mercury::App({
 		.ctx = vk,
 		.width = 800,
 		.height = 600,
@@ -694,7 +694,7 @@ public:
 		profiler.end();
 
 		auto frame = profiler.pop();
-		std::cout << mercury::Profiler::pretty(frame) << std::endl;
+		// std::cout << mercury::Profiler::pretty(frame) << std::endl;
 	}
 
 	void update_command_buffers() {
@@ -812,7 +812,7 @@ public:
 	static const std::vector <VkDescriptorSetLayoutBinding> dsl_bindings;
 };
 
-const std::vector <VkDescriptorSetLayoutBinding> SampleScene::dsl_bindings = {
+const std::vector <VkDescriptorSetLayoutBinding> MercuryApplication::dsl_bindings = {
 	VkDescriptorSetLayoutBinding {
 		.binding = 0,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -872,26 +872,14 @@ int main()
 		<< model.mesh(0).triangle_count() << " triangles" << std::endl; */
 
 	// Initialize Vulkan
-	Vulkan vulkan;
-
-	// Initialize the buffers
-	// allocate_buffers(vulkan);
+	Vulkan *vulkan = new Vulkan();
 
 	// Create sample scene
-	SampleScene scene(&vulkan);
-
-	/* Compute shader descriptor
-	compute_shader = vulkan.make_shader("shaders/pixel.spv");
-
-	// Add shader to deletion queue'
-	vulkan.push_deletion_task(
-		[&](Vulkan *vk) {
-			vkDestroyShaderModule(vk->device, compute_shader, nullptr);
-			Logger::ok("[main] Deleted compute shader");
-		}
-	); */
+	MercuryApplication scene(vulkan);
 
 	scene.update_descriptor_set();
 	scene.update_command_buffers();
 	scene.run();
+
+	delete vulkan;
 }

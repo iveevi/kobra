@@ -391,6 +391,7 @@ Vulkan::Swapchain Vulkan::make_swapchain(
 	);
 
 	VkExtent2D extent = _choose_swch_extent(
+		surface,
 		swch_support.capabilities
 	);
 

@@ -61,7 +61,7 @@ public:
 
 	// Run application
 	void run() {
-		while (!glfwWindowShouldClose(ctx->window)) {
+		while (!glfwWindowShouldClose(surface.window)) {
 			frame();
 
 			// TODO: mod by max frames in flight

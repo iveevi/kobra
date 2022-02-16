@@ -90,7 +90,7 @@ public:
 	/////////////////////
 	
 	// GLFW window
-	GLFWwindow *window;
+	// GLFWwindow *window;
 
 	// Vulkan basic context
 	VkInstance instance;
@@ -904,12 +904,12 @@ private:
 		return VK_PRESENT_MODE_IMMEDIATE_KHR;
 	}
 
-	VkExtent2D _choose_swch_extent(const VkSurfaceCapabilitiesKHR &capabilities) {
+	VkExtent2D _choose_swch_extent(const Surface &surface, const VkSurfaceCapabilitiesKHR &capabilities) {
 		if (capabilities.currentExtent.width != UINT32_MAX)
 			return capabilities.currentExtent;
 	
 		int width, height;
-		glfwGetFramebufferSize(window, &width, &height);
+		glfwGetFramebufferSize(surface.window, &width, &height);
 
 		VkExtent2D ext = {
 			static_cast <uint32_t> (width),
