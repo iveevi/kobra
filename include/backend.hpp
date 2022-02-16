@@ -30,6 +30,8 @@ const uint32_t HEIGHT = 600;
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
+// TODO: aux class which stores device and physcial device
+// (and other per device objects)
 class Vulkan {
 public:
 	///////////////////////
@@ -93,7 +95,7 @@ public:
 	// Vulkan basic context
 	VkInstance instance;
 	
-	VkSurfaceKHR surface;
+	/* VkSurfaceKHR surface;
 
 	VkPhysicalDevice physical_device = VK_NULL_HANDLE;
 	VkDevice device;
@@ -132,7 +134,7 @@ public:
 	// Descriptor sets
 	DSLayout			ds_layout;
 	std::vector <DSLayout>		descriptor_set_layouts;
-	std::vector <DS>		descriptor_sets;
+	std::vector <DS>		descriptor_sets; */
 private:
 
 	// Internal structures
@@ -183,7 +185,7 @@ private:
 
 #endif
 
-	void _init_window() {
+	/* void _init_window() {
 		glfwInit();
 
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -194,7 +196,7 @@ private:
 			window,
 			framebuffer_resize_callback
 		);
-	}
+	} */
 
 	static void framebuffer_resize_callback(GLFWwindow* window, int width, int height) {
 		auto app = reinterpret_cast <Vulkan*> (
@@ -208,7 +210,8 @@ private:
 	void _init_vulkan() {
 		_mk_instance();
 		_setup_debug_messenger();
-		_mk_surface();
+		
+		/* _mk_surface();
 		_pick_phdev();
 		_mk_logical_device();
 
@@ -222,12 +225,13 @@ private:
 		_mk_sync_objects();
 		_mk_descriptor_set_layout();
 		_mk_descriptor_pool();
-		_mk_descriptor_sets();
+		_mk_descriptor_sets(); */
 	}
 
 	// TODO: modifiable by the user
 	// TODO: method to set default layout, and rebuild descriptor sets
-	void _mk_descriptor_set_layout() {
+	
+	/* void _mk_descriptor_set_layout() {
 		// Binding info
 		VkDescriptorSetLayoutBinding compute_bindings_1 {
 			.binding = 0,
@@ -357,13 +361,13 @@ private:
 			Logger::error("[Vulkan] Failed to allocate descriptor sets");
 			throw(-1);
 		}
-	}
+	} */
 
 	//////////////////////
 	// Cleanup routines //
 	//////////////////////
 
-	void _cleanup_swapchain() {
+	/* void _cleanup_swapchain() {
 		for (auto framebuffer : swch_framebuffers)
 			vkDestroyFramebuffer(device, framebuffer, nullptr);
 
@@ -386,11 +390,11 @@ private:
 			vkDestroyBuffer(device, buffer.buffer, nullptr);
 			vkFreeMemory(device, buffer.memory, nullptr);
 		}
-	}
+	} */
 
 	void cleanup() {
 		// Destroy the swapchain
-		_cleanup_swapchain();
+		// _cleanup_swapchain();
 
 		// Destroy descriptor pool
 		// vkDestroyDescriptorPool(device, descriptor_pool, nullptr);
@@ -399,7 +403,7 @@ private:
 		for (auto layout : descriptor_set_layouts)
 			vkDestroyDescriptorSetLayout(device, layout, nullptr); */
 
-		// Destroy descriptor sets
+		/* Destroy descriptor sets
 		for (auto set : descriptor_sets)
 			vkFreeDescriptorSets(device, descriptor_pool, 1, &set);
 
@@ -410,7 +414,7 @@ private:
 			vkDestroyFence(device, in_flight_fences[i], nullptr);
 		}
 
-		vkDestroyCommandPool(device, command_pool, nullptr);
+		vkDestroyCommandPool(device, command_pool, nullptr); */
 
 		// Run all deletion tasks
 		for (auto &task : _deletion_tasks)
@@ -418,7 +422,7 @@ private:
 
 		// _cleanup_buffers();
 
-		vkDestroyDevice(device, nullptr);
+		// vkDestroyDevice(device, nullptr);
 
 		if (enable_validation_layers) {
 			_delete_debug_messenger(
@@ -427,16 +431,18 @@ private:
 			);
 		}
 
-		vkDestroySurfaceKHR(instance, surface, nullptr);
+		// vkDestroySurfaceKHR(instance, surface, nullptr);
 		vkDestroyInstance(instance, nullptr);
 
 		// Destroy GLFW window
-		glfwDestroyWindow(window);
+		// glfwDestroyWindow(window);
 
 		// End GLFW
 		glfwTerminate();
 	}
 
+	// TODO: make an alternate overload
+	/*
 	void _remk_swapchain() {
 		// TODO: method to returnn window size
 		int width = 0, height = 0;
@@ -464,7 +470,7 @@ private:
 			swch_images.size(),
 			VK_NULL_HANDLE
 		);
-	}
+	} */
 
 	void _mk_instance() {
 		if (enable_validation_layers && !_check_validation_layer_support()) {
@@ -525,7 +531,7 @@ private:
 		}
 	}
 
-	void _mk_surface() {
+	/* void _mk_surface() {
 		VkResult result = glfwCreateWindowSurface(
 			instance, window,
 			nullptr, &surface
@@ -694,12 +700,12 @@ private:
 				throw (-1);
 			}
 		}
-	}
+	} */
 
-	void _make_image_views(Swapchain &) const;
+	void _make_image_views(const Device &, Swapchain &) const;
 
 	// TODO: depreciate
-	void _mk_render_pass() {
+	/* void _mk_render_pass() {
 		// Create attachment description
 		VkAttachmentDescription color_attachment {
 			.format = swch_image_format,
@@ -810,13 +816,15 @@ private:
 			Logger::error("[Vulkan] Failed to create command pool!");
 			throw(-1);
 		}
-	}
+	} */
 
 	// Find memory type for a given type and properties
-	uint32_t _find_memory_type(uint32_t type_filter, VkMemoryPropertyFlags properties) {
+	uint32_t _find_memory_type(const VkPhysicalDevice &phdev,
+			uint32_t type_filter,
+			VkMemoryPropertyFlags properties) {
 		VkPhysicalDeviceMemoryProperties mem_props;
 		vkGetPhysicalDeviceMemoryProperties(
-			physical_device, &mem_props
+			phdev, &mem_props
 		);
 
 		for (uint32_t i = 0; i < mem_props.memoryTypeCount; i++) {
@@ -829,7 +837,7 @@ private:
 		throw(-1);
 	}
 
-	void _mk_command_buffers() {
+	/* void _mk_command_buffers() {
 		// Resize command buffers
 		command_buffers.resize(swch_framebuffers.size());
 
@@ -872,7 +880,7 @@ private:
 				throw std::runtime_error("failed to create synchronization objects for a frame!");
 			}
 		}
-	}
+	} */
 
 	VkSurfaceFormatKHR _choose_swch_surface_format(const std::vector <VkSurfaceFormatKHR> &fmts) {
 		for (const auto &fmt : fmts) {
@@ -922,7 +930,7 @@ private:
 	}
 
 	// TODO: depreciate
-	SwapchainSupport _query_swch_support(VkPhysicalDevice device) {
+	/* SwapchainSupport _query_swch_support(VkPhysicalDevice device) {
 		SwapchainSupport details;
 
 		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
@@ -961,7 +969,7 @@ private:
 		}
 
 		return details;
-	}
+	} */
 	
 	SwapchainSupport _query_swch_support(const VkPhysicalDevice &device, const Surface &surface) const {
 		SwapchainSupport details;
@@ -1005,7 +1013,7 @@ private:
 	}
 
 	// TODO: depreciate this overload
-	bool isDeviceSuitable(VkPhysicalDevice device) {
+	/* bool isDeviceSuitable(VkPhysicalDevice device) {
 		QueueFamilyIndices indices = _find_queue_families(device);
 
 		bool extensionsSupported = checkDeviceExtensionSupport(device);
@@ -1017,7 +1025,7 @@ private:
 		}
 
 		return indices && extensionsSupported && swchAdequate;
-	}
+	} */
 
 	bool _check_device_suitability(const VkPhysicalDevice &device, const Surface &surface) const {
 		QueueFamilyIndices indices = _find_queue_families(device, surface);
@@ -1051,7 +1059,7 @@ private:
 		return requiredExtensions.empty();
 	}
 
-	QueueFamilyIndices _find_queue_families(VkPhysicalDevice device) {
+	/* QueueFamilyIndices _find_queue_families(VkPhysicalDevice device) {
 		// Structure to return
 		QueueFamilyIndices indices;
 
@@ -1087,7 +1095,7 @@ private:
 		}
 
 		return indices;
-	}
+	} */
 	
 	QueueFamilyIndices _find_queue_families(const VkPhysicalDevice &device, const Surface &surface) const {
 		// Structure to return
@@ -1133,6 +1141,7 @@ private:
 		glfw_exts = glfwGetRequiredInstanceExtensions(&glfw_ext_count);
 
 		std::vector <const char *> extensions(glfw_exts, glfw_exts + glfw_ext_count);
+		extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
 
 		if (enable_validation_layers)
 			extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -1171,7 +1180,7 @@ private:
 	}
 
 	// Create a shader from glob
-	VkShaderModule _mk_shader_module(const Glob &code) {
+	VkShaderModule _mk_shader_module(const Device &device, const Glob &code) {
 		// Creation info
 		VkShaderModuleCreateInfo create_info {
 			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -1184,7 +1193,7 @@ private:
 		VkShaderModule shader_module;
 
 		VkResult result = vkCreateShaderModule(
-			device, &create_info,
+			device.device, &create_info,
 			nullptr, &shader_module
 		);
 
@@ -1200,8 +1209,11 @@ private:
 	// ImGui initialization //
 	//////////////////////////
 
+	// TODO: public method
+
 	// TODO: separate from this backend class
-	VkDescriptorPool imgui_pool;
+	
+	/*VkDescriptorPool imgui_pool;
 	VkCommandPool imgui_cmd_pool;
 	VkCommandBuffer imgui_cmd_buffer;
 	VkRenderPass imgui_render_pass;
@@ -1337,7 +1349,7 @@ private:
 
 		imgui_semaphore = make_semaphore();
 		imgui_fence = make_fence();
-	}
+	} */
 
 	/////////////////////////////////////
 	// Debugging and validation layers //
@@ -1433,7 +1445,11 @@ private:
 public:
 	// TODO: create a GLFW class and pass it to the constructor
 	Vulkan() {
-		_init_window();
+		// _init_window();
+		// TODO: initglfw function
+		glfwInit();
+		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+		
 		_init_vulkan();
 		Logger::ok("[Vulkan] Vulkan instance completely initialized");
 	}
@@ -1443,10 +1459,11 @@ public:
 	}
 
 	// Extra initialization
-	void init_imgui() {
+	// TODO: another overload
+	/* void init_imgui() {
 		_init_imgui();
 		Logger::ok("[Vulkan] ImGui initialized");
-	}
+	} */
 
 	// Destructor tasks
 	void push_deletion_task(const DeletionTask &task) {
@@ -1454,11 +1471,11 @@ public:
 	}
 
 	// Render a frame
-	void frame();
+	// void frame();
 
 	// Set command buffer for each frame
 	// TODO: depcreiate this overload
-	void set_command_buffers(CommandBufferMaker cbm) {
+	/* void set_command_buffers(CommandBufferMaker cbm) {
 		// Resize command buffers
 		command_buffers.resize(swch_framebuffers.size());
 
@@ -1505,9 +1522,10 @@ public:
 				throw(-1);
 			}
 		}
-	}
+	} */
 
-	void set_command_buffers(const Swapchain &swch,
+	void set_command_buffers(const Device &device,
+			const Swapchain &swch,
 			VkCommandPool cpool,
 			std::vector <VkCommandBuffer> &buffers,
 			CommandBufferMaker maker) const {
@@ -1524,7 +1542,7 @@ public:
 
 		// Allocate the command buffers
 		VkResult result = vkAllocateCommandBuffers(
-			device, &alloc_info,
+			device.device, &alloc_info,
 			buffers.data()
 		);
 
@@ -1533,7 +1551,7 @@ public:
 			throw(-1);
 		}
 
-		for (size_t i = 0; i < command_buffers.size(); i++) {
+		for (size_t i = 0; i < buffers.size(); i++) {
 			// Command buffer creation info
 			VkCommandBufferBeginInfo begin_info {
 				.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
@@ -1566,14 +1584,14 @@ public:
 	
 	// Allocate shader
 	// TODO: wrap in struct?
-	VkShaderModule make_shader(const std::string &path) {
+	VkShaderModule make_shader(const Device &device, const std::string &path) {
 		Glob g = _read_file(path);
-		return _mk_shader_module(g);
+		return _mk_shader_module(device, g);
 	}
 
 	// Create a command buffer
 	// TODO: pass level
-	VkCommandBuffer make_command_buffer(VkCommandPool cmd_pool) {
+	VkCommandBuffer make_command_buffer(const Device &device, VkCommandPool cmd_pool) {
 		VkCommandBufferAllocateInfo alloc_info {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
 			.commandPool = cmd_pool,
@@ -1584,7 +1602,7 @@ public:
 		VkCommandBuffer command_buffer;
 
 		VkResult result = vkAllocateCommandBuffers(
-			device, &alloc_info, &command_buffer
+			device.device, &alloc_info, &command_buffer
 		);
 
 		if (result != VK_SUCCESS) {
@@ -1596,7 +1614,7 @@ public:
 	}
 
 	// Creating multiple command buffers
-	void make_command_buffers(VkCommandPool command_pool, std::vector <VkCommandBuffer> &buffers, size_t size) const {
+	void make_command_buffers(const Device &device, VkCommandPool command_pool, std::vector <VkCommandBuffer> &buffers, size_t size) const {
 		// Fill command buffer info
 		VkCommandBufferAllocateInfo alloc_info {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -1608,7 +1626,7 @@ public:
 		// Allocate the command buffers
 		VkCommandBuffer command_buffer;
 		VkResult result = vkAllocateCommandBuffers(
-			device, &alloc_info, buffers.data()
+			device.device, &alloc_info, buffers.data()
 		);
 
 		// Check for errors
@@ -1642,7 +1660,7 @@ public:
 	}
 
 	// Submit a command buffer
-	void submit_command_buffer(VkCommandBuffer command_buffer) {
+	void submit_command_buffer(const Device &device, VkCommandBuffer command_buffer) {
 		VkSubmitInfo submit_info {
 			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
 			.commandBufferCount = 1,
@@ -1650,7 +1668,7 @@ public:
 		};
 
 		VkResult result = vkQueueSubmit(
-			graphics_queue, 1, &submit_info, VK_NULL_HANDLE
+			device.graphics_queue, 1, &submit_info, VK_NULL_HANDLE
 		);
 
 		if (result != VK_SUCCESS) {
@@ -1661,13 +1679,13 @@ public:
 	
 	// Buffer methods
 	// TODO: pass buffer propreties as a struct
-	void make_buffer(Buffer &, size_t, VkBufferUsageFlags);
-	void destroy_buffer(Buffer &);
-	void map_buffer(Buffer *, void *, size_t);
+	void make_buffer(const VkPhysicalDevice &, const Device &, Buffer &, size_t, VkBufferUsageFlags);
+	void destroy_buffer(const Device &, Buffer &);
+	void map_buffer(const Device &, Buffer *, void *, size_t);
 	
 	// Create a render pass
 	// TODO: remove this overload
-	VkRenderPass make_render_pass(VkAttachmentLoadOp load_op,
+	/* VkRenderPass make_render_pass(VkAttachmentLoadOp load_op,
 			VkAttachmentStoreOp store_op,
 			VkImageLayout initial_layout = VK_IMAGE_LAYOUT_UNDEFINED,
 			VkImageLayout final_layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
@@ -1735,9 +1753,10 @@ public:
 			<< render_pass << ")\n";
 
 		return new_render_pass;
-	}
+	} */
 	
-	VkRenderPass make_render_pass(const Swapchain &swch,
+	VkRenderPass make_render_pass(const Device &device,
+		const Swapchain &swch,
 		VkAttachmentLoadOp,
 		VkAttachmentStoreOp,
 		VkImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
@@ -1750,12 +1769,15 @@ public:
 	void end_render_pass(VkCommandBuffer cmd_buffer) const;
 
 	// Create a command pool
-	VkCommandPool make_command_pool(VkCommandPoolCreateFlags flags) {
+	VkCommandPool make_command_pool(const VkPhysicalDevice &phdev,
+			const Surface &surface,
+			const Device &device,
+			const VkCommandPoolCreateFlags flags) {
 		// Command pool to return
 		VkCommandPool new_command_pool = VK_NULL_HANDLE;
 
 		// Find queue family indices
-		QueueFamilyIndices indices = _find_queue_families(physical_device);
+		QueueFamilyIndices indices = _find_queue_families(phdev, surface);
 
 		// Create command pool
 		VkCommandPoolCreateInfo pool_info {
@@ -1765,7 +1787,7 @@ public:
 		};
 
 		VkResult result = vkCreateCommandPool(
-			device, &pool_info,
+			device.device, &pool_info,
 			nullptr, &new_command_pool
 		);
 
@@ -1778,7 +1800,7 @@ public:
 	}
 
 	// Create a semaphore
-	VkSemaphore make_semaphore() {
+	VkSemaphore make_semaphore(const Device &device) {
 		// Semaphore
 		VkSemaphore new_semaphore = VK_NULL_HANDLE;
 
@@ -1788,7 +1810,7 @@ public:
 		};
 
 		VkResult result = vkCreateSemaphore(
-			device, &semaphore_info,
+			device.device, &semaphore_info,
 			nullptr, &new_semaphore
 		);
 
@@ -1801,7 +1823,7 @@ public:
 	}
 
 	// Create a fence
-	VkFence make_fence(VkFenceCreateFlags flags = 0) {
+	VkFence make_fence(const Device &device, VkFenceCreateFlags flags = 0) {
 		// Fence
 		VkFence new_fence = VK_NULL_HANDLE;
 
@@ -1812,7 +1834,7 @@ public:
 		};
 
 		VkResult result = vkCreateFence(
-			device, &fence_info,
+			device.device, &fence_info,
 			nullptr, &new_fence
 		);
 
@@ -1853,12 +1875,12 @@ public:
 	}
 
 	// Create a swapchain and related functions
-	Swapchain make_swapchain(const Surface &);
-	void make_framebuffers(Swapchain &, VkRenderPass) const;
+	Swapchain make_swapchain(const VkPhysicalDevice &, const Device &device, const Surface &);
+	void make_framebuffers(const Device &, Swapchain &, VkRenderPass) const;
 
 	// Create a descriptor pool
 	// TODO: pass sizes (and a default) in a struct
-	VkDescriptorPool make_descriptor_pool() const {
+	VkDescriptorPool make_descriptor_pool(const Device &device, VkAllocationCallbacks *allocator = nullptr) const {
 		// Descriptor pool to return
 		VkDescriptorPool new_descriptor_pool = VK_NULL_HANDLE;
 
@@ -1889,7 +1911,7 @@ public:
 		// Creation
 		// TODO: wrap inside a method
 		VkResult result = vkCreateDescriptorPool(
-			device,	&pool_info,
+			device.device, &pool_info,
 			allocator, &new_descriptor_pool
 		);
 
@@ -1906,7 +1928,9 @@ public:
 	}
 	
 	// Create a descriptor set layout
-	VkDescriptorSetLayout make_descriptor_set_layout(const std::vector <VkDescriptorSetLayoutBinding> &bindings) const {
+	VkDescriptorSetLayout make_descriptor_set_layout(const Device &device,
+			const std::vector <VkDescriptorSetLayoutBinding> &bindings,
+			VkAllocationCallbacks *allocator = nullptr) const {
 		// Descriptor set layout to return
 		VkDescriptorSetLayout new_descriptor_set_layout = VK_NULL_HANDLE;
 
@@ -1919,7 +1943,7 @@ public:
 
 		// Create the descriptor set layout
 		VkResult result = vkCreateDescriptorSetLayout(
-			device, &layout_info,
+			device.device, &layout_info,
 			allocator, &new_descriptor_set_layout
 		);
 
@@ -1935,7 +1959,7 @@ public:
 	}
 
 	// Create a descriptor set
-	VkDescriptorSet make_descriptor_set(VkDescriptorPool dpool, VkDescriptorSetLayout dsl) const {
+	VkDescriptorSet make_descriptor_set(const Device &device, VkDescriptorPool dpool, VkDescriptorSetLayout dsl) const {
 		// Descriptor set to return
 		VkDescriptorSet new_descriptor_set = VK_NULL_HANDLE;
 
@@ -1949,7 +1973,7 @@ public:
 
 		// Creation
 		VkResult result = vkAllocateDescriptorSets(
-			device, &alloc_info,
+			device.device, &alloc_info,
 			&new_descriptor_set
 		);
 
@@ -2077,10 +2101,10 @@ public:
 	}
 
 	// Getters
-	VkPhysicalDeviceProperties phdev_props() const;
+	VkPhysicalDeviceProperties phdev_props(const VkPhysicalDevice &) const;
 
 	// Other methods
-	void idle() const;
+	void idle(const Device &) const;
 
 	// Static member variables
 	static const std::vector <const char *> device_extensions;

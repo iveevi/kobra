@@ -13,7 +13,7 @@ const std::vector <const char *> Vulkan::validation_layers = {
 // Public methods //
 ////////////////////
 
-// Draw a frame
+/* Draw a frame
 void Vulkan::frame()
 {
 	// Wait for the next image in the swap chain
@@ -188,7 +188,7 @@ void Vulkan::frame()
 
 	// Get the next frame index
 	current_frame = (current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
-}
+} */
 
 ////////////////////
 // Buffer methods //
@@ -196,7 +196,11 @@ void Vulkan::frame()
 
 // Allocate a buffer
 // TODO: pass buffer propreties as a struct
-void Vulkan::make_buffer(Buffer &bf, size_t size, VkBufferUsageFlags usage)
+void Vulkan::make_buffer(const VkPhysicalDevice &phdev,
+		const Device &device,
+		Buffer &bf,
+		size_t size,
+		VkBufferUsageFlags usage)
 {
 	// Buffer creation info
 	VkBufferCreateInfo buffer_info {
@@ -207,7 +211,7 @@ void Vulkan::make_buffer(Buffer &bf, size_t size, VkBufferUsageFlags usage)
 	};
 
 	VkResult result = vkCreateBuffer(
-		device, &buffer_info,
+		device.device, &buffer_info,
 		nullptr, &bf.buffer
 	);
 
@@ -219,12 +223,13 @@ void Vulkan::make_buffer(Buffer &bf, size_t size, VkBufferUsageFlags usage)
 
 	// Allocate memory for the buffer
 	VkMemoryRequirements mem_reqs;
-	vkGetBufferMemoryRequirements(device, bf.buffer, &mem_reqs);
+	vkGetBufferMemoryRequirements(device.device, bf.buffer, &mem_reqs);
 
 	VkMemoryAllocateInfo alloc_info {
 		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
 		.allocationSize = mem_reqs.size,
 		.memoryTypeIndex = _find_memory_type(
+			phdev,
 			mem_reqs.memoryTypeBits,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
 		)
@@ -232,7 +237,7 @@ void Vulkan::make_buffer(Buffer &bf, size_t size, VkBufferUsageFlags usage)
 
 	// Create device memory
 	result = vkAllocateMemory(
-		device, &alloc_info,
+		device.device, &alloc_info,
 		nullptr, &bf.memory
 	);
 
@@ -242,7 +247,7 @@ void Vulkan::make_buffer(Buffer &bf, size_t size, VkBufferUsageFlags usage)
 	}
 
 	// Bind the buffer to the memory
-	vkBindBufferMemory(device, bf.buffer, bf.memory, 0);
+	vkBindBufferMemory(device.device, bf.buffer, bf.memory, 0);
 
 	// Set the buffer properties
 	bf.size = size;
@@ -255,18 +260,18 @@ void Vulkan::make_buffer(Buffer &bf, size_t size, VkBufferUsageFlags usage)
 }
 
 // Destroy a buffer
-void Vulkan::destroy_buffer(Buffer &bf)
+void Vulkan::destroy_buffer(const Device &device, Buffer &bf)
 {
-	vkDestroyBuffer(device, bf.buffer, nullptr);
-	vkFreeMemory(device, bf.memory, nullptr);
+	vkDestroyBuffer(device.device, bf.buffer, nullptr);
+	vkFreeMemory(device.device, bf.memory, nullptr);
 }
 
 // Map data to a buffer
-void Vulkan::map_buffer(Buffer *buffer, void *data, size_t size)
+void Vulkan::map_buffer(const Device &device, Buffer *buffer, void *data, size_t size)
 {
 	// Map the buffer
 	VkResult result = vkMapMemory(
-		device, buffer->memory, 0,
+		device.device, buffer->memory, 0,
 		size, 0, &buffer->mapped
 	);
 
@@ -279,7 +284,7 @@ void Vulkan::map_buffer(Buffer *buffer, void *data, size_t size)
 	memcpy(buffer->mapped, data, size);
 
 	// Unmap the buffer
-	vkUnmapMemory(device, buffer->memory);
+	vkUnmapMemory(device.device, buffer->memory);
 }
 
 ///////////////////////
@@ -287,7 +292,7 @@ void Vulkan::map_buffer(Buffer *buffer, void *data, size_t size)
 ///////////////////////
 
 // Fill image views
-void Vulkan::_make_image_views(Swapchain &swch) const
+void Vulkan::_make_image_views(const Device &device, Swapchain &swch) const
 {
 	// Resize first
 	swch.image_views.resize(swch.images.size());
@@ -317,7 +322,7 @@ void Vulkan::_make_image_views(Swapchain &swch) const
 
 		// Create image view
 		VkResult result = vkCreateImageView(
-			device, &create_info,
+			device.device, &create_info,
 			nullptr, &swch.image_views[i]
 		);
 
@@ -329,7 +334,7 @@ void Vulkan::_make_image_views(Swapchain &swch) const
 }
 
 // Create framebuffers
-void Vulkan::make_framebuffers(Swapchain &swch, VkRenderPass rpass) const
+void Vulkan::make_framebuffers(const Device &device, Swapchain &swch, VkRenderPass rpass) const
 {
 	// Resize first
 	swch.framebuffers.resize(swch.image_views.size());
@@ -354,7 +359,7 @@ void Vulkan::make_framebuffers(Swapchain &swch, VkRenderPass rpass) const
 
 		// Safely create framebuffer
 		VkResult result = vkCreateFramebuffer(
-			device, &framebuffer_info,
+			device.device, &framebuffer_info,
 			nullptr, &swch.framebuffers[i]
 		);
 
@@ -365,13 +370,16 @@ void Vulkan::make_framebuffers(Swapchain &swch, VkRenderPass rpass) const
 	}
 }
 
-// TODO: should pass number of frames in fligh
-Vulkan::Swapchain Vulkan::make_swapchain(const Surface &surface)
+// TODO: should pass number of frames in flight
+Vulkan::Swapchain Vulkan::make_swapchain(
+		const VkPhysicalDevice &phdev,
+		const Device &device,
+		const Surface &surface)
 {
 	// Object to return
 	Swapchain swch;
 
-	SwapchainSupport swch_support = _query_swch_support(physical_device);
+	SwapchainSupport swch_support = _query_swch_support(phdev, surface);
 
 	// Select swapchain properties
 	VkSurfaceFormatKHR surface_format = _choose_swch_surface_format(
@@ -406,7 +414,7 @@ Vulkan::Swapchain Vulkan::make_swapchain(const Surface &surface)
 	create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
 		| VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
-	QueueFamilyIndices indices = _find_queue_families(physical_device);
+	QueueFamilyIndices indices = _find_queue_families(phdev, surface);
 	uint32_t queueFamilyIndices[] = {indices.graphics.value(), indices.present.value()};
 
 	if (indices.graphics != indices.present) {
@@ -424,7 +432,7 @@ Vulkan::Swapchain Vulkan::make_swapchain(const Surface &surface)
 
 	// Create the swapchain
 	VkResult result = vkCreateSwapchainKHR(
-		device, &create_info,
+		device.device, &create_info,
 		nullptr, &swch.swch
 	);
 
@@ -435,14 +443,14 @@ Vulkan::Swapchain Vulkan::make_swapchain(const Surface &surface)
 
 	// Resize images
 	vkGetSwapchainImagesKHR(
-		device, swch.swch,
+		device.device, swch.swch,
 		&image_count, nullptr
 	);
 
 	swch.images.resize(image_count);
 
 	vkGetSwapchainImagesKHR(
-		device, swch.swch,
+		device.device, swch.swch,
 		&image_count, swch.images.data()
 	);
 
@@ -451,7 +459,7 @@ Vulkan::Swapchain Vulkan::make_swapchain(const Surface &surface)
 	swch.extent = extent;
 
 	// Fill out image views
-	_make_image_views(swch);
+	_make_image_views(device, swch);
 
 	// Log creation and return
 	Logger::ok() << "[Vulkan] Swapchain created (VkSwapchain="
@@ -465,7 +473,8 @@ Vulkan::Swapchain Vulkan::make_swapchain(const Surface &surface)
 /////////////////////////
 
 // Create render pass
-VkRenderPass Vulkan::make_render_pass(const Swapchain &swch,
+VkRenderPass Vulkan::make_render_pass(const Device &device,
+		const Swapchain &swch,
 		VkAttachmentLoadOp load_op,
 		VkAttachmentStoreOp store_op,
 		VkImageLayout initial_layout,
@@ -521,7 +530,7 @@ VkRenderPass Vulkan::make_render_pass(const Swapchain &swch,
 	};
 
 	VkResult result = vkCreateRenderPass(
-		device, &render_pass_info,
+		device.device, &render_pass_info,
 		nullptr, &new_render_pass
 	);
 
@@ -532,7 +541,7 @@ VkRenderPass Vulkan::make_render_pass(const Swapchain &swch,
 
 	// Log creation
 	Logger::ok() << "[Vulkan] Render pass created (VkRenderPass="
-		<< render_pass << ")\n";
+		<< new_render_pass << ")\n";
 
 	return new_render_pass;
 }
@@ -571,13 +580,13 @@ void Vulkan::end_render_pass(VkCommandBuffer cmd_buffer) const
 // Getters //
 /////////////
 
-VkPhysicalDeviceProperties Vulkan::phdev_props() const
+VkPhysicalDeviceProperties Vulkan::phdev_props(const VkPhysicalDevice &phdev) const
 {
 	// Create the properties struct
 	VkPhysicalDeviceProperties props;
 
 	// Get the properties
-	vkGetPhysicalDeviceProperties(physical_device, &props);
+	vkGetPhysicalDeviceProperties(phdev, &props);
 
 	// Return the properties
 	return props;
@@ -587,7 +596,7 @@ VkPhysicalDeviceProperties Vulkan::phdev_props() const
 // Other methods //
 ///////////////////
 
-void Vulkan::idle() const
+void Vulkan::idle(const Device &device) const
 {
-	vkDeviceWaitIdle(device);
+	vkDeviceWaitIdle(device.device);
 }

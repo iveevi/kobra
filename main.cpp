@@ -2,7 +2,7 @@
 #include <cstring>
 #include <iostream>
 #include <thread>
-#include <vulkan/vulkan_core.h>
+// #include <vulkan/vulkan_core.h>
 
 // Local headers
 #include "global.hpp"
@@ -105,181 +105,9 @@ inline std::ostream &operator<<(std::ostream &os, const aligned_vec4 &v)
 static const size_t MAX_OBJECT_SIZE = sizeof(Triangle);
 static const size_t MAX_LIGHT_SIZE = sizeof(PointLight);
 
-
-// Size of the world data, including indices
-size_t world_data_size()
-{
-	size_t objects = std::max(world.objects.size(), INITIAL_OBJECTS);
-	size_t lights = std::max(world.lights.size(), INITIAL_LIGHTS);
-
-	return sizeof(GPUWorld) + 4 * (objects + lights);
-}
-// Copy buffer helper
-struct MapInfo {
-	uint8_t *ptr;
-	size_t size;
-	bool resized;
-};
-
-MapInfo map_world_buffer(Vulkan *vk, Buffer &objects, Buffer &lights, Buffer &materials)
-{
-	// Static (cached) raw memory buffer
-	static uint8_t *buffer = nullptr;
-	static size_t buffer_size = 0;
-	
-	static const VkBufferUsageFlags buffer_usage =
-		VK_BUFFER_USAGE_TRANSFER_DST_BIT
-		| VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-
-	// Check buffer resize requirement
-	size_t size = world_data_size();
-
-	// Resize buffer if required
-	if (size > buffer_size) {
-		buffer_size = size;
-		buffer = (uint8_t *) realloc(buffer, buffer_size);
-	}
-
-	// Generate world data and write to buffers
-	Indices indices;
-	world.write_objects(objects, materials, indices);
-	world.write_lights(lights, indices);
-
-	// Copy world and indices
-	GPUWorld gworld = world.dump();
-	gworld.objects = objects.size();
-
-	memcpy(buffer, &gworld, sizeof(GPUWorld));
-	memcpy(buffer + sizeof(GPUWorld), indices.data(),
-		4 * indices.size());
-
-	/* Dump contents of the buffers
-	// TODO: ImGui option
-	std::cout << "=== Objects: " << objects.size() << " ===" << std::endl;
-	for (size_t i = 0; i < objects.size(); i++)
-		std::cout << i << ":\t" << objects[i] << std::endl;
-	std::cout << "Lights: " << lights.size() << std::endl;
-	for (size_t i = 0; i < lights.size(); i++)
-		std::cout << lights[i] << std::endl;
-	std::cout << "Materials: " << materials.size() << std::endl;
-	for (size_t i = 0; i < materials.size(); i++)
-		std::cout << materials[i] << std::endl;
-	std::cout << "Indices: " << indices.size() << std::endl;
-	for (size_t i = 0; i < indices.size(); i++)
-		std::cout << indices[i] << std::endl;
-
-	// Dump buffer contents (as uvec4)
-	std::cout << "=== Buffer contents ===" << std::endl;
-	for (size_t i = 0; i < buffer_size; i += 4 * sizeof(uint32_t)) {
-		uint32_t *uptr = (uint32_t *) (buffer + i);
-		float *fptr = (float *) (buffer + i);
-
-		std::cout << uptr[0] << " " << uptr[1] << " "
-			<< uptr[2] << " " << uptr[3]
-			<< " -> ("
-			<< fptr[0] << ", " << fptr[1] << ", "
-			<< fptr[2] << ", " << fptr[3]
-			<< ")" << std::endl;
-	} */
-	
-	// Resizing and remaking buffers
-	int resized = 0;
-
-	// World
-	if (size > world_buffer.size) {
-		// Resize vulkan buffer
-		vk->destroy_buffer(world_buffer);
-		vk->make_buffer(world_buffer, buffer_size, buffer_usage);
-		resized++;
-	}
-
-	// Objects
-	if (sizeof(aligned_vec4) * objects.size() > objects_buffer.size) {
-		// Resize vulkan buffer
-		vk->destroy_buffer(objects_buffer);
-		vk->make_buffer(objects_buffer, objects.size() * sizeof(aligned_vec4), buffer_usage);
-		resized++;
-	}
-
-	// Lights
-	if (sizeof(aligned_vec4) * lights.size() > lights_buffer.size) {
-		// Resize vulkan buffer
-		vk->destroy_buffer(lights_buffer);
-		vk->make_buffer(lights_buffer, lights.size() * sizeof(aligned_vec4), buffer_usage);
-		resized++;
-	}
-
-	/* Update descriptor sets
-	if (resized) {
-		for (size_t i = 0; i < vk->swch_images.size(); i++)
-			descriptor_set_maker(vk, i);
-		vk->set_command_buffers(cmd_buffer_maker);
-	} */
-
-	// Return pointer to the buffer
-	return {buffer, buffer_size, (resized > 0)};
-}
-
-// Map all the buffers
-// TODO: deal with resizing buffers
-bool map_buffers(Vulkan *vk)
-{
-	// Create and write to buffers
-	Buffer objects;
-	Buffer lights;
-	Buffer materials;
-
-	auto wb = map_world_buffer(vk, objects, lights, materials);
-
-	// Map buffers
-	vk->map_buffer(&world_buffer, wb.ptr, wb.size);
-	vk->map_buffer(&objects_buffer, objects.data(), sizeof(aligned_vec4) * objects.size());
-	vk->map_buffer(&materials_buffer, materials.data(), sizeof(Material) * materials.size());
-	vk->map_buffer(&lights_buffer, lights.data(), sizeof(aligned_vec4) * lights.size());
-
-	return wb.resized;
-}
-
-// Allocate buffers
-void allocate_buffers(Vulkan &vulkan)
-{
-	// Allocate buffers
-	size_t pixel_size = 4 * 800 * 600;
-	size_t world_size = world_data_size();
-	size_t objects_size = MAX_OBJECT_SIZE * std::max(world.objects.size(), INITIAL_OBJECTS);
-	size_t lights_size = MAX_LIGHT_SIZE * std::max(world.lights.size(), INITIAL_LIGHTS);
-	size_t materials_size = sizeof(Material) * INITIAL_MATERIALS;
-
-	static const VkBufferUsageFlags buffer_usage =
-		VK_BUFFER_USAGE_TRANSFER_DST_BIT
-		| VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-
-	// Create buffers
-	vulkan.make_buffer(pixel_buffer,   pixel_size,   buffer_usage | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-	vulkan.make_buffer(world_buffer,   world_size,   buffer_usage);
-	vulkan.make_buffer(objects_buffer, objects_size, buffer_usage);
-	vulkan.make_buffer(lights_buffer,  lights_size,  buffer_usage);
-	vulkan.make_buffer(materials_buffer, materials_size, buffer_usage);
-	
-	// Add all buffers to deletion queue
-	vulkan.push_deletion_task(
-		[&](Vulkan *vk) {
-			vk->destroy_buffer(pixel_buffer);
-			vk->destroy_buffer(world_buffer);
-			vk->destroy_buffer(objects_buffer);
-			vk->destroy_buffer(lights_buffer);
-			vk->destroy_buffer(materials_buffer);
-			Logger::ok("[main] Deleted buffers");
-		}
-	);
-}
-
 // App
 class SampleScene : public mercury::App {
 	// TODO: some of these member should be moved back to App
-	VkPhysicalDevice		physical_device; // TODO: goes to App
-	Vulkan::Device			device;
-
 	VkRenderPass			render_pass;
 	VkCommandPool			command_pool;
 
@@ -302,6 +130,7 @@ class SampleScene : public mercury::App {
 	mercury::Profiler		profiler;
 
 	// Fill out command buffer
+	// TODO: do we need the vk parameter?
 	void maker(const Vulkan *vk, size_t i) {
 		// Get image at current index
 		VkImage image = swapchain.images[i];
@@ -402,7 +231,7 @@ class SampleScene : public mercury::App {
 			VkPipelineLayout pipeline_layout;
 
 			VkResult res = vkCreatePipelineLayout(
-				vk->device,
+				device.device,
 				&pipeline_layout_info,
 				nullptr,
 				&pipeline_layout
@@ -428,7 +257,7 @@ class SampleScene : public mercury::App {
 			};
 
 			res = vkCreateComputePipelines(
-				vk->device,
+				device.device,
 				VK_NULL_HANDLE,
 				1,
 				&compute_pipeline_info,
@@ -467,6 +296,182 @@ class SampleScene : public mercury::App {
 			swapchain.extent.height, 1
 		);
 	}
+	
+	// GPU buffers
+	Vulkan::Buffer pixel_buffer;
+	Vulkan::Buffer world_buffer;
+	Vulkan::Buffer objects_buffer;
+	Vulkan::Buffer lights_buffer;
+	Vulkan::Buffer materials_buffer;
+
+	////////////////////
+	// Buffer methods //
+	////////////////////
+
+	// Size of the world data, including indices
+	size_t world_data_size() {
+		size_t objects = std::max(world.objects.size(), INITIAL_OBJECTS);
+		size_t lights = std::max(world.lights.size(), INITIAL_LIGHTS);
+
+		return sizeof(GPUWorld) + 4 * (objects + lights);
+	}
+
+	// Copy buffer helper
+	struct MapInfo {
+		uint8_t *ptr;
+		size_t size;
+		bool resized;
+	};
+
+	MapInfo map_world_buffer(Vulkan *vk, Buffer &objects, Buffer &lights, Buffer &materials) {
+		// Static (cached) raw memory buffer
+		static uint8_t *buffer = nullptr;
+		static size_t buffer_size = 0;
+		
+		static const VkBufferUsageFlags buffer_usage =
+			VK_BUFFER_USAGE_TRANSFER_DST_BIT
+			| VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+
+		// Check buffer resize requirement
+		size_t size = world_data_size();
+
+		// Resize buffer if required
+		if (size > buffer_size) {
+			buffer_size = size;
+			buffer = (uint8_t *) realloc(buffer, buffer_size);
+		}
+
+		// Generate world data and write to buffers
+		Indices indices;
+		world.write_objects(objects, materials, indices);
+		world.write_lights(lights, indices);
+
+		// Copy world and indices
+		GPUWorld gworld = world.dump();
+		gworld.objects = objects.size();
+
+		memcpy(buffer, &gworld, sizeof(GPUWorld));
+		memcpy(buffer + sizeof(GPUWorld), indices.data(),
+			4 * indices.size());
+
+		/* Dump contents of the buffers
+		// TODO: ImGui option
+		std::cout << "=== Objects: " << objects.size() << " ===" << std::endl;
+		for (size_t i = 0; i < objects.size(); i++)
+			std::cout << i << ":\t" << objects[i] << std::endl;
+		std::cout << "Lights: " << lights.size() << std::endl;
+		for (size_t i = 0; i < lights.size(); i++)
+			std::cout << lights[i] << std::endl;
+		std::cout << "Materials: " << materials.size() << std::endl;
+		for (size_t i = 0; i < materials.size(); i++)
+			std::cout << materials[i] << std::endl;
+		std::cout << "Indices: " << indices.size() << std::endl;
+		for (size_t i = 0; i < indices.size(); i++)
+			std::cout << indices[i] << std::endl;
+
+		// Dump buffer contents (as uvec4)
+		std::cout << "=== Buffer contents ===" << std::endl;
+		for (size_t i = 0; i < buffer_size; i += 4 * sizeof(uint32_t)) {
+			uint32_t *uptr = (uint32_t *) (buffer + i);
+			float *fptr = (float *) (buffer + i);
+
+			std::cout << uptr[0] << " " << uptr[1] << " "
+				<< uptr[2] << " " << uptr[3]
+				<< " -> ("
+				<< fptr[0] << ", " << fptr[1] << ", "
+				<< fptr[2] << ", " << fptr[3]
+				<< ")" << std::endl;
+		} */
+		
+		// Resizing and remaking buffers
+		int resized = 0;
+
+		// World
+		if (size > world_buffer.size) {
+			// Resize vulkan buffer
+			vk->destroy_buffer(device, world_buffer);
+			vk->make_buffer(physical_device, device, world_buffer, buffer_size, buffer_usage);
+			resized++;
+		}
+
+		// Objects
+		if (sizeof(aligned_vec4) * objects.size() > objects_buffer.size) {
+			// Resize vulkan buffer
+			vk->destroy_buffer(device, objects_buffer);
+			vk->make_buffer(physical_device, device, objects_buffer, objects.size() * sizeof(aligned_vec4), buffer_usage);
+			resized++;
+		}
+
+		// Lights
+		if (sizeof(aligned_vec4) * lights.size() > lights_buffer.size) {
+			// Resize vulkan buffer
+			vk->destroy_buffer(device, lights_buffer);
+			vk->make_buffer(physical_device, device, lights_buffer, lights.size() * sizeof(aligned_vec4), buffer_usage);
+			resized++;
+		}
+
+		/* Update descriptor sets
+		if (resized) {
+			for (size_t i = 0; i < vk->swch_images.size(); i++)
+				descriptor_set_maker(vk, i);
+			vk->set_command_buffers(cmd_buffer_maker);
+		} */
+
+		// Return pointer to the buffer
+		return {buffer, buffer_size, (resized > 0)};
+	}
+
+	// Map all the buffers
+	// TODO: deal with resizing buffers
+	bool map_buffers(Vulkan *vk) {
+		// Create and write to buffers
+		Buffer objects;
+		Buffer lights;
+		Buffer materials;
+
+		auto wb = map_world_buffer(vk, objects, lights, materials);
+
+		// Map buffers
+		vk->map_buffer(device, &world_buffer, wb.ptr, wb.size);
+		vk->map_buffer(device, &objects_buffer, objects.data(), sizeof(aligned_vec4) * objects.size());
+		vk->map_buffer(device, &materials_buffer, materials.data(), sizeof(Material) * materials.size());
+		vk->map_buffer(device, &lights_buffer, lights.data(), sizeof(aligned_vec4) * lights.size());
+
+		return wb.resized;
+	}
+
+	// Allocate buffers
+	void allocate_buffers() {
+		// Allocate buffers
+		size_t pixel_size = 4 * 800 * 600;
+		size_t world_size = world_data_size();
+		size_t objects_size = MAX_OBJECT_SIZE * std::max(world.objects.size(), INITIAL_OBJECTS);
+		size_t lights_size = MAX_LIGHT_SIZE * std::max(world.lights.size(), INITIAL_LIGHTS);
+		size_t materials_size = sizeof(Material) * INITIAL_MATERIALS;
+
+		static const VkBufferUsageFlags buffer_usage =
+			VK_BUFFER_USAGE_TRANSFER_DST_BIT
+			| VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+
+		// Create buffers
+		ctx->make_buffer(physical_device, device, pixel_buffer, pixel_size, buffer_usage | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+		ctx->make_buffer(physical_device, device, world_buffer, world_size, buffer_usage);
+		ctx->make_buffer(physical_device, device, objects_buffer, objects_size, buffer_usage);
+		ctx->make_buffer(physical_device, device, lights_buffer, lights_size, buffer_usage);
+		ctx->make_buffer(physical_device, device, materials_buffer, materials_size, buffer_usage);
+		
+		// Add all buffers to deletion queue
+		ctx->push_deletion_task(
+			[&](Vulkan *vk) {
+				vk->destroy_buffer(device, pixel_buffer);
+				vk->destroy_buffer(device, world_buffer);
+				vk->destroy_buffer(device, objects_buffer);
+				vk->destroy_buffer(device, lights_buffer);
+				vk->destroy_buffer(device, materials_buffer);
+				Logger::ok("[main] Deleted buffers");
+			}
+		);
+	}
 public:
 	// Constructor
 	SampleScene(Vulkan *vk) : mercury::App({
@@ -475,54 +480,57 @@ public:
 		.height = 600,
 		.name = "Mercury - Sample Scene",
 	}) {
-		// Select the physical device
-		physical_device = ctx->select_phdev(surface);
-
-		// Create a logical device
-		device = ctx->make_device(physical_device, surface);
-
 		// Create render pass
 		render_pass = ctx->make_render_pass(
+			device,
+			swapchain,
 			VK_ATTACHMENT_LOAD_OP_LOAD,
 			VK_ATTACHMENT_STORE_OP_STORE
 		);
 
 		// Create framebuffers
-		ctx->make_framebuffers(swapchain, render_pass);
+		ctx->make_framebuffers(device, swapchain, render_pass);
 
 		// Create command pool
 		command_pool = ctx->make_command_pool(
+			physical_device,
+			surface,
+			device,
 			VK_COMMAND_POOL_CREATE_TRANSIENT_BIT
 		);
 
 		// Create descriptor pool
-		descriptor_pool = ctx->make_descriptor_pool();
+		descriptor_pool = ctx->make_descriptor_pool(device);
 
 		// Create descriptor set layout
-		descriptor_set_layout = ctx->make_descriptor_set_layout(dsl_bindings);
+		descriptor_set_layout = ctx->make_descriptor_set_layout(device, dsl_bindings);
 
 		// Create descriptor set
 		descriptor_set = ctx->make_descriptor_set(
+			device,
 			descriptor_pool,
 			descriptor_set_layout
 		);
 
 		// Load compute shader
-		compute_shader = ctx->make_shader("shaders/pixel.spv");
+		compute_shader = ctx->make_shader(device, "shaders/pixel.spv");
 
 		// Create sync objects
 		// TODO: use max frames in flight
 		images_in_flight.resize(swapchain.images.size(), VK_NULL_HANDLE);
 		for (size_t i = 0; i < 2; i++) {
-			in_flight_fences.push_back(ctx->make_fence(VK_FENCE_CREATE_SIGNALED_BIT));
-			smph_image_available.push_back(ctx->make_semaphore());
-			smph_render_finished.push_back(ctx->make_semaphore());
+			in_flight_fences.push_back(ctx->make_fence(device, VK_FENCE_CREATE_SIGNALED_BIT));
+			smph_image_available.push_back(ctx->make_semaphore(device));
+			smph_render_finished.push_back(ctx->make_semaphore(device));
 		}
 
 		// GLFW callbacks
 		glfwSetKeyCallback(surface.window, key_callback);
 		glfwSetInputMode(surface.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 		glfwSetCursorPosCallback(surface.window, mouse_callback);
+
+		// Create the buffers
+		allocate_buffers();
 	}
 
 	// Update the world
@@ -556,7 +564,7 @@ public:
 	void present() {
 		// Wait for the next image in the swap chain
 		vkWaitForFences(
-			ctx->device, 1,
+			device.device, 1,
 			&in_flight_fences[frame_index],
 			VK_TRUE, UINT64_MAX
 		);
@@ -564,7 +572,7 @@ public:
 		// Acquire the next image from the swap chain
 		uint32_t image_index;
 		VkResult result = vkAcquireNextImageKHR(
-			ctx->device, swapchain.swch, UINT64_MAX,
+			device.device, swapchain.swch, UINT64_MAX,
 			smph_image_available[frame_index],
 			VK_NULL_HANDLE, &image_index
 		);
@@ -583,7 +591,7 @@ public:
 		profiler.frame("Acquire image");
 		if (images_in_flight[image_index] != VK_NULL_HANDLE) {
 			vkWaitForFences(
-				ctx->device, 1,
+				device.device, 1,
 				&images_in_flight[image_index],
 				VK_TRUE, UINT64_MAX
 			);
@@ -623,11 +631,11 @@ public:
 		};
 
 		// Submit the command buffer
-		vkResetFences(ctx->device, 1, &in_flight_fences[frame_index]);
+		vkResetFences(device.device, 1, &in_flight_fences[frame_index]);
 	
 		profiler.frame("Queue submit");
 		result = vkQueueSubmit(
-			ctx->graphics_queue, 1, &submit_info,
+			device.graphics_queue, 1, &submit_info,
 			in_flight_fences[frame_index]
 		);
 		profiler.end();
@@ -651,7 +659,7 @@ public:
 		};
 
 		profiler.frame("vkQueuePresentKHR");
-		result = vkQueuePresentKHR(ctx->present_queue, &present_info);
+		result = vkQueuePresentKHR(device.present_queue, &present_info);
 		profiler.end();
 		
 		/* if (result == VK_ERROR_OUT_OF_DATE_KHR
@@ -697,6 +705,7 @@ public:
 		};
 
 		ctx->set_command_buffers(
+			device,
 			swapchain, command_pool,
 			command_buffers, ftn
 		);
@@ -793,7 +802,7 @@ public:
 		};
 
 		vkUpdateDescriptorSets(
-			ctx->device, 5,
+			device.device, 5,
 			&writes[0],
 			0, nullptr
 		);
@@ -866,7 +875,7 @@ int main()
 	Vulkan vulkan;
 
 	// Initialize the buffers
-	allocate_buffers(vulkan);
+	// allocate_buffers(vulkan);
 
 	// Create sample scene
 	SampleScene scene(&vulkan);

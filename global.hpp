@@ -3,7 +3,7 @@
 
 #define MERCURY_VALIDATION_LAYERS
 #define MERCURY_VALIDATION_ERROR_ONLY
-// #define MERCURY_THROW_ERROR
+#define MERCURY_THROW_ERROR
 
 // Standard headers
 #include <memory>
@@ -165,12 +165,13 @@ struct World {
 	}
 };
 
-// Pixel buffers
+/* Pixel buffers
 extern Vulkan::Buffer pixel_buffer;
 extern Vulkan::Buffer world_buffer;
 extern Vulkan::Buffer objects_buffer;
 extern Vulkan::Buffer lights_buffer;
 extern Vulkan::Buffer materials_buffer;
+*/
 
 // Compute shader
 extern VkShaderModule compute_shader;

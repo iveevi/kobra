@@ -23,6 +23,10 @@ public:
 protected:
 	// Vulkan context
 	Vulkan *ctx;
+	
+	// Devices
+	VkPhysicalDevice		physical_device; // TODO: goes to App
+	Vulkan::Device			device;
 
 	// Surface
 	// TODO: should allow multiple surfaces
@@ -39,11 +43,17 @@ public:
 	// TODO: constructor for multiple windows?
 	App(const Info &info) : ctx(info.ctx), frame_index(0) {
 		// Create surface
-		surface = ctx->make_surface(info.name,info.width, info.height);
+		surface = ctx->make_surface(info.name, info.width, info.height);
+		
+		// Select the physical device
+		physical_device = ctx->select_phdev(surface);
+
+		// Create a logical device
+		device = ctx->make_device(physical_device, surface);
 
 		// Create swapchain
 		// TODO: should be passing in window handle into info
-		swapchain = ctx->make_swapchain(surface);
+		swapchain = ctx->make_swapchain(physical_device, device, surface);
 	}
 
 	// Virtual destructor
@@ -58,7 +68,7 @@ public:
 			frame_index = (frame_index + 1) % 2;
 		}
 
-		ctx->idle();
+		ctx->idle(device);
 	}
 
 	// Frame function (must be implemented by user)

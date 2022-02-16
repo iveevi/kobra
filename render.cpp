@@ -11,7 +11,7 @@ Vulkan::Buffer materials_buffer;
 // Compute shader
 VkShaderModule compute_shader;
 
-// Command buffer function per frame index
+/* Command buffer function per frame index
 void cmd_buffer_maker(const Vulkan *vk, size_t i) {	
 	// Get image at current index
 	VkImage image = vk->swch_images[i];
@@ -273,7 +273,7 @@ void descriptor_set_maker(Vulkan *vulkan, size_t i)
 		&writes[0],
 		0, nullptr
 	);
-}
+} */
 
 // Keyboard callback
 // TODO: in class
