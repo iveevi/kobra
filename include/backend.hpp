@@ -210,219 +210,19 @@ private:
 	void _init_vulkan() {
 		_mk_instance();
 		_setup_debug_messenger();
-		
-		/* _mk_surface();
-		_pick_phdev();
-		_mk_logical_device();
-
-		createSwapChain();
-		_mk_image_views();
-		_mk_render_pass();
-		_mk_framebuffers();
-
-		_mk_command_pool();
-		_mk_command_buffers();
-		_mk_sync_objects();
-		_mk_descriptor_set_layout();
-		_mk_descriptor_pool();
-		_mk_descriptor_sets(); */
 	}
 
 	// TODO: modifiable by the user
 	// TODO: method to set default layout, and rebuild descriptor sets
 	
-	/* void _mk_descriptor_set_layout() {
-		// Binding info
-		VkDescriptorSetLayoutBinding compute_bindings_1 {
-			.binding = 0,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.descriptorCount = 1,
-			.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-			.pImmutableSamplers = nullptr
-		};
-
-		VkDescriptorSetLayoutBinding compute_bindings_2 {
-			.binding = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.descriptorCount = 1,
-			.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-			.pImmutableSamplers = nullptr
-		};
-		
-		VkDescriptorSetLayoutBinding compute_bindings_3 {
-			.binding = 2,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.descriptorCount = 1,
-			.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-			.pImmutableSamplers = nullptr
-		};
-		
-		VkDescriptorSetLayoutBinding compute_bindings_4 {
-			.binding = 3,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.descriptorCount = 1,
-			.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-			.pImmutableSamplers = nullptr
-		};
-
-		VkDescriptorSetLayoutBinding compute_bindings_5 {
-			.binding = 4,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.descriptorCount = 1,
-			.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-			.pImmutableSamplers = nullptr
-		};
-
-		// VkDesciptorSetLayoutBinding
-		VkDescriptorSetLayoutBinding compute_bindings[] {
-			compute_bindings_1,
-			compute_bindings_2,
-			compute_bindings_3,
-			compute_bindings_4,
-			compute_bindings_5
-		};
-		
-		// Create info
-		VkDescriptorSetLayoutCreateInfo layout_info {
-			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-			.bindingCount = 5,
-			.pBindings = &compute_bindings[0]
-		};
-
-		// Create the descriptor set layout
-		VkResult result = vkCreateDescriptorSetLayout(
-			device, &layout_info,
-			allocator, &ds_layout
-		);
-
-		if (result != VK_SUCCESS) {
-			Logger::error("[Vulkan] Failed to create descriptor set layout!");
-			throw (-1);
-		}
-	}
-
-	void _mk_descriptor_pool() {
-		// Pool sizes
-		VkDescriptorPoolSize pool_sizes[] = {
-			{ VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
-			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
-			{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
-			{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
-			{ VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
-			{ VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
-			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
-			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
-			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
-			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
-			{ VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 }
-		};
-
-		// Creation info
-		VkDescriptorPoolCreateInfo pool_info = {
-			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-			.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
-			.maxSets = 1000 * IM_ARRAYSIZE(pool_sizes),
-			.poolSizeCount = (uint32_t) IM_ARRAYSIZE(pool_sizes),
-			.pPoolSizes = pool_sizes
-		};
-
-		// Creation
-		// TODO: wrap inside a method
-		VkResult result = vkCreateDescriptorPool(
-			device,	&pool_info,
-			allocator, &descriptor_pool
-		);
-
-		if (result != VK_SUCCESS) {
-			throw(-1);
-		}
-	}
-
-	void _mk_descriptor_sets() {
-		// Descriptor set layouts
-		descriptor_set_layouts.resize(swch_images.size(), ds_layout);
-
-		// Descriptor set creation info
-		VkDescriptorSetAllocateInfo alloc_info = {
-			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-			.descriptorPool = descriptor_pool,
-			.descriptorSetCount = static_cast <uint32_t>
-				(descriptor_set_layouts.size()),
-			.pSetLayouts = descriptor_set_layouts.data()
-		};
-
-		// Creation
-		descriptor_sets.resize(swch_images.size());
-		VkResult result = vkAllocateDescriptorSets(
-			device, &alloc_info, descriptor_sets.data()
-		);
-
-		if (result != VK_SUCCESS) {
-			Logger::error("[Vulkan] Failed to allocate descriptor sets");
-			throw(-1);
-		}
-	} */
-
 	//////////////////////
 	// Cleanup routines //
 	//////////////////////
 
-	/* void _cleanup_swapchain() {
-		for (auto framebuffer : swch_framebuffers)
-			vkDestroyFramebuffer(device, framebuffer, nullptr);
-
-		vkFreeCommandBuffers(
-			device, command_pool,
-			static_cast <uint32_t> (command_buffers.size()),
-			command_buffers.data()
-		);
-
-		vkDestroyRenderPass(device, render_pass, nullptr);
-
-		for (auto image_view : swch_image_views)
-			vkDestroyImageView(device, image_view, nullptr);
-
-		vkDestroySwapchainKHR(device, swch, nullptr);
-	}
-
-	void _cleanup_buffers() {
-		for (auto buffer : _buffers) {
-			vkDestroyBuffer(device, buffer.buffer, nullptr);
-			vkFreeMemory(device, buffer.memory, nullptr);
-		}
-	} */
-
 	void cleanup() {
-		// Destroy the swapchain
-		// _cleanup_swapchain();
-
-		// Destroy descriptor pool
-		// vkDestroyDescriptorPool(device, descriptor_pool, nullptr);
-
-		/* Destroy descriptor set layouts
-		for (auto layout : descriptor_set_layouts)
-			vkDestroyDescriptorSetLayout(device, layout, nullptr); */
-
-		/* Destroy descriptor sets
-		for (auto set : descriptor_sets)
-			vkFreeDescriptorSets(device, descriptor_pool, 1, &set);
-
-		// Destroy synchronization objects
-		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-			vkDestroySemaphore(device, render_finished_semaphores[i], nullptr);
-			vkDestroySemaphore(device, image_available_semaphores[i], nullptr);
-			vkDestroyFence(device, in_flight_fences[i], nullptr);
-		}
-
-		vkDestroyCommandPool(device, command_pool, nullptr); */
-
 		// Run all deletion tasks
 		for (auto &task : _deletion_tasks)
 			task(this);
-
-		// _cleanup_buffers();
-
-		// vkDestroyDevice(device, nullptr);
 
 		if (enable_validation_layers) {
 			_delete_debug_messenger(
@@ -434,43 +234,9 @@ private:
 		// vkDestroySurfaceKHR(instance, surface, nullptr);
 		vkDestroyInstance(instance, nullptr);
 
-		// Destroy GLFW window
-		// glfwDestroyWindow(window);
-
 		// End GLFW
 		glfwTerminate();
 	}
-
-	// TODO: make an alternate overload
-	/*
-	void _remk_swapchain() {
-		// TODO: method to returnn window size
-		int width = 0, height = 0;
-		glfwGetFramebufferSize(window, &width, &height);
-		while (width == 0 || height == 0) {
-			glfwGetFramebufferSize(window, &width, &height);
-			glfwWaitEvents();
-		}
-
-		// Wait for all frames to finish
-		vkDeviceWaitIdle(device);
-
-		// Cleanup swapchain
-		_cleanup_swapchain();
-
-		// Recreate swapchain
-		createSwapChain();
-		_mk_image_views();
-		_mk_render_pass();
-		_mk_framebuffers();
-		_mk_command_buffers();
-
-		// Recreate buffers
-		images_in_flight.resize(
-			swch_images.size(),
-			VK_NULL_HANDLE
-		);
-	} */
 
 	void _mk_instance() {
 		if (enable_validation_layers && !_check_validation_layer_support()) {
@@ -837,51 +603,6 @@ private:
 		throw(-1);
 	}
 
-	/* void _mk_command_buffers() {
-		// Resize command buffers
-		command_buffers.resize(swch_framebuffers.size());
-
-		// Command buffer info
-		VkCommandBufferAllocateInfo alloc_info {
-			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-			.commandPool = command_pool,
-			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-			.commandBufferCount = (uint32_t) command_buffers.size()
-		};
-
-		// Allocate the command buffers
-		VkResult result = vkAllocateCommandBuffers(
-			device, &alloc_info, command_buffers.data()
-		);
-
-		if (result != VK_SUCCESS) {
-			Logger::error("[Vulkan] Failed to allocate command buffers!");
-			throw(-1);
-		}
-	}
-
-	void _mk_sync_objects() {
-		image_available_semaphores.resize(MAX_FRAMES_IN_FLIGHT);
-		render_finished_semaphores.resize(MAX_FRAMES_IN_FLIGHT);
-		in_flight_fences.resize(MAX_FRAMES_IN_FLIGHT);
-		images_in_flight.resize(swch_images.size(), VK_NULL_HANDLE);
-
-		VkSemaphoreCreateInfo semaphoreInfo{};
-		semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-		VkFenceCreateInfo fenceInfo{};
-		fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-		fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-			if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &image_available_semaphores[i]) != VK_SUCCESS ||
-					vkCreateSemaphore(device, &semaphoreInfo, nullptr, &render_finished_semaphores[i]) != VK_SUCCESS ||
-					vkCreateFence(device, &fenceInfo, nullptr, &in_flight_fences[i]) != VK_SUCCESS) {
-				throw std::runtime_error("failed to create synchronization objects for a frame!");
-			}
-		}
-	} */
-
 	VkSurfaceFormatKHR _choose_swch_surface_format(const std::vector <VkSurfaceFormatKHR> &fmts) {
 		for (const auto &fmt : fmts) {
 			if (fmt.format == VK_FORMAT_B8G8R8A8_SRGB
@@ -928,48 +649,6 @@ private:
 
 		return ext;
 	}
-
-	// TODO: depreciate
-	/* SwapchainSupport _query_swch_support(VkPhysicalDevice device) {
-		SwapchainSupport details;
-
-		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-			device, surface,
-			&details.capabilities
-		);
-
-		uint32_t format_count;
-		vkGetPhysicalDeviceSurfaceFormatsKHR(
-			device, surface,
-			&format_count, nullptr
-		);
-
-		if (format_count != 0) {
-			details.formats.resize(format_count);
-			vkGetPhysicalDeviceSurfaceFormatsKHR(
-				device, surface,
-				&format_count,
-				details.formats.data()
-			);
-		}
-
-		uint32_t present_mode_count;
-		vkGetPhysicalDeviceSurfacePresentModesKHR(
-			device, surface,
-			&present_mode_count, nullptr
-		);
-
-		if (present_mode_count != 0) {
-			details.present_modes.resize(present_mode_count);
-			vkGetPhysicalDeviceSurfacePresentModesKHR(
-				device, surface,
-				&present_mode_count,
-				details.present_modes.data()
-			);
-		}
-
-		return details;
-	} */
 	
 	SwapchainSupport _query_swch_support(const VkPhysicalDevice &device, const Surface &surface) const {
 		SwapchainSupport details;
@@ -1012,21 +691,6 @@ private:
 		return details;
 	}
 
-	// TODO: depreciate this overload
-	/* bool isDeviceSuitable(VkPhysicalDevice device) {
-		QueueFamilyIndices indices = _find_queue_families(device);
-
-		bool extensionsSupported = checkDeviceExtensionSupport(device);
-
-		bool swchAdequate = false;
-		if (extensionsSupported) {
-			SwapchainSupport swchSupport = _query_swch_support(device);
-			swchAdequate = !swchSupport.formats.empty() && !swchSupport.present_modes.empty();
-		}
-
-		return indices && extensionsSupported && swchAdequate;
-	} */
-
 	bool _check_device_suitability(const VkPhysicalDevice &device, const Surface &surface) const {
 		QueueFamilyIndices indices = _find_queue_families(device, surface);
 
@@ -1058,44 +722,6 @@ private:
 
 		return requiredExtensions.empty();
 	}
-
-	/* QueueFamilyIndices _find_queue_families(VkPhysicalDevice device) {
-		// Structure to return
-		QueueFamilyIndices indices;
-
-		// Get count and fill vector
-		uint32_t qfc = 0;
-		vkGetPhysicalDeviceQueueFamilyProperties(
-			device, &qfc, nullptr
-		);
-
-		std::vector <VkQueueFamilyProperties> qfs(qfc);
-		vkGetPhysicalDeviceQueueFamilyProperties(
-			device, &qfc, qfs.data()
-		);
-
-		for (int i = 0; i < qfs.size(); i++) {
-			// Check graphics supports
-			if (qfs[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
-				indices.graphics = i;
-
-			// Check present support
-			VkBool32 present_support = false;
-			vkGetPhysicalDeviceSurfaceSupportKHR(
-				device, i, surface,
-				&present_support
-			);
-			
-			if (present_support)
-				indices.present = i;
-
-			// Early quit
-			if (indices)
-				break;
-		}
-
-		return indices;
-	} */
 	
 	QueueFamilyIndices _find_queue_families(const VkPhysicalDevice &device, const Surface &surface) const {
 		// Structure to return
@@ -1459,6 +1085,167 @@ public:
 	}
 
 	// Extra initialization
+	void init_imgui() {
+		// TODO: init on need basis?
+		// variable imgui_init = false...
+		ImGui::CreateContext();
+	}
+
+	// TODO: move to global scope
+	
+	// ImGui window context variables
+	struct ImGuiContext {
+		VkDescriptorPool	descriptor_pool;
+		VkCommandPool		command_pool;
+		VkCommandBuffer		command_buffer;
+		VkRenderPass		render_pass;
+		VkSemaphore		semaphore;
+		VkFence			fence;
+	};
+	
+	ImGuiContext init_imgui_glfw(const VkPhysicalDevice &phdev, const Device &device, const Surface &surface, const Swapchain &swapchain) {
+		// Context to return
+		ImGuiContext context;
+
+		// Create descriptor pool
+		VkDescriptorPoolSize pool_sizes[] {
+			{ VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
+			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
+			{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
+			{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
+			{ VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
+			{ VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
+			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
+			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
+			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
+			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
+			{ VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 }
+		};
+
+		VkDescriptorPoolCreateInfo pool_info = {};
+		pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+		pool_info.maxSets = 1000;
+		pool_info.poolSizeCount = std::size(pool_sizes);
+		pool_info.pPoolSizes = pool_sizes;
+
+		VkResult result = vkCreateDescriptorPool(
+			device.device, &pool_info,
+			nullptr, &context.descriptor_pool
+		);
+
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan-ImGui] Failed to create descriptor pool");
+			throw (-1);
+		}
+		
+		// Create render pass
+		context.render_pass = make_render_pass(
+			device, swapchain,
+			VK_ATTACHMENT_LOAD_OP_LOAD,
+			VK_ATTACHMENT_STORE_OP_STORE
+		);
+
+		// Initialize the ImGui context
+		ImGui::CreateContext();
+
+		// Initialize the ImGui for Vulkan renderer
+		ImGui_ImplGlfw_InitForVulkan(surface.window, true);
+
+		//this initializes imgui for Vulkan
+		ImGui_ImplVulkan_InitInfo init_info = {};
+		init_info.Instance = instance;
+		init_info.PhysicalDevice = phdev;
+		init_info.Device = device.device;
+		init_info.Queue = device.graphics_queue;
+		init_info.DescriptorPool = context.descriptor_pool;
+		init_info.MinImageCount = 2;
+		init_info.ImageCount = 2;
+		init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+
+		ImGui_ImplVulkan_Init(&init_info, context.render_pass);
+		
+		// Create command pool
+		context.command_pool = make_command_pool(
+			phdev, surface, device,
+			VK_COMMAND_POOL_CREATE_TRANSIENT_BIT
+			| VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
+		);
+
+		// Start a new, single use command buffer
+		// TODO: make a method for immediate command buffers
+		VkCommandBufferAllocateInfo alloc_info = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+			.commandPool = context.command_pool,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = 1
+		};
+
+		VkCommandBuffer tmp_cmd_buffer;
+		result = vkAllocateCommandBuffers(
+			device.device, &alloc_info, &tmp_cmd_buffer
+		);
+
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan-ImGui] Failed to allocate command buffer");
+			throw (-1);
+		}
+
+		// Start recording the command buffer
+		VkCommandBufferBeginInfo begin_info = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+			.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+		};
+
+		result = vkBeginCommandBuffer(tmp_cmd_buffer, &begin_info);
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan-ImGui] Failed to begin command buffer");
+			throw (-1);
+		}
+
+		// Create font textures
+		ImGui_ImplVulkan_CreateFontsTexture(tmp_cmd_buffer);
+
+		// End recording the command buffer
+		result = vkEndCommandBuffer(tmp_cmd_buffer);
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan-ImGui] Failed to end command buffer");
+			throw (-1);
+		}
+
+		// Submit the command buffer
+		VkSubmitInfo submit_info = {
+			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+			.commandBufferCount = 1,
+			.pCommandBuffers = &tmp_cmd_buffer
+		};
+
+		result = vkQueueSubmit(device.graphics_queue, 1, &submit_info, VK_NULL_HANDLE);
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan-ImGui] Failed to submit command buffer");
+			throw (-1);
+		}
+
+		// Wait for the command buffer to finish
+		vkQueueWaitIdle(device.graphics_queue);
+
+		// Destroy the command buffer
+		// TODO: deletion queue function
+		vkFreeCommandBuffers(device.device, context.command_pool, 1, &tmp_cmd_buffer);
+
+		//clear font textures from cpu data
+		ImGui_ImplVulkan_DestroyFontUploadObjects();
+
+		// Create command buffer and render pass
+		context.command_buffer = make_command_buffer(device, context.command_pool);
+		context.semaphore = make_semaphore(device);
+		context.fence = make_fence(device);
+
+		// Log the ImGui context creation
+		Logger::ok() << "[Vulkan-ImGui] ImGui context created (Surface=" << &surface << ")";
+		return context;
+	}
+
 	// TODO: another overload
 	/* void init_imgui() {
 		_init_imgui();
@@ -1470,60 +1257,7 @@ public:
 		_deletion_tasks.push_back(task);
 	}
 
-	// Render a frame
-	// void frame();
-
 	// Set command buffer for each frame
-	// TODO: depcreiate this overload
-	/* void set_command_buffers(CommandBufferMaker cbm) {
-		// Resize command buffers
-		command_buffers.resize(swch_framebuffers.size());
-
-		// Command buffer info
-		VkCommandBufferAllocateInfo alloc_info {
-			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-			.commandPool = command_pool,
-			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-			.commandBufferCount = (uint32_t) command_buffers.size()
-		};
-
-		// Allocate the command buffers
-		VkResult result = vkAllocateCommandBuffers(
-			device, &alloc_info, command_buffers.data()
-		);
-
-		if (result != VK_SUCCESS) {
-			Logger::error("[Vulkan] Failed to allocate command buffers!");
-			throw(-1);
-		}
-
-		for (size_t i = 0; i < command_buffers.size(); i++) {
-			// Command buffer creation info
-			VkCommandBufferBeginInfo begin_info {
-				.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
-			};
-
-			// Begin recording
-			result = vkBeginCommandBuffer(command_buffers[i], &begin_info);
-			if (result != VK_SUCCESS) {
-				Logger::error("[Vulkan] Failed to begin"
-					" recording command buffer!");
-				throw(-1);
-			}
-
-			// Command buffer generation
-			cbm(this, i);
-
-			// End recording
-			result = vkEndCommandBuffer(command_buffers[i]);
-			if (result != VK_SUCCESS) {
-				Logger::error("[Vulkan] Failed to end"
-					" recording command buffer!");
-				throw(-1);
-			}
-		}
-	} */
-
 	void set_command_buffers(const Device &device,
 			const Swapchain &swch,
 			VkCommandPool cpool,
@@ -1684,77 +1418,6 @@ public:
 	void map_buffer(const Device &, Buffer *, void *, size_t);
 	
 	// Create a render pass
-	// TODO: remove this overload
-	/* VkRenderPass make_render_pass(VkAttachmentLoadOp load_op,
-			VkAttachmentStoreOp store_op,
-			VkImageLayout initial_layout = VK_IMAGE_LAYOUT_UNDEFINED,
-			VkImageLayout final_layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
-		// Render pass to return
-		VkRenderPass new_render_pass = VK_NULL_HANDLE;
-
-		// Create attachment description
-		VkAttachmentDescription color_attachment {
-			.format = swch_image_format,
-			.samples = VK_SAMPLE_COUNT_1_BIT,
-			.loadOp = load_op,
-			.storeOp = store_op,
-			.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-			.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-			.initialLayout = initial_layout,
-			.finalLayout = final_layout
-		};
-
-		// Create attachment reference
-		VkAttachmentReference color_attachment_ref {
-			.attachment = 0,
-			.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-		};
-
-		// Subpasses and dependencies
-		VkSubpassDescription subpass {
-			.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-			.colorAttachmentCount = 1,
-			.pColorAttachments = &color_attachment_ref
-		};
-
-		VkSubpassDependency dependency {
-			.srcSubpass = VK_SUBPASS_EXTERNAL,
-			.dstSubpass = 0,
-			.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-			.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-			.srcAccessMask = 0,
-			.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
-				| VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
-		};
-
-		// Create render pass
-		VkRenderPassCreateInfo render_pass_info {
-			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-			.attachmentCount = 1,
-			.pAttachments = &color_attachment,
-			.subpassCount = 1,
-			.pSubpasses = &subpass,
-			.dependencyCount = 1,
-			.pDependencies = &dependency
-		};
-
-		VkResult result = vkCreateRenderPass(
-			device, &render_pass_info,
-			nullptr, &new_render_pass
-		);
-
-		if (result != VK_SUCCESS) {
-			Logger::error("[Vulkan] Failed to create render pass!");
-			throw(-1);
-		}
-
-		// Log creation
-		Logger::ok() << "[Vulkan] Render pass created (VkRenderPass="
-			<< render_pass << ")\n";
-
-		return new_render_pass;
-	} */
-	
 	VkRenderPass make_render_pass(const Device &device,
 		const Swapchain &swch,
 		VkAttachmentLoadOp,

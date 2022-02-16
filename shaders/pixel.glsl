@@ -29,16 +29,8 @@ layout (set = 0, binding = 1, std430) buffer World
 	vec4 cup;
 	vec4 cright;
 
-	// TODO: make a camera structure
-	// plus transform
-	
-	// fov, scale, aspect
-	/* float fov;
-	float scale;
-	float aspect; */
 	vec4 tunings;
 
-	// TODO: indices for objects, lights, background
 	uint indices[];
 } world;
 
@@ -304,38 +296,6 @@ void main()
 	uint xsize = gl_NumWorkGroups.x;
 
 	vec2 dimensions = vec2(world.width, world.height);
-	/* for (uint y = y0; y < world.height; y += ysize) {
-		for (uint x = x0; x < world.width; x += xsize) {
-			uint index = y * world.width + x;
-			
-			vec3 sum = vec3(0.0);
-			for (uint s = 0; s < SAMPLES; s++) {
-				// Sample ray
-				vec2 point = vec2(x + 0.5, y + 0.5) + offsets[s];
-
-				vec2 uv = point / dimensions;
-				Ray ray = make_ray(
-					uv,
-					world.camera.xyz,
-					world.cforward.xyz, world.cup.xyz, world.cright.xyz,
-					world.tunings.y,
-					world.tunings.z
-				);
-
-				// Get color
-				vec3 color = color_at(ray);
-
-				// Accumulate color
-				sum += color;
-			}
-
-			// Average samples
-			sum /= float(SAMPLES);
-
-			// Set pixel color
-			frame.pixels[index] = cast_color(sum);
-		}
-	} */
 			
 	uint index = y0 * world.width + x0;
 		

@@ -472,6 +472,65 @@ class MercuryApplication : public mercury::App {
 			}
 		);
 	}
+
+	// ImGui context and methods
+	// TODO: the context should not have any sync objects
+	Vulkan::ImGuiContext imgui_ctx;
+
+	// Create ImGui profiler tree
+	void make_profiler_tree(const mercury::Profiler::Frame &frame) {
+		ImGui::TreeNode(frame.name.c_str());
+		/* for (const auto &child : frame.children)
+			make_profiler_tree(child); */
+		ImGui::TreePop();
+	}
+
+	// Create ImGui render
+	void make_imgui(size_t image_index) {
+		// Fill out imgui command buffer and render pass
+		ctx->begin_command_buffer(imgui_ctx.command_buffer);
+
+		// Begin the render pass
+		ctx->begin_render_pass(
+			imgui_ctx.command_buffer,
+			swapchain.framebuffers[image_index],
+			imgui_ctx.render_pass,
+			swapchain.extent,
+			0, nullptr
+		);
+
+			// ImGui new frame
+			// TODO: method
+			ImGui_ImplVulkan_NewFrame();
+			ImGui_ImplGlfw_NewFrame();
+			ImGui::NewFrame();
+
+			// Show render monitor
+			ImGui::Begin("Render Monitor");
+			ImGui::Text("fps: %.1f", ImGui::GetIO().Framerate);
+			
+			if (profiler.size() > 0) {
+				auto frame = profiler.pop();
+				make_profiler_tree(frame);
+			}
+
+			ImGui::End();
+
+			ImGui::EndFrame();
+			ImGui::Render();
+
+			// Render ImGui
+			ImGui_ImplVulkan_RenderDrawData(
+				ImGui::GetDrawData(),
+				imgui_ctx.command_buffer
+			);
+
+		// End the render pass
+		ctx->end_render_pass(imgui_ctx.command_buffer);
+
+		// End the command buffer
+		ctx->end_command_buffer(imgui_ctx.command_buffer);
+	}
 public:
 	// Constructor
 	MercuryApplication(Vulkan *vk) : mercury::App({
@@ -480,6 +539,14 @@ public:
 		.height = 600,
 		.name = "Mercury - Sample Scene",
 	}) {
+		// GLFW callbacks
+		glfwSetKeyCallback(surface.window, key_callback);
+		glfwSetInputMode(surface.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		glfwSetCursorPosCallback(surface.window, mouse_callback);
+
+		// Initialize ImGui for this application
+		imgui_ctx = ctx->init_imgui_glfw(physical_device, device, surface, swapchain);
+
 		// Create render pass
 		render_pass = ctx->make_render_pass(
 			device,
@@ -524,11 +591,6 @@ public:
 			smph_render_finished.push_back(ctx->make_semaphore(device));
 		}
 
-		// GLFW callbacks
-		glfwSetKeyCallback(surface.window, key_callback);
-		glfwSetInputMode(surface.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-		glfwSetCursorPosCallback(surface.window, mouse_callback);
-
 		// Create the buffers
 		allocate_buffers();
 	}
@@ -554,10 +616,7 @@ public:
 		}
 
 		// Update time
-		// ImGuiIO &io = ImGui::GetIO();
-		// time += io.DeltaTime;
-		time += 0.01f;
-		// TODO: use delta time from App class
+		time += frame_time;
 	}
 
 	// Present the frame
@@ -601,6 +660,9 @@ public:
 		// Mark the image as in use by this frame
 		images_in_flight[image_index] = in_flight_fences[frame_index];
 
+		// Render imgui
+		make_imgui(image_index);
+
 		// Frame submission and synchronization info
 		VkSemaphore wait_semaphores[] = {
 			smph_image_available[frame_index]
@@ -612,7 +674,8 @@ public:
 		};
 
 		VkSemaphore signal_semaphores[] = {
-			smph_render_finished[frame_index]
+			smph_render_finished[frame_index],
+			imgui_ctx.semaphore
 		};
 
 		// Create information
@@ -641,7 +704,29 @@ public:
 		profiler.end();
 
 		if (result != VK_SUCCESS) {
-			Logger::error("[Vulkan] Failed to submit draw command buffer!");
+			Logger::error("[main] Failed to submit draw command buffer!");
+			throw (-1);
+		}
+
+		// Wait for the first command buffer to finish
+		vkQueueWaitIdle(device.graphics_queue);
+
+		// Submit ImGui command buffer
+		submit_info.waitSemaphoreCount = 0;
+		submit_info.pSignalSemaphores = &imgui_ctx.semaphore;
+		submit_info.pCommandBuffers = &imgui_ctx.command_buffer;
+
+		// Submit the command buffer
+		// TODO: Vulkan method
+		vkResetFences(device.device, 1, &imgui_ctx.fence);
+
+		result = vkQueueSubmit(
+			device.graphics_queue, 1, &submit_info,
+			imgui_ctx.fence
+		);
+
+		if (result != VK_SUCCESS) {
+			Logger::error("[main] Failed to submit draw ImGui command buffer!");
 			throw (-1);
 		}
 		
@@ -650,7 +735,7 @@ public:
 		
 		VkPresentInfoKHR present_info {
 			.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-			.waitSemaphoreCount = 1,
+			.waitSemaphoreCount = 2,
 			.pWaitSemaphores = signal_semaphores,
 			.swapchainCount = 1,
 			.pSwapchains = swchs,
@@ -692,9 +777,6 @@ public:
 
 		// End profiling the frame and display it
 		profiler.end();
-
-		auto frame = profiler.pop();
-		// std::cout << mercury::Profiler::pretty(frame) << std::endl;
 	}
 
 	void update_command_buffers() {
@@ -873,6 +955,7 @@ int main()
 
 	// Initialize Vulkan
 	Vulkan *vulkan = new Vulkan();
+	vulkan->init_imgui();
 
 	// Create sample scene
 	MercuryApplication scene(vulkan);

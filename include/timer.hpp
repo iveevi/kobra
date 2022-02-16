@@ -47,6 +47,13 @@ public:
 			<std::chrono::microseconds>
 			(now() - t).count();
 	}
+
+	// Elapsed time and reset timer
+	double lap() {
+		double elapsed = this->elapsed(_start);
+		this->start();
+		return elapsed;
+	}
 };
 
 }

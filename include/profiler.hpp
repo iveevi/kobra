@@ -46,6 +46,11 @@ public:
 		_start = _timer.now();
 	}
 
+	// Number of recorded frames
+	size_t size() const {
+		return _frames.size();
+	}
+
 	// Create a new frame
 	void frame(const std::string &name) {
 		Frame frame {name, _timer.now()};

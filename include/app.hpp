@@ -3,6 +3,7 @@
 
 // Engine headers
 #include "backend.hpp"
+#include "timer.hpp"
 
 namespace mercury {
 
@@ -36,8 +37,11 @@ protected:
 	// TODO: should allow multiple swapchains
 	Vulkan::Swapchain swapchain;
 
-	// Frame index
-	size_t frame_index;
+	// Frame information
+	Timer		frame_timer;
+	double 		frame_time = 0.0;
+
+	size_t		frame_index;
 public:
 	// Constructor
 	// TODO: constructor for multiple windows?
@@ -61,11 +65,22 @@ public:
 
 	// Run application
 	void run() {
+		static const double scale = 1e6; 
+
+		// Start timer
+		frame_timer.start();
 		while (!glfwWindowShouldClose(surface.window)) {
+			// Poll events
+			glfwPollEvents();
+
+			// Run application frame
 			frame();
 
 			// TODO: mod by max frames in flight
 			frame_index = (frame_index + 1) % 2;
+
+			// Get frame time
+			frame_time = frame_timer.lap()/scale;
 		}
 
 		ctx->idle(device);
