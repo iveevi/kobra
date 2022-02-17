@@ -10,6 +10,7 @@
 
 // TODO: replace version with command line argument
 
+// TODO: move layouts to separate file
 layout (set = 0, binding = 0, std430) buffer Pixels
 {
 	uint pixels[];
@@ -60,6 +61,16 @@ layout (set = 0, binding = 4, std430) buffer Materials
 	// vec4 descriptor (color, shading)
 	vec4 data[];
 } materials;
+
+// BVH
+layout (set = 0, binding = 5, std430) buffer BVH
+{
+	// BVH layout:
+	// vec4 header
+	// vec4 centroid
+	// vec4 dimenions
+	vec4 data[];
+} bvh;
 
 // Closest object information
 // TODO: this should be obslete
@@ -282,6 +293,30 @@ const vec2 offsets[MAX_SAMPLES] = {
 // TODO: pass as world parameter
 #define SAMPLES 1
 
+// Bounding box
+struct BoundingBox {
+	vec3 center;
+	vec3 extents;
+};
+
+// Intersect bounding box
+float intersect_box(Ray ray, BoundingBox box)
+{
+	vec3 tmin = (box.center - ray.origin) / ray.direction;
+	vec3 tmax = (box.center + box.extents - ray.origin) / ray.direction;
+
+	vec3 t1 = min(tmin, tmax);
+	vec3 t2 = max(tmin, tmax);
+
+	float tnear = max(max(t1.x, t1.y), t1.z);
+	float tfar = min(min(t2.x, t2.y), t2.z);
+
+	if (tnear > tfar)
+		return -1.0;
+	
+	return tnear;
+}
+
 void main()
 {
 	// Offset from space origin
@@ -314,6 +349,20 @@ void main()
 
 	// Get color
 	vec3 color = color_at(ray);
+
+	// Check which bvhs are intesected
+	for (int i = 0; i < world.objects; i++) {
+		vec3 center = bvh.data[3 * i + 1].xyz;
+		vec3 extents = bvh.data[3 * i + 2].xyz;
+
+		BoundingBox bbox = { center, extents };
+		float t = intersect_box(ray, bbox);
+
+		if (t >= 0.0) {
+			// Add opaque red
+			color += vec3(1.0, 0.0, 0.0) * 0.1;
+		}
+	}
 
 	// Set pixel color
 	frame.pixels[index] = cast_color(color);

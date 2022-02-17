@@ -98,6 +98,25 @@ public:
 			triangle.write_to_buffer(buffer, indices, mati);
 		}
 	}
+
+	// Get bounding boxes
+	void extract_bboxes(std::vector <mercury::BoundingBox> &bboxes) const override {
+		// Get bounding box for each triangle
+		for (size_t i = 0; i < _indices.size(); i += 3) {
+			// Get each vertex
+			const Vertex <T> &v0 = _vertices[_indices[i + 0]];
+			const Vertex <T> &v1 = _vertices[_indices[i + 1]];
+			const Vertex <T> &v2 = _vertices[_indices[i + 2]];
+
+			// Construct triangle
+			Triangle triangle {
+				v0.pos, v1.pos, v2.pos
+			};
+
+			// Add bounding box
+			triangle.extract_bboxes(bboxes);
+		}
+	}
 };
 
 #endif

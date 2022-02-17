@@ -93,6 +93,12 @@ inline std::ostream &operator<<(std::ostream &os, const aligned_vec4 &v)
 	return (os << v.data);
 }
 
+// Print BoundingBox
+inline std::ostream &operator<<(std::ostream &os, const mercury::BoundingBox &b)
+{
+	return (os << "(" << b.centroid	<< ", " << b.dimension << ")");
+}
+
 // TODO: put the following functions into a alloc.cpp file
 
 // Minimum sizes
@@ -298,11 +304,14 @@ class MercuryApplication : public mercury::App {
 	}
 	
 	// GPU buffers
-	Vulkan::Buffer pixel_buffer;
-	Vulkan::Buffer world_buffer;
-	Vulkan::Buffer objects_buffer;
-	Vulkan::Buffer lights_buffer;
-	Vulkan::Buffer materials_buffer;
+	Vulkan::Buffer	pixel_buffer;
+	Vulkan::Buffer	world_buffer;
+	Vulkan::Buffer	objects_buffer;
+	Vulkan::Buffer	lights_buffer;
+	Vulkan::Buffer	materials_buffer;
+
+	// BVH resources
+	mercury::BVH	bvh;
 
 	////////////////////
 	// Buffer methods //
@@ -410,12 +419,11 @@ class MercuryApplication : public mercury::App {
 			resized++;
 		}
 
-		/* Update descriptor sets
+		// Update descriptor sets
 		if (resized) {
-			for (size_t i = 0; i < vk->swch_images.size(); i++)
-				descriptor_set_maker(vk, i);
-			vk->set_command_buffers(cmd_buffer_maker);
-		} */
+			update_descriptor_set();
+			update_command_buffers();
+		}
 
 		// Return pointer to the buffer
 		return {buffer, buffer_size, (resized > 0)};
@@ -479,10 +487,13 @@ class MercuryApplication : public mercury::App {
 
 	// Create ImGui profiler tree
 	void make_profiler_tree(const mercury::Profiler::Frame &frame) {
-		ImGui::TreeNode(frame.name.c_str());
-		/* for (const auto &child : frame.children)
-			make_profiler_tree(child); */
-		ImGui::TreePop();
+		// Show tree
+		ImGui::BeginChild("##profiler", ImVec2(0, 0), true);
+		ImGui::Text("Frame %s: %.3f", frame.name.c_str(), frame.time);
+		for (auto &child : frame.children) {
+			make_profiler_tree(child);
+		}
+		ImGui::EndChild();
 	}
 
 	// Create ImGui render
@@ -508,13 +519,15 @@ class MercuryApplication : public mercury::App {
 			// Show render monitor
 			ImGui::Begin("Render Monitor");
 			ImGui::Text("fps: %.1f", ImGui::GetIO().Framerate);
+			ImGui::End();
 			
 			if (profiler.size() > 0) {
 				auto frame = profiler.pop();
-				make_profiler_tree(frame);
-			}
 
-			ImGui::End();
+				ImGui::Begin("Profiler");
+				make_profiler_tree(frame);
+				ImGui::End();
+			}
 
 			ImGui::EndFrame();
 			ImGui::Render();
@@ -593,6 +606,9 @@ public:
 
 		// Create the buffers
 		allocate_buffers();
+
+		// Create BVH builder
+		bvh = mercury::BVH(ctx, physical_device, device, world);
 	}
 
 	// Update the world
@@ -824,6 +840,12 @@ public:
 			.offset = 0,
 			.range = materials_buffer.size
 		};
+		
+		VkDescriptorBufferInfo bvh_info {
+			.buffer = bvh.buffer.buffer,
+			.offset = 0,
+			.range = bvh.buffer.size
+		};
 
 		VkWriteDescriptorSet pb_write = {
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -875,16 +897,27 @@ public:
 			.pBufferInfo = &mt_info
 		};
 
+		VkWriteDescriptorSet bvh_write = {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = descriptor_set,
+			.dstBinding = 5,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.pBufferInfo = &mt_info
+		};
+
 		VkWriteDescriptorSet writes[] = {
 			pb_write,
 			wb_write,
 			ob_write,
 			lb_write,
-			mt_write
+			mt_write,
+			bvh_write
 		};
 
 		vkUpdateDescriptorSets(
-			device.device, 5,
+			device.device, 6,
 			&writes[0],
 			0, nullptr
 		);
@@ -933,7 +966,15 @@ const std::vector <VkDescriptorSetLayoutBinding> MercuryApplication::dsl_binding
 		.descriptorCount = 1,
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 		.pImmutableSamplers = nullptr
-	}
+	},
+
+	VkDescriptorSetLayoutBinding {
+		.binding = 5,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.pImmutableSamplers = nullptr
+	},
 };
 
 int main()

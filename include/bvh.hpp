@@ -6,15 +6,11 @@
 
 // Engine headers
 #include "backend.hpp"
+#include "bbox.hpp"
 #include "core.hpp"
+#include "world.hpp"
 
 namespace mercury {
-
-// Axis Aligned Bounding Box
-struct BoundingBox {
-	glm::vec3 min;
-	glm::vec3 max;
-};
 
 // C++ representation of a BVH node
 struct BVHNode {
@@ -72,14 +68,83 @@ struct BVHNode {
 
 		// Write the node
 		buffer.push_back(header);
-		buffer.push_back(bbox.min);
-		buffer.push_back(bbox.max);
+		buffer.push_back(bbox.centroid);
+		buffer.push_back(bbox.dimension);
 
 		// Write the children
 		if (left)
 			left->write(buffer);
 		if (right)
 			right->write(buffer);
+	}
+};
+
+// Aggreagate structure for BVH
+struct BVH {
+	// Vuklan context (TODO: struct)
+	Vulkan *		vk = nullptr;
+	VkPhysicalDevice	phdev = VK_NULL_HANDLE;
+	Vulkan::Device		device;
+
+	// Root nodes
+	std::vector <BVHNode *>	nodes;
+
+	// Vulkan buffer
+	Vulkan::Buffer		buffer;
+	Buffer			dump;
+
+	// Default
+	BVH() {}
+
+	// Construct BVH from world
+	BVH(Vulkan *vulkan, const VkPhysicalDevice &physical, const Vulkan::Device &dev, const World &world)
+			: vk(vulkan), phdev(physical), device(dev) {
+		// Get all bounding boxes
+		std::vector <BoundingBox> boxes = world.extract_bboxes();
+
+		// Process into BVH nodes
+		process(boxes);
+
+		// TODO: there should only be one root node remaining
+		
+		// Dump all nodes to buffer
+		dump_all();
+
+		// Allocate buffer
+		vk->make_buffer(phdev, device, buffer, dump.size() * sizeof(aligned_vec4),
+				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+
+		// Map buffer
+		map_buffer();
+	}
+
+	// Process bounding boxes into BVH nodes
+	void process(const std::vector <BoundingBox> &boxes) {
+		// Convert each bounding box into a BVH node
+		for (const BoundingBox &box : boxes)
+			nodes.push_back(new BVHNode(box));
+		
+		// TODO: implement partitioning
+	}
+
+	// Dump all nodes to buffer
+	void dump_all() {
+		// Clear dump
+		dump.clear();
+
+		// Dump all nodes to buffer
+		for (BVHNode *node : nodes)
+			node->write(dump);
+	}
+
+	// Map buffer
+	void map_buffer() {
+		// Map buffer
+		vk->map_buffer(device,
+			&buffer,
+			dump.data(),
+			dump.size() * sizeof(aligned_vec4)
+		);
 	}
 };
 

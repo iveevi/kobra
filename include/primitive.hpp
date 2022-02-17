@@ -2,6 +2,7 @@
 #define PRIMITIVE_H_
 
 // Engine headers
+#include "bbox.hpp"
 #include "core.hpp"
 #include "material.hpp"
 #include "transform.hpp"
@@ -23,6 +24,9 @@ struct Primitive {
 
 	// Write data to aligned_vec4 buffer (inherited)
 	virtual void write(Buffer &buffer) const = 0;
+
+	// Extract bounding boxes
+	virtual void extract_bboxes(std::vector <mercury::BoundingBox> &bboxes) const = 0;
 
 	// Write full object data
 	// TODO: pass paramters as a struct
@@ -61,6 +65,8 @@ struct Triangle : public Primitive {
 	glm::vec3 c;
 
 	Triangle() {}
+	Triangle(const glm::vec3 &a, const glm::vec3 &b, const glm::vec3 &c)
+			: a(a), b(b), c(c) {}
 	Triangle(const glm::vec3 &a, const glm::vec3 &b, const glm::vec3 &c,
 			const Material &m)
 			: Primitive(OBJECT_TYPE_TRIANGLE, Transform(), m),
@@ -70,6 +76,20 @@ struct Triangle : public Primitive {
 		buffer.push_back(aligned_vec4(a));
 		buffer.push_back(aligned_vec4(b));
 		buffer.push_back(aligned_vec4(c));
+	}
+
+	void extract_bboxes(std::vector <mercury::BoundingBox> &bboxes) const override {
+		// Get min and max coordinates 
+		// TODO: account for transform
+		glm::vec3 min = glm::min(a, glm::min(b, c));
+		glm::vec3 max = glm::max(a, glm::max(b, c));
+
+		// Create bounding box
+		glm::vec3 center = (min + max) / 2.0f;
+		glm::vec3 size = (max - min) / 2.0f;
+
+		// Push bounding box
+		bboxes.push_back(mercury::BoundingBox(center, size));
 	}
 };
 
@@ -86,6 +106,15 @@ struct Sphere : public Primitive {
 		buffer.push_back(aligned_vec4 {
 			glm::vec4(transform.position, radius)
 		});
+	}
+
+	void extract_bboxes(std::vector <mercury::BoundingBox> &bboxes) const override {
+		// Create bounding box
+		glm::vec3 center = transform.position;
+		glm::vec3 size = glm::vec3(radius);
+
+		// Push bounding box
+		bboxes.push_back(mercury::BoundingBox(center, size));
 	}
 };
 
