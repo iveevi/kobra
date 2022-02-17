@@ -44,7 +44,7 @@ struct BVHNode {
 	}
 
 	// Recursively write the BVH to a buffer
-	void write(Buffer &buffer) {
+	void write(Buffer &buffer, uint &iobj) {
 		// TODO: implement
 
 		// Is the node a leaf?
@@ -60,22 +60,23 @@ struct BVHNode {
 		int32_t right_index = right ? after + left_size : -1;
 
 		// Header vec4
-		aligned_vec4 header = glm::vec3 {
+		aligned_vec4 header = glm::vec4 {
 			leaf,
+			static_cast <float> (iobj++),
 			static_cast <float> (left_index),
 			static_cast <float> (right_index)
 		};
 
 		// Write the node
 		buffer.push_back(header);
-		buffer.push_back(bbox.centroid);
-		buffer.push_back(bbox.dimension);
+		buffer.push_back(bbox.min);
+		buffer.push_back(bbox.max);
 
 		// Write the children
 		if (left)
-			left->write(buffer);
+			left->write(buffer, iobj);
 		if (right)
-			right->write(buffer);
+			right->write(buffer, iobj);
 	}
 };
 
@@ -118,9 +119,27 @@ struct BVH {
 		map_buffer();
 	}
 
+	// Update BVH
+	void update(const World &world) {
+		// Get all bounding boxes
+		std::vector <BoundingBox> boxes = world.extract_bboxes();
+
+		// Process into BVH nodes
+		process(boxes);
+		
+		// Dump all nodes to buffer
+		dump_all();
+
+		// TODO: reallocate if needed
+
+		// Map buffer
+		map_buffer();
+	}
+
 	// Process bounding boxes into BVH nodes
 	void process(const std::vector <BoundingBox> &boxes) {
 		// Convert each bounding box into a BVH node
+		nodes.clear();
 		for (const BoundingBox &box : boxes)
 			nodes.push_back(new BVHNode(box));
 		
@@ -133,8 +152,9 @@ struct BVH {
 		dump.clear();
 
 		// Dump all nodes to buffer
+		uint iobj = 0;
 		for (BVHNode *node : nodes)
-			node->write(dump);
+			node->write(dump, iobj);
 	}
 
 	// Map buffer

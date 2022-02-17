@@ -151,6 +151,16 @@ Intersection intersect_sphere(Ray ray, uint index)
 	return intersection;
 }
 
+// Get material for corresponding object
+vec3 material_for(uint index)
+{
+	// Get material index at the second element
+	uint mati = floatBitsToUint(objects.data[index].y);
+
+	// Get material from the materials buffer
+	return materials.data[mati].xyz;
+}
+
 // Get object intersection
 Intersection intersect(Ray ray, uint index)
 {
@@ -293,28 +303,76 @@ const vec2 offsets[MAX_SAMPLES] = {
 // TODO: pass as world parameter
 #define SAMPLES 1
 
+#define COLOR_WHEEL_SIZE 8
+
+// Bounding box color wheel
+const vec3 colors[COLOR_WHEEL_SIZE] = {
+	vec3(1.0, 0.0, 0.0),
+	vec3(1.0, 1.0, 0.0),
+	vec3(0.0, 1.0, 0.0),
+	vec3(0.0, 1.0, 1.0),
+	vec3(1.0, 0.0, 1.0),
+	vec3(0.0, 0.0, 1.0),
+	vec3(1.0, 0.5, 0.0),
+	vec3(0.5, 0.0, 1.0)
+};
+
 // Bounding box
 struct BoundingBox {
-	vec3 center;
-	vec3 extents;
+	vec3 pmin;
+	vec3 pmax;
 };
 
 // Intersect bounding box
 float intersect_box(Ray ray, BoundingBox box)
 {
-	vec3 tmin = (box.center - ray.origin) / ray.direction;
-	vec3 tmax = (box.center + box.extents - ray.origin) / ray.direction;
+	float tmin = (box.pmin.x - ray.origin.x) / ray.direction.x;
+	float tmax = (box.pmax.x - ray.origin.x) / ray.direction.x;
 
-	vec3 t1 = min(tmin, tmax);
-	vec3 t2 = max(tmin, tmax);
+	// TODO: swap function?
+	if (tmin > tmax) {
+		float tmp = tmin;
+		tmin = tmax;
+		tmax = tmp;
+	}
 
-	float tnear = max(max(t1.x, t1.y), t1.z);
-	float tfar = min(min(t2.x, t2.y), t2.z);
+	float tymin = (box.pmin.y - ray.origin.y) / ray.direction.y;
+	float tymax = (box.pmax.y - ray.origin.y) / ray.direction.y;
 
-	if (tnear > tfar)
+	if (tymin > tymax) {
+		float tmp = tymin;
+		tymin = tymax;
+		tymax = tmp;
+	}
+
+	if ((tmin > tymax) || (tymin > tmax))
 		return -1.0;
-	
-	return tnear;
+
+	if (tymin > tmin)
+		tmin = tymin;
+
+	if (tymax < tmax)
+		tmax = tymax;
+
+	float tzmin = (box.pmin.z - ray.origin.z) / ray.direction.z;
+	float tzmax = (box.pmax.z - ray.origin.z) / ray.direction.z;
+
+	if (tzmin > tzmax) {
+		float tmp = tzmin;
+		tzmin = tzmax;
+		tzmax = tmp;
+	}
+
+	if ((tmin > tzmax) || (tzmin > tmax))
+		return -1.0;
+
+	if (tzmin > tmin)
+		tmin = tzmin;
+
+	if (tzmax < tmax)
+		tmax = tzmax;
+
+	return tmin;
 }
 
 void main()
@@ -351,16 +409,17 @@ void main()
 	vec3 color = color_at(ray);
 
 	// Check which bvhs are intesected
-	for (int i = 0; i < world.objects; i++) {
-		vec3 center = bvh.data[3 * i + 1].xyz;
-		vec3 extents = bvh.data[3 * i + 2].xyz;
+	for (uint i = 0; i < world.objects; i++) {
+		vec3 pmin = bvh.data[3 * i + 1].xyz;
+		vec3 pmax = bvh.data[3 * i + 2].xyz;
 
-		BoundingBox bbox = { center, extents };
+		BoundingBox bbox = {pmin, pmax};
 		float t = intersect_box(ray, bbox);
 
-		if (t >= 0.0) {
-			// Add opaque red
-			color += vec3(1.0, 0.0, 0.0) * 0.1;
+		if (t > 0.0) {
+			// Blend color is the color of the object
+			vec3 blend = colors[i % COLOR_WHEEL_SIZE];
+			color = mix(color, blend, 0.15);
 		}
 	}
 

@@ -84,12 +84,8 @@ struct Triangle : public Primitive {
 		glm::vec3 min = glm::min(a, glm::min(b, c));
 		glm::vec3 max = glm::max(a, glm::max(b, c));
 
-		// Create bounding box
-		glm::vec3 center = (min + max) / 2.0f;
-		glm::vec3 size = (max - min) / 2.0f;
-
 		// Push bounding box
-		bboxes.push_back(mercury::BoundingBox(center, size));
+		bboxes.push_back(mercury::BoundingBox(min, max));
 	}
 };
 
@@ -110,11 +106,11 @@ struct Sphere : public Primitive {
 
 	void extract_bboxes(std::vector <mercury::BoundingBox> &bboxes) const override {
 		// Create bounding box
-		glm::vec3 center = transform.position;
-		glm::vec3 size = glm::vec3(radius);
+		glm::vec3 min = transform.position - glm::vec3(radius);
+		glm::vec3 max = transform.position + glm::vec3(radius);
 
 		// Push bounding box
-		bboxes.push_back(mercury::BoundingBox(center, size));
+		bboxes.push_back(mercury::BoundingBox(min, max));
 	}
 };
 

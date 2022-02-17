@@ -8,13 +8,13 @@ namespace mercury {
 
 // Axis Aligned Bounding Box
 struct BoundingBox {
-	glm::vec3 centroid;
-	glm::vec3 dimension;
+	glm::vec3 min;
+	glm::vec3 max;
 
 	// Constructor
 	BoundingBox() {}
-	BoundingBox(const glm::vec3 &c, const glm::vec3 &d)
-			: centroid(c), dimension(d) {}
+	BoundingBox(const glm::vec3 &a, const glm::vec3 &b)
+			: min(a), max(b) {}
 };
 
 }

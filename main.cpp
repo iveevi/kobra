@@ -50,8 +50,16 @@ World world {
 		World::PrimitivePtr(new Sphere(2.0f, transforms[3], materials[3])),
 		World::PrimitivePtr(new Sphere(2.0f, transforms[4], materials[4])),
 
+		// Triangle
+		World::PrimitivePtr(new Triangle(
+			glm::vec3(0.0f, 0.0f, 0.0f),
+			glm::vec3(0.0f, 0.0f, 1.0f),
+			glm::vec3(1.0f, 1.0f, 0.0f),
+			materials[4]
+		))
+
 		// Cube mesh
-		World::PrimitivePtr(new Mesh <VERTEX_TYPE_POSITION> (
+		/* World::PrimitivePtr(new Mesh <VERTEX_TYPE_POSITION> (
 			{
 				glm::vec3(0.0f, 0.0f, -1.0f),
 				glm::vec3(1.0f, 0.0f, -1.0f),
@@ -71,11 +79,12 @@ World world {
 				2, 6, 7,	2, 7, 3
 			},
 			materials[1]
-		))
+		)), */
 	},
 
 	// Lights
 	std::vector <World::LightPtr> {
+		// TODO: objects with emmision
 		World::LightPtr(new PointLight(transforms[0], 0.0f))
 	}
 };
@@ -96,7 +105,7 @@ inline std::ostream &operator<<(std::ostream &os, const aligned_vec4 &v)
 // Print BoundingBox
 inline std::ostream &operator<<(std::ostream &os, const mercury::BoundingBox &b)
 {
-	return (os << "(" << b.centroid	<< ", " << b.dimension << ")");
+	return (os << "(" << b.min	<< " --> " << b.max << ")");
 }
 
 // TODO: put the following functions into a alloc.cpp file
@@ -609,6 +618,15 @@ public:
 
 		// Create BVH builder
 		bvh = mercury::BVH(ctx, physical_device, device, world);
+
+		// Print contents of bvh buffer
+		Logger::ok() << "[main] BVH buffer contents\n";
+		for (const auto &v : bvh.dump) {
+			glm::vec3 pos = glm::vec3(v.data.x, v.data.y, v.data.z);
+			pos = glm::abs(pos);
+			pos = glm::normalize(pos);
+			std::cout << "\t" << v << " --> " << pos << "\n";
+		}
 	}
 
 	// Update the world
@@ -630,6 +648,8 @@ public:
 			update_descriptor_set();
 			update_command_buffers();
 		}
+
+		bvh.update(world);
 
 		// Update time
 		time += frame_time;
@@ -904,7 +924,7 @@ public:
 			.dstArrayElement = 0,
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.pBufferInfo = &mt_info
+			.pBufferInfo = &bvh_info
 		};
 
 		VkWriteDescriptorSet writes[] = {
