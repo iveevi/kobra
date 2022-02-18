@@ -46,7 +46,9 @@ struct BVHNode {
 	}
 
 	// Recursively write the BVH to a buffer
-	void write(Buffer &buffer) {
+	//	miss is the index of tree node
+	//	that should be visited next (essential for traversal)
+	void write(Buffer &buffer, int miss = -1) {
 		// TODO: implement
 
 		// Is the node a leaf?
@@ -61,12 +63,15 @@ struct BVHNode {
 		int32_t left_size = left ? 3 * left->size() : 0;
 		int32_t right_index = right ? after + left_size : -1;
 
+		// Left index is the hit index
+		// Right index is the miss index
+
 		// Header vec4
 		aligned_vec4 header = glm::vec4 {
 			leaf,
 			*reinterpret_cast <float *> (&object),
 			*reinterpret_cast <float *> (&left_index),
-			*reinterpret_cast <float *> (&right_index)
+			*reinterpret_cast <float *> (&miss)
 		};
 
 		// Write the node
@@ -76,9 +81,9 @@ struct BVHNode {
 
 		// Write the children
 		if (left)
-			left->write(buffer);
+			left->write(buffer, right_index);
 		if (right)
-			right->write(buffer);
+			right->write(buffer, miss);
 	}
 };
 
@@ -94,6 +99,7 @@ struct BVH {
 
 	// Vulkan buffer
 	Vulkan::Buffer		buffer;
+	// TODO: remove stack, will have no need for it
 	Vulkan::Buffer		stack; // Traversal stack
 	Buffer			dump;
 
@@ -205,9 +211,9 @@ struct BVH {
 			}
 		}
 
-		Logger::ok() << "[BVH] size = " << nodes.size() << ", axis: "
+		/* Logger::ok() << "[BVH] size = " << nodes.size() << ", axis: "
 			<< axis << ", (min, max) = ("
-			<< min_value << ", " << max_value << ")" << std::endl;
+			<< min_value << ", " << max_value << ")" << std::endl; */
 
 		// Binary search optimal partition (using SAH)
 		float min_cost = std::numeric_limits <float> ::max();
@@ -217,7 +223,7 @@ struct BVH {
 		for (int i = 0; i < bins; i++) {
 			float split = (max_value - min_value) / bins * i + min_value;
 			float cost = cost_split(nodes, split, axis);
-			std::cout << "Candidate split: " << split << ", cost: " << cost << std::endl;
+			// std::cout << "Candidate split: " << split << ", cost: " << cost << std::endl;
 
 			if (cost < min_cost) {
 				min_cost = cost;
@@ -228,7 +234,7 @@ struct BVH {
 		std::vector <BVHNode *> left;
 		std::vector <BVHNode *> right;
 
-		std::cout << "min_split = " << min_split << std::endl;
+		// std::cout << "min_split = " << min_split << std::endl;
 		if (min_cost == std::numeric_limits <float> ::max()) {
 			// Partition evenly
 			for (int i = 0; i < nodes.size(); i++) {
@@ -301,8 +307,8 @@ struct BVH {
 
 			float value = (min[axis] + max[axis]) / 2.0f;
 			
-			std::cout << "\textent: " << max[axis] << " --> "
-				<< min[axis] << ", median = " << value << std::endl;
+			// std::cout << "\textent: " << max[axis] << " --> "
+			//	<< min[axis] << ", median = " << value << std::endl;
 
 			if (value < split) {
 				// Left
@@ -319,7 +325,7 @@ struct BVH {
 			}
 		}
 
-		std::cout << "\tleft: " << prims_left << ", right: " << prims_right << std::endl;
+		// std::cout << "\tleft: " << prims_left << ", right: " << prims_right << std::endl;
 
 		// Max cost when all primitives are in one side
 		if (prims_left == 0 || prims_right == 0)
@@ -330,8 +336,8 @@ struct BVH {
 		float sa_right = BoundingBox(min_right, max_right).surface_area();
 		float sa_total = BoundingBox(tmin, tmax).surface_area();
 
-		std::cout << "\tSA_left = " << sa_left << ", SA_right = " << sa_right << std::endl;
-		std::cout << "\tprims_left = " << prims_left << ", prims_right = " << prims_right << std::endl;
+		// std::cout << "\tSA_left = " << sa_left << ", SA_right = " << sa_right << std::endl;
+		// std::cout << "\tprims_left = " << prims_left << ", prims_right = " << prims_right << std::endl;
 
 		return 1 + (prims_left * sa_left + prims_right * sa_right) / sa_total;
 	}

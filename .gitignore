@@ -4,4 +4,5 @@
 *.spv
 .cache
 .smake
+.vscode
 compile_commands.json

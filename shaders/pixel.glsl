@@ -192,16 +192,22 @@ Intersection intersect(Ray ray, uint index)
 // TODO: put all bvh functions in separate file
 
 // Get left and right child of the node
-int left_child(int node)
+int hit(int node)
 {
 	vec4 prop = bvh.data[node];
 	return floatBitsToInt(prop.z);
 }
 
-int right_child(int node)
+int miss(int node)
 {
 	vec4 prop = bvh.data[node];
 	return floatBitsToInt(prop.w);
+}
+
+int object(int node)
+{
+	vec4 prop = bvh.data[node];
+	return floatBitsToInt(prop.y);
 }
 
 bool leaf(int node)
@@ -229,61 +235,37 @@ Hit closest_object(Ray ray)
 		SHADING_TYPE_NONE
 	);
 
-	/* for (int i = 0; i < world.objects; i++) {
-		uint index = world.indices[i];
-		Intersection it = intersect(ray, index);
-
-		// Intersection it = intersect_shape(ray, sphere);
-		if (it.time > 0.0 && it.time < mini.time) {
-			min_index = i;
-			mini = it;
-		}
-	} */
-
-	// Debug representation
-	int debug_index = 0;
-
-	// Stack representation
-	int stack_index = 0;
-
-	// Push root to stack
-	stack.data[stack_index++] = 12;
-	while (stack_index > 0) {
-		// Pop top element
-		int root = stack.data[--stack_index];
-
-		// Check if it is a leaf
-		if (leaf(root)) {
+	// Traverse BVH as a threaded binary tree
+	int node = 0;
+	while (node != -1) {
+		if (leaf(node)) {
 			// Get object index
-			uint iobj = floatBitsToUint(bvh.data[root].y);
+			// int iobj = floatBitsToInt(bvh.data[node].y);
+			int iobj = object(node);
 			uint index = world.indices[iobj];
-			
-			debug.data[debug_index++] = vec4(3.141, iobj, index, 1.0);
 
 			// Get object
 			Intersection it = intersect(ray, index);
 
-			// Check if it is closer than the current minimum
+			// If intersection is valid, update minimum
 			if (it.time > 0.0 && it.time < mini.time) {
-				min_index = int(iobj);
+				min_index = iobj;
 				mini = it;
 			}
-		} else {
-			debug.data[debug_index++] = vec4(-3.141, 0.0, 0.0, 1.0);
 
+			// Go to next node (ame as miss)
+			node = miss(node);
+		} else {
 			// Get bounding box
-			BoundingBox box = bbox(root);
+			BoundingBox box = bbox(node);
 
 			// Check if ray intersects the bounding box
 			if (intersect_box(ray, box) > 0.0) {
-				// Push left and right child to stack
-				int left = left_child(root);
-				int right = right_child(root);
-
-				if (left >= 0)
-					stack.data[stack_index++] = left;
-				if (right >= 0)
-					stack.data[stack_index++] = right;
+				// Traverse left child
+				node = hit(node);
+			} else {
+				// Traverse right child
+				node = miss(node);
 			}
 		}
 	}
@@ -440,7 +422,7 @@ void main()
 	// Get color
 	vec3 color = color_at(ray);
 
-	// Check which bvhs are intesected
+	/* Check which bvhs are intesected
 	for (uint i = 0; i < world.objects; i++) {
 		vec3 pmin = bvh.data[3 * i + 1].xyz;
 		vec3 pmax = bvh.data[3 * i + 2].xyz;
@@ -448,12 +430,12 @@ void main()
 		BoundingBox bbox = {pmin, pmax};
 		float t = intersect_box(ray, bbox);
 
-		if (t > 0.0) {
+		if (t >= 0.0) {
 			// Blend color is the color of the object
 			vec3 blend = colors[i % COLOR_WHEEL_SIZE];
 			color = mix(color, blend, 0.15);
 		}
-	}
+	} */
 
 	// Set pixel color
 	frame.pixels[index] = cast_color(color);

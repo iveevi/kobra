@@ -481,7 +481,7 @@ class MercuryApplication : public mercury::App {
 		ctx->make_buffer(physical_device, device, lights_buffer, lights_size, buffer_usage);
 		ctx->make_buffer(physical_device, device, materials_buffer, materials_size, buffer_usage);
 
-		// Debug buffer (100 vec4s)
+		// Debug buffer (one vec4 per pixel)
 		ctx->make_buffer(physical_device, device, debug_buffer, 100 * sizeof(aligned_vec4), buffer_usage);
 		
 		// Add all buffers to deletion queue
@@ -655,10 +655,12 @@ public:
 
 		bvh.update(world);
 
-		// Print contents of bvh buffer
+		/* Print contents of bvh buffer
 		Logger::ok() << "[main] BVH buffer contents\n";
-		for (size_t i = 0; i < bvh.dump.size(); i += 3)
-			std::cout << "\t" << i << ": " << bvh.dump[i] << std::endl;
+		for (size_t i = 0; i < bvh.dump.size(); i += 3) {
+			glm::ivec4 dump = *reinterpret_cast <glm::uvec4 *> (&bvh.dump[i].data);
+			std::cout << "\t" << i << ": " << bvh.dump[i] << " --> " << dump << std::endl;
+		} */
 
 		// Update time
 		time += frame_time;
