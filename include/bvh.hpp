@@ -15,6 +15,8 @@ namespace mercury {
 // C++ representation of a BVH node
 struct BVHNode {
 	BoundingBox	bbox;
+	// Index of the object in the world
+	uint		object = 0;
 	BVHNode *	left = nullptr;
 	BVHNode *	right = nullptr;
 
@@ -44,7 +46,7 @@ struct BVHNode {
 	}
 
 	// Recursively write the BVH to a buffer
-	void write(Buffer &buffer, uint &iobj) {
+	void write(Buffer &buffer) {
 		// TODO: implement
 
 		// Is the node a leaf?
@@ -62,9 +64,9 @@ struct BVHNode {
 		// Header vec4
 		aligned_vec4 header = glm::vec4 {
 			leaf,
-			static_cast <float> (iobj++),
-			static_cast <float> (left_index),
-			static_cast <float> (right_index)
+			*reinterpret_cast <float *> (&object),
+			*reinterpret_cast <float *> (&left_index),
+			*reinterpret_cast <float *> (&right_index)
 		};
 
 		// Write the node
@@ -74,9 +76,9 @@ struct BVHNode {
 
 		// Write the children
 		if (left)
-			left->write(buffer, iobj);
+			left->write(buffer);
 		if (right)
-			right->write(buffer, iobj);
+			right->write(buffer);
 	}
 };
 
@@ -92,6 +94,7 @@ struct BVH {
 
 	// Vulkan buffer
 	Vulkan::Buffer		buffer;
+	Vulkan::Buffer		stack; // Traversal stack
 	Buffer			dump;
 
 	// Default
@@ -115,12 +118,26 @@ struct BVH {
 		vk->make_buffer(phdev, device, buffer, dump.size() * sizeof(aligned_vec4),
 				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 
+		// Traversal stack needs at most the # of nodes
+		// Quantize to 100 bytes
+		size_t size = nodes.size() * sizeof(int32_t);
+		size = (size + 99) / 100 * 100;
+
+		// Allocate stack
+		vk->make_buffer(phdev, device, stack, size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+
 		// Map buffer
 		map_buffer();
 	}
 
 	// Update BVH
 	void update(const World &world) {
+		// Free the tree nodes
+		// TODO: later conserve allocation, and
+		// find a better method for dynamic BVH
+		if (nodes.size() && nodes[0])
+			delete nodes[0];
+
 		// Get all bounding boxes
 		std::vector <BoundingBox> boxes = world.extract_bboxes();
 
@@ -140,14 +157,14 @@ struct BVH {
 	void process(const std::vector <BoundingBox> &boxes) {
 		// Convert each bounding box into a BVH node
 		nodes.clear();
-		for (const BoundingBox &box : boxes)
-			nodes.push_back(new BVHNode(box));
+		for (const BoundingBox &box : boxes) {
+			BVHNode *node = new BVHNode(box);
+			node->object = nodes.size();
+			nodes.push_back(node);
+		}
 		
-		// TODO: implement partitioning
+		// Partition nodes and single out root node
 		BVHNode *root = partition(nodes);
-
-		// nodes = std::vector <BVHNode *> { root };
-		// nodes.push_back(root);
 		nodes = std::vector <BVHNode *> {root};
 	}
 	
@@ -325,9 +342,8 @@ struct BVH {
 		dump.clear();
 
 		// Dump all nodes to buffer
-		uint iobj = 0;
 		for (BVHNode *node : nodes)
-			node->write(dump, iobj);
+			node->write(dump);
 	}
 
 	// Map buffer
@@ -338,6 +354,8 @@ struct BVH {
 			dump.data(),
 			dump.size() * sizeof(aligned_vec4)
 		);
+
+		// Stack has no need to be mapped
 	}
 };
 

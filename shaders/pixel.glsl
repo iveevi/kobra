@@ -7,6 +7,7 @@
 #include "ray.glsl"
 #include "intersect.glsl"
 #include "color.glsl"
+#include "bbox.glsl"
 
 // TODO: replace version with command line argument
 
@@ -71,6 +72,18 @@ layout (set = 0, binding = 5, std430) buffer BVH
 	// vec4 dimenions
 	vec4 data[];
 } bvh;
+
+// Stack (for BVH traversal)
+layout (set = 0, binding = 6, std430) buffer Stack
+{
+	int data[];
+} stack;
+
+// Debug buffer
+layout (set = 0, binding = 7, std430) buffer Debug
+{
+	vec4 data[];
+} debug;
 
 // Closest object information
 // TODO: this should be obslete
@@ -176,6 +189,35 @@ Intersection intersect(Ray ray, uint index)
 	return Intersection(-1.0, vec3(0.0), vec3(0.0), SHADING_TYPE_NONE);
 }
 
+// TODO: put all bvh functions in separate file
+
+// Get left and right child of the node
+int left_child(int node)
+{
+	vec4 prop = bvh.data[node];
+	return floatBitsToInt(prop.z);
+}
+
+int right_child(int node)
+{
+	vec4 prop = bvh.data[node];
+	return floatBitsToInt(prop.w);
+}
+
+bool leaf(int node)
+{
+	vec4 prop = bvh.data[node];
+	return prop.x == 0x1;
+}
+
+BoundingBox bbox(int node)
+{
+	vec3 min = bvh.data[node + 1].xyz;
+	vec3 max = bvh.data[node + 2].xyz;
+
+	return BoundingBox(min, max);
+}
+
 // Get index of cloests object
 Hit closest_object(Ray ray)
 {
@@ -187,7 +229,7 @@ Hit closest_object(Ray ray)
 		SHADING_TYPE_NONE
 	);
 
-	for (int i = 0; i < world.objects; i++) {
+	/* for (int i = 0; i < world.objects; i++) {
 		uint index = world.indices[i];
 		Intersection it = intersect(ray, index);
 
@@ -195,6 +237,54 @@ Hit closest_object(Ray ray)
 		if (it.time > 0.0 && it.time < mini.time) {
 			min_index = i;
 			mini = it;
+		}
+	} */
+
+	// Debug representation
+	int debug_index = 0;
+
+	// Stack representation
+	int stack_index = 0;
+
+	// Push root to stack
+	stack.data[stack_index++] = 12;
+	while (stack_index > 0) {
+		// Pop top element
+		int root = stack.data[--stack_index];
+
+		// Check if it is a leaf
+		if (leaf(root)) {
+			// Get object index
+			uint iobj = floatBitsToUint(bvh.data[root].y);
+			uint index = world.indices[iobj];
+			
+			debug.data[debug_index++] = vec4(3.141, iobj, index, 1.0);
+
+			// Get object
+			Intersection it = intersect(ray, index);
+
+			// Check if it is closer than the current minimum
+			if (it.time > 0.0 && it.time < mini.time) {
+				min_index = int(iobj);
+				mini = it;
+			}
+		} else {
+			debug.data[debug_index++] = vec4(-3.141, 0.0, 0.0, 1.0);
+
+			// Get bounding box
+			BoundingBox box = bbox(root);
+
+			// Check if ray intersects the bounding box
+			if (intersect_box(ray, box) > 0.0) {
+				// Push left and right child to stack
+				int left = left_child(root);
+				int right = right_child(root);
+
+				if (left >= 0)
+					stack.data[stack_index++] = left;
+				if (right >= 0)
+					stack.data[stack_index++] = right;
+			}
 		}
 	}
 
@@ -316,64 +406,6 @@ const vec3 colors[COLOR_WHEEL_SIZE] = {
 	vec3(1.0, 0.5, 0.0),
 	vec3(0.5, 0.0, 1.0)
 };
-
-// Bounding box
-struct BoundingBox {
-	vec3 pmin;
-	vec3 pmax;
-};
-
-// Intersect bounding box
-float intersect_box(Ray ray, BoundingBox box)
-{
-	float tmin = (box.pmin.x - ray.origin.x) / ray.direction.x;
-	float tmax = (box.pmax.x - ray.origin.x) / ray.direction.x;
-
-	// TODO: swap function?
-	if (tmin > tmax) {
-		float tmp = tmin;
-		tmin = tmax;
-		tmax = tmp;
-	}
-
-	float tymin = (box.pmin.y - ray.origin.y) / ray.direction.y;
-	float tymax = (box.pmax.y - ray.origin.y) / ray.direction.y;
-
-	if (tymin > tymax) {
-		float tmp = tymin;
-		tymin = tymax;
-		tymax = tmp;
-	}
-
-	if ((tmin > tymax) || (tymin > tmax))
-		return -1.0;
-
-	if (tymin > tmin)
-		tmin = tymin;
-
-	if (tymax < tmax)
-		tmax = tymax;
-
-	float tzmin = (box.pmin.z - ray.origin.z) / ray.direction.z;
-	float tzmax = (box.pmax.z - ray.origin.z) / ray.direction.z;
-
-	if (tzmin > tzmax) {
-		float tmp = tzmin;
-		tzmin = tzmax;
-		tzmax = tmp;
-	}
-
-	if ((tmin > tzmax) || (tzmin > tmax))
-		return -1.0;
-
-	if (tzmin > tmin)
-		tmin = tzmin;
-
-	if (tzmax < tmax)
-		tmax = tzmax;
-
-	return tmin;
-}
 
 void main()
 {

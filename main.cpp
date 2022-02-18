@@ -43,11 +43,13 @@ World world {
 	// Primitives
 	// TODO: later read from file
 	std::vector <World::PrimitivePtr> {
-		World::PrimitivePtr(new Sphere(0.25f, transforms[0], materials[6])),
+		// World::PrimitivePtr(new Sphere(0.25f, transforms[0], materials[6])),
+		
 		World::PrimitivePtr(new Sphere(1.0f, transforms[0], materials[0])),
-		World::PrimitivePtr(new Sphere(3.0f, transforms[1], materials[1])),
+		// World::PrimitivePtr(new Sphere(3.0f, transforms[1], materials[1])),
 		World::PrimitivePtr(new Sphere(6.0f, transforms[2], materials[2])),
-		World::PrimitivePtr(new Sphere(2.0f, transforms[3], materials[3])),
+		
+		// World::PrimitivePtr(new Sphere(2.0f, transforms[3], materials[3])),
 		World::PrimitivePtr(new Sphere(2.0f, transforms[4], materials[4])),
 
 		// Triangle
@@ -56,10 +58,10 @@ World world {
 			glm::vec3(0.0f, 0.0f, 1.0f),
 			glm::vec3(1.0f, 1.0f, 0.0f),
 			materials[4]
-		))
+		)),
 
-		// Cube mesh
-		/* World::PrimitivePtr(new Mesh <VERTEX_TYPE_POSITION> (
+		/* Cube mesh
+		World::PrimitivePtr(new Mesh <VERTEX_TYPE_POSITION> (
 			{
 				glm::vec3(0.0f, 0.0f, -1.0f),
 				glm::vec3(1.0f, 0.0f, -1.0f),
@@ -319,6 +321,8 @@ class MercuryApplication : public mercury::App {
 	Vulkan::Buffer	lights_buffer;
 	Vulkan::Buffer	materials_buffer;
 
+	Vulkan::Buffer debug_buffer;
+
 	// BVH resources
 	mercury::BVH	bvh;
 
@@ -476,6 +480,9 @@ class MercuryApplication : public mercury::App {
 		ctx->make_buffer(physical_device, device, objects_buffer, objects_size, buffer_usage);
 		ctx->make_buffer(physical_device, device, lights_buffer, lights_size, buffer_usage);
 		ctx->make_buffer(physical_device, device, materials_buffer, materials_size, buffer_usage);
+
+		// Debug buffer (100 vec4s)
+		ctx->make_buffer(physical_device, device, debug_buffer, 100 * sizeof(aligned_vec4), buffer_usage);
 		
 		// Add all buffers to deletion queue
 		ctx->push_deletion_task(
@@ -495,14 +502,20 @@ class MercuryApplication : public mercury::App {
 	Vulkan::ImGuiContext imgui_ctx;
 
 	// Create ImGui profiler tree
-	void make_profiler_tree(const mercury::Profiler::Frame &frame) {
+	void make_profiler_tree(const mercury::Profiler::Frame &frame, float parent = -1.0) {
 		// Show tree
-		ImGui::BeginChild("##profiler", ImVec2(0, 0), true);
-		ImGui::Text("Frame %s: %.3f", frame.name.c_str(), frame.time);
-		for (auto &child : frame.children) {
-			make_profiler_tree(child);
+		if (ImGui::TreeNode(frame.name.c_str())) {
+			ImGui::Text("time:   %10.3f ms", frame.time);
+
+			if (parent > 0) {
+				float percent = frame.time / parent;
+				ImGui::Text("parent: %10.3f%%", percent * 100.0f);
+			}
+
+			for (auto &child : frame.children)
+				make_profiler_tree(child, frame.time);
+			ImGui::TreePop();
 		}
-		ImGui::EndChild();
 	}
 
 	// Create ImGui render
@@ -618,35 +631,34 @@ public:
 
 		// Create BVH builder
 		bvh = mercury::BVH(ctx, physical_device, device, world);
-
-		// Print contents of bvh buffer
-		Logger::ok() << "[main] BVH buffer contents\n";
-		for (const auto &v : bvh.dump)
-			std::cout << "\t" << v << "\n";
-		// throw std::runtime_error("Finished printing bvh buffer contents");
 	}
 
 	// Update the world
 	void update_world() {
 		static float time = 0.0f;
 
-		/* Update light position
+		// Update light position
 		float amplitude = 7.0f;
 		glm::vec3 position {
 			amplitude * sin(time), 7.0f,
 			amplitude * cos(time)
 		};
 
-		world.objects[0]->transform.position = position;
-		world.lights[0]->transform.position = position;
+		// world.objects[0]->transform.position = position;
+		// world.lights[0]->transform.position = position;
 
 		// Map buffers
 		if (map_buffers(ctx)) {
 			update_descriptor_set();
 			update_command_buffers();
-		} */
+		}
 
-		//bvh.update(world);
+		bvh.update(world);
+
+		// Print contents of bvh buffer
+		Logger::ok() << "[main] BVH buffer contents\n";
+		for (size_t i = 0; i < bvh.dump.size(); i += 3)
+			std::cout << "\t" << i << ": " << bvh.dump[i] << std::endl;
 
 		// Update time
 		time += frame_time;
@@ -741,7 +753,7 @@ public:
 			throw (-1);
 		}
 
-		/* Wait for the first command buffer to finish
+		// Wait for the first command buffer to finish
 		vkQueueWaitIdle(device.graphics_queue);
 
 		// Submit ImGui command buffer
@@ -761,7 +773,7 @@ public:
 		if (result != VK_SUCCESS) {
 			Logger::error("[main] Failed to submit draw ImGui command buffer!");
 			throw (-1);
-		} */
+		}
 		
 		// Present the image to the swap chain
 		VkSwapchainKHR swchs[] = {swapchain.swch};
@@ -863,6 +875,18 @@ public:
 			.offset = 0,
 			.range = bvh.buffer.size
 		};
+		
+		VkDescriptorBufferInfo stack_info {
+			.buffer = bvh.stack.buffer,
+			.offset = 0,
+			.range = bvh.stack.size
+		};
+
+		VkDescriptorBufferInfo dbg_info {
+			.buffer = debug_buffer.buffer,
+			.offset = 0,
+			.range = debug_buffer.size
+		};
 
 		VkWriteDescriptorSet pb_write = {
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -924,17 +948,39 @@ public:
 			.pBufferInfo = &bvh_info
 		};
 
+		VkWriteDescriptorSet stack_write = {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = descriptor_set,
+			.dstBinding = 6,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.pBufferInfo = &stack_info
+		};
+
+		VkWriteDescriptorSet dbg_write = {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = descriptor_set,
+			.dstBinding = 7,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.pBufferInfo = &dbg_info
+		};
+
 		VkWriteDescriptorSet writes[] = {
 			pb_write,
 			wb_write,
 			ob_write,
 			lb_write,
 			mt_write,
-			bvh_write
+			bvh_write,
+			stack_write,
+			dbg_write
 		};
 
 		vkUpdateDescriptorSets(
-			device.device, 6,
+			device.device, 8,
 			&writes[0],
 			0, nullptr
 		);
@@ -992,6 +1038,27 @@ const std::vector <VkDescriptorSetLayoutBinding> MercuryApplication::dsl_binding
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 		.pImmutableSamplers = nullptr
 	},
+
+	VkDescriptorSetLayoutBinding {
+		.binding = 6,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.pImmutableSamplers = nullptr
+	},
+
+	VkDescriptorSetLayoutBinding {
+		.binding = 7,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.pImmutableSamplers = nullptr
+	}
+};
+
+// Profiler application
+class ProfilerApplication : public mercury::App {
+
 };
 
 int main()
