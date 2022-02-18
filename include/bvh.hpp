@@ -144,6 +144,179 @@ struct BVH {
 			nodes.push_back(new BVHNode(box));
 		
 		// TODO: implement partitioning
+		BVHNode *root = partition(nodes);
+
+		// nodes = std::vector <BVHNode *> { root };
+		// nodes.push_back(root);
+		nodes = std::vector <BVHNode *> {root};
+	}
+	
+	BVHNode *partition(std::vector <BVHNode *> &nodes) {
+		// Base cases
+		if (nodes.size() == 0)
+			return nullptr;
+
+		if (nodes.size() == 1)
+			return nodes[0];
+
+		if (nodes.size() == 2) {
+			BVHNode *node = new BVHNode(union_of(nodes));
+			node->left = nodes[0];
+			node->right = nodes[1];
+			return node;
+		}
+		
+		// Get axis with largest extent
+		int axis = 0;
+		float max_extent = 0.0f;
+
+		float min_value = std::numeric_limits <float> ::max();
+		float max_value = -std::numeric_limits <float> ::max();
+
+		for (size_t n = 0; n < nodes.size(); n++) {
+			for (int i = 0; i < 3; i++) {
+				glm::vec3 min = nodes[n]->bbox.min;
+				glm::vec3 max = nodes[n]->bbox.max;
+
+				float extent = std::abs(max[i] - min[i]);
+				if (extent > max_extent) {
+					max_extent = extent;
+					min_value = min[i];
+					max_value = max[i];
+					axis = i;
+				}
+			}
+		}
+
+		Logger::ok() << "[BVH] size = " << nodes.size() << ", axis: "
+			<< axis << ", (min, max) = ("
+			<< min_value << ", " << max_value << ")" << std::endl;
+
+		// Binary search optimal partition (using SAH)
+		float min_cost = std::numeric_limits <float> ::max();
+		float min_split = 0.0f;
+		int bins = 10;
+
+		for (int i = 0; i < bins; i++) {
+			float split = (max_value - min_value) / bins * i + min_value;
+			float cost = cost_split(nodes, split, axis);
+			std::cout << "Candidate split: " << split << ", cost: " << cost << std::endl;
+
+			if (cost < min_cost) {
+				min_cost = cost;
+				min_split = split;
+			}
+		}
+
+		std::vector <BVHNode *> left;
+		std::vector <BVHNode *> right;
+
+		std::cout << "min_split = " << min_split << std::endl;
+		if (min_cost == std::numeric_limits <float> ::max()) {
+			// Partition evenly
+			for (int i = 0; i < nodes.size(); i++) {
+				if (i % 2 == 0)
+					left.push_back(nodes[i]);
+				else
+					right.push_back(nodes[i]);
+			}
+		} else {
+			// Centroid partition with optimal split
+			for (BVHNode *node : nodes) {
+				glm::vec3 min = node->bbox.min;
+				glm::vec3 max = node->bbox.max;
+
+				float value = (min[axis] + max[axis]) / 2.0f;
+
+				if (value < min_split)
+					left.push_back(node);
+				else
+					right.push_back(node);
+			}
+		}
+
+		// Create left and right nodes
+		BoundingBox bbox = union_of(nodes);
+		BVHNode *left_node = partition(left);
+		BVHNode *right_node = partition(right);
+
+		BVHNode *node = new BVHNode(bbox);
+		node->left = left_node;
+		node->right = right_node;
+
+		return node;
+	}
+
+	// Union bounding boxes
+	BoundingBox union_of(const std::vector <BVHNode *> &nodes) {
+		glm::vec3 min = nodes[0]->bbox.min;
+		glm::vec3 max = nodes[0]->bbox.max;
+
+		for (int i = 1; i < nodes.size(); i++) {
+			min = glm::min(min, nodes[i]->bbox.min);
+			max = glm::max(max, nodes[i]->bbox.max);
+		}
+
+		return BoundingBox(min, max);
+	}
+
+	float cost_split(const std::vector <BVHNode *> &nodes, float split, int axis) {
+		float cost = 0.0f;
+
+		glm::vec3 min_left = glm::vec3(std::numeric_limits <float> ::max());
+		glm::vec3 max_left = glm::vec3(-std::numeric_limits <float> ::max());
+
+		glm::vec3 min_right = glm::vec3(std::numeric_limits <float> ::max());
+		glm::vec3 max_right = glm::vec3(-std::numeric_limits <float> ::max());
+
+		glm::vec3 tmin = nodes[0]->bbox.min;
+		glm::vec3 tmax = nodes[0]->bbox.max;
+
+		int prims_left = 0;
+		int prims_right = 0;
+
+		for (BVHNode *node : nodes) {
+			glm::vec3 min = node->bbox.min;
+			glm::vec3 max = node->bbox.max;
+
+			tmin = glm::min(tmin, min);
+			tmax = glm::max(tmax, max);
+
+			float value = (min[axis] + max[axis]) / 2.0f;
+			
+			std::cout << "\textent: " << max[axis] << " --> "
+				<< min[axis] << ", median = " << value << std::endl;
+
+			if (value < split) {
+				// Left
+				prims_left++;
+
+				min_left = glm::min(min_left, min);
+				max_left = glm::max(max_left, max);
+			} else {
+				// Right
+				prims_right++;
+
+				min_right = glm::min(min_right, min);
+				max_right = glm::max(max_right, max);
+			}
+		}
+
+		std::cout << "\tleft: " << prims_left << ", right: " << prims_right << std::endl;
+
+		// Max cost when all primitives are in one side
+		if (prims_left == 0 || prims_right == 0)
+			return std::numeric_limits <float> ::max();
+
+		// Compute cost
+		float sa_left = BoundingBox(min_left, max_left).surface_area();
+		float sa_right = BoundingBox(min_right, max_right).surface_area();
+		float sa_total = BoundingBox(tmin, tmax).surface_area();
+
+		std::cout << "\tSA_left = " << sa_left << ", SA_right = " << sa_right << std::endl;
+		std::cout << "\tprims_left = " << prims_left << ", prims_right = " << prims_right << std::endl;
+
+		return 1 + (prims_left * sa_left + prims_right * sa_right) / sa_total;
 	}
 
 	// Dump all nodes to buffer

@@ -621,19 +621,16 @@ public:
 
 		// Print contents of bvh buffer
 		Logger::ok() << "[main] BVH buffer contents\n";
-		for (const auto &v : bvh.dump) {
-			glm::vec3 pos = glm::vec3(v.data.x, v.data.y, v.data.z);
-			pos = glm::abs(pos);
-			pos = glm::normalize(pos);
-			std::cout << "\t" << v << " --> " << pos << "\n";
-		}
+		for (const auto &v : bvh.dump)
+			std::cout << "\t" << v << "\n";
+		// throw std::runtime_error("Finished printing bvh buffer contents");
 	}
 
 	// Update the world
 	void update_world() {
 		static float time = 0.0f;
 
-		// Update light position
+		/* Update light position
 		float amplitude = 7.0f;
 		glm::vec3 position {
 			amplitude * sin(time), 7.0f,
@@ -647,9 +644,9 @@ public:
 		if (map_buffers(ctx)) {
 			update_descriptor_set();
 			update_command_buffers();
-		}
+		} */
 
-		bvh.update(world);
+		//bvh.update(world);
 
 		// Update time
 		time += frame_time;
@@ -744,7 +741,7 @@ public:
 			throw (-1);
 		}
 
-		// Wait for the first command buffer to finish
+		/* Wait for the first command buffer to finish
 		vkQueueWaitIdle(device.graphics_queue);
 
 		// Submit ImGui command buffer
@@ -755,8 +752,8 @@ public:
 		// Submit the command buffer
 		// TODO: Vulkan method
 		vkResetFences(device.device, 1, &imgui_ctx.fence);
-
 		result = vkQueueSubmit(
+
 			device.graphics_queue, 1, &submit_info,
 			imgui_ctx.fence
 		);
@@ -764,7 +761,7 @@ public:
 		if (result != VK_SUCCESS) {
 			Logger::error("[main] Failed to submit draw ImGui command buffer!");
 			throw (-1);
-		}
+		} */
 		
 		// Present the image to the swap chain
 		VkSwapchainKHR swchs[] = {swapchain.swch};
