@@ -56,3 +56,10 @@ float intersect_box(Ray ray, BoundingBox box)
 	return tmin;
 }
 
+// Check if point is in bounding box
+bool in_box(vec3 point, BoundingBox box)
+{
+	return (point.x >= box.pmin.x && point.x <= box.pmax.x &&
+		point.y >= box.pmin.y && point.y <= box.pmax.y &&
+		point.z >= box.pmin.z && point.z <= box.pmax.z);
+}

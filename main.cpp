@@ -322,7 +322,7 @@ class MercuryApplication : public mercury::App {
 	Vulkan::Buffer debug_buffer;
 
 	// BVH resources
-	mercury::BVH	bvh;
+	mercury::BVH bvh;
 
 	////////////////////
 	// Buffer methods //
@@ -538,7 +538,11 @@ class MercuryApplication : public mercury::App {
 
 			// Show render monitor
 			ImGui::Begin("Render Monitor");
-			ImGui::Text("fps: %.1f", ImGui::GetIO().Framerate);
+			{
+				ImGui::Text("fps: %.1f", ImGui::GetIO().Framerate);
+				ImGui::Checkbox("BVH Debugging", &world.options.debug_bvh);
+				ImGui::InputInt("Descretize (grey)", &world.options.discretize);
+			}
 			ImGui::End();
 			
 			if (profiler.size() > 0) {
@@ -1067,7 +1071,7 @@ int main()
 	// Logger::switch_file("mercury.log");
 
 	mercury::Model <VERTEX_TYPE_POSITION> model("resources/debug.obj");
-	model[0] = materials[2];
+	model[0].material = materials[2];
 
 	world.objects.push_back(std::shared_ptr <mercury::Model <VERTEX_TYPE_POSITION>> (
 		new mercury::Model <VERTEX_TYPE_POSITION> (model)
@@ -1075,8 +1079,8 @@ int main()
 
 	Logger::ok() << "[main] Loaded model with "
 		<< model.mesh_count() << " meshe(s), "
-		<< model.mesh(0).vertex_count() << " vertices, "
-		<< model.mesh(0).triangle_count() << " triangles" << std::endl;
+		<< model[0].vertex_count() << " vertices, "
+		<< model[0].triangle_count() << " triangles" << std::endl;
 	
 	// Initialize Vulkan
 	Vulkan *vulkan = new Vulkan();

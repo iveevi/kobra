@@ -12,6 +12,12 @@
 #include "logger.hpp"
 #include "primitive.hpp"
 
+// Rendering options
+struct Options {
+	bool	debug_bvh = false;
+	int	discretize = -1;
+};
+
 // GPU friendyl world data structure
 struct GPUWorld {
 	// GLSL-like aliases
@@ -23,6 +29,9 @@ struct GPUWorld {
 
 	uint	width;
 	uint	height;
+
+	uint	options;
+	int32_t	discretize;
 
 	// Camera data
 	aligned_vec4 position;
@@ -39,9 +48,12 @@ struct World {
 	using LightPtr = std::shared_ptr <Light>;
 
 	// Data
-	Camera			camera;
+	Camera				camera;
 	std::vector <PrimitivePtr>	objects;
-	std::vector <LightPtr>	lights;
+	std::vector <LightPtr>		lights;
+
+	// Extra
+	Options				options;
 
 	// World constructor
 	World() {}
@@ -58,7 +70,8 @@ struct World {
 			.objects = static_cast <uint> (objects.size()),
 			.lights = static_cast <uint> (lights.size()),
 			.width = 800,
-			.height = 600
+			.height = 600,
+			.discretize = options.discretize
 		};
 
 		// Camera data
@@ -75,6 +88,11 @@ struct World {
 			camera.tunings.scale,
 			camera.tunings.aspect
 		};
+
+		// Set options as bit flags
+		world.options = 0;
+		if (options.debug_bvh)
+			world.options |= 0x1;
 
 		return world;
 	}

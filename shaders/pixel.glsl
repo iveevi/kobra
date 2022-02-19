@@ -21,10 +21,12 @@ layout (set = 0, binding = 1, std430) buffer World
 {
 	uint objects;
 	uint lights;
-	// uint background;
 
 	uint width;
 	uint height;
+
+	uint options;
+	int discretize;	
 
 	vec4 camera;
 	vec4 cforward;
@@ -259,8 +261,12 @@ Hit closest_object(Ray ray)
 			// Get bounding box
 			BoundingBox box = bbox(node);
 
-			// Check if ray intersects the bounding box
-			if (intersect_box(ray, box) > 0.0) {
+			// Check if ray intersects (or is inside)
+			// the bounding box
+			float t = intersect_box(ray, box);
+			bool inside = in_box(ray.origin, box);
+
+			if (t > 0.0 || inside) {
 				// Traverse left child
 				node = hit(node);
 			} else {
@@ -282,12 +288,12 @@ Hit closest_object(Ray ray)
 
 vec3 color_at(Ray ray)
 {
+	// Light position (fixed for now)
+	vec3 light_position = lights.data[0].xyz;
+
 	// Shadow bias
 	// TODO: why is this so large?
 	float bias = 0.1;
-
-	// Maximum recursion depth
-	int max_depth = 2;
 	
 	Hit hit = closest_object(ray);
 	
@@ -341,7 +347,6 @@ vec3 color_at(Ray ray)
 
 		// TODO: different light/shading modes, using ImGui
 		color = hit.color * clamp(spec + diff * (1.0 - 0.9 * shadow) + 0.15, 0.0, 1.0);
-		// color = discretize(color, 4);
 		return color;
 	}
 
@@ -422,20 +427,27 @@ void main()
 	// Get color
 	vec3 color = color_at(ray);
 
-	/* Check which bvhs are intesected
-	for (uint i = 0; i < world.objects; i++) {
-		vec3 pmin = bvh.data[3 * i + 1].xyz;
-		vec3 pmax = bvh.data[3 * i + 2].xyz;
+	// Descretize color if needed
+	if (world.discretize > 0)
+		color = discretize_grey(color, world.discretize);
 
-		BoundingBox bbox = {pmin, pmax};
-		float t = intersect_box(ray, bbox);
+	// TODO: constants for mask
+	if ((world.options & 0x1) == 0x1) {
+		// Check which bvhs are intesected
+		for (uint i = 0; i < world.objects; i++) {
+			vec3 pmin = bvh.data[3 * i + 1].xyz;
+			vec3 pmax = bvh.data[3 * i + 2].xyz;
 
-		if (t >= 0.0) {
-			// Blend color is the color of the object
-			vec3 blend = colors[i % COLOR_WHEEL_SIZE];
-			color = mix(color, blend, 0.15);
+			BoundingBox bbox = {pmin, pmax};
+			float t = intersect_box(ray, bbox);
+
+			if (t >= 0.0) {
+				// Blend color is the color of the object
+				vec3 blend = colors[i % COLOR_WHEEL_SIZE];
+				color = mix(color, blend, 0.15);
+			}
 		}
-	} */
+	}
 
 	// Set pixel color
 	frame.pixels[index] = cast_color(color);

@@ -43,6 +43,7 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 }
 
 // Mouse movement callback
+// TODO: in class
 void mouse_callback(GLFWwindow *window, double xpos, double ypos)
 {
 	static bool first_mouse = true;

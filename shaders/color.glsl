@@ -18,7 +18,7 @@ uint cast_color(vec3 c)
 }
 
 // Discretize and grey scale
-vec3 discretize(vec3 c, float levels)
+vec3 discretize_grey(vec3 c, float levels)
 {
 	// Get gray scale
 	float gray = (c.x + c.y + c.z) / 3.0;

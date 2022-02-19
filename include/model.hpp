@@ -21,11 +21,6 @@ template <VertexType T>
 class Model : public Primitive {
 	// Meshes
 	std::vector <Mesh <T>> _meshes;
-
-	// Materials (per mesh)
-	std::vector <Material> _materials;
-
-	// TODO: materials, textures, etc.
 	
 	// Assimp helpers
 	void _process_node(aiNode *, const aiScene *);
@@ -38,11 +33,9 @@ public:
 
 	// Properties
 	size_t mesh_count() const;
-	const Mesh <T> &mesh(size_t) const;
 
-	// Setting materials
-	Material &operator[](size_t);
-	const Material &operator[](size_t) const;
+	Mesh <T> &operator[](size_t);
+	const Mesh <T> &operator[](size_t) const;
 
 	// Write model to buffer (fake to resolve abstract base class)
 	void write(Buffer &buffer) const override {
@@ -119,8 +112,14 @@ void Model <T> ::_process_mesh(aiMesh *mesh, const aiScene *scene)
 	// TODO: ignoring materials right now
 	
 	// Push back the mesh, and its material
-	Material mat;
-	_materials.push_back(mat);
+	// 	default material is magenta
+	Material mat(
+		glm::vec3 {
+			1.0f, 0.0f, 1.0f
+		},
+		SHADING_TYPE_FLAT
+	);
+
 	_meshes.push_back(Mesh <T> (vertices, indices, mat));
 }
 
@@ -170,32 +169,15 @@ size_t Model <T> ::mesh_count() const
 }
 
 template <VertexType T>
-const Mesh <T> &Model <T> ::mesh(size_t i) const
+Mesh <T> &Model <T> ::operator[](size_t i)
 {
 	return _meshes[i];
 }
 
-// Setting materials
 template <VertexType T>
-Material &Model <T> ::operator[](size_t index)
+const Mesh <T> &Model <T> ::operator[](size_t i) const
 {
-	// Check if the index is valid
-	if (index >= _materials.size())
-		_materials.resize(index + 1);
-
-	// Return the material
-	return _materials[index];
-}
-
-template <VertexType T>
-const Material &Model <T> ::operator[](size_t index) const
-{
-	// Check if the index is valid
-	if (index >= _materials.size())
-		throw std::out_of_range("Model::operator[]");
-
-	// Return the material
-	return _materials[index];
+	return _meshes[i];
 }
 
 }
