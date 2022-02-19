@@ -58,12 +58,26 @@ layout (set = 0, binding = 3, std430) buffer Lights
 } lights;
 
 // Array of materials
+// TODO: move to separate file
 layout (set = 0, binding = 4, std430) buffer Materials
 {
 	// Material layout:
-	// vec4 descriptor (color, shading)
+	// vec4 descriptor (color[3], shading[1])
+	// vec4 properties (reflectance[1], refractance[1])
 	vec4 data[];
 } materials;
+
+// Create material from index
+Material material_for(uint mati)
+{
+	vec4 r1 = materials.data[mati];
+	vec4 r2 = materials.data[mati + 1];
+
+	return Material(
+		vec3(r1.x, r1.y, r1.z), r1.w,
+		r2.x, r2.y, r2.z
+	);
+}
 
 // BVH
 layout (set = 0, binding = 5, std430) buffer BVH
@@ -94,8 +108,8 @@ struct Hit {
 	float	time;
 	vec3	point;
 	vec3	normal;
-	vec3	color;
-	float	shading;	// Shading type
+
+	Material mat;
 };
 
 // Background color corresponding to ray
@@ -129,10 +143,7 @@ Intersection intersect_triangle(Ray ray, uint index)
 	if (intersection.time > 0.0) {
 		// Get material index at the second element
 		uint mati = floatBitsToUint(prop.y);
-
-		// Get material from the materials buffer
-		intersection.color = materials.data[mati].xyz;
-		intersection.shading = materials.data[mati].w;
+		intersection.mat = material_for(mati);
 	}
 
 	return intersection;
@@ -157,23 +168,10 @@ Intersection intersect_sphere(Ray ray, uint index)
 	if (intersection.time > 0.0) {
 		// Get material index at the second element
 		uint mati = floatBitsToUint(prop.y);
-
-		// Get material from the materials buffer
-		intersection.color = materials.data[mati].xyz;
-		intersection.shading = materials.data[mati].w;
+		intersection.mat = material_for(mati);
 	}
 
 	return intersection;
-}
-
-// Get material for corresponding object
-vec3 material_for(uint index)
-{
-	// Get material index at the second element
-	uint mati = floatBitsToUint(objects.data[index].y);
-
-	// Get material from the materials buffer
-	return materials.data[mati].xyz;
 }
 
 // Get object intersection
@@ -188,7 +186,7 @@ Intersection intersect(Ray ray, uint index)
 	if (id == OBJECT_TYPE_SPHERE)
 		return intersect_sphere(ray, index);
 	
-	return Intersection(-1.0, vec3(0.0), vec3(0.0), SHADING_TYPE_NONE);
+	return Intersection(-1.0, vec3(0.0), mat_default());
 }
 
 // TODO: put all bvh functions in separate file
@@ -233,8 +231,8 @@ Hit closest_object(Ray ray)
 	
 	// Starting time
 	Intersection mini = Intersection(
-		1.0/0.0, vec3(0.0), vec3(0.0),
-		SHADING_TYPE_NONE
+		1.0/0.0, vec3(0.0),
+		mat_default()
 	);
 
 	// Traverse BVH as a threaded binary tree
@@ -278,79 +276,152 @@ Hit closest_object(Ray ray)
 
 	// Color of closest object
 	vec3 color = background(ray);
-	if (min_index >= 0)
-		color = mini.color;
+	if (min_index < 0)
+		mini.mat.albedo = color;
 
 	vec3 point = ray.origin + ray.direction * mini.time;
 
-	return Hit(min_index, mini.time, point, mini.normal, color, mini.shading);
+	return Hit(
+		min_index,
+		mini.time,
+		point,
+		mini.normal,
+		mini.mat
+	);
+}
+
+// "Phong"
+vec3 color_calc(Hit hit, Ray ray)
+{
+	// Check for light type again
+	if (hit.mat.shading == SHADING_TYPE_LIGHT)
+		return hit.mat.albedo;
+
+	// Intersection bias
+	float bias = 0.1;
+
+	// Light position (fixed for now)
+	vec3 light_position = lights.data[0].yzw; // TODO: function to get light position
+	vec3 light_direction = normalize(light_position - hit.point);
+
+	// Shadow calculation
+	vec3 shadow_origin = hit.point + hit.normal * bias;
+
+	Ray shadow_ray = Ray(
+		shadow_origin,
+		light_direction
+	);
+
+	Hit shadow_hit = closest_object(shadow_ray);
+
+	float shadow = 0.0;
+	if (shadow_hit.object >= 0 && shadow_hit.mat.shading != SHADING_TYPE_LIGHT)
+		shadow = 1.0;
+
+	// Diffuse
+	float diffuse = max(dot(hit.normal, light_direction), 0.0);
+
+	// Specular
+	vec3 view_direction = normalize(hit.point - ray.origin);
+	vec3 reflect_direction = reflect(light_direction, hit.normal);
+	float specular = pow(
+		max(dot(view_direction, reflect_direction), 0.0),
+		hit.mat.specular
+	);
+
+	// Combine diffuse and shadow
+	float ambience = 0.15;
+
+	float diffuse_specular = ambience + (1.0 - ambience) * (diffuse + specular);
+	float factor = clamp(
+		diffuse_specular * (1.0 - 0.9 * shadow),
+		0.0, 1.0
+	);
+
+	// float factor = clamp(diffuse * (1 - 0.9 * shadow) + 0.15, 0.0, 1.0);
+
+	// Return final color
+	return hit.mat.albedo * factor;
+}
+
+vec3 color_calc_flat(Hit hit)
+{
+	// Intersection bias
+	float bias = 0.1;
+
+	// Light position (fixed for now)
+	vec3 light_position = lights.data[0].yzw;
+	vec3 light_direction = normalize(light_position - hit.point);
+	
+	// Shadow calculation
+	vec3 shadow_origin = hit.point + hit.normal * bias;
+
+	Ray shadow_ray = Ray(
+		shadow_origin,
+		light_direction
+	);
+
+	Hit shadow_hit = closest_object(shadow_ray);
+
+	float shadow = 0.0;
+	if (shadow_hit.object >= 0 && shadow_hit.mat.shading != SHADING_TYPE_LIGHT)
+		shadow = 1.0;
+	
+	// Calculate factor
+	float factor = clamp(1.0 - 0.9 * shadow, 0.0, 1.0);
+
+	// Return final color
+	return hit.mat.albedo * factor;
 }
 
 vec3 color_at(Ray ray)
 {
-	// Light position (fixed for now)
-	vec3 light_position = lights.data[0].xyz;
-
-	// Shadow bias
-	// TODO: why is this so large?
+	// Bias for intersection
 	float bias = 0.1;
-	
+
 	Hit hit = closest_object(ray);
-	
-	vec3 color = hit.color;
 	if (hit.object != -1) {
-		// Calculate diffuse lighting
-		// TODO: account all lights, after adding flat shading
-		vec3 light_pos = lights.data[0].yzw;
-		vec3 light_dir = normalize(light_pos - hit.point);
-
-		// Calculate shadow factor by tracing path to light
-		float shadow = 0.0;
-
-		// Shadow origin, taking bias into account
-		vec3 shadow_origin = hit.point + hit.normal * bias;
-
-		Ray reverse = Ray(shadow_origin, light_dir);
-		Hit hit_light = closest_object(reverse);
-
-		// Check the shading type (lighting....)
-		// TODO: clean
-		if (hit.shading == SHADING_TYPE_LIGHT) {
-			return color;
-		} else if (hit.shading == SHADING_TYPE_FLAT) {
-			// Still need to account for shadows
-			// TODO: method to check for valid shadow hit
-
-			if (hit_light.object >= 0 && hit_light.shading != SHADING_TYPE_LIGHT) {
-				shadow = 1.0;
-			}
-
-			// TODO: ambience variables
-			color *= clamp(1.0 - 0.9 * shadow + 0.15, 0.0, 1.0);
-			return color;
+		if (hit.mat.shading == SHADING_TYPE_LIGHT) {
+			return hit.mat.albedo;
+		} else if (hit.mat.shading == SHADING_TYPE_FLAT) {
+			return color_calc_flat(hit);
 		}
 
-		// Diffuse lighting
-		float diff = max(dot(light_dir, hit.normal), 0.0);
+		// Calculate lighting normally
+		vec3 color = color_calc(hit, ray);
 
-		// Specular lighting
-		vec3 view_dir = normalize(world.camera.xyz - hit.point);
-		vec3 reflect_dir = reflect(-light_dir, hit.normal);
-		float spec = pow(max(dot(view_dir, reflect_dir), 0.0), 16.0);
+		// Reflections
+		int max_refls = 2;
+		float refl_coef = 1.0;
 
-		int obj = hit_light.object;
-		if (obj >= 0 && hit_light.shading != SHADING_TYPE_LIGHT) {
-			// Fraction of lights path
-			shadow = 1.0;
-			spec = 0.0;
-		}
+		// Early exit if no reflections
+		if (max_refls == 0)
+			return color;
 
-		// TODO: different light/shading modes, using ImGui
-		color = hit.color * clamp(spec + diff * (1.0 - 0.9 * shadow) + 0.15, 0.0, 1.0);
+		// Loop through reflections
+		do {
+			// Reflection ray
+			vec3 refl_dir = reflect(ray.direction, hit.normal);
+			Ray refl_ray = Ray(hit.point + hit.normal * bias, refl_dir);
+
+			// Calculate reflection
+			Hit refl_hit = closest_object(refl_ray);
+
+			// Add contribution regardless of whether
+			// the reflection hit an object (background counts)
+			refl_coef *= hit.mat.reflectance;
+			color = mix(color, color_calc(refl_hit, refl_ray), refl_coef);
+			hit = refl_hit;
+
+			// Decrement reflection count
+			max_refls--;
+		} while (max_refls > 0 && hit.object >= 0
+				&& hit.mat.reflectance > 0.0);
+
 		return color;
 	}
 
-	return color;
+	return hit.mat.albedo;
 }
 
 #define MAX_SAMPLES 16

@@ -1,12 +1,13 @@
 #include "primitives.glsl"
+#include "material.glsl"
 
 // Intersection structure
 // TODO: add function constructors
 struct Intersection {
 	float	time;
 	vec3	normal;
-	vec3	color;
-	float	shading;	// Shading type
+
+	Material mat;
 };
 
 // Traingle-ray intersection
@@ -57,7 +58,7 @@ Intersection intersect_shape(Ray r, Triangle t)
 	vec3 n = vec3(0.0);
 
 	if (time < 0.0)
-		return Intersection(-1.0, n, n, SHADING_TYPE_NONE);
+		return Intersection(-1.0, n, mat_default());
 
 	// Calculate the normal
 	vec3 e1 = t.v2 - t.v1;
@@ -69,7 +70,7 @@ Intersection intersect_shape(Ray r, Triangle t)
 	if (dot(n, r.direction) > 0.0)
 		n = -n;
 
-	return Intersection(time, n, vec3(0.0), SHADING_TYPE_NONE);
+	return Intersection(time, n, mat_default());
 }
 
 Intersection intersect_shape(Ray r, Sphere s)
@@ -79,10 +80,10 @@ Intersection intersect_shape(Ray r, Sphere s)
 
 	// If no, intersection, dont bother with normal
 	if (t < 0.0)
-		return Intersection(t, n, n, SHADING_TYPE_NONE);
+		return Intersection(t, n, mat_default());
 
 	// Calculate the normal
 	n = normalize(r.origin + r.direction * t - s.center);
 
-	return Intersection(t, n, vec3(0.0), SHADING_TYPE_NONE);
+	return Intersection(t, n, mat_default());
 }

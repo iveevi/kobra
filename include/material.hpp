@@ -8,18 +8,19 @@
 // Material
 struct Material {
 	// Shading type
-	float shading = SHADING_TYPE_BLINN_PHONG;
+	glm::vec3 albedo;
+	float shading		= SHADING_TYPE_BLINN_PHONG;
 
-	// For now, just a color
-	glm::vec3 color;
-
-	Material() {}
-	Material(const glm::vec3 &c) : color(c) {}
-	Material(const glm::vec3 &c, float s) : shading(s), color(c) {}
+	float specular		= 32.0f;
+	float reflectance	= 0.0f;
+	float refraction	= 0.0f;
 
 	// Write to buffer
 	void write_to_buffer(Buffer &buffer) const {
-		buffer.push_back(aligned_vec4(color, shading));
+		buffer.push_back(aligned_vec4(albedo, shading));
+		buffer.push_back(aligned_vec4(
+			{specular, reflectance, refraction, 0.0f}
+		));
 	}
 };
 

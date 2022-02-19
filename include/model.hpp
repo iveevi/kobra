@@ -113,12 +113,12 @@ void Model <T> ::_process_mesh(aiMesh *mesh, const aiScene *scene)
 	
 	// Push back the mesh, and its material
 	// 	default material is magenta
-	Material mat(
-		glm::vec3 {
+	Material mat {
+		.albedo = glm::vec3 {
 			1.0f, 0.0f, 1.0f
 		},
-		SHADING_TYPE_FLAT
-	);
+		.shading = SHADING_TYPE_FLAT
+	};
 
 	_meshes.push_back(Mesh <T> (vertices, indices, mat));
 }

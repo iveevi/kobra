@@ -9,19 +9,26 @@
 
 // List of objet materials
 Material materials[] {
-	glm::vec3 {0.1f, 0.5f, 0.2f},
-	glm::vec3 {0.9f, 0.5f, 0.2f},
-	glm::vec3 {0.4f, 0.4f, 0.9f},
-	glm::vec3 {0.5f, 0.1f, 0.6f},
-	glm::vec3 {0.6f, 0.5f, 0.3f},
-	glm::vec3 {1.0f, 0.5f, 1.0f},
-	{glm::vec3 {1.0f, 1.0f, 1.0f}, SHADING_TYPE_LIGHT},
+	{.albedo = glm::vec3 {0.1f, 0.5f, 0.2f}},
+	{.albedo = glm::vec3 {0.9f, 0.5f, 0.2f}},
+	{
+		.albedo = glm::vec3 {1.0f, 0.7f, 0.7f},
+		.specular = 1.0,
+		.reflectance = 0.7
+	},
+	{.albedo = glm::vec3 {0.5f, 0.1f, 0.6f}},
+	{.albedo = glm::vec3 {0.6f, 0.5f, 0.3f}},
+	{.albedo = glm::vec3 {1.0f, 0.5f, 1.0f}},
+	{
+		.albedo = glm::vec3 {1.0f, 1.0f, 1.0f},
+		.shading = SHADING_TYPE_LIGHT
+	}
 };
 
 // List of object transforms
 Transform transforms[] {
 	glm::vec3 {-1.0f, 0.0f, 4.0f},
-	glm::vec3 {0.5f, 5.0f, 3.0f},
+	glm::vec3 {0.5f, 5.0f, 3.5f},
 	glm::vec3 {6.0f, -2.0f, 5.0f},
 	glm::vec3 {6.0f, 3.0f, 11.5f},
 	glm::vec3 {6.0f, 3.0f, -2.0f},
@@ -1071,7 +1078,7 @@ int main()
 	// Logger::switch_file("mercury.log");
 
 	mercury::Model <VERTEX_TYPE_POSITION> model("resources/debug.obj");
-	model[0].material = materials[2];
+	// model[0].material = materials[2];
 
 	world.objects.push_back(std::shared_ptr <mercury::Model <VERTEX_TYPE_POSITION>> (
 		new mercury::Model <VERTEX_TYPE_POSITION> (model)
