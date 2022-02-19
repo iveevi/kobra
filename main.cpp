@@ -43,13 +43,11 @@ World world {
 	// Primitives
 	// TODO: later read from file
 	std::vector <World::PrimitivePtr> {
-		// World::PrimitivePtr(new Sphere(0.25f, transforms[0], materials[6])),
-		
+		World::PrimitivePtr(new Sphere(0.25f, transforms[0], materials[6])),
 		World::PrimitivePtr(new Sphere(1.0f, transforms[0], materials[0])),
-		// World::PrimitivePtr(new Sphere(3.0f, transforms[1], materials[1])),
+		World::PrimitivePtr(new Sphere(3.0f, transforms[1], materials[1])),
 		World::PrimitivePtr(new Sphere(6.0f, transforms[2], materials[2])),
-		
-		// World::PrimitivePtr(new Sphere(2.0f, transforms[3], materials[3])),
+		World::PrimitivePtr(new Sphere(2.0f, transforms[3], materials[3])),
 		World::PrimitivePtr(new Sphere(2.0f, transforms[4], materials[4])),
 
 		// Triangle
@@ -60,7 +58,7 @@ World world {
 			materials[4]
 		)),
 
-		/* Cube mesh
+		// Cube mesh
 		World::PrimitivePtr(new Mesh <VERTEX_TYPE_POSITION> (
 			{
 				glm::vec3(0.0f, 0.0f, -1.0f),
@@ -81,7 +79,7 @@ World world {
 				2, 6, 7,	2, 7, 3
 			},
 			materials[1]
-		)), */
+		)),
 	},
 
 	// Lights
@@ -644,8 +642,8 @@ public:
 			amplitude * cos(time)
 		};
 
-		// world.objects[0]->transform.position = position;
-		// world.lights[0]->transform.position = position;
+		world.objects[0]->transform.position = position;
+		world.lights[0]->transform.position = position;
 
 		// Map buffers
 		if (map_buffers(ctx)) {
@@ -658,8 +656,8 @@ public:
 		/* Print contents of bvh buffer
 		Logger::ok() << "[main] BVH buffer contents\n";
 		for (size_t i = 0; i < bvh.dump.size(); i += 3) {
-			glm::ivec4 dump = *reinterpret_cast <glm::uvec4 *> (&bvh.dump[i].data);
-			std::cout << "\t" << i << ": " << bvh.dump[i] << " --> " << dump << std::endl;
+			glm::ivec4 dump = *reinterpret_cast <glm::ivec4 *> (&bvh.dump[i].data);
+			std::cou t << "\t" << i << ": " << bvh.dump[i] << " --> " << dump << std::endl;
 		} */
 
 		// Update time
@@ -1068,7 +1066,7 @@ int main()
 	// Redirect logger to file
 	// Logger::switch_file("mercury.log");
 
-	/* mercury::Model <VERTEX_TYPE_POSITION> model("resources/suzanne.obj");
+	mercury::Model <VERTEX_TYPE_POSITION> model("resources/debug.obj");
 	model[0] = materials[2];
 
 	world.objects.push_back(std::shared_ptr <mercury::Model <VERTEX_TYPE_POSITION>> (
@@ -1078,8 +1076,8 @@ int main()
 	Logger::ok() << "[main] Loaded model with "
 		<< model.mesh_count() << " meshe(s), "
 		<< model.mesh(0).vertex_count() << " vertices, "
-		<< model.mesh(0).triangle_count() << " triangles" << std::endl; */
-
+		<< model.mesh(0).triangle_count() << " triangles" << std::endl;
+	
 	// Initialize Vulkan
 	Vulkan *vulkan = new Vulkan();
 	vulkan->init_imgui();

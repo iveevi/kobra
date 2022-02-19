@@ -58,6 +58,15 @@ public:
 			_meshes[i].write_to_buffer(buffer, materials, indices);
 		}
 	}
+
+	// Get bounding boxes
+	void extract_bboxes(std::vector <mercury::BoundingBox> &bboxes) const override {
+		// Get bounding box for each mesh
+		for (size_t i = 0; i < _meshes.size(); i++) {
+			// Get bounding box
+			_meshes[i].extract_bboxes(bboxes);
+		}
+	}
 };
 
 // Assimp helpers

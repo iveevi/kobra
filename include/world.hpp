@@ -54,6 +54,7 @@ struct World {
 	// Dump data to GPU friendly structure
 	GPUWorld dump() const {
 		GPUWorld world {
+			// TODO: modify object count function
 			.objects = static_cast <uint> (objects.size()),
 			.lights = static_cast <uint> (lights.size()),
 			.width = 800,
