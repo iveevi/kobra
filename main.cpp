@@ -12,7 +12,7 @@ Material materials[] {
 	{.albedo = glm::vec3 {0.1f, 0.5f, 0.2f}},
 	{.albedo = glm::vec3 {0.9f, 0.5f, 0.2f}},
 	{
-		.albedo = glm::vec3 {1.0f, 0.7f, 0.7f},
+		.albedo = glm::vec3 {1.0f, 1.0f, 1.0f},
 		.specular = 1.0,
 		.reflectance = 0.7
 	},
@@ -549,6 +549,31 @@ class MercuryApplication : public mercury::App {
 				ImGui::Text("fps: %.1f", ImGui::GetIO().Framerate);
 				ImGui::Checkbox("BVH Debugging", &world.options.debug_bvh);
 				ImGui::InputInt("Descretize (grey)", &world.options.discretize);
+			}
+			ImGui::End();
+
+			// Statistics
+			ImGui::Begin("Statistics");
+			{
+				ImGui::Text("Objects: %lu", world.objects.size());
+				ImGui::Text("Lights:  %lu", world.lights.size());
+				ImGui::Text("BVH Nodes: %lu", bvh.size);
+				ImGui::Text("BVH Primitives: %lu", bvh.primitives);
+
+				// Buffer sizes in MB
+				auto to_mb = [](size_t size) {
+					return size / (1024.0f * 1024.0f);
+				};
+
+				if (ImGui::TreeNode("Buffer sizes")) {
+					ImGui::Text("Pixel buffer: %.2f MB", to_mb(pixel_buffer.size));
+					ImGui::Text("World buffer: %.2f MB", to_mb(world_buffer.size));
+					ImGui::Text("Objects buffer: %.2f MB", to_mb(objects_buffer.size));
+					ImGui::Text("Lights buffer: %.2f MB", to_mb(lights_buffer.size));
+					ImGui::Text("Materials buffer: %.2f MB", to_mb(materials_buffer.size));
+					ImGui::Text("BVH buffer: %.2f MB", to_mb(bvh.buffer.size));
+					ImGui::TreePop();
+				}
 			}
 			ImGui::End();
 			

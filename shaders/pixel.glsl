@@ -338,8 +338,6 @@ vec3 color_calc(Hit hit, Ray ray)
 		0.0, 1.0
 	);
 
-	// float factor = clamp(diffuse * (1 - 0.9 * shadow) + 0.15, 0.0, 1.0);
-
 	// Return final color
 	return hit.mat.albedo * factor;
 }

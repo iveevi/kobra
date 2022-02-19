@@ -103,6 +103,10 @@ struct BVH {
 	Vulkan::Buffer		stack; // Traversal stack
 	Buffer			dump;
 
+	// Extra information
+	size_t			size = 0;
+	size_t			primitives = 0;
+
 	// Default
 	BVH() {}
 
@@ -111,6 +115,7 @@ struct BVH {
 			: vk(vulkan), phdev(physical), device(dev) {
 		// Get all bounding boxes
 		std::vector <BoundingBox> boxes = world.extract_bboxes();
+		primitives = boxes.size();
 
 		// Process into BVH nodes
 		process(boxes);
@@ -119,6 +124,7 @@ struct BVH {
 		
 		// Dump all nodes to buffer
 		dump_all();
+		size = dump.size() / 3;
 
 		// Allocate buffer
 		vk->make_buffer(phdev, device, buffer, dump.size() * sizeof(aligned_vec4),
@@ -146,12 +152,14 @@ struct BVH {
 
 		// Get all bounding boxes
 		std::vector <BoundingBox> boxes = world.extract_bboxes();
+		primitives = boxes.size();
 
 		// Process into BVH nodes
 		process(boxes);
 		
 		// Dump all nodes to buffer
 		dump_all();
+		size = dump.size() / 3;
 
 		// TODO: reallocate if needed
 
