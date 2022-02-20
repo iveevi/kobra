@@ -19,7 +19,8 @@ layout (set = 0, binding = 0, std430) buffer Pixels
 
 layout (set = 0, binding = 1, std430) buffer World
 {
-	uint objects;
+	uint objects;		// TODO: this is useless
+	uint primitives;
 	uint lights;
 
 	uint width;
@@ -140,7 +141,7 @@ Intersection intersect_triangle(Ray ray, uint index)
 	Intersection intersection = intersect_shape(ray, triangle);
 
 	// If intersection is valid, compute color
-	if (intersection.time > 0.0) {
+	if (intersection.time >= 0.0) {
 		// Get material index at the second element
 		uint mati = floatBitsToUint(prop.y);
 		intersection.mat = material_for(mati);
@@ -235,9 +236,11 @@ Hit closest_object(Ray ray)
 		mat_default()
 	);
 
-	// Traverse BVH as a threaded binary tree
+	/* Traverse BVH as a threaded binary tree
 	int node = 0;
+	int count = 0;
 	while (node != -1) {
+		count++;
 		if (leaf(node)) {
 			// Get object index
 			// int iobj = floatBitsToInt(bvh.data[node].y);
@@ -272,7 +275,32 @@ Hit closest_object(Ray ray)
 				node = miss(node);
 			}
 		}
+	} */
+
+	// Traverse linearly
+	int count = 0;
+	for (int i = 0; i < world.primitives; i++) {
+		count++;
+		// Get object index
+		uint index = world.indices[i];
+
+		// Get object
+		Intersection it = intersect(ray, index);
+
+		// If intersection is valid, update minimum
+		if (it.time > 0.0 && it.time < mini.time) {
+			min_index = i;
+			mini = it;
+		}
 	}
+
+	// Index of thread
+	int tid = int(gl_WorkGroupID.x + gl_WorkGroupID.y * world.width);
+
+	debug.data[tid].x = mini.time;
+	debug.data[tid].y = intBitsToFloat(min_index);
+	debug.data[tid].z = intBitsToFloat(count);
+	debug.data[tid].w = intBitsToFloat(tid);
 
 	// Color of closest object
 	vec3 color = background(ray);

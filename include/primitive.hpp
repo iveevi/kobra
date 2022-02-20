@@ -22,6 +22,9 @@ struct Primitive {
 	// Virtual object destructor
 	virtual ~Primitive() {}
 
+	// Count number of primitives
+	virtual uint count() const = 0;
+
 	// Write data to aligned_vec4 buffer (inherited)
 	virtual void write(Buffer &buffer) const = 0;
 
@@ -72,6 +75,8 @@ struct Triangle : public Primitive {
 			: Primitive(OBJECT_TYPE_TRIANGLE, Transform(), m),
 			a(a), b(b), c(c) {}
 
+	uint count() const override { return 1; }
+
 	void write(Buffer &buffer) const override {
 		buffer.push_back(aligned_vec4(a));
 		buffer.push_back(aligned_vec4(b));
@@ -97,6 +102,8 @@ struct Sphere : public Primitive {
 	Sphere(float r, const Transform &t, const Material &m)
 			: Primitive(OBJECT_TYPE_SPHERE, t, m),
 			radius(r) {}
+
+	uint count() const override { return 1; }
 
 	void write(Buffer &buffer) const override {
 		buffer.push_back(aligned_vec4 {

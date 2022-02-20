@@ -51,7 +51,7 @@ World world {
 	// TODO: later read from file
 	std::vector <World::PrimitivePtr> {
 		World::PrimitivePtr(new Sphere(0.25f, transforms[0], materials[6])),
-		World::PrimitivePtr(new Sphere(1.0f, transforms[0], materials[0])),
+		/* World::PrimitivePtr(new Sphere(1.0f, transforms[0], materials[0])),
 		World::PrimitivePtr(new Sphere(3.0f, transforms[1], materials[1])),
 		World::PrimitivePtr(new Sphere(6.0f, transforms[2], materials[2])),
 		World::PrimitivePtr(new Sphere(2.0f, transforms[3], materials[3])),
@@ -86,7 +86,7 @@ World world {
 				2, 6, 7,	2, 7, 3
 			},
 			materials[1]
-		)),
+		)), */
 	},
 
 	// Lights
@@ -178,7 +178,7 @@ class MercuryApplication : public mercury::App {
 			}
 		};
 
-		vkCmdPipelineBarrier(
+		/* vkCmdPipelineBarrier(
 			command_buffers[i],
 			VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
 			VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
@@ -189,7 +189,7 @@ class MercuryApplication : public mercury::App {
 			nullptr,
 			1,
 			&image_memory_barrier
-		);
+		); */
 
 		// Buffer copy regions
 		VkBufferImageCopy buffer_copy_region {
@@ -350,6 +350,8 @@ class MercuryApplication : public mercury::App {
 		bool resized;
 	};
 
+	GPUWorld gworld;
+
 	MapInfo map_world_buffer(Vulkan *vk, Buffer &objects, Buffer &lights, Buffer &materials) {
 		// Static (cached) raw memory buffer
 		static uint8_t *buffer = nullptr;
@@ -374,7 +376,7 @@ class MercuryApplication : public mercury::App {
 		world.write_lights(lights, indices);
 
 		// Copy world and indices
-		GPUWorld gworld = world.dump();
+		gworld = world.dump();
 		gworld.objects = objects.size();
 
 		memcpy(buffer, &gworld, sizeof(GPUWorld));
@@ -487,7 +489,7 @@ class MercuryApplication : public mercury::App {
 		ctx->make_buffer(physical_device, device, materials_buffer, materials_size, buffer_usage);
 
 		// Debug buffer (one vec4 per pixel)
-		ctx->make_buffer(physical_device, device, debug_buffer, 100 * sizeof(aligned_vec4), buffer_usage);
+		ctx->make_buffer(physical_device, device, debug_buffer, 800 * 600 * sizeof(aligned_vec4), buffer_usage);
 		
 		// Add all buffers to deletion queue
 		ctx->push_deletion_task(
@@ -505,6 +507,33 @@ class MercuryApplication : public mercury::App {
 	// ImGui context and methods
 	// TODO: the context should not have any sync objects
 	Vulkan::ImGuiContext imgui_ctx;
+
+	// Dump debug data to file
+	void dump_debug_data(Vulkan *vk) {
+		// Open file
+		std::ofstream file("debug.log");
+
+		file << "=== Debug data ===" << std::endl;
+
+		// Wait for queue to finish
+		vkQueueWaitIdle(device.graphics_queue);
+
+		// Extract data from debug buffer
+		aligned_vec4 *data = (aligned_vec4 *) vk->get_buffer_data(device, debug_buffer);
+
+		// Dump data
+		for (size_t i = 0; i < 800 * 600; i++) {
+			// Cast to quads of ints
+			glm::vec4 vec = data[i].data;
+			int *ptr1 = (int *) &vec.x;
+			int *ptr2 = (int *) &vec.y;
+			int *ptr3 = (int *) &vec.z;
+			int *ptr4 = (int *) &vec.w;
+
+			file << vec << " --> " << *ptr1 << ", "
+				<< *ptr2 << ", " << *ptr3 << ", " << *ptr4 << std::endl;
+		}
+	}
 
 	// Create ImGui profiler tree
 	void make_profiler_tree(const mercury::Profiler::Frame &frame, float parent = -1.0) {
@@ -549,16 +578,24 @@ class MercuryApplication : public mercury::App {
 				ImGui::Text("fps: %.1f", ImGui::GetIO().Framerate);
 				ImGui::Checkbox("BVH Debugging", &world.options.debug_bvh);
 				ImGui::InputInt("Descretize (grey)", &world.options.discretize);
+
+				if (ImGui::Button("Capture Debug Data"))
+					dump_debug_data(ctx);
 			}
 			ImGui::End();
 
 			// Statistics
 			ImGui::Begin("Statistics");
 			{
-				ImGui::Text("Objects: %lu", world.objects.size());
-				ImGui::Text("Lights:  %lu", world.lights.size());
-				ImGui::Text("BVH Nodes: %lu", bvh.size);
-				ImGui::Text("BVH Primitives: %lu", bvh.primitives);
+				ImGui::Text("Objects: %u", gworld.objects);
+				ImGui::Text("Primitives: %u", gworld.primitives);
+				ImGui::Text("Lights:  %u", gworld.lights);
+
+				if (ImGui::TreeNode("BVH")) {
+					ImGui::Text("# Nodes: %lu", bvh.size);
+					ImGui::Text("# Primitives: %lu", bvh.primitives);
+					ImGui::TreePop();
+				}
 
 				// Buffer sizes in MB
 				auto to_mb = [](size_t size) {
@@ -566,12 +603,13 @@ class MercuryApplication : public mercury::App {
 				};
 
 				if (ImGui::TreeNode("Buffer sizes")) {
-					ImGui::Text("Pixel buffer: %.2f MB", to_mb(pixel_buffer.size));
-					ImGui::Text("World buffer: %.2f MB", to_mb(world_buffer.size));
-					ImGui::Text("Objects buffer: %.2f MB", to_mb(objects_buffer.size));
-					ImGui::Text("Lights buffer: %.2f MB", to_mb(lights_buffer.size));
-					ImGui::Text("Materials buffer: %.2f MB", to_mb(materials_buffer.size));
-					ImGui::Text("BVH buffer: %.2f MB", to_mb(bvh.buffer.size));
+					ImGui::Text("Pixel buffer:     %5.2f MB", to_mb(pixel_buffer.size));
+					ImGui::Text("World buffer:     %5.2f MB", to_mb(world_buffer.size));
+					ImGui::Text("Objects buffer:   %5.2f MB", to_mb(objects_buffer.size));
+					ImGui::Text("Lights buffer:    %5.2f MB", to_mb(lights_buffer.size));
+					ImGui::Text("Materials buffer: %5.2f MB", to_mb(materials_buffer.size));
+					ImGui::Text("BVH buffer:       %5.2f MB", to_mb(bvh.buffer.size));
+					ImGui::Text("Debug buffer:     %5.2f MB", to_mb(debug_buffer.size));
 					ImGui::TreePop();
 				}
 			}
@@ -665,6 +703,36 @@ public:
 
 		// Create BVH builder
 		bvh = mercury::BVH(ctx, physical_device, device, world);
+		Logger::ok() << "BVH: " << bvh.size << " nodes, " << bvh.primitives << " primitives" << std::endl;
+
+		mercury::BVHNode *root = bvh.nodes[0];
+		Logger::warn() << "Checking BVH: should traverse through " << root->size()
+			<< " nodes if proper." << std::endl;
+
+		Buffer bvh_buf;
+		root->write(bvh_buf);
+
+		auto leaf = [&](int node) {
+			return (bvh_buf[node].data.x == 0x1);
+		};
+
+		auto hit = [&](int node) {
+			return *reinterpret_cast <int32_t *> (&bvh_buf[node].data.z);
+		};
+
+		int node = 0;
+		int count = 0;
+		while (node != -1) {
+			count++;
+
+			// Always go to hit
+			node = hit(node);
+		}
+
+		Logger::warn() << "Traversed through " << count << " nodes." << std::endl;
+
+		if (count != root->size())
+			Logger::error() << "BVH traversal failed!" << std::endl;
 	}
 
 	// Update the world
@@ -790,6 +858,7 @@ public:
 		}
 
 		// Wait for the first command buffer to finish
+		// TODO: use wait semaphores
 		vkQueueWaitIdle(device.graphics_queue);
 
 		// Submit ImGui command buffer
@@ -1103,17 +1172,82 @@ int main()
 	// Logger::switch_file("mercury.log");
 
 	mercury::Model <VERTEX_TYPE_POSITION> model("resources/debug.obj");
-	// model[0].material = materials[2];
+	model[0].material = materials[1];
 
-	world.objects.push_back(std::shared_ptr <mercury::Model <VERTEX_TYPE_POSITION>> (
+	/* world.objects.push_back(std::shared_ptr <mercury::Model <VERTEX_TYPE_POSITION>> (
 		new mercury::Model <VERTEX_TYPE_POSITION> (model)
-	));
+	)); */
 
 	Logger::ok() << "[main] Loaded model with "
 		<< model.mesh_count() << " meshe(s), "
 		<< model[0].vertex_count() << " vertices, "
 		<< model[0].triangle_count() << " triangles" << std::endl;
+
+	// Procedural plane mesh
+	float width = 10.0f;
+	float height = 10.0f;
+
+	int rows = 20;
+	int columns = 20;
+
+	Mesh <VERTEX_TYPE_POSITION> ::VertexList vertices;
+	Indices indices;
+
+	// Fill in the vertices first
+	for (int i = 0; i < rows; i++) {
+		for (int j = 0; j < columns; j++) {
+			vertices.push_back(
+				Vertex <VERTEX_TYPE_POSITION> {
+					{
+						(float)j * width / (float)columns,
+						0.0f,
+						(float)i * height / (float)rows
+					}
+				}
+			);
+		}
+	}
+
+	// Fill in the indices
+	for (int i = 0; i < rows - 1; i++) {
+		for (int j = 0; j < columns - 1; j++) {
+			indices.push_back(
+				(i + 0) * columns + (j + 0)
+			);
+
+			indices.push_back(
+				(i + 0) * columns + (j + 1)
+			);
+
+			indices.push_back(
+				(i + 1) * columns + (j + 0)
+			);
+
+			indices.push_back(
+				(i + 1) * columns + (j + 0)
+			);
+
+			indices.push_back(
+				(i + 0) * columns + (j + 1)
+			);
+
+			indices.push_back(
+				(i + 1) * columns + (j + 1)
+			);
+		}
+	}
+
+	// Create the mesh
+	Mesh <VERTEX_TYPE_POSITION> mesh(vertices, indices, materials[1]);
+
+	Logger::ok() << "[main] Created mesh with "
+		<< mesh.vertex_count() << " vertices, "
+		<< mesh.triangle_count() << " triangles" << std::endl;
 	
+	world.objects.push_back(std::shared_ptr <Mesh <VERTEX_TYPE_POSITION>> (
+		new Mesh <VERTEX_TYPE_POSITION> (mesh)
+	));
+
 	// Initialize Vulkan
 	Vulkan *vulkan = new Vulkan();
 	vulkan->init_imgui();

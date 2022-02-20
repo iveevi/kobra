@@ -25,12 +25,14 @@ struct GPUWorld {
 
 	// Data
 	uint	objects;
+	uint	primitives;
 	uint	lights;
 
 	uint	width;
 	uint	height;
 
 	uint	options;
+
 	int32_t	discretize;
 
 	// Camera data
@@ -68,11 +70,16 @@ struct World {
 		GPUWorld world {
 			// TODO: modify object count function
 			.objects = static_cast <uint> (objects.size()),
+			.primitives = 0,
 			.lights = static_cast <uint> (lights.size()),
 			.width = 800,
 			.height = 600,
 			.discretize = options.discretize
 		};
+
+		// Add primitives
+		for (const auto &object : objects)
+			world.primitives += object->count();
 
 		// Camera data
 		world.position = camera.transform.position;

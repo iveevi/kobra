@@ -37,6 +37,14 @@ public:
 	Mesh <T> &operator[](size_t);
 	const Mesh <T> &operator[](size_t) const;
 
+	// Count primitives
+	uint count() const override {
+		uint c = 0;
+		for (auto &m : _meshes)
+			c += m.count();
+		return c;
+	}
+
 	// Write model to buffer (fake to resolve abstract base class)
 	void write(Buffer &buffer) const override {
 		// Throw

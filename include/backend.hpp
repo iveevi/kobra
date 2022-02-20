@@ -982,7 +982,14 @@ public:
 	// TODO: pass buffer propreties as a struct
 	void make_buffer(const VkPhysicalDevice &, const Device &, Buffer &, size_t, VkBufferUsageFlags);
 	void destroy_buffer(const Device &, Buffer &);
+
 	void map_buffer(const Device &, Buffer *, void *, size_t);
+
+	void *get_buffer_data(const Device &device, const Buffer &buffer) {
+		void *data;
+		vkMapMemory(device.device, buffer.memory, 0, buffer.size, 0, &data);
+		return data;
+	}
 	
 	// Create a render pass
 	VkRenderPass make_render_pass(const Device &device,

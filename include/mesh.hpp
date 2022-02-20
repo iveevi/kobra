@@ -3,6 +3,7 @@
 
 // Engine headers
 #include "primitive.hpp"
+#include "logger.hpp"	// TODO: remove
 
 // TODO: put vertex into own header file
 
@@ -62,6 +63,20 @@ public:
 
 	size_t triangle_count() const {
 		return _indices.size() / 3;
+	}
+
+	// Get data
+	const VertexList &vertices() const {
+		return _vertices;
+	}
+
+	const Indices &indices() const {
+		return _indices;
+	}
+
+	// Count primitives
+	uint count() const override {
+		return triangle_count();
 	}
 
 	// Write mesh to buffer (fake to resolve abstract base class)

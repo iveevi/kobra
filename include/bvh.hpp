@@ -63,14 +63,21 @@ struct BVHNode {
 		int32_t left_size = left ? 3 * left->size() : 0;
 		int32_t right_index = right ? after + left_size : -1;
 
-		// Left index is the hit index
-		// Right index is the miss index
+		// Hit index
+		int32_t hit = left_index;
+		if (!left && !right)
+			hit = miss;
+
+		// Miss index for left branch
+		int32_t miss_left = right_index;
+		if (!right)
+			miss_left = miss;
 
 		// Header vec4
 		aligned_vec4 header = glm::vec4 {
 			leaf,
 			*reinterpret_cast <float *> (&object),
-			*reinterpret_cast <float *> (&left_index),
+			*reinterpret_cast <float *> (&hit),
 			*reinterpret_cast <float *> (&miss)
 		};
 
@@ -81,7 +88,7 @@ struct BVHNode {
 
 		// Write the children
 		if (left)
-			left->write(buffer, right_index);
+			left->write(buffer, miss_left);
 		if (right)
 			right->write(buffer, miss);
 	}
