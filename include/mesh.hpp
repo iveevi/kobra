@@ -4,6 +4,7 @@
 // Engine headers
 #include "primitive.hpp"
 #include "logger.hpp"	// TODO: remove
+#include "world.hpp"
 
 namespace mercury {
 
@@ -107,13 +108,13 @@ public:
 
 	// Write mesh to buffer
 	// TODO: write to both vertex and object buffers
-	void write_to_buffer(Buffer &buffer, Buffer &materials, Indices &indices) override {
+	void write_object(WorldUpdate &wu) override {
 		// Remove last index
-		indices.erase(indices.end() - 1);
+		wu.indices.erase(wu.indices.end() - 1);
 
 		// Get index of material and push
-		uint mati = materials.size();
-		material.write_to_buffer(materials);
+		uint mati = wu.materials.size();
+		material.write_to_buffer(wu.materials);
 
 		// Write each triangle
 		for (size_t i = 0; i < _indices.size(); i += 3) {
@@ -129,8 +130,8 @@ public:
 			};
 
 			// Write triangle to buffer
-			indices.push_back(buffer.size());
-			triangle.write_to_buffer(buffer, indices, mati);
+			wu.indices.push_back(wu.objects.size());
+			triangle.write_to_buffer(wu.objects, wu.indices, mati);
 		}
 	}
 

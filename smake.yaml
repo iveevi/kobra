@@ -40,8 +40,15 @@ builds:
       thirdparty/imgui/backends/imgui_impl_glfw.cpp,
       thirdparty/imgui/backends/imgui_impl_vulkan.cpp'
     - idirs: 'thirdparty/glm,
-      thirdparty/imgui'
-    - libraries: glfw, vulkan, assimp
+      thirdparty/imgui,
+      /usr/include/opencv4'
+    - libraries: 'glfw,
+      vulkan,
+      assimp,
+      pthread,
+      opencv_core,
+      opencv_imgcodecs,
+      opencv_videoio'
     - flags: '-std=c++17 -g'
 
 targets:

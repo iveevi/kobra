@@ -6,11 +6,15 @@
 #include <vector>
 
 // Engine headers
+#include "buffer_manager.hpp"
 #include "camera.hpp"
 #include "core.hpp"
 #include "light.hpp"
 #include "logger.hpp"
 #include "primitive.hpp"
+#include "world_update.hpp"
+
+namespace mercury {
 
 // Rendering options
 struct Options {
@@ -105,34 +109,22 @@ struct World {
 	}
 
 	// Write object data to buffer
-	void write_objects(Buffer &buffer, Buffer &materials, Indices &indices) const {
-		buffer.clear();
-		materials.clear();
-
-		indices.push_back(0);
+	void write_objects(WorldUpdate &wu) const {
+		wu.objects.clear();
+		wu.materials.clear();
 		for (const auto &object : objects) {
-			// uint index = materials.size();
-			// object->material.write_to_buffer(materials);
-			object->write_to_buffer(buffer, materials, indices);
-			indices.push_back(buffer.size());
+			wu.indices.push_back(wu.objects.size());
+			object->write_object(wu);
 		}
-
-		// Pop last index
-		indices.pop_back();
 	}
 
 	// Write light data to buffer
-	void write_lights(Buffer &buffer, Indices &indices) const {
-		buffer.clear();
-
-		indices.push_back(0);
+	void write_lights(WorldUpdate &wu) const {
+		wu.lights.clear();
 		for (const auto &light : lights) {
-			light->write_to_buffer(buffer);
-			indices.push_back(buffer.size());
+			wu.indices.push_back(wu.lights.size());
+			light->write_light(wu);
 		}
-
-		// Pop last index
-		indices.pop_back();
 	}
 
 	// Extract all bounding bxoes from the primitives
@@ -143,5 +135,7 @@ struct World {
 		return bboxes;
 	}
 };
+
+}
 
 #endif

@@ -10,6 +10,7 @@
 #include "material.hpp"
 #include "transform.hpp"
 #include "types.hpp"
+#include "world_update.hpp"
 
 // Primitive structures
 struct Primitive {
@@ -41,25 +42,25 @@ struct Primitive {
 	}
 
 	// Write data to aligned_vec4 buffer (inherited)
-	virtual void write(Buffer &buffer) const = 0;
+	virtual void write(Buffer &) const = 0;
 
 	// Extract bounding boxes
 	virtual void extract_bboxes(std::vector <mercury::BoundingBox> &bboxes) const = 0;
 
 	// Write full object data
 	// TODO: pass paramters as a struct
-	virtual void write_to_buffer(Buffer &buffer, Buffer &materials, Indices &indices) {
+	virtual void write_object(mercury::WorldUpdate &wu) {
 		// Deal with material
-		uint mati = materials.size();
-		material.write_to_buffer(materials);
+		uint mati = wu.materials.size();
+		material.write_to_buffer(wu.materials);// TODO: refactor
 		float index = *reinterpret_cast <float *> (&mati);
 
 		// Push ID and material, then everything else
-		buffer.push_back(aligned_vec4 {
+		wu.objects.push_back(aligned_vec4 {
 			glm::vec4(id, index, 0.0, 0.0)
 		});
 
-		this->write(buffer);
+		this->write(wu.objects);
 	}
 
 	// Write full object data, but takes index to material

@@ -33,12 +33,14 @@ private:
 	std::vector <T> cpu_buffer;
 	Vulkan::Buffer	gpu_buffer;
 
+	size_t		push_index;
+
 	BFM_Settings	settings;
 public:
 	// Constructors
 	BufferManager() {}
 	BufferManager(const Vulkan::Context &vk, const BFM_Settings &s)
-			: context(vk), settings(s) {
+			: context(vk), push_index(0), settings(s) {
 		// Allocate if requested
 		if (settings.usage_type != BFM_READ_ONLY)
 			cpu_buffer.resize(settings.size);
@@ -57,7 +59,7 @@ public:
 			[&](Vulkan *vk) {
 				vk->destroy_buffer(
 					context.device,
-					gpu_buffer
+					this->gpu_buffer
 				);
 			}
 		);
@@ -94,6 +96,14 @@ public:
 	// Write to buffer (must have write property)
 	size_t write(const T *data, size_t size, size_t offset = 0) {
 		if (settings.usage_type == BFM_WRITE_ONLY) {
+			// Warn on overflow
+			if (offset + size > settings.size) {
+				Logger::warn() << "BufferManager::write: write overflow"
+					": requested to write " << size << " [+"
+					<< offset << "] elements, but buffer size is "
+					<< settings.size << " elements" << std::endl;
+			}
+
 			// Copy data
 			std::memcpy(
 				cpu_buffer.data() + offset,
@@ -105,12 +115,27 @@ public:
 		return 0;
 	}
 
+	// Pushback functionality
+	void reset_pushback() {
+		push_index = 0;
+	}
+
+	void pushback(const T &data) {
+		// Don't bother resizing all the time
+		if (cpu_buffer.size() <= push_index)
+			cpu_buffer.push_back(data);
+		else
+			cpu_buffer[push_index] = data;
+		
+		push_index++;
+	}
+
 	// Flush cpu buffer to gpu (must have write property)
 	void flush() {
 		if (settings.usage_type == BFM_WRITE_ONLY) {
 			context.vk->map_buffer(
 				context.device,
-				gpu_buffer,
+				&gpu_buffer,
 				cpu_buffer.data(),
 				sizeof(T) * std::min(
 					settings.size,
@@ -118,6 +143,39 @@ public:
 				)
 			);
 		}
+	}
+
+	// Resize buffer
+	void resize(size_t size) {
+		// Check if resize is needed
+		if (size == settings.size)
+			return;
+
+		// Resize cpu buffer
+		cpu_buffer.resize(size);
+
+		// Delete old buffer
+		context.vk->destroy_buffer(
+			context.device,
+			gpu_buffer
+		);
+
+		// Create new buffer
+		context.vk->make_buffer(
+			context.phdev,
+			context.device,
+			gpu_buffer,
+			size * sizeof(T),
+			settings.usage
+		);
+
+		// Update settings
+		settings.size = size;
+	}
+
+	// Resize after pushbacks
+	void sync_size() {
+		resize(cpu_buffer.size());
 	}
 
 	// Generating bindings

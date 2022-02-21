@@ -8,6 +8,9 @@
 // Local headers
 #include "global.hpp"
 #include "include/buffer_manager.hpp"
+#include "include/world.hpp"
+
+using namespace mercury;
 
 // List of objet materials
 Material materials[] {
@@ -40,6 +43,25 @@ Transform transforms[] {
 	glm::vec3 {6.0f, 3.0f, -2.0f},
 	glm::vec3 {0.0f, 0.0f, 0.0f}
 };
+
+// Print aligned_vec4
+// TODO: common header
+inline std::ostream& operator<<(std::ostream& os, const glm::vec4 &v)
+{
+	return (os << "(" << v.x << ", " << v.y
+		<< ", " << v.z << ", " << v.w << ")");
+}
+
+inline std::ostream &operator<<(std::ostream &os, const aligned_vec4 &v)
+{
+	return (os << v.data);
+}
+
+// Print BoundingBox
+inline std::ostream &operator<<(std::ostream &os, const mercury::BoundingBox &b)
+{
+	return (os << "(" << b.min << " --> " << b.max << ")");
+}
 
 World world {
 	// Camera
@@ -94,31 +116,12 @@ World world {
 	}
 };
 
-// Print aligned_vec4
-// TODO: common header
-inline std::ostream& operator<<(std::ostream& os, const glm::vec4 &v)
-{
-	return (os << "(" << v.x << ", " << v.y
-		<< ", " << v.z << ", " << v.w << ")");
-}
-
-inline std::ostream &operator<<(std::ostream &os, const aligned_vec4 &v)
-{
-	return (os << v.data);
-}
-
-// Print BoundingBox
-inline std::ostream &operator<<(std::ostream &os, const mercury::BoundingBox &b)
-{
-	return (os << "(" << b.min	<< " --> " << b.max << ")");
-}
-
 // TODO: put the following functions into a alloc.cpp file
 
 // Minimum sizes
-#define INITIAL_OBJECTS		100UL
-#define INITIAL_LIGHTS		100UL
-#define INITIAL_MATERIALS	100UL
+#define INITIAL_OBJECTS		128UL
+#define INITIAL_LIGHTS		128UL
+#define INITIAL_MATERIALS	128UL
 
 // Sizes of objects and lights
 // are assumed to be the maximum
@@ -126,8 +129,6 @@ static const size_t MAX_OBJECT_SIZE = sizeof(Triangle);
 static const size_t MAX_LIGHT_SIZE = sizeof(PointLight);
 
 // App
-namespace mercury {
-
 class MercuryApplication : public mercury::App {
 	// TODO: some of these member should be moved back to App
 	VkRenderPass			render_pass;
@@ -318,7 +319,7 @@ class MercuryApplication : public mercury::App {
 	
 	// GPU buffers
 	// Vulkan::Buffer	pixel_buffer;
-	Vulkan::Buffer	world_buffer;
+	// Vulkan::Buffer	world_buffer;
 	Vulkan::Buffer	objects_buffer;
 	Vulkan::Buffer	lights_buffer;
 	Vulkan::Buffer	materials_buffer;
@@ -343,126 +344,79 @@ class MercuryApplication : public mercury::App {
 	}
 
 	// Copy buffer helper
-	struct MapInfo {
-		uint8_t *ptr;
-		size_t size;
-		bool resized;
-	};
-
 	GPUWorld gworld;
-
-	MapInfo map_world_buffer(Vulkan *vk, Buffer &objects, Buffer &lights, Buffer &materials) {
-		// Static (cached) raw memory buffer
-		static uint8_t *buffer = nullptr;
-		static size_t buffer_size = 0;
-		
-		static const VkBufferUsageFlags buffer_usage =
-			VK_BUFFER_USAGE_TRANSFER_DST_BIT
-			| VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-
-		// Generate world data and write to buffers
-		Indices indices;
-		world.write_objects(objects, materials, indices);
-		world.write_lights(lights, indices);
-
-		// Calculate size of world buffer
-		size_t world_size = sizeof(GPUWorld) + indices.size() * sizeof(uint);
-		if (world_size > buffer_size) {
-			buffer_size = world_size;
-			buffer = (uint8_t *) realloc(buffer, buffer_size);
-		}
-
-		// Copy world and indices
-		gworld = world.dump();
-		gworld.objects = objects.size();
-
-		memcpy(buffer, &gworld, sizeof(GPUWorld));
-		memcpy(buffer + sizeof(GPUWorld), indices.data(),
-			4 * indices.size());
-
-		/* Dump contents of the buffers
-		// TODO: ImGui option
-		std::cout << "=== Objects: " << objects.size() << " ===" << std::endl;
-		for (size_t i = 0; i < objects.size(); i++)
-			std::cout << i << ":\t" << objects[i] << std::endl;
-		std::cout << "Lights: " << lights.size() << std::endl;
-		for (size_t i = 0; i < lights.size(); i++)
-			std::cout << lights[i] << std::endl;
-		std::cout << "Materials: " << materials.size() << std::endl;
-		for (size_t i = 0; i < materials.size(); i++)
-			std::cout << materials[i] << std::endl;
-		std::cout << "Indices: " << indices.size() << std::endl;
-		for (size_t i = 0; i < indices.size(); i++)
-			std::cout << indices[i] << std::endl;
-
-		// Dump buffer contents (as uvec4)
-		std::cout << "=== Buffer contents ===" << std::endl;
-		for (size_t i = 0; i < buffer_size; i += 4 * sizeof(uint32_t)) {
-			uint32_t *uptr = (uint32_t *) (buffer + i);
-			float *fptr = (float *) (buffer + i);
-
-			std::cout << uptr[0] << " " << uptr[1] << " "
-				<< uptr[2] << " " << uptr[3]
-				<< " -> ("
-				<< fptr[0] << ", " << fptr[1] << ", "
-				<< fptr[2] << ", " << fptr[3]
-				<< ")" << std::endl;
-		} */
-		
-		// Resizing and remaking buffers
-		int resized = 0;
-
-		// World
-		if (world_size > world_buffer.size) {
-			// Resize vulkan buffer
-			vk->destroy_buffer(context.device, world_buffer);
-			vk->make_buffer(context.phdev, context.device, world_buffer, buffer_size, buffer_usage);
-			resized++;
-		}
-
-		// Objects
-		if (sizeof(aligned_vec4) * objects.size() > objects_buffer.size) {
-			// Resize vulkan buffer
-			vk->destroy_buffer(context.device, objects_buffer);
-			vk->make_buffer(context.phdev, context.device, objects_buffer, objects.size() * sizeof(aligned_vec4), buffer_usage);
-			resized++;
-		}
-
-		// Lights
-		if (sizeof(aligned_vec4) * lights.size() > lights_buffer.size) {
-			// Resize vulkan buffer
-			vk->destroy_buffer(context.device, lights_buffer);
-			vk->make_buffer(context.phdev, context.device, lights_buffer, lights.size() * sizeof(aligned_vec4), buffer_usage);
-			resized++;
-		}
-
-		// Update descriptor sets
-		if (resized) {
-			update_descriptor_set();
-			update_command_buffers();
-		}
-
-		// Return pointer to the buffer
-		return {buffer, buffer_size, (resized > 0)};
-	}
 
 	// Map all the buffers
 	// TODO: deal with resizing buffers
 	bool map_buffers(Vulkan *vk) {
-		// Create and write to buffers
+		/* Create and write to buffers
 		Buffer objects;
 		Buffer lights;
-		Buffer materials;
+		Buffer materials; */
 
-		auto wb = map_world_buffer(vk, objects, lights, materials);
+		static const VkBufferUsageFlags buffer_usage =
+			VK_BUFFER_USAGE_TRANSFER_DST_BIT
+			| VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+		
+		// Resizing and remaking buffers
+		int resized = 0;
+
+		// World update
+		WorldUpdate wu;
+
+		// Generate world data and write to buffers
+		// Indices indices;
+		world.write_objects(wu);
+		world.write_lights(wu);
+
+		// Calculate size of world buffer
+		size_t world_size = sizeof(GPUWorld) + wu.indices.size() * sizeof(uint);
+
+		// Copy world and indices
+		gworld = world.dump();
+		gworld.objects = wu.objects.size();	// TODO: this is not the correct size
+
+		if (_bf_world.size() < world_size) {
+			Logger::notify() << "Resizing world buffer" << std::endl;
+			_bf_world.resize(world_size);
+		}
+		
+		_bf_world.write(
+			(const uint8_t *) &gworld,
+			sizeof(GPUWorld)
+		);
+
+		_bf_world.write(
+			(const uint8_t *) wu.indices.data(),
+			4 * wu.indices.size(),
+			sizeof(GPUWorld)
+		);
+
+		// Objects
+		if (sizeof(aligned_vec4) * wu.objects.size() > objects_buffer.size) {
+			// Resize vulkan buffer
+			vk->destroy_buffer(context.device, objects_buffer);
+			vk->make_buffer(context.phdev, context.device, objects_buffer, wu.objects.size() * sizeof(aligned_vec4), buffer_usage);
+			resized++;
+		}
+
+		// Lights
+		if (sizeof(aligned_vec4) * wu.lights.size() > lights_buffer.size) {
+			// Resize vulkan buffer
+			vk->destroy_buffer(context.device, lights_buffer);
+			vk->make_buffer(context.phdev, context.device, lights_buffer, wu.lights.size() * sizeof(aligned_vec4), buffer_usage);
+			resized++;
+		}
 
 		// Map buffers
-		vk->map_buffer(context.device, &world_buffer, wb.ptr, wb.size);
-		vk->map_buffer(context.device, &objects_buffer, objects.data(), sizeof(aligned_vec4) * objects.size());
-		vk->map_buffer(context.device, &materials_buffer, materials.data(), sizeof(Material) * materials.size());
-		vk->map_buffer(context.device, &lights_buffer, lights.data(), sizeof(aligned_vec4) * lights.size());
+		// vk->map_buffer(context.device, &world_buffer, wb.ptr, wb.size);
+		_bf_world.flush();
+		vk->map_buffer(context.device, &objects_buffer, wu.objects.data(), sizeof(aligned_vec4) * wu.objects.size());
+		vk->map_buffer(context.device, &materials_buffer, wu.materials.data(), sizeof(Material) * wu.materials.size());
+		vk->map_buffer(context.device, &lights_buffer, wu.lights.data(), sizeof(aligned_vec4) * wu.lights.size());
 
-		return wb.resized;
+		// Return pointer to the buffer
+		return (resized > 0);
 	}
 
 	// Allocate buffers
@@ -481,7 +435,7 @@ class MercuryApplication : public mercury::App {
 		// Create buffers
 		// context.vk->make_buffer(physical_device, device, pixel_buffer, pixel_size, buffer_usage | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
-		context.vk->make_buffer(context.phdev, context.device, world_buffer, world_size, buffer_usage);
+		// context.vk->make_buffer(context.phdev, context.device, world_buffer, world_size, buffer_usage);
 		context.vk->make_buffer(context.phdev, context.device, objects_buffer, objects_size, buffer_usage);
 		context.vk->make_buffer(context.phdev, context.device, lights_buffer, lights_size, buffer_usage);
 		context.vk->make_buffer(context.phdev, context.device, materials_buffer, materials_size, buffer_usage);
@@ -500,8 +454,8 @@ class MercuryApplication : public mercury::App {
 		_bf_world = BufferManager <uint8_t> {
 			context,
 			BFM_Settings {
-				// Allocate dummy amount (1 MB)
-				.size = 1024 * 1024,
+				// Allocate dummy amount (1 KB)
+				.size = 1024,
 				.usage = buffer_usage,
 				.usage_type = BFM_WRITE_ONLY
 			}
@@ -622,7 +576,7 @@ class MercuryApplication : public mercury::App {
 
 				if (ImGui::TreeNode("Buffer sizes")) {
 					ImGui::Text("Pixel buffer:     %5.2f MB", to_mb(_bf_pixels.size()));
-					ImGui::Text("World buffer:     %5.2f MB", to_mb(world_buffer.size));
+					ImGui::Text("World buffer:     %5.2f MB", to_mb(_bf_world.size()));
 					ImGui::Text("Objects buffer:   %5.2f MB", to_mb(objects_buffer.size));
 					ImGui::Text("Lights buffer:    %5.2f MB", to_mb(lights_buffer.size));
 					ImGui::Text("Materials buffer: %5.2f MB", to_mb(materials_buffer.size));
@@ -1007,11 +961,11 @@ public:
 
 	// TODO: make some cleaner method
 	void update_descriptor_set() {
-		VkDescriptorBufferInfo wb_info {
+		/* VkDescriptorBufferInfo wb_info {
 			.buffer = world_buffer.buffer,
 			.offset = 0,
 			.range = world_buffer.size
-		};
+		}; */
 		
 		VkDescriptorBufferInfo ob_info {
 			.buffer = objects_buffer.buffer,
@@ -1043,7 +997,7 @@ public:
 			.range = bvh.stack.size
 		};
 		
-		VkWriteDescriptorSet wb_write = {
+		/* VkWriteDescriptorSet wb_write = {
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = descriptor_set,
 			.dstBinding = 1,
@@ -1051,7 +1005,7 @@ public:
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 			.pBufferInfo = &wb_info
-		};
+		}; */
 		
 		VkWriteDescriptorSet ob_write = {
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -1104,7 +1058,7 @@ public:
 		};
 
 		VkWriteDescriptorSet writes[] = {
-			wb_write,
+			// wb_write,
 			ob_write,
 			lb_write,
 			mt_write,
@@ -1113,12 +1067,13 @@ public:
 		};
 
 		vkUpdateDescriptorSets(
-			context.device.device, 6,
+			context.device.device, 5,
 			&writes[0],
 			0, nullptr
 		);
 
 		_bf_pixels.update_descriptor_set(descriptor_set, 0);
+		_bf_world.update_descriptor_set(descriptor_set, 1);
 		_bf_debug.update_descriptor_set(descriptor_set, 7);
 	}
 
@@ -1198,8 +1153,6 @@ class ProfilerApplication : public mercury::App {
 
 };
 
-}
-
 int main()
 {
 	// Redirect logger to file
@@ -1226,7 +1179,7 @@ int main()
 	vulkan->init_imgui();
 
 	// Create sample scene
-	mercury::MercuryApplication app(vulkan);
+	MercuryApplication app(vulkan);
 
 	app.update_descriptor_set();
 	app.update_command_buffers();

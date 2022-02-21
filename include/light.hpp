@@ -3,7 +3,9 @@
 
 // Engine headers
 #include "core.hpp"
+#include "transform.hpp"
 #include "types.hpp"
+#include "world_update.hpp"
 
 // Light structure
 struct Light {
@@ -23,9 +25,9 @@ struct Light {
 	virtual void write(Buffer &buffer) const = 0;
 
 	// Write full light data
-	void write_to_buffer(Buffer &buffer) {
+	void write_light(mercury::WorldUpdate &wu) {
 		// Push ID, then everythig else
-		buffer.push_back(aligned_vec4 {
+		wu.lights.push_back(aligned_vec4 {
 			glm::vec4 {
 				id, transform.position.x,
 				transform.position.y,
@@ -33,7 +35,7 @@ struct Light {
 			}
 		});
 
-		this->write(buffer);
+		this->write(wu.lights);
 	}
 };
 

@@ -27,7 +27,7 @@
 #include "include/world.hpp"
 
 // Global world data
-extern World world;
+extern mercury::World world;
 
 // GLFW helpers
 void key_callback(GLFWwindow *, int, int, int, int);

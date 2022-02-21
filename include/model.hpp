@@ -13,6 +13,7 @@
 // Engine headers
 #include "mesh.hpp"
 #include "logger.hpp"
+#include "world_update.hpp"
 
 namespace mercury {
 
@@ -57,11 +58,11 @@ public:
 	}
 
 	// Write model to buffer
-	void write_to_buffer(Buffer &buffer, Buffer &materials, Indices &indices) override {
+	void write_object(WorldUpdate &wu) override {
 		// Write meshes
 		for (size_t i = 0; i < _meshes.size(); i++) {
 			// Write mesh
-			_meshes[i].write_to_buffer(buffer, materials, indices);
+			_meshes[i].write_object(wu);
 		}
 	}
 
