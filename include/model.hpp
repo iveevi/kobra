@@ -19,8 +19,10 @@ namespace mercury {
 // Model structure
 template <VertexType T>
 class Model : public Primitive {
+	// Filename
+	std::string		_filename;
 	// Meshes
-	std::vector <Mesh <T>> _meshes;
+	std::vector <Mesh <T>>	_meshes;
 	
 	// Assimp helpers
 	void _process_node(aiNode *, const aiScene *);
@@ -44,6 +46,9 @@ public:
 			c += m.count();
 		return c;
 	}
+
+	// Write to file
+	void save(std::ofstream &file) const override;
 
 	// Write model to buffer (fake to resolve abstract base class)
 	void write(Buffer &buffer) const override {
@@ -139,7 +144,7 @@ template <VertexType T>
 Model <T> ::Model(const char *path) : Model(std::string(path)) {}
 
 template <VertexType T>
-Model <T> ::Model(const std::string &filename)
+Model <T> ::Model(const std::string &filename) : _filename(filename)
 {
 	// Check if the file exists
 	std::ifstream file(filename);
@@ -186,6 +191,14 @@ template <VertexType T>
 const Mesh <T> &Model <T> ::operator[](size_t i) const
 {
 	return _meshes[i];
+}
+
+// Write to file
+template <VertexType T>
+void Model <T> ::save(std::ofstream &file) const
+{
+	// Header and write number of meshes
+	file << "MESH " << _filename << std::endl;
 }
 
 }

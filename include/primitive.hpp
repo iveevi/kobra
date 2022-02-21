@@ -1,6 +1,9 @@
 #ifndef PRIMITIVE_H_
 #define PRIMITIVE_H_
 
+// Standard headers
+#include <fstream>
+
 // Engine headers
 #include "bbox.hpp"
 #include "core.hpp"
@@ -24,6 +27,18 @@ struct Primitive {
 
 	// Count number of primitives
 	virtual uint count() const = 0;
+
+	// Save to a file
+	virtual void save(std::ofstream &file) const = 0;
+
+	// Wrappers around virtual functions
+	void save_to_file(std::ofstream &file) const {
+		// TODO: save as binary at some point?
+		save(file);
+
+		// Save transform and material
+		// file << "\tTransform: " << transform.position << "\n";
+	}
 
 	// Write data to aligned_vec4 buffer (inherited)
 	virtual void write(Buffer &buffer) const = 0;
@@ -77,6 +92,19 @@ struct Triangle : public Primitive {
 
 	uint count() const override { return 1; }
 
+	// Save to file
+	void save(std::ofstream &file) const override {
+		// Header for object
+		file << "Triangle\n";
+
+		// Write positions in binary
+		file << "\tpositions:";
+		file.write(reinterpret_cast <const char *> (&a), sizeof(glm::vec3));
+		file.write(reinterpret_cast <const char *> (&b), sizeof(glm::vec3));
+		file.write(reinterpret_cast <const char *> (&c), sizeof(glm::vec3));
+		file << "\n";
+	}
+
 	void write(Buffer &buffer) const override {
 		buffer.push_back(aligned_vec4(a));
 		buffer.push_back(aligned_vec4(b));
@@ -104,6 +132,17 @@ struct Sphere : public Primitive {
 			radius(r) {}
 
 	uint count() const override { return 1; }
+
+	// Save to file
+	void save(std::ofstream &file) const override {
+		// Header for object
+		file << "Sphere\n";
+
+		// Write radius in binary
+		file << "\tradius: ";
+		file.write(reinterpret_cast <const char *> (&radius), sizeof(float));
+		file << "\n";
+	}
 
 	void write(Buffer &buffer) const override {
 		buffer.push_back(aligned_vec4 {

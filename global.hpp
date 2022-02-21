@@ -2,7 +2,7 @@
 #define GLOBAL_H_
 
 #define MERCURY_VALIDATION_LAYERS
-// #define MERCURY_VALIDATION_ERROR_ONLY
+#define MERCURY_VALIDATION_ERROR_ONLY
 // #define MERCURY_THROW_ERROR
 
 // Standard headers
@@ -19,6 +19,7 @@
 #include "include/model.hpp"
 #include "include/primitive.hpp"
 #include "include/profiler.hpp"
+#include "include/scene.hpp"
 #include "include/timer.hpp"
 #include "include/types.h"
 #include "include/world.hpp"

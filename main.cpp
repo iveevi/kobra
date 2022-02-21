@@ -10,7 +10,11 @@
 // List of objet materials
 Material materials[] {
 	{.albedo = glm::vec3 {0.1f, 0.5f, 0.2f}},
-	{.albedo = glm::vec3 {0.9f, 0.5f, 0.2f}},
+	{
+		.albedo = glm::vec3 {0.9f, 0.5f, 0.2f},
+		.specular = 0.5f,
+		.reflectance = 0.2f,
+	},
 	{
 		.albedo = glm::vec3 {1.0f, 1.0f, 1.0f},
 		.specular = 1.0,
@@ -51,31 +55,23 @@ World world {
 	// TODO: later read from file
 	std::vector <World::PrimitivePtr> {
 		World::PrimitivePtr(new Sphere(0.25f, transforms[0], materials[6])),
-		/* World::PrimitivePtr(new Sphere(1.0f, transforms[0], materials[0])),
+		World::PrimitivePtr(new Sphere(1.0f, transforms[0], materials[0])),
 		World::PrimitivePtr(new Sphere(3.0f, transforms[1], materials[1])),
 		World::PrimitivePtr(new Sphere(6.0f, transforms[2], materials[2])),
 		World::PrimitivePtr(new Sphere(2.0f, transforms[3], materials[3])),
 		World::PrimitivePtr(new Sphere(2.0f, transforms[4], materials[4])),
 
-		// Triangle
-		World::PrimitivePtr(new Triangle(
-			glm::vec3(0.0f, 0.0f, 0.0f),
-			glm::vec3(0.0f, 0.0f, 1.0f),
-			glm::vec3(1.0f, 1.0f, 0.0f),
-			materials[4]
-		)),
-
 		// Cube mesh
-		World::PrimitivePtr(new Mesh <VERTEX_TYPE_POSITION> (
+		World::PrimitivePtr(new mercury::Mesh <mercury::VERTEX_TYPE_POSITION> (
 			{
-				glm::vec3(0.0f, 0.0f, -1.0f),
-				glm::vec3(1.0f, 0.0f, -1.0f),
-				glm::vec3(1.0f, 1.0f, -1.0f),
-				glm::vec3(0.0f, 1.0f, -1.0),
-				glm::vec3(0.0f, 0.0f, 1.0f),
-				glm::vec3(1.0f, 0.0f, 1.0f),
-				glm::vec3(1.0f, 1.0f, 1.0f),
-				glm::vec3(0.0f, 1.0f, 1.0f)
+				glm::vec3(0.0f, 6.0f, -1.5f),
+				glm::vec3(1.0f, 6.0f, -1.5f),
+				glm::vec3(1.0f, 7.0f, -1.5f),
+				glm::vec3(0.0f, 7.0f, -1.5),
+				glm::vec3(0.0f, 6.0f, 0.5f),
+				glm::vec3(1.0f, 6.0f, 0.5f),
+				glm::vec3(1.0f, 7.0f, 0.5f),
+				glm::vec3(0.0f, 7.0f, 0.5f)
 			},
 			{
 				0, 1, 2,	0, 2, 3,
@@ -86,7 +82,7 @@ World world {
 				2, 6, 7,	2, 7, 3
 			},
 			materials[1]
-		)), */
+		)),
 	},
 
 	// Lights
@@ -1166,11 +1162,11 @@ int main()
 	// Redirect logger to file
 	// Logger::switch_file("mercury.log");
 
-	mercury::Model <VERTEX_TYPE_POSITION> model("resources/teapot.obj");
+	mercury::Model <mercury::VERTEX_TYPE_POSITION> model("resources/benchmark/suzanne.obj");
 	model[0].material = materials[1];
 
-	world.objects.push_back(std::shared_ptr <mercury::Model <VERTEX_TYPE_POSITION>> (
-		new mercury::Model <VERTEX_TYPE_POSITION> (model)
+	world.objects.push_back(std::shared_ptr <mercury::Model <mercury::VERTEX_TYPE_POSITION>> (
+		new mercury::Model <mercury::VERTEX_TYPE_POSITION> (model)
 	));
 
 	Logger::ok() << "[main] Loaded model with "
@@ -1178,16 +1174,20 @@ int main()
 		<< model[0].vertex_count() << " vertices, "
 		<< model[0].triangle_count() << " triangles" << std::endl;
 
+	// Save world into scene
+	mercury::Scene scene("default_world", world);
+	scene.save("resources/default_world.hg");
+
 	// Initialize Vulkan
 	Vulkan *vulkan = new Vulkan();
 	vulkan->init_imgui();
 
 	// Create sample scene
-	MercuryApplication scene(vulkan);
+	MercuryApplication app(vulkan);
 
-	scene.update_descriptor_set();
-	scene.update_command_buffers();
-	scene.run();
+	app.update_descriptor_set();
+	app.update_command_buffers();
+	app.run();
 
 	delete vulkan;
 }

@@ -5,6 +5,8 @@
 #include "primitive.hpp"
 #include "logger.hpp"	// TODO: remove
 
+namespace mercury {
+
 // TODO: put vertex into own header file
 
 // Vertex types
@@ -79,6 +81,24 @@ public:
 		return triangle_count();
 	}
 
+	// Write to file
+	void save(std::ofstream &file) const override {
+		// Header for object
+		file << "Mesh\n";
+
+		// Write vertices in binary
+		file << "\tvertices:";
+		file.write(reinterpret_cast <const char *> (&_vertices[0]),
+				sizeof(Vertex <T>) * _vertices.size());
+		file << "\n";
+
+		// Write indices in binary
+		file << "\tindices:";
+		file.write(reinterpret_cast <const char *> (&_indices[0]),
+				sizeof(uint32_t) * _indices.size());
+		file << "\n";
+	}
+
 	// Write mesh to buffer (fake to resolve abstract base class)
 	void write(Buffer &buffer) const override {
 		// Throw
@@ -133,5 +153,7 @@ public:
 		}
 	}
 };
+
+}
 
 #endif

@@ -1,3 +1,4 @@
+*.hg
 *.ini
 *.log
 *.out
