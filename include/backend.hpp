@@ -830,7 +830,13 @@ public:
 			VkCommandPool cpool,
 			std::vector <VkCommandBuffer> &buffers,
 			CommandBufferMaker maker) const {
-		// Resize command buffers
+		VkResult result;
+
+		// Free old command buffers
+		for (auto &buffer : buffers)
+			vkFreeCommandBuffers(device.device, cpool, 1, &buffer);
+
+		// Allocate new command buffers
 		buffers.resize(swch.framebuffers.size());
 
 		// Command buffer info
@@ -842,7 +848,7 @@ public:
 		};
 
 		// Allocate the command buffers
-		VkResult result = vkAllocateCommandBuffers(
+		result = vkAllocateCommandBuffers(
 			device.device, &alloc_info,
 			buffers.data()
 		);

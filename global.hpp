@@ -2,7 +2,7 @@
 #define GLOBAL_H_
 
 #define MERCURY_VALIDATION_LAYERS
-#define MERCURY_VALIDATION_ERROR_ONLY
+// #define MERCURY_VALIDATION_ERROR_ONLY
 // #define MERCURY_THROW_ERROR
 
 // Standard headers

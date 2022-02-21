@@ -226,9 +226,11 @@ BoundingBox bbox(int node)
 }
 
 // Get index of cloests object
+int min_index = -1;
+
 Hit closest_object(Ray ray)
 {
-	int min_index = -1;
+	min_index = -1;
 	
 	// Starting time
 	Intersection mini = Intersection(
@@ -236,7 +238,9 @@ Hit closest_object(Ray ray)
 		mat_default()
 	);
 
-	/* Traverse BVH as a threaded binary tree
+#if 1
+
+	// Traverse BVH as a threaded binary tree
 	int node = 0;
 	int count = 0;
 	while (node != -1) {
@@ -275,7 +279,9 @@ Hit closest_object(Ray ray)
 				node = miss(node);
 			}
 		}
-	} */
+	}
+
+#else
 
 	// Traverse linearly
 	int count = 0;
@@ -294,13 +300,7 @@ Hit closest_object(Ray ray)
 		}
 	}
 
-	// Index of thread
-	int tid = int(gl_WorkGroupID.x + gl_WorkGroupID.y * world.width);
-
-	debug.data[tid].x = mini.time;
-	debug.data[tid].y = intBitsToFloat(min_index);
-	debug.data[tid].z = intBitsToFloat(count);
-	debug.data[tid].w = intBitsToFloat(tid);
+#endif
 
 	// Color of closest object
 	vec3 color = background(ray);

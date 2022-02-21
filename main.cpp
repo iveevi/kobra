@@ -178,18 +178,15 @@ class MercuryApplication : public mercury::App {
 			}
 		};
 
-		/* vkCmdPipelineBarrier(
+		vkCmdPipelineBarrier(
 			command_buffers[i],
 			VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
 			VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
 			0,
-			0,
-			nullptr,
-			0,
-			nullptr,
-			1,
-			&image_memory_barrier
-		); */
+			0, nullptr,
+			0, nullptr,
+			1, &image_memory_barrier
+		);
 
 		// Buffer copy regions
 		VkBufferImageCopy buffer_copy_region {
@@ -326,7 +323,7 @@ class MercuryApplication : public mercury::App {
 	Vulkan::Buffer	lights_buffer;
 	Vulkan::Buffer	materials_buffer;
 
-	Vulkan::Buffer debug_buffer;
+	Vulkan::Buffer  debug_buffer;
 
 	// BVH resources
 	mercury::BVH bvh;
@@ -361,19 +358,17 @@ class MercuryApplication : public mercury::App {
 			VK_BUFFER_USAGE_TRANSFER_DST_BIT
 			| VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
-		// Check buffer resize requirement
-		size_t size = world_data_size();
-
-		// Resize buffer if required
-		if (size > buffer_size) {
-			buffer_size = size;
-			buffer = (uint8_t *) realloc(buffer, buffer_size);
-		}
-
 		// Generate world data and write to buffers
 		Indices indices;
 		world.write_objects(objects, materials, indices);
 		world.write_lights(lights, indices);
+
+		// Calculate size of world buffer
+		size_t world_size = sizeof(GPUWorld) + indices.size() * sizeof(uint);
+		if (world_size > buffer_size) {
+			buffer_size = world_size;
+			buffer = (uint8_t *) realloc(buffer, buffer_size);
+		}
 
 		// Copy world and indices
 		gworld = world.dump();
@@ -416,7 +411,7 @@ class MercuryApplication : public mercury::App {
 		int resized = 0;
 
 		// World
-		if (size > world_buffer.size) {
+		if (world_size > world_buffer.size) {
 			// Resize vulkan buffer
 			vk->destroy_buffer(device, world_buffer);
 			vk->make_buffer(physical_device, device, world_buffer, buffer_size, buffer_usage);
@@ -1171,82 +1166,17 @@ int main()
 	// Redirect logger to file
 	// Logger::switch_file("mercury.log");
 
-	mercury::Model <VERTEX_TYPE_POSITION> model("resources/debug.obj");
+	mercury::Model <VERTEX_TYPE_POSITION> model("resources/teapot.obj");
 	model[0].material = materials[1];
 
-	/* world.objects.push_back(std::shared_ptr <mercury::Model <VERTEX_TYPE_POSITION>> (
+	world.objects.push_back(std::shared_ptr <mercury::Model <VERTEX_TYPE_POSITION>> (
 		new mercury::Model <VERTEX_TYPE_POSITION> (model)
-	)); */
+	));
 
 	Logger::ok() << "[main] Loaded model with "
 		<< model.mesh_count() << " meshe(s), "
 		<< model[0].vertex_count() << " vertices, "
 		<< model[0].triangle_count() << " triangles" << std::endl;
-
-	// Procedural plane mesh
-	float width = 10.0f;
-	float height = 10.0f;
-
-	int rows = 20;
-	int columns = 20;
-
-	Mesh <VERTEX_TYPE_POSITION> ::VertexList vertices;
-	Indices indices;
-
-	// Fill in the vertices first
-	for (int i = 0; i < rows; i++) {
-		for (int j = 0; j < columns; j++) {
-			vertices.push_back(
-				Vertex <VERTEX_TYPE_POSITION> {
-					{
-						(float)j * width / (float)columns,
-						0.0f,
-						(float)i * height / (float)rows
-					}
-				}
-			);
-		}
-	}
-
-	// Fill in the indices
-	for (int i = 0; i < rows - 1; i++) {
-		for (int j = 0; j < columns - 1; j++) {
-			indices.push_back(
-				(i + 0) * columns + (j + 0)
-			);
-
-			indices.push_back(
-				(i + 0) * columns + (j + 1)
-			);
-
-			indices.push_back(
-				(i + 1) * columns + (j + 0)
-			);
-
-			indices.push_back(
-				(i + 1) * columns + (j + 0)
-			);
-
-			indices.push_back(
-				(i + 0) * columns + (j + 1)
-			);
-
-			indices.push_back(
-				(i + 1) * columns + (j + 1)
-			);
-		}
-	}
-
-	// Create the mesh
-	Mesh <VERTEX_TYPE_POSITION> mesh(vertices, indices, materials[1]);
-
-	Logger::ok() << "[main] Created mesh with "
-		<< mesh.vertex_count() << " vertices, "
-		<< mesh.triangle_count() << " triangles" << std::endl;
-	
-	world.objects.push_back(std::shared_ptr <Mesh <VERTEX_TYPE_POSITION>> (
-		new Mesh <VERTEX_TYPE_POSITION> (mesh)
-	));
 
 	// Initialize Vulkan
 	Vulkan *vulkan = new Vulkan();
