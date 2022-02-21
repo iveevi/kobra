@@ -4,23 +4,159 @@
 // Engine headers
 #include "backend.hpp"
 #include "core.hpp"
+#include <vulkan/vulkan_core.h>
 
 namespace mercury {
+
+// TODO: alloc subnamespace?
+// Usage types for buffer manager
+enum BFM_Usage {
+	BFM_WRITE_ONLY,
+	BFM_READ_ONLY,
+	BFM_READ_WRITE,
+};
+
+// Settings for buffer manager
+struct BFM_Settings {
+	size_t			size;
+	VkBufferUsageFlags	usage;
+	BFM_Usage		usage_type;
+};
 
 // Manages buffer and associated memory
 template <class T>
 class BufferManager {
-	// TODO: pass vulkan context
-	Vulkan		*vk;
-	Vulkan::Device	device;
+private:
+	// Members
+	Vulkan::Context	context;
 
 	std::vector <T> cpu_buffer;
 	Vulkan::Buffer	gpu_buffer;
 
+	BFM_Settings	settings;
+public:
 	// Constructors
 	BufferManager() {}
-	BufferManager(Vulkan *ctx, size_t size) {
+	BufferManager(const Vulkan::Context &vk, const BFM_Settings &s)
+			: context(vk), settings(s) {
+		// Allocate if requested
+		if (settings.usage_type != BFM_READ_ONLY)
+			cpu_buffer.resize(settings.size);
 
+		// Create buffer
+		context.vk->make_buffer(
+			context.phdev,
+			context.device,
+			gpu_buffer,
+			settings.size * sizeof(T),
+			settings.usage
+		);
+
+		// Add to deletion queue
+		context.vk->push_deletion_task(
+			[&](Vulkan *vk) {
+				vk->destroy_buffer(
+					context.device,
+					gpu_buffer
+				);
+			}
+		);
+	}
+
+	// Properties
+	const size_t &size() const {
+		return settings.size;
+	}
+
+	// Get data
+	const T *data() const {
+		if (settings.usage_type == BFM_READ_ONLY) {
+			void *data = context.vk->get_buffer_data(
+				context.device,
+				gpu_buffer
+			);
+
+			return reinterpret_cast <T *> (data);
+		}
+
+		return cpu_buffer.data();
+	}
+
+	// Get underlying buffer
+	const Vulkan::Buffer &buffer() const {
+		return gpu_buffer;
+	}
+
+	const VkBuffer &vk_buffer() const {
+		return gpu_buffer.buffer;
+	}
+
+	// Write to buffer (must have write property)
+	size_t write(const T *data, size_t size, size_t offset = 0) {
+		if (settings.usage_type == BFM_WRITE_ONLY) {
+			// Copy data
+			std::memcpy(
+				cpu_buffer.data() + offset,
+				data,
+				size * sizeof(T)
+			);
+		}
+
+		return 0;
+	}
+
+	// Flush cpu buffer to gpu (must have write property)
+	void flush() {
+		if (settings.usage_type == BFM_WRITE_ONLY) {
+			context.vk->map_buffer(
+				context.device,
+				gpu_buffer,
+				cpu_buffer.data(),
+				sizeof(T) * std::min(
+					settings.size,
+					cpu_buffer.size()
+				)
+			);
+		}
+	}
+
+	// Generating bindings
+	VkDescriptorSetLayoutBinding make_dsl_binding(uint32_t binding, VkShaderStageFlags stage) const {
+		return VkDescriptorSetLayoutBinding {
+			.binding = binding,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.descriptorCount = 1,
+			.stageFlags = stage,
+			.pImmutableSamplers = nullptr
+		};
+	}
+
+	// Update descriptor set
+	void update_descriptor_set(VkDescriptorSet descriptor_set, uint32_t binding) const {
+		VkDescriptorBufferInfo buffer_info {
+			.buffer = gpu_buffer.buffer,
+			.offset = 0,
+			.range = gpu_buffer.size
+		};
+
+		VkWriteDescriptorSet write_descriptor_set {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.pNext = nullptr,
+			.dstSet = descriptor_set,
+			.dstBinding = binding,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.pImageInfo = nullptr,
+			.pBufferInfo = &buffer_info,
+			.pTexelBufferView = nullptr
+		};
+
+		vkUpdateDescriptorSets(
+			context.device.device,
+			1, &write_descriptor_set,
+			0, nullptr
+		);
 	}
 };
 

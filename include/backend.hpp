@@ -75,6 +75,20 @@ public:
 		std::vector <VkImageView>	image_views;
 	};
 
+	// Context, containing the device
+	// TODO: include swapchain?
+	// TODO: put outside of this class?
+	struct Context {
+		Vulkan			*vk;
+		Device			device;
+		VkPhysicalDevice	phdev;
+
+		// Get underlying device
+		const VkDevice &vk_device() const {
+			return device.device;
+		}
+	};
+
 	// Aliases
 	using Glob = std::vector <char>;
 

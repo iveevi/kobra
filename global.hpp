@@ -11,6 +11,7 @@
 // Engine headers
 #include "include/app.hpp"
 #include "include/backend.hpp"
+#include "include/buffer_manager.hpp"
 #include "include/bvh.hpp"
 #include "include/camera.hpp"
 #include "include/capture.hpp"

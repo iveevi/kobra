@@ -7,6 +7,7 @@
 
 // Local headers
 #include "global.hpp"
+#include "include/buffer_manager.hpp"
 
 // List of objet materials
 Material materials[] {
@@ -125,6 +126,8 @@ static const size_t MAX_OBJECT_SIZE = sizeof(Triangle);
 static const size_t MAX_LIGHT_SIZE = sizeof(PointLight);
 
 // App
+namespace mercury {
+
 class MercuryApplication : public mercury::App {
 	// TODO: some of these member should be moved back to App
 	VkRenderPass			render_pass;
@@ -146,7 +149,7 @@ class MercuryApplication : public mercury::App {
 	std::vector <VkSemaphore>	smph_render_finished;
 
 	// Profiler
-	mercury::Profiler		profiler;
+	Profiler		profiler;
 
 	// Fill out command buffer
 	// TODO: do we need the vk parameter?
@@ -207,7 +210,7 @@ class MercuryApplication : public mercury::App {
 		// Copy buffer to image
 		vkCmdCopyBufferToImage(
 			command_buffers[i],
-			pixel_buffer.buffer,
+			_bf_pixels.vk_buffer(),
 			image,
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			1,
@@ -247,7 +250,7 @@ class MercuryApplication : public mercury::App {
 			VkPipelineLayout pipeline_layout;
 
 			VkResult res = vkCreatePipelineLayout(
-				device.device,
+				context.vk_device(),
 				&pipeline_layout_info,
 				nullptr,
 				&pipeline_layout
@@ -273,7 +276,7 @@ class MercuryApplication : public mercury::App {
 			};
 
 			res = vkCreateComputePipelines(
-				device.device,
+				context.device.device,
 				VK_NULL_HANDLE,
 				1,
 				&compute_pipeline_info,
@@ -314,13 +317,15 @@ class MercuryApplication : public mercury::App {
 	}
 	
 	// GPU buffers
-	Vulkan::Buffer	pixel_buffer;
+	// Vulkan::Buffer	pixel_buffer;
 	Vulkan::Buffer	world_buffer;
 	Vulkan::Buffer	objects_buffer;
 	Vulkan::Buffer	lights_buffer;
 	Vulkan::Buffer	materials_buffer;
 
-	Vulkan::Buffer  debug_buffer;
+	BufferManager <uint>	_bf_pixels;
+	BufferManager <uint8_t>	_bf_world;
+	Buffer4f		_bf_debug;
 
 	// BVH resources
 	mercury::BVH bvh;
@@ -410,24 +415,24 @@ class MercuryApplication : public mercury::App {
 		// World
 		if (world_size > world_buffer.size) {
 			// Resize vulkan buffer
-			vk->destroy_buffer(device, world_buffer);
-			vk->make_buffer(physical_device, device, world_buffer, buffer_size, buffer_usage);
+			vk->destroy_buffer(context.device, world_buffer);
+			vk->make_buffer(context.phdev, context.device, world_buffer, buffer_size, buffer_usage);
 			resized++;
 		}
 
 		// Objects
 		if (sizeof(aligned_vec4) * objects.size() > objects_buffer.size) {
 			// Resize vulkan buffer
-			vk->destroy_buffer(device, objects_buffer);
-			vk->make_buffer(physical_device, device, objects_buffer, objects.size() * sizeof(aligned_vec4), buffer_usage);
+			vk->destroy_buffer(context.device, objects_buffer);
+			vk->make_buffer(context.phdev, context.device, objects_buffer, objects.size() * sizeof(aligned_vec4), buffer_usage);
 			resized++;
 		}
 
 		// Lights
 		if (sizeof(aligned_vec4) * lights.size() > lights_buffer.size) {
 			// Resize vulkan buffer
-			vk->destroy_buffer(device, lights_buffer);
-			vk->make_buffer(physical_device, device, lights_buffer, lights.size() * sizeof(aligned_vec4), buffer_usage);
+			vk->destroy_buffer(context.device, lights_buffer);
+			vk->make_buffer(context.phdev, context.device, lights_buffer, lights.size() * sizeof(aligned_vec4), buffer_usage);
 			resized++;
 		}
 
@@ -452,10 +457,10 @@ class MercuryApplication : public mercury::App {
 		auto wb = map_world_buffer(vk, objects, lights, materials);
 
 		// Map buffers
-		vk->map_buffer(device, &world_buffer, wb.ptr, wb.size);
-		vk->map_buffer(device, &objects_buffer, objects.data(), sizeof(aligned_vec4) * objects.size());
-		vk->map_buffer(device, &materials_buffer, materials.data(), sizeof(Material) * materials.size());
-		vk->map_buffer(device, &lights_buffer, lights.data(), sizeof(aligned_vec4) * lights.size());
+		vk->map_buffer(context.device, &world_buffer, wb.ptr, wb.size);
+		vk->map_buffer(context.device, &objects_buffer, objects.data(), sizeof(aligned_vec4) * objects.size());
+		vk->map_buffer(context.device, &materials_buffer, materials.data(), sizeof(Material) * materials.size());
+		vk->map_buffer(context.device, &lights_buffer, lights.data(), sizeof(aligned_vec4) * lights.size());
 
 		return wb.resized;
 	}
@@ -474,26 +479,42 @@ class MercuryApplication : public mercury::App {
 			| VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
 		// Create buffers
-		ctx->make_buffer(physical_device, device, pixel_buffer, pixel_size, buffer_usage | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-		ctx->make_buffer(physical_device, device, world_buffer, world_size, buffer_usage);
-		ctx->make_buffer(physical_device, device, objects_buffer, objects_size, buffer_usage);
-		ctx->make_buffer(physical_device, device, lights_buffer, lights_size, buffer_usage);
-		ctx->make_buffer(physical_device, device, materials_buffer, materials_size, buffer_usage);
+		// context.vk->make_buffer(physical_device, device, pixel_buffer, pixel_size, buffer_usage | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+
+		context.vk->make_buffer(context.phdev, context.device, world_buffer, world_size, buffer_usage);
+		context.vk->make_buffer(context.phdev, context.device, objects_buffer, objects_size, buffer_usage);
+		context.vk->make_buffer(context.phdev, context.device, lights_buffer, lights_size, buffer_usage);
+		context.vk->make_buffer(context.phdev, context.device, materials_buffer, materials_size, buffer_usage);
 
 		// Debug buffer (one vec4 per pixel)
-		ctx->make_buffer(physical_device, device, debug_buffer, 800 * 600 * sizeof(aligned_vec4), buffer_usage);
-		
-		// Add all buffers to deletion queue
-		ctx->push_deletion_task(
-			[&](Vulkan *vk) {
-				vk->destroy_buffer(device, pixel_buffer);
-				vk->destroy_buffer(device, world_buffer);
-				vk->destroy_buffer(device, objects_buffer);
-				vk->destroy_buffer(device, lights_buffer);
-				vk->destroy_buffer(device, materials_buffer);
-				Logger::ok("[main] Deleted buffers");
+		// context.vk->make_buffer(physical_device, device, debug_buffer, 800 * 600 * sizeof(aligned_vec4), buffer_usage);
+		_bf_pixels = BufferManager <uint> {
+			context,
+			BFM_Settings {
+				.size = pixel_size,
+				.usage = buffer_usage | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+				.usage_type = BFM_READ_ONLY
 			}
-		);
+		};
+
+		_bf_world = BufferManager <uint8_t> {
+			context,
+			BFM_Settings {
+				// Allocate dummy amount (1 MB)
+				.size = 1024 * 1024,
+				.usage = buffer_usage,
+				.usage_type = BFM_WRITE_ONLY
+			}
+		};
+
+		_bf_debug = Buffer4f {
+			context,
+			BFM_Settings {
+				.size = 800 * 600,
+				.usage = buffer_usage,
+				.usage_type = BFM_READ_ONLY
+			}
+		};
 	}
 
 	// ImGui context and methods
@@ -513,10 +534,10 @@ class MercuryApplication : public mercury::App {
 		file << "=== Debug data ===" << std::endl;
 
 		// Wait for queue to finish
-		vkQueueWaitIdle(device.graphics_queue);
+		vkQueueWaitIdle(context.device.graphics_queue);
 
 		// Extract data from debug buffer
-		aligned_vec4 *data = (aligned_vec4 *) vk->get_buffer_data(device, debug_buffer);
+		const aligned_vec4 *data = _bf_debug.data();
 
 		// Dump data
 		for (size_t i = 0; i < 800 * 600; i++) {
@@ -552,10 +573,10 @@ class MercuryApplication : public mercury::App {
 	// Create ImGui render
 	void make_imgui(size_t image_index) {
 		// Fill out imgui command buffer and render pass
-		ctx->begin_command_buffer(imgui_ctx.command_buffer);
+		context.vk->begin_command_buffer(imgui_ctx.command_buffer);
 
 		// Begin the render pass
-		ctx->begin_render_pass(
+		context.vk->begin_render_pass(
 			imgui_ctx.command_buffer,
 			swapchain.framebuffers[image_index],
 			imgui_ctx.render_pass,
@@ -577,7 +598,7 @@ class MercuryApplication : public mercury::App {
 				ImGui::InputInt("Descretize (grey)", &world.options.discretize);
 
 				if (ImGui::Button("Capture Debug Data"))
-					dump_debug_data(ctx);
+					dump_debug_data(context.vk);
 			}
 			ImGui::End();
 
@@ -600,13 +621,13 @@ class MercuryApplication : public mercury::App {
 				};
 
 				if (ImGui::TreeNode("Buffer sizes")) {
-					ImGui::Text("Pixel buffer:     %5.2f MB", to_mb(pixel_buffer.size));
+					ImGui::Text("Pixel buffer:     %5.2f MB", to_mb(_bf_pixels.size()));
 					ImGui::Text("World buffer:     %5.2f MB", to_mb(world_buffer.size));
 					ImGui::Text("Objects buffer:   %5.2f MB", to_mb(objects_buffer.size));
 					ImGui::Text("Lights buffer:    %5.2f MB", to_mb(lights_buffer.size));
 					ImGui::Text("Materials buffer: %5.2f MB", to_mb(materials_buffer.size));
 					ImGui::Text("BVH buffer:       %5.2f MB", to_mb(bvh.buffer.size));
-					ImGui::Text("Debug buffer:     %5.2f MB", to_mb(debug_buffer.size));
+					ImGui::Text("Debug buffer:     %5.2f MB", to_mb(_bf_debug.size()));
 					ImGui::TreePop();
 				}
 			}
@@ -616,10 +637,10 @@ class MercuryApplication : public mercury::App {
 			ImGui::Begin("Capture");
 			{
 				if (ImGui::Button("Capture image")) {
-					vkQueueWaitIdle(device.graphics_queue);
+					vkQueueWaitIdle(context.device.graphics_queue);
 					mercury::capture::write(
-						ctx, device,
-						pixel_buffer,
+						context.vk, context.device,
+						_bf_pixels.buffer(),
 						800, 600,
 						"capture.png"
 					);
@@ -646,8 +667,8 @@ class MercuryApplication : public mercury::App {
 						);
 
 						capture.write(
-							ctx, device,
-							pixel_buffer,
+							context.vk, context.device,
+							_bf_pixels.buffer(),
 							800, 600
 						);
 					} else {
@@ -675,10 +696,10 @@ class MercuryApplication : public mercury::App {
 			);
 
 		// End the render pass
-		ctx->end_render_pass(imgui_ctx.command_buffer);
+		context.vk->end_render_pass(imgui_ctx.command_buffer);
 
 		// End the command buffer
-		ctx->end_command_buffer(imgui_ctx.command_buffer);
+		context.vk->end_command_buffer(imgui_ctx.command_buffer);
 	}
 public:
 	// Constructor
@@ -694,57 +715,57 @@ public:
 		glfwSetCursorPosCallback(surface.window, mouse_callback);
 
 		// Initialize ImGui for this application
-		imgui_ctx = ctx->init_imgui_glfw(physical_device, device, surface, swapchain);
+		imgui_ctx = context.vk->init_imgui_glfw(context.phdev, context.device, surface, swapchain);
 
 		// Create render pass
-		render_pass = ctx->make_render_pass(
-			device,
+		render_pass = context.vk->make_render_pass(
+			context.device,
 			swapchain,
 			VK_ATTACHMENT_LOAD_OP_LOAD,
 			VK_ATTACHMENT_STORE_OP_STORE
 		);
 
 		// Create framebuffers
-		ctx->make_framebuffers(device, swapchain, render_pass);
+		context.vk->make_framebuffers(context.device, swapchain, render_pass);
 
 		// Create command pool
-		command_pool = ctx->make_command_pool(
-			physical_device,
+		command_pool = context.vk->make_command_pool(
+			context.phdev,
 			surface,
-			device,
+			context.device,
 			VK_COMMAND_POOL_CREATE_TRANSIENT_BIT
 		);
 
 		// Create descriptor pool
-		descriptor_pool = ctx->make_descriptor_pool(device);
+		descriptor_pool = context.vk->make_descriptor_pool(context.device);
 
 		// Create descriptor set layout
-		descriptor_set_layout = ctx->make_descriptor_set_layout(device, dsl_bindings);
+		descriptor_set_layout = context.vk->make_descriptor_set_layout(context.device, dsl_bindings);
 
 		// Create descriptor set
-		descriptor_set = ctx->make_descriptor_set(
-			device,
+		descriptor_set = context.vk->make_descriptor_set(
+			context.device,
 			descriptor_pool,
 			descriptor_set_layout
 		);
 
 		// Load compute shader
-		compute_shader = ctx->make_shader(device, "shaders/pixel.spv");
+		compute_shader = context.vk->make_shader(context.device, "shaders/pixel.spv");
 
 		// Create sync objects
 		// TODO: use max frames in flight
 		images_in_flight.resize(swapchain.images.size(), VK_NULL_HANDLE);
 		for (size_t i = 0; i < 2; i++) {
-			in_flight_fences.push_back(ctx->make_fence(device, VK_FENCE_CREATE_SIGNALED_BIT));
-			smph_image_available.push_back(ctx->make_semaphore(device));
-			smph_render_finished.push_back(ctx->make_semaphore(device));
+			in_flight_fences.push_back(context.vk->make_fence(context.device, VK_FENCE_CREATE_SIGNALED_BIT));
+			smph_image_available.push_back(context.vk->make_semaphore(context.device));
+			smph_render_finished.push_back(context.vk->make_semaphore(context.device));
 		}
 
 		// Create the buffers
 		allocate_buffers();
 
 		// Create BVH builder
-		bvh = mercury::BVH(ctx, physical_device, device, world);
+		bvh = mercury::BVH(context.vk, context.phdev, context.device, world);
 		Logger::ok() << "BVH: " << bvh.size << " nodes, " << bvh.primitives << " primitives" << std::endl;
 
 		mercury::BVHNode *root = bvh.nodes[0];
@@ -792,7 +813,7 @@ public:
 		world.lights[0]->transform.position = position;
 
 		// Map buffers
-		if (map_buffers(ctx)) {
+		if (map_buffers(context.vk)) {
 			update_descriptor_set();
 			update_command_buffers();
 		}
@@ -814,7 +835,7 @@ public:
 	void present() {
 		// Wait for the next image in the swap chain
 		vkWaitForFences(
-			device.device, 1,
+			context.vk_device(), 1,
 			&in_flight_fences[frame_index],
 			VK_TRUE, UINT64_MAX
 		);
@@ -822,7 +843,7 @@ public:
 		// Acquire the next image from the swap chain
 		uint32_t image_index;
 		VkResult result = vkAcquireNextImageKHR(
-			device.device, swapchain.swch, UINT64_MAX,
+			context.vk_device(), swapchain.swch, UINT64_MAX,
 			smph_image_available[frame_index],
 			VK_NULL_HANDLE, &image_index
 		);
@@ -841,7 +862,7 @@ public:
 		profiler.frame("Acquire image");
 		if (images_in_flight[image_index] != VK_NULL_HANDLE) {
 			vkWaitForFences(
-				device.device, 1,
+				context.vk_device(), 1,
 				&images_in_flight[image_index],
 				VK_TRUE, UINT64_MAX
 			);
@@ -885,11 +906,11 @@ public:
 		};
 
 		// Submit the command buffer
-		vkResetFences(device.device, 1, &in_flight_fences[frame_index]);
+		vkResetFences(context.device.device, 1, &in_flight_fences[frame_index]);
 	
 		profiler.frame("Queue submit");
 		result = vkQueueSubmit(
-			device.graphics_queue, 1, &submit_info,
+			context.device.graphics_queue, 1, &submit_info,
 			in_flight_fences[frame_index]
 		);
 		profiler.end();
@@ -901,7 +922,7 @@ public:
 
 		// Wait for the first command buffer to finish
 		// TODO: use wait semaphores
-		vkQueueWaitIdle(device.graphics_queue);
+		vkQueueWaitIdle(context.device.graphics_queue);
 
 		// Submit ImGui command buffer
 		submit_info.waitSemaphoreCount = 0;
@@ -910,10 +931,9 @@ public:
 
 		// Submit the command buffer
 		// TODO: Vulkan method
-		vkResetFences(device.device, 1, &imgui_ctx.fence);
+		vkResetFences(context.vk_device(), 1, &imgui_ctx.fence);
 		result = vkQueueSubmit(
-
-			device.graphics_queue, 1, &submit_info,
+			context.device.graphics_queue, 1, &submit_info,
 			imgui_ctx.fence
 		);
 
@@ -936,7 +956,7 @@ public:
 		};
 
 		profiler.frame("vkQueuePresentKHR");
-		result = vkQueuePresentKHR(device.present_queue, &present_info);
+		result = vkQueuePresentKHR(context.device.present_queue, &present_info);
 		profiler.end();
 		
 		/* if (result == VK_ERROR_OUT_OF_DATE_KHR
@@ -978,8 +998,8 @@ public:
 			this->maker(ctx, i);
 		};
 
-		ctx->set_command_buffers(
-			device,
+		context.vk->set_command_buffers(
+			context.device,
 			swapchain, command_pool,
 			command_buffers, ftn
 		);
@@ -987,12 +1007,6 @@ public:
 
 	// TODO: make some cleaner method
 	void update_descriptor_set() {
-		VkDescriptorBufferInfo pb_info {
-			.buffer = pixel_buffer.buffer,
-			.offset = 0,
-			.range = pixel_buffer.size
-		};
-		
 		VkDescriptorBufferInfo wb_info {
 			.buffer = world_buffer.buffer,
 			.offset = 0,
@@ -1027,22 +1041,6 @@ public:
 			.buffer = bvh.stack.buffer,
 			.offset = 0,
 			.range = bvh.stack.size
-		};
-
-		VkDescriptorBufferInfo dbg_info {
-			.buffer = debug_buffer.buffer,
-			.offset = 0,
-			.range = debug_buffer.size
-		};
-
-		VkWriteDescriptorSet pb_write = {
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = descriptor_set,
-			.dstBinding = 0,
-			.dstArrayElement = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.pBufferInfo = &pb_info
 		};
 		
 		VkWriteDescriptorSet wb_write = {
@@ -1105,38 +1103,30 @@ public:
 			.pBufferInfo = &stack_info
 		};
 
-		VkWriteDescriptorSet dbg_write = {
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = descriptor_set,
-			.dstBinding = 7,
-			.dstArrayElement = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.pBufferInfo = &dbg_info
-		};
-
 		VkWriteDescriptorSet writes[] = {
-			pb_write,
 			wb_write,
 			ob_write,
 			lb_write,
 			mt_write,
 			bvh_write,
-			stack_write,
-			dbg_write
+			stack_write
 		};
 
 		vkUpdateDescriptorSets(
-			device.device, 8,
+			context.device.device, 6,
 			&writes[0],
 			0, nullptr
 		);
+
+		_bf_pixels.update_descriptor_set(descriptor_set, 0);
+		_bf_debug.update_descriptor_set(descriptor_set, 7);
 	}
 
 	// Desctiptor set layout bindings
 	static const std::vector <VkDescriptorSetLayoutBinding> dsl_bindings;
 };
 
+// TODO: cache in constructor or something...
 const std::vector <VkDescriptorSetLayoutBinding> MercuryApplication::dsl_bindings = {
 	VkDescriptorSetLayoutBinding {
 		.binding = 0,
@@ -1208,6 +1198,8 @@ class ProfilerApplication : public mercury::App {
 
 };
 
+}
+
 int main()
 {
 	// Redirect logger to file
@@ -1234,7 +1226,7 @@ int main()
 	vulkan->init_imgui();
 
 	// Create sample scene
-	MercuryApplication app(vulkan);
+	mercury::MercuryApplication app(vulkan);
 
 	app.update_descriptor_set();
 	app.update_command_buffers();
