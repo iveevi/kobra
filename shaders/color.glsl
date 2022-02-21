@@ -1,5 +1,4 @@
 // Uint color to vec3 color
-// TOOO: color header
 vec3 cast_color(uint c)
 {
 	return vec3(

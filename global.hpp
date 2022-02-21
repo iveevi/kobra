@@ -13,6 +13,7 @@
 #include "include/backend.hpp"
 #include "include/bvh.hpp"
 #include "include/camera.hpp"
+#include "include/capture.hpp"
 #include "include/core.hpp"
 #include "include/logger.hpp"
 #include "include/mesh.hpp"
@@ -21,7 +22,7 @@
 #include "include/profiler.hpp"
 #include "include/scene.hpp"
 #include "include/timer.hpp"
-#include "include/types.h"
+#include "include/types.hpp"
 #include "include/world.hpp"
 
 // Global world data

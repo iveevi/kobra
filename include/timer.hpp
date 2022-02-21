@@ -42,6 +42,12 @@ public:
 			(_end - _start).count();
 	}
 
+	double elapsed_start() {
+		return std::chrono::duration_cast
+			<std::chrono::microseconds>
+			(now() - _start).count();
+	}
+
 	double elapsed(time_point t) {
 		return std::chrono::duration_cast
 			<std::chrono::microseconds>

@@ -2,6 +2,7 @@
 #include <cstring>
 #include <iostream>
 #include <thread>
+#include <vulkan/vulkan_core.h>
 // #include <vulkan/vulkan_core.h>
 
 // Local headers
@@ -499,6 +500,11 @@ class MercuryApplication : public mercury::App {
 	// TODO: the context should not have any sync objects
 	Vulkan::ImGuiContext imgui_ctx;
 
+	// TODO: wrap inside a struct
+	bool capturing = false;
+	mercury::Timer capture_timer;
+	mercury::Capture capture;
+
 	// Dump debug data to file
 	void dump_debug_data(Vulkan *vk) {
 		// Open file
@@ -602,6 +608,51 @@ class MercuryApplication : public mercury::App {
 					ImGui::Text("BVH buffer:       %5.2f MB", to_mb(bvh.buffer.size));
 					ImGui::Text("Debug buffer:     %5.2f MB", to_mb(debug_buffer.size));
 					ImGui::TreePop();
+				}
+			}
+			ImGui::End();
+
+			// Image/video capture
+			ImGui::Begin("Capture");
+			{
+				if (ImGui::Button("Capture image")) {
+					vkQueueWaitIdle(device.graphics_queue);
+					mercury::capture::write(
+						ctx, device,
+						pixel_buffer,
+						800, 600,
+						"capture.png"
+					);
+				}
+
+				// TODO: will need to set the fps of the phsyics simulation
+				std::string button = "Start capturing";
+				if (capturing)
+					button = "Stop capturing";
+				
+				if (ImGui::Button(button.c_str())) {
+					if (!capturing) {
+						capturing = true;
+						capture_timer.start();
+						capture.start("capture.avi", 800, 600);
+					} else {
+						capturing = false;
+					}
+				} else {
+					if (capturing) {
+						ImGui::Text(
+							"Capture: %5.3f s",
+							capture_timer.elapsed_start() / 1000000.0f
+						);
+
+						capture.write(
+							ctx, device,
+							pixel_buffer,
+							800, 600
+						);
+					} else {
+						capture.flush();
+					}
 				}
 			}
 			ImGui::End();

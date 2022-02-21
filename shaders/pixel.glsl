@@ -2,7 +2,7 @@
 
 // TODO: rename file
 
-#include "../include/types.h"
+#include "../include/types.hpp"
 
 #include "ray.glsl"
 #include "intersect.glsl"

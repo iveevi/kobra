@@ -3,7 +3,7 @@
 
 // Engine headers
 #include "core.hpp"
-#include "types.h"
+#include "types.hpp"
 
 // Material
 struct Material {

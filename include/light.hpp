@@ -3,7 +3,7 @@
 
 // Engine headers
 #include "core.hpp"
-#include "types.h"
+#include "types.hpp"
 
 // Light structure
 struct Light {

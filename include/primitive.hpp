@@ -9,7 +9,7 @@
 #include "core.hpp"
 #include "material.hpp"
 #include "transform.hpp"
-#include "types.h"
+#include "types.hpp"
 
 // Primitive structures
 struct Primitive {
