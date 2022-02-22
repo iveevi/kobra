@@ -228,6 +228,7 @@ public:
 
 // Aliases
 using Buffer4f = BufferManager <aligned_vec4>;
+using Buffer4m = BufferManager <aligned_mat4>;
 
 }
 

@@ -134,6 +134,8 @@ struct World {
 		this->write_lights(wu);
 	}
 
+	// TODO: update transforms specialized method
+
 	// Extract all bounding bxoes from the primitives
 	std::vector <mercury::BoundingBox> extract_bboxes() const {
 		std::vector <mercury::BoundingBox> bboxes;

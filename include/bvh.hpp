@@ -226,10 +226,6 @@ struct BVH {
 			}
 		}
 
-		/* Logger::ok() << "[BVH] size = " << nodes.size() << ", axis: "
-			<< axis << ", (min, max) = ("
-			<< min_value << ", " << max_value << ")" << std::endl; */
-
 		// Binary search optimal partition (using SAH)
 		float min_cost = std::numeric_limits <float> ::max();
 		float min_split = 0.0f;
@@ -238,7 +234,6 @@ struct BVH {
 		for (int i = 0; i < bins; i++) {
 			float split = (max_value - min_value) / bins * i + min_value;
 			float cost = cost_split(nodes, split, axis);
-			// std::cout << "Candidate split: " << split << ", cost: " << cost << std::endl;
 
 			if (cost < min_cost) {
 				min_cost = cost;
@@ -249,7 +244,6 @@ struct BVH {
 		std::vector <BVHNode *> left;
 		std::vector <BVHNode *> right;
 
-		// std::cout << "min_split = " << min_split << std::endl;
 		if (min_cost == std::numeric_limits <float> ::max()) {
 			// Partition evenly
 			for (int i = 0; i < nodes.size(); i++) {
@@ -322,9 +316,6 @@ struct BVH {
 
 			float value = (min[axis] + max[axis]) / 2.0f;
 			
-			// std::cout << "\textent: " << max[axis] << " --> "
-			//	<< min[axis] << ", median = " << value << std::endl;
-
 			if (value < split) {
 				// Left
 				prims_left++;
@@ -340,8 +331,6 @@ struct BVH {
 			}
 		}
 
-		// std::cout << "\tleft: " << prims_left << ", right: " << prims_right << std::endl;
-
 		// Max cost when all primitives are in one side
 		if (prims_left == 0 || prims_right == 0)
 			return std::numeric_limits <float> ::max();
@@ -350,9 +339,6 @@ struct BVH {
 		float sa_left = BoundingBox(min_left, max_left).surface_area();
 		float sa_right = BoundingBox(min_right, max_right).surface_area();
 		float sa_total = BoundingBox(tmin, tmax).surface_area();
-
-		// std::cout << "\tSA_left = " << sa_left << ", SA_right = " << sa_right << std::endl;
-		// std::cout << "\tprims_left = " << prims_left << ", prims_right = " << prims_right << std::endl;
 
 		return 1 + (prims_left * sa_left + prims_right * sa_right) / sa_total;
 	}

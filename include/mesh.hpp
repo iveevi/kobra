@@ -4,6 +4,7 @@
 // Engine headers
 #include "primitive.hpp"
 #include "logger.hpp"	// TODO: remove
+#include "transform.hpp"
 #include "world.hpp"
 #include "world_update.hpp"
 
@@ -59,6 +60,10 @@ public:
 			const Material &material)
 			: _vertices {vertices}, _indices {indices},
 			Primitive {OBJECT_TYPE_NONE, Transform(), material} {}
+	Mesh(const VertexList &vertices, const Indices &indices,
+			const Transform &trans, const Material &mat)
+			: _vertices {vertices}, _indices {indices},
+			Primitive {OBJECT_TYPE_NONE, trans, mat} {}
 
 	// Properties
 	size_t vertex_count() const {
@@ -117,10 +122,14 @@ public:
 		uint mati = wu.bf_mats->push_size();
 		material.write_material(wu);
 
+		// Get index of transform and push
+		uint tati = wu.bf_trans->push_size();
+		wu.bf_trans->push_back(transform.model());
+
 		// Push all vertices
 		uint offset = wu.bf_verts->push_size();
 		for (const auto &v : _vertices)
-			wu.bf_verts->push_back(v.pos);
+			wu.bf_verts->push_back({v.pos, 1.0});
 
 		// Dummy triangle instance
 		Triangle triangle {
@@ -137,13 +146,17 @@ public:
 				_indices[i] + offset,
 				_indices[i + 1] + offset,
 				_indices[i + 2] + offset,
-				mati
+				mati,
+				tati
 			);	
 		}
 	}
 
 	// Get bounding boxes
-	void extract_bboxes(std::vector <mercury::BoundingBox> &bboxes) const override {
+	void extract_bboxes(std::vector <mercury::BoundingBox> &bboxes, const glm::mat4 &parent) const override {
+		// Get combined transform
+		glm::mat4 combined = parent * transform.model();
+
 		// Get bounding box for each triangle
 		for (size_t i = 0; i < _indices.size(); i += 3) {
 			// Get each vertex
@@ -157,7 +170,7 @@ public:
 			};
 
 			// Add bounding box
-			triangle.extract_bboxes(bboxes);
+			triangle.extract_bboxes(bboxes, combined);
 		}
 	}
 };

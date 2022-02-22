@@ -21,13 +21,19 @@ struct Transform {
         glm::vec3 right;
 
         // Constructors
-        Transform() {}
+        Transform() : Transform({0.0, 0.0, 0.0}) {}
         Transform(const glm::vec3 &pos) : position {pos},
                 rotation {1.0, 0.0, 0.0, 0.0},
                 scale {1.0, 1.0, 1.0},
                 forward {0.0, 0.0, 1.0},
                 up {0.0, 1.0, 0.0},
                 right {1.0, 0.0, 0.0} {}
+	
+	// Full constructor
+	Transform(const glm::vec3 &pos, const glm::quat &rot, const glm::vec3 s,
+			const glm::vec3 &f, const glm::vec3 &u, const glm::vec3 &r)
+			: position {pos}, rotation {rot}, scale {s},
+			forward(f), up(u), right(r) {}
 
 	void recalculate() {
 		// Cardinal Directions
@@ -39,6 +45,21 @@ struct Transform {
 		forward = glm::normalize(glm::vec3(rotation * f));
 		up = glm::normalize(glm::vec3(rotation * u));
 		right = glm::normalize(glm::vec3(rotation * r));
+	}
+
+	// Get as mat4
+	// TODO: cache
+	glm::mat4 model() const {
+		glm::mat4 model {1.0};
+		model = glm::translate(model, position);
+		model = glm::scale(model, scale);
+		model = glm::mat4_cast(rotation) * model;
+		return model;
+	}
+
+	// Apply transformation to vec3
+	glm::vec3 apply(const glm::vec3 &v) const {
+		return glm::vec3(model() * glm::vec4(v, 1.0));
 	}
 
 	// Set pitch

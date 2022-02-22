@@ -8,15 +8,6 @@
 #include <glm/glm.hpp>
 
 // Aligned structures
-// TODO: remove?
-struct alignas(16) aligned_vec3 {
-	glm::vec3 data;
-
-	aligned_vec3() {}
-	aligned_vec3(const glm::vec3 &d) : data(d) {}
-};
-
-// TODO: move to another place
 struct alignas(16) aligned_vec4 {
 	glm::vec4 data;
 
@@ -27,8 +18,15 @@ struct alignas(16) aligned_vec4 {
 	aligned_vec4(const glm::vec3 &d, float w) : data(d, w) {}
 };
 
+struct alignas(16) aligned_mat4 {
+	glm::mat4 data;
+
+	aligned_mat4() {}
+	aligned_mat4(const glm::mat4 &d) : data(d) {}
+};
+
 // Buffer type aliases
-using Buffer = std::vector <aligned_vec4>;
+using Buffer = std::vector <aligned_vec4>;	// TODO: remove?
 using Indices = std::vector <uint32_t>;
 
 #endif

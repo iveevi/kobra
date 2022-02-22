@@ -45,15 +45,17 @@ struct Primitive {
 	virtual void write(mercury::WorldUpdate &) const = 0;
 
 	// Extract bounding boxes
-	virtual void extract_bboxes(std::vector <mercury::BoundingBox> &bboxes) const = 0;
+	virtual void extract_bboxes(std::vector <mercury::BoundingBox> &,
+			const glm::mat4 & = glm::mat4 {1.0}) const = 0;
 
 	// Write header
-	void write_header(mercury::WorldUpdate &wu, uint mati) const {
-		float index = *reinterpret_cast <float *> (&mati);
+	void write_header(mercury::WorldUpdate &wu, uint mati, uint tati) const {
+		float material_index = *reinterpret_cast <float *> (&mati);
+		float transform_index = *reinterpret_cast <float *> (&tati);
 
 		// Push ID and material, then everything else
 		wu.bf_objs->push_back(aligned_vec4 {
-			glm::vec4(id, index, 0.0, 0.0)
+			glm::vec4(id, material_index, transform_index, 0.0)
 		});
 	}
 
@@ -64,27 +66,18 @@ struct Primitive {
 		uint mati = wu.bf_mats->push_size();
 		material.write_material(wu);
 
-		/* float index = *reinterpret_cast <float *> (&mati);
+		// Deal with transform
+		uint tati = wu.bf_trans->push_size();
+		wu.bf_trans->push_back(transform.model());
 
-		// Push ID and material, then everything else
-		wu.bf_objs->push_back(aligned_vec4 {
-			glm::vec4(id, index, 0.0, 0.0)
-		}); */
-		write_header(wu, mati);
+		write_header(wu, mati, tati);
 		this->write(wu);
 	}
 
-	// Write full object data, but takes index to material
-	virtual void write_object_mati(mercury::WorldUpdate &wu, uint mati) {
-		/* Deal with material
-		float index = *reinterpret_cast <float *> (&mati);
-
-		// Push ID and material, then everything else
-		wu.bf_objs->push_back(aligned_vec4 {
-			glm::vec4(id, index, 0.0, 0.0)
-		}); */
-
-		write_header(wu, mati);
+	// Write full object data, but takes indices
+	// TODO: is this needed anymore?
+	virtual void write_object_mati(mercury::WorldUpdate &wu, uint mati, uint tati) {
+		write_header(wu, mati, tati);
 		this->write(wu);
 	}
 };
@@ -140,9 +133,9 @@ struct Triangle : public Primitive {
 
 	// Write, but indices are given
 	void write_indexed(mercury::WorldUpdate &wu,
-			uint a, uint b, uint c, uint mati) const {
+			uint a, uint b, uint c, uint mati, uint tati) const {
 		// Header from parent
-		write_header(wu, mati);
+		write_header(wu, mati, tati);
 		
 		float *iaf = reinterpret_cast <float *> (&a);
 		float *ibf = reinterpret_cast <float *> (&b);
@@ -153,11 +146,16 @@ struct Triangle : public Primitive {
 		});		
 	}
 
-	void extract_bboxes(std::vector <mercury::BoundingBox> &bboxes) const override {
+	void extract_bboxes(std::vector <mercury::BoundingBox> &bboxes, const glm::mat4 &parent) const override {
 		// Get min and max coordinates 
 		// TODO: account for transform
-		glm::vec3 min = glm::min(a, glm::min(b, c));
-		glm::vec3 max = glm::max(a, glm::max(b, c));
+		glm::mat4 m = parent * transform.model();
+		glm::vec3 ta = m * glm::vec4(a, 1.0);
+		glm::vec3 tb = m * glm::vec4(b, 1.0);
+		glm::vec3 tc = m * glm::vec4(c, 1.0);
+
+		glm::vec3 min = glm::min(ta, glm::min(tb, tc));
+		glm::vec3 max = glm::max(ta, glm::max(tb, tc));
 
 		// Push bounding box
 		bboxes.push_back(mercury::BoundingBox(min, max));
@@ -192,7 +190,7 @@ struct Sphere : public Primitive {
 		});
 	}
 
-	void extract_bboxes(std::vector <mercury::BoundingBox> &bboxes) const override {
+	void extract_bboxes(std::vector <mercury::BoundingBox> &bboxes, const glm::mat4 &parent) const override {
 		// Create bounding box
 		glm::vec3 min = transform.position - glm::vec3(radius);
 		glm::vec3 max = transform.position + glm::vec3(radius);

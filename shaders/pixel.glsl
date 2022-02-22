@@ -109,6 +109,13 @@ layout (set = 0, binding = 8, std430) buffer Vertices
 	vec4 data[];
 } vertices;
 
+// Transforms buffer
+layout (set = 0, binding = 9, std430) buffer Transforms
+{
+	// Transform as a model matrix
+	mat4 data[];
+} transforms;
+
 // Closest object information
 // TODO: this should be obslete
 struct Hit {
@@ -140,13 +147,17 @@ Intersection intersect_triangle(Ray ray, uint index)
 	vec4 prop = objects.data[index];
 	vec4 indices = objects.data[index + 1];
 
+	// Transform index
+	uint tati = floatBitsToUint(prop.z);
+	mat4 model = transforms.data[tati];
+
 	uint a = floatBitsToUint(indices.x);
 	uint b = floatBitsToUint(indices.y);
 	uint c = floatBitsToUint(indices.z);
 
-	vec3 v1 = vertices.data[a].xyz;
-	vec3 v2 = vertices.data[b].xyz;
-	vec3 v3 = vertices.data[c].xyz;
+	vec3 v1 = vec3(model * vertices.data[a]);
+	vec3 v2 = vec3(model * vertices.data[b]);
+	vec3 v3 = vec3(model * vertices.data[c]);
 
 	Triangle triangle = Triangle(v1, v2, v3);
 

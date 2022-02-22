@@ -7,6 +7,7 @@
 
 // Local headers
 #include "global.hpp"
+#include "imgui.h"
 #include "include/buffer_manager.hpp"
 #include "include/world.hpp"
 
@@ -41,7 +42,8 @@ Transform transforms[] {
 	glm::vec3 {6.0f, -2.0f, 5.0f},
 	glm::vec3 {6.0f, 3.0f, 11.5f},
 	glm::vec3 {6.0f, 3.0f, -2.0f},
-	glm::vec3 {0.0f, 0.0f, 0.0f}
+	glm::vec3 {0.0f, 0.0f, 0.0f},
+	glm::vec3 {0.0f, 0.0f, -1.0f}
 };
 
 // Print aligned_vec4
@@ -105,6 +107,7 @@ World world {
 				0, 1, 4,	1, 4, 5,
 				2, 6, 7,	2, 7, 3
 			},
+			transforms[6],
 			materials[1]
 		)),
 	},
@@ -324,6 +327,7 @@ class MercuryApplication : public mercury::App {
 	Buffer4f		_bf_lights;
 	Buffer4f		_bf_materials;
 	Buffer4f		_bf_vertices;
+	Buffer4m		_bf_transforms;
 	Buffer4f		_bf_debug;
 
 	// BVH resources
@@ -343,6 +347,7 @@ class MercuryApplication : public mercury::App {
 		_bf_lights.reset_push_back();
 		_bf_materials.reset_push_back();
 		_bf_vertices.reset_push_back();
+		_bf_transforms.reset_push_back();
 		
 		// Resizing and remaking buffers
 		int resized = 0;
@@ -354,7 +359,8 @@ class MercuryApplication : public mercury::App {
 			.bf_objs = &_bf_objects,
 			.bf_lights = &_bf_lights,
 			.bf_mats = &_bf_materials,
-			.bf_verts = &_bf_vertices
+			.bf_verts = &_bf_vertices,
+			.bf_trans = &_bf_transforms
 		};
 
 		// Generate world data and write to buffers
@@ -388,6 +394,7 @@ class MercuryApplication : public mercury::App {
 		resized += _bf_lights.sync_size();
 		resized += _bf_materials.sync_size();
 		resized += _bf_vertices.sync_size();
+		resized += _bf_transforms.sync_size();
 
 		// Map buffers
 		_bf_world.flush();
@@ -395,6 +402,7 @@ class MercuryApplication : public mercury::App {
 		_bf_lights.flush();
 		_bf_materials.flush();
 		_bf_vertices.flush();
+		_bf_transforms.flush();
 
 		// Return true if any buffers were resized
 		return (resized > 0);
@@ -441,6 +449,7 @@ class MercuryApplication : public mercury::App {
 		_bf_lights = Buffer4f {context, bfm_wo_settings};
 		_bf_materials = Buffer4f {context, bfm_wo_settings};
 		_bf_vertices = Buffer4f {context, bfm_wo_settings};
+		_bf_transforms = Buffer4m {context, bfm_wo_settings};
 	}
 
 	// ImGui context and methods
@@ -548,11 +557,16 @@ class MercuryApplication : public mercury::App {
 
 				if (ImGui::TreeNode("Buffer sizes")) {
 					ImGui::Text("Pixel buffer:     %5.2f MB", to_mb(_bf_pixels.bytes()));
+
+					ImGui::Separator();
 					ImGui::Text("World buffer:     %5.2f MB", to_mb(_bf_world.bytes()));
 					ImGui::Text("Objects buffer:   %5.2f MB", to_mb(_bf_objects.bytes()));
 					ImGui::Text("Lights buffer:    %5.2f MB", to_mb(_bf_lights.bytes()));
 					ImGui::Text("Materials buffer: %5.2f MB", to_mb(_bf_materials.bytes()));
 					ImGui::Text("Vertex buffer:    %5.2f MB", to_mb(_bf_vertices.bytes()));
+					ImGui::Text("Transform buffer: %5.2f MB", to_mb(_bf_transforms.bytes()));
+
+					ImGui::Separator();
 					ImGui::Text("BVH buffer:       %5.2f MB", to_mb(bvh.buffer.size));
 					ImGui::Text("Debug buffer:     %5.2f MB", to_mb(_bf_debug.bytes()));
 					ImGui::TreePop();
@@ -986,6 +1000,7 @@ public:
 		_bf_materials.update_descriptor_set(descriptor_set, 4);
 		_bf_debug.update_descriptor_set(descriptor_set, 7);
 		_bf_vertices.update_descriptor_set(descriptor_set, 8);
+		_bf_transforms.update_descriptor_set(descriptor_set, 9);
 	}
 
 	// Desctiptor set layout bindings
@@ -1065,6 +1080,14 @@ const std::vector <VkDescriptorSetLayoutBinding> MercuryApplication::dsl_binding
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 		.pImmutableSamplers = nullptr
 	},
+
+	VkDescriptorSetLayoutBinding {
+		.binding = 9,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.pImmutableSamplers = nullptr
+	},
 };
 
 // Profiler application
@@ -1088,6 +1111,13 @@ int main()
 		<< model.mesh_count() << " meshe(s), "
 		<< model[0].vertex_count() << " vertices, "
 		<< model[0].triangle_count() << " triangles" << std::endl;
+
+	Logger::notify("Transforms (model matrices) of all objects:");
+	for (auto &object : world.objects) {
+		glm::mat4 model = object->transform.model();
+		glm::vec4 pos = model[3];
+		Logger::notify() << "\t" << pos.x << ", " << pos.y << ", " << pos.z << std::endl;
+	}
 
 	// Save world into scene
 	mercury::Scene scene("default_world", world);

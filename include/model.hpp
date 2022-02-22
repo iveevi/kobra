@@ -67,11 +67,14 @@ public:
 	}
 
 	// Get bounding boxes
-	void extract_bboxes(std::vector <mercury::BoundingBox> &bboxes) const override {
+	void extract_bboxes(std::vector <mercury::BoundingBox> &bboxes, const glm::mat4 &parent) const override {
+		// Get combined transform
+		glm::mat4 combined = parent * transform.model();
+
 		// Get bounding box for each mesh
 		for (size_t i = 0; i < _meshes.size(); i++) {
 			// Get bounding box
-			_meshes[i].extract_bboxes(bboxes);
+			_meshes[i].extract_bboxes(bboxes, combined);
 		}
 	}
 };
