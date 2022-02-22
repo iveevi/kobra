@@ -70,6 +70,10 @@ public:
 		return settings.size;
 	}
 
+	const size_t &push_size() const {
+		return push_index;
+	}
+
 	// Get data
 	const T *data() const {
 		if (settings.usage_type == BFM_READ_ONLY) {
@@ -116,11 +120,11 @@ public:
 	}
 
 	// Pushback functionality
-	void reset_pushback() {
+	void reset_push_back() {
 		push_index = 0;
 	}
 
-	void pushback(const T &data) {
+	void push_back(const T &data) {
 		// Don't bother resizing all the time
 		if (cpu_buffer.size() <= push_index)
 			cpu_buffer.push_back(data);
@@ -137,19 +141,16 @@ public:
 				context.device,
 				&gpu_buffer,
 				cpu_buffer.data(),
-				sizeof(T) * std::min(
-					settings.size,
-					cpu_buffer.size()
-				)
+				sizeof(T) * settings.size
 			);
 		}
 	}
 
 	// Resize buffer
-	void resize(size_t size) {
+	bool resize(size_t size) {
 		// Check if resize is needed
 		if (size == settings.size)
-			return;
+			return false;
 
 		// Resize cpu buffer
 		cpu_buffer.resize(size);
@@ -171,11 +172,14 @@ public:
 
 		// Update settings
 		settings.size = size;
+
+		// Return success
+		return true;
 	}
 
 	// Resize after pushbacks
-	void sync_size() {
-		resize(cpu_buffer.size());
+	bool sync_size() {
+		return resize(cpu_buffer.size());
 	}
 
 	// Generating bindings

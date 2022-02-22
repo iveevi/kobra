@@ -42,38 +42,39 @@ struct Primitive {
 	}
 
 	// Write data to aligned_vec4 buffer (inherited)
-	virtual void write(Buffer &) const = 0;
+	virtual void write(mercury::WorldUpdate &) const = 0;
 
 	// Extract bounding boxes
 	virtual void extract_bboxes(std::vector <mercury::BoundingBox> &bboxes) const = 0;
 
 	// Write full object data
-	// TODO: pass paramters as a struct
+	// TODO: const?
 	virtual void write_object(mercury::WorldUpdate &wu) {
 		// Deal with material
 		uint mati = wu.materials.size();
-		material.write_to_buffer(wu.materials);// TODO: refactor
+		material.write_material(wu);
+
 		float index = *reinterpret_cast <float *> (&mati);
 
 		// Push ID and material, then everything else
-		wu.objects.push_back(aligned_vec4 {
+		wu.bf_objs->push_back(aligned_vec4 {
 			glm::vec4(id, index, 0.0, 0.0)
 		});
 
-		this->write(wu.objects);
+		this->write(wu);
 	}
 
 	// Write full object data, but takes index to material
-	virtual void write_to_buffer(Buffer &buffer, Indices &indices, uint mati) {
+	virtual void write_object_mati(mercury::WorldUpdate &wu, uint mati) {
 		// Deal with material
 		float index = *reinterpret_cast <float *> (&mati);
 
 		// Push ID and material, then everything else
-		buffer.push_back(aligned_vec4 {
+		wu.bf_objs->push_back(aligned_vec4 {
 			glm::vec4(id, index, 0.0, 0.0)
 		});
 
-		this->write(buffer);
+		this->write(wu);
 	}
 };
 
@@ -106,10 +107,10 @@ struct Triangle : public Primitive {
 		file << "\n";
 	}
 
-	void write(Buffer &buffer) const override {
-		buffer.push_back(aligned_vec4(a));
-		buffer.push_back(aligned_vec4(b));
-		buffer.push_back(aligned_vec4(c));
+	void write(mercury::WorldUpdate &wu) const override {
+		wu.bf_objs->push_back(aligned_vec4(a));
+		wu.bf_objs->push_back(aligned_vec4(b));
+		wu.bf_objs->push_back(aligned_vec4(c));
 	}
 
 	void extract_bboxes(std::vector <mercury::BoundingBox> &bboxes) const override {
@@ -145,8 +146,8 @@ struct Sphere : public Primitive {
 		file << "\n";
 	}
 
-	void write(Buffer &buffer) const override {
-		buffer.push_back(aligned_vec4 {
+	void write(mercury::WorldUpdate &wu) const override {
+		wu.bf_objs->push_back(aligned_vec4 {
 			glm::vec4(transform.position, radius)
 		});
 	}

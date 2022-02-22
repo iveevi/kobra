@@ -5,6 +5,7 @@
 #include "primitive.hpp"
 #include "logger.hpp"	// TODO: remove
 #include "world.hpp"
+#include "world_update.hpp"
 
 namespace mercury {
 
@@ -101,7 +102,7 @@ public:
 	}
 
 	// Write mesh to buffer (fake to resolve abstract base class)
-	void write(Buffer &buffer) const override {
+	void write(WorldUpdate &) const override {
 		// Throw
 		throw std::runtime_error("Mesh::write not implemented");
 	}
@@ -114,7 +115,7 @@ public:
 
 		// Get index of material and push
 		uint mati = wu.materials.size();
-		material.write_to_buffer(wu.materials);
+		material.write_material(wu);
 
 		// Write each triangle
 		for (size_t i = 0; i < _indices.size(); i += 3) {
@@ -130,8 +131,8 @@ public:
 			};
 
 			// Write triangle to buffer
-			wu.indices.push_back(wu.objects.size());
-			triangle.write_to_buffer(wu.objects, wu.indices, mati);
+			wu.indices.push_back(wu.bf_objs->push_size());
+			triangle.write_object_mati(wu, mati);
 		}
 	}
 

@@ -318,14 +318,15 @@ class MercuryApplication : public mercury::App {
 	}
 	
 	// GPU buffers
-	// Vulkan::Buffer	pixel_buffer;
-	// Vulkan::Buffer	world_buffer;
-	Vulkan::Buffer	objects_buffer;
+	// Vulkan::Buffer	objects_buffer;
 	Vulkan::Buffer	lights_buffer;
 	Vulkan::Buffer	materials_buffer;
 
 	BufferManager <uint>	_bf_pixels;
 	BufferManager <uint8_t>	_bf_world;
+	Buffer4f		_bf_objects;
+	Buffer4f		_bf_lights;
+	Buffer4f		_bf_materials;
 	Buffer4f		_bf_debug;
 
 	// BVH resources
@@ -335,50 +336,44 @@ class MercuryApplication : public mercury::App {
 	// Buffer methods //
 	////////////////////
 
-	// Size of the world data, including indices
-	size_t world_data_size() {
-		size_t objects = std::max(world.objects.size(), INITIAL_OBJECTS);
-		size_t lights = std::max(world.lights.size(), INITIAL_LIGHTS);
-
-		return sizeof(GPUWorld) + 4 * (objects + lights);
-	}
-
 	// Copy buffer helper
 	GPUWorld gworld;
 
 	// Map all the buffers
 	// TODO: deal with resizing buffers
 	bool map_buffers(Vulkan *vk) {
-		/* Create and write to buffers
-		Buffer objects;
-		Buffer lights;
-		Buffer materials; */
-
+		// TODO: remove this
 		static const VkBufferUsageFlags buffer_usage =
 			VK_BUFFER_USAGE_TRANSFER_DST_BIT
 			| VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+		
+		// Reset pushback indices
+		_bf_objects.reset_push_back();
 		
 		// Resizing and remaking buffers
 		int resized = 0;
 
 		// World update
-		WorldUpdate wu;
+		WorldUpdate wu {
+			.bf_objs = &_bf_objects
+		};
 
 		// Generate world data and write to buffers
 		// Indices indices;
 		world.write_objects(wu);
 		world.write_lights(wu);
+		// TODO: simple write method
 
 		// Calculate size of world buffer
 		size_t world_size = sizeof(GPUWorld) + wu.indices.size() * sizeof(uint);
 
 		// Copy world and indices
 		gworld = world.dump();
-		gworld.objects = wu.objects.size();	// TODO: this is not the correct size
+		gworld.objects = wu.bf_objs->push_size();	// TODO: this is not the correct size
 
 		if (_bf_world.size() < world_size) {
 			Logger::notify() << "Resizing world buffer" << std::endl;
-			_bf_world.resize(world_size);
+			resized += _bf_world.resize(world_size);
 		}
 		
 		_bf_world.write(
@@ -392,13 +387,8 @@ class MercuryApplication : public mercury::App {
 			sizeof(GPUWorld)
 		);
 
-		// Objects
-		if (sizeof(aligned_vec4) * wu.objects.size() > objects_buffer.size) {
-			// Resize vulkan buffer
-			vk->destroy_buffer(context.device, objects_buffer);
-			vk->make_buffer(context.phdev, context.device, objects_buffer, wu.objects.size() * sizeof(aligned_vec4), buffer_usage);
-			resized++;
-		}
+		if (_bf_objects.sync_size())
+			Logger::notify("Resizing objects buffer");
 
 		// Lights
 		if (sizeof(aligned_vec4) * wu.lights.size() > lights_buffer.size) {
@@ -409,9 +399,8 @@ class MercuryApplication : public mercury::App {
 		}
 
 		// Map buffers
-		// vk->map_buffer(context.device, &world_buffer, wb.ptr, wb.size);
 		_bf_world.flush();
-		vk->map_buffer(context.device, &objects_buffer, wu.objects.data(), sizeof(aligned_vec4) * wu.objects.size());
+		_bf_objects.flush();
 		vk->map_buffer(context.device, &materials_buffer, wu.materials.data(), sizeof(Material) * wu.materials.size());
 		vk->map_buffer(context.device, &lights_buffer, wu.lights.data(), sizeof(aligned_vec4) * wu.lights.size());
 
@@ -423,8 +412,7 @@ class MercuryApplication : public mercury::App {
 	void allocate_buffers() {
 		// Allocate buffers
 		size_t pixel_size = 4 * 800 * 600;
-		size_t world_size = world_data_size();
-		size_t objects_size = MAX_OBJECT_SIZE * std::max(world.objects.size(), INITIAL_OBJECTS);
+		size_t objects_size = MAX_OBJECT_SIZE * INITIAL_OBJECTS;
 		size_t lights_size = MAX_LIGHT_SIZE * std::max(world.lights.size(), INITIAL_LIGHTS);
 		size_t materials_size = sizeof(Material) * INITIAL_MATERIALS;
 
@@ -436,12 +424,14 @@ class MercuryApplication : public mercury::App {
 		// context.vk->make_buffer(physical_device, device, pixel_buffer, pixel_size, buffer_usage | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
 		// context.vk->make_buffer(context.phdev, context.device, world_buffer, world_size, buffer_usage);
-		context.vk->make_buffer(context.phdev, context.device, objects_buffer, objects_size, buffer_usage);
+		// context.vk->make_buffer(context.phdev, context.device, objects_buffer, objects_size, buffer_usage);
 		context.vk->make_buffer(context.phdev, context.device, lights_buffer, lights_size, buffer_usage);
 		context.vk->make_buffer(context.phdev, context.device, materials_buffer, materials_size, buffer_usage);
 
 		// Debug buffer (one vec4 per pixel)
 		// context.vk->make_buffer(physical_device, device, debug_buffer, 800 * 600 * sizeof(aligned_vec4), buffer_usage);
+
+		// TODO: clean, lots of duplicate code
 		_bf_pixels = BufferManager <uint> {
 			context,
 			BFM_Settings {
@@ -455,6 +445,33 @@ class MercuryApplication : public mercury::App {
 			context,
 			BFM_Settings {
 				// Allocate dummy amount (1 KB)
+				.size = 1024,
+				.usage = buffer_usage,
+				.usage_type = BFM_WRITE_ONLY
+			}
+		};
+
+		_bf_objects = Buffer4f {
+			context,
+			BFM_Settings {
+				.size = 1024,
+				.usage = buffer_usage,
+				.usage_type = BFM_WRITE_ONLY
+			}
+		};
+
+		_bf_lights = Buffer4f {
+			context,
+			BFM_Settings {
+				.size = 1024,
+				.usage = buffer_usage,
+				.usage_type = BFM_WRITE_ONLY
+			}
+		};
+
+		_bf_materials = Buffer4f {
+			context,
+			BFM_Settings {
 				.size = 1024,
 				.usage = buffer_usage,
 				.usage_type = BFM_WRITE_ONLY
@@ -577,7 +594,7 @@ class MercuryApplication : public mercury::App {
 				if (ImGui::TreeNode("Buffer sizes")) {
 					ImGui::Text("Pixel buffer:     %5.2f MB", to_mb(_bf_pixels.size()));
 					ImGui::Text("World buffer:     %5.2f MB", to_mb(_bf_world.size()));
-					ImGui::Text("Objects buffer:   %5.2f MB", to_mb(objects_buffer.size));
+					ImGui::Text("Objects buffer:   %5.2f MB", to_mb(_bf_objects.size()));
 					ImGui::Text("Lights buffer:    %5.2f MB", to_mb(lights_buffer.size));
 					ImGui::Text("Materials buffer: %5.2f MB", to_mb(materials_buffer.size));
 					ImGui::Text("BVH buffer:       %5.2f MB", to_mb(bvh.buffer.size));
@@ -967,11 +984,11 @@ public:
 			.range = world_buffer.size
 		}; */
 		
-		VkDescriptorBufferInfo ob_info {
+		/* VkDescriptorBufferInfo ob_info {
 			.buffer = objects_buffer.buffer,
 			.offset = 0,
 			.range = objects_buffer.size
-		};
+		}; */
 
 		VkDescriptorBufferInfo lb_info {
 			.buffer = lights_buffer.buffer,
@@ -1007,7 +1024,7 @@ public:
 			.pBufferInfo = &wb_info
 		}; */
 		
-		VkWriteDescriptorSet ob_write = {
+		/* VkWriteDescriptorSet ob_write = {
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = descriptor_set,
 			.dstBinding = 2,
@@ -1015,7 +1032,7 @@ public:
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 			.pBufferInfo = &ob_info
-		};
+		}; */
 
 		VkWriteDescriptorSet lb_write = {
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -1059,7 +1076,7 @@ public:
 
 		VkWriteDescriptorSet writes[] = {
 			// wb_write,
-			ob_write,
+			// ob_write,
 			lb_write,
 			mt_write,
 			bvh_write,
@@ -1067,13 +1084,14 @@ public:
 		};
 
 		vkUpdateDescriptorSets(
-			context.device.device, 5,
+			context.device.device, 4,
 			&writes[0],
 			0, nullptr
 		);
 
 		_bf_pixels.update_descriptor_set(descriptor_set, 0);
 		_bf_world.update_descriptor_set(descriptor_set, 1);
+		_bf_objects.update_descriptor_set(descriptor_set, 2);
 		_bf_debug.update_descriptor_set(descriptor_set, 7);
 	}
 

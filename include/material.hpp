@@ -4,6 +4,7 @@
 // Engine headers
 #include "core.hpp"
 #include "types.hpp"
+#include "world_update.hpp"
 
 // Material
 struct Material {
@@ -16,9 +17,9 @@ struct Material {
 	float refraction	= 0.0f;
 
 	// Write to buffer
-	void write_to_buffer(Buffer &buffer) const {
-		buffer.push_back(aligned_vec4(albedo, shading));
-		buffer.push_back(aligned_vec4(
+	void write_material(mercury::WorldUpdate &wu) const {
+		wu.materials.push_back(aligned_vec4(albedo, shading));
+		wu.materials.push_back(aligned_vec4(
 			{specular, reflectance, refraction, 0.0f}
 		));
 	}

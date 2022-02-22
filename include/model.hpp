@@ -52,7 +52,7 @@ public:
 	void save(std::ofstream &file) const override;
 
 	// Write model to buffer (fake to resolve abstract base class)
-	void write(Buffer &buffer) const override {
+	void write(WorldUpdate &) const override {
 		// Throw
 		throw std::runtime_error("Model::write not implemented");
 	}

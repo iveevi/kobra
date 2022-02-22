@@ -110,10 +110,12 @@ struct World {
 
 	// Write object data to buffer
 	void write_objects(WorldUpdate &wu) const {
-		wu.objects.clear();
+		// wu.objects.clear();
 		wu.materials.clear();
+
+		// Reset pushback index
 		for (const auto &object : objects) {
-			wu.indices.push_back(wu.objects.size());
+			wu.indices.push_back(wu.bf_objs->push_size());
 			object->write_object(wu);
 		}
 	}
