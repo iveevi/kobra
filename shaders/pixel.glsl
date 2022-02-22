@@ -181,8 +181,12 @@ Intersection intersect_sphere(Ray ray, uint index)
 	vec4 prop = objects.data[index];
 	vec4 data = objects.data[index + 1];
 
-	vec3 center = data.xyz;
-	float radius = data.w;
+	// Transform index
+	uint tati = floatBitsToUint(prop.z);
+	mat4 model = transforms.data[tati];
+
+	vec3 center = vec3(model * vec4(0.0, 0.0, 0.0, 1.0));
+	float radius = data.x;
 
 	Sphere sphere = Sphere(center, radius);
 
@@ -554,18 +558,29 @@ void main()
 
 	// TODO: constants for mask
 	if ((world.options & 0x1) == 0x1) {
-		// Check which bvhs are intesected
-		for (uint i = 0; i < world.objects; i++) {
-			vec3 pmin = bvh.data[3 * i + 1].xyz;
-			vec3 pmax = bvh.data[3 * i + 2].xyz;
+		// Iterate through BVHs
+		int node = 0;
+		while (node != -1) {
+			if (leaf(node)) {
+				// Only considering non-leaf nodes
+				node = miss(node);
+			} else {
+				// Get bounding box
+				BoundingBox box = bbox(node);
 
-			BoundingBox bbox = {pmin, pmax};
-			float t = intersect_box(ray, bbox);
+				// Check if ray intersects bounding box
+				float t = intersect_box(ray, box);
+				bool inside = in_box(ray.origin, box);
 
-			if (t >= 0.0) {
-				// Blend color is the color of the object
-				vec3 blend = colors[i % COLOR_WHEEL_SIZE];
-				color = mix(color, blend, 0.15);
+				if (t >= 0.0 || inside) {
+					// Intersected
+					vec3 blend = colors[node % COLOR_WHEEL_SIZE];
+					color = mix(color, blend, 0.15);
+					node = hit(node);
+				} else {
+					// Missed
+					node = miss(node);
+				}
 			}
 		}
 	}

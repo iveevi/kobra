@@ -186,14 +186,16 @@ struct Sphere : public Primitive {
 
 	void write(mercury::WorldUpdate &wu) const override {
 		wu.bf_objs->push_back(aligned_vec4 {
-			glm::vec4(transform.position, radius)
+			glm::vec4(radius)
 		});
 	}
 
 	void extract_bboxes(std::vector <mercury::BoundingBox> &bboxes, const glm::mat4 &parent) const override {
 		// Create bounding box
-		glm::vec3 min = transform.position - glm::vec3(radius);
-		glm::vec3 max = transform.position + glm::vec3(radius);
+		glm::mat4 m = parent * transform.model();
+		glm::vec3 pos = m * glm::vec4(0.0, 0.0, 0.0, 1.0);
+		glm::vec3 min = pos - glm::vec3(radius);
+		glm::vec3 max = pos + glm::vec3(radius);
 
 		// Push bounding box
 		bboxes.push_back(mercury::BoundingBox(min, max));

@@ -81,7 +81,8 @@ World world {
 	// TODO: later read from file
 	std::vector <World::PrimitivePtr> {
 		World::PrimitivePtr(new Sphere(0.25f, transforms[0], materials[6])),
-		World::PrimitivePtr(new Sphere(1.0f, transforms[0], materials[0])),
+
+		/* World::PrimitivePtr(new Sphere(1.0f, transforms[0], materials[0])),
 		World::PrimitivePtr(new Sphere(3.0f, transforms[1], materials[1])),
 		World::PrimitivePtr(new Sphere(6.0f, transforms[2], materials[2])),
 		World::PrimitivePtr(new Sphere(2.0f, transforms[3], materials[3])),
@@ -109,7 +110,7 @@ World world {
 			},
 			transforms[6],
 			materials[1]
-		)),
+		)), */
 	},
 
 	// Lights
@@ -1100,8 +1101,9 @@ int main()
 	// Redirect logger to file
 	// Logger::switch_file("mercury.log");
 
-	mercury::Model <mercury::VERTEX_TYPE_POSITION> model("resources/benchmark/suzanne.obj");
+	mercury::Model <mercury::VERTEX_TYPE_POSITION> model("resources/benchmark/bunny_res_1.ply");
 	model[0].material = materials[1];
+	model[0].transform.scale = glm::vec3(10.0f);
 
 	world.objects.push_back(std::shared_ptr <mercury::Model <mercury::VERTEX_TYPE_POSITION>> (
 		new mercury::Model <mercury::VERTEX_TYPE_POSITION> (model)
@@ -1111,6 +1113,31 @@ int main()
 		<< model.mesh_count() << " meshe(s), "
 		<< model[0].vertex_count() << " vertices, "
 		<< model[0].triangle_count() << " triangles" << std::endl;
+
+	// Plane mesh
+	float width = 10.0f;
+	float length = 10.0f;
+
+	mercury::Mesh <mercury::VERTEX_TYPE_POSITION> plane_mesh {
+		{
+			glm::vec3(-width/2, -0.1f, -length/2),
+			glm::vec3(width/2, -0.1f, -length/2),
+			glm::vec3(width/2, -0.1f, length/2),
+			glm::vec3(-width/2, -0.1f, length/2)
+		},
+		{
+			0, 1, 2,
+			2, 3, 0
+		},
+		{
+			.albedo = glm::vec3(0.5f, 0.5f, 0.5f)
+		}
+	};
+
+	// Add plane to world
+	world.objects.push_back(std::shared_ptr <mercury::Mesh <mercury::VERTEX_TYPE_POSITION>> (
+		new mercury::Mesh <mercury::VERTEX_TYPE_POSITION> (plane_mesh)
+	));
 
 	Logger::notify("Transforms (model matrices) of all objects:");
 	for (auto &object : world.objects) {
