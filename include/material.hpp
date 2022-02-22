@@ -18,8 +18,8 @@ struct Material {
 
 	// Write to buffer
 	void write_material(mercury::WorldUpdate &wu) const {
-		wu.materials.push_back(aligned_vec4(albedo, shading));
-		wu.materials.push_back(aligned_vec4(
+		wu.bf_mats->push_back(aligned_vec4(albedo, shading));
+		wu.bf_mats->push_back(aligned_vec4(
 			{specular, reflectance, refraction, 0.0f}
 		));
 	}

@@ -66,6 +66,10 @@ public:
 	}
 
 	// Properties
+	size_t bytes() const {
+		return settings.size * sizeof(T);
+	}
+
 	const size_t &size() const {
 		return settings.size;
 	}
@@ -182,7 +186,7 @@ public:
 		return resize(cpu_buffer.size());
 	}
 
-	// Generating bindings
+	/* Generating bindings
 	VkDescriptorSetLayoutBinding make_dsl_binding(uint32_t binding, VkShaderStageFlags stage) const {
 		return VkDescriptorSetLayoutBinding {
 			.binding = binding,
@@ -191,7 +195,7 @@ public:
 			.stageFlags = stage,
 			.pImmutableSamplers = nullptr
 		};
-	}
+	} */
 
 	// Update descriptor set
 	void update_descriptor_set(VkDescriptorSet descriptor_set, uint32_t binding) const {

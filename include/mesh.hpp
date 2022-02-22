@@ -114,7 +114,7 @@ public:
 		wu.indices.erase(wu.indices.end() - 1);
 
 		// Get index of material and push
-		uint mati = wu.materials.size();
+		uint mati = wu.bf_mats->push_size();
 		material.write_material(wu);
 
 		// Write each triangle

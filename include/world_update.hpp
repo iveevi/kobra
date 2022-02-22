@@ -9,9 +9,6 @@ namespace mercury {
 
 // Update structure
 struct WorldUpdate {
-	Buffer		materials;
-	Buffer		lights;
-
 	Buffer4f *	bf_objs;
 	Buffer4f *	bf_lights;
 	Buffer4f *	bf_mats;

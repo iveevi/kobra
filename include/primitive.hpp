@@ -51,7 +51,7 @@ struct Primitive {
 	// TODO: const?
 	virtual void write_object(mercury::WorldUpdate &wu) {
 		// Deal with material
-		uint mati = wu.materials.size();
+		uint mati = wu.bf_mats->push_size();
 		material.write_material(wu);
 
 		float index = *reinterpret_cast <float *> (&mati);

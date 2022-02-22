@@ -110,9 +110,6 @@ struct World {
 
 	// Write object data to buffer
 	void write_objects(WorldUpdate &wu) const {
-		// wu.objects.clear();
-		wu.materials.clear();
-
 		// Reset pushback index
 		for (const auto &object : objects) {
 			wu.indices.push_back(wu.bf_objs->push_size());
@@ -122,11 +119,19 @@ struct World {
 
 	// Write light data to buffer
 	void write_lights(WorldUpdate &wu) const {
-		wu.lights.clear();
 		for (const auto &light : lights) {
-			wu.indices.push_back(wu.lights.size());
+			wu.indices.push_back(wu.bf_lights->push_size());
 			light->write_light(wu);
 		}
+	}
+
+	// Write overall
+	void write(WorldUpdate &wu) const {
+		// Write objects
+		this->write_objects(wu);
+
+		// Write lights
+		this->write_lights(wu);
 	}
 
 	// Extract all bounding bxoes from the primitives
