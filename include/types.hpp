@@ -7,6 +7,9 @@ const float SHADING_TYPE_FLAT		= 0x00000001;
 const float SHADING_TYPE_BLINN_PHONG	= 0x00000002;
 const float SHADING_TYPE_LIGHT		= 0x00000003;
 
+// Simple ray tracing with reflections and refractions
+const float SHADING_TYPE_SIMPLE		= 0x00000004;
+
 // All possible types of objects
 // TODO: refactor to primitive types
 const float OBJECT_TYPE_NONE		= 0x00000000;

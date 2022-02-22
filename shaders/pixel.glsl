@@ -65,6 +65,7 @@ layout (set = 0, binding = 4, std430) buffer Materials
 	// Material layout:
 	// vec4 descriptor (color[3], shading[1])
 	// vec4 properties (reflectance[1], refractance[1])
+	// note that refractance is index of refraction
 	vec4 data[];
 } materials;
 
@@ -349,6 +350,10 @@ Hit closest_object(Ray ray)
 // "Phong"
 vec3 color_calc(Hit hit, Ray ray)
 {
+	// If no hit, just return background color
+	if (hit.object < 0)
+		return hit.mat.albedo;
+	
 	// Check for light type again
 	if (hit.mat.shading == SHADING_TYPE_LIGHT)
 		return hit.mat.albedo;
@@ -384,6 +389,8 @@ vec3 color_calc(Hit hit, Ray ray)
 		max(dot(view_direction, reflect_direction), 0.0),
 		hit.mat.specular
 	);
+
+	specular = 0.0;
 
 	// Combine diffuse and shadow
 	float ambience = 0.15;
@@ -453,10 +460,27 @@ vec3 color_at(Ray ray)
 			return color;
 
 		// Loop through reflections
+		float index_refraction = 1.0f;	// Assume vacuum
+
 		do {
 			// Reflection ray
 			vec3 refl_dir = reflect(ray.direction, hit.normal);
 			Ray refl_ray = Ray(hit.point + hit.normal * bias, refl_dir);
+
+			/* Refraction ray
+			vec3 refr_color = vec3(0.0);
+			if (hit.mat.refractance != 0.0) {
+				float eta = index_refraction / hit.mat.refractance;
+				vec3 refr_dir = refract(ray.direction, -hit.normal, eta);
+				Ray refr_ray = Ray(hit.point + hit.normal * bias, refr_dir);
+
+				// Calculate refraction
+				Hit refr_hit = closest_object(refr_ray);
+				refr_color = color_calc(refr_hit, refr_ray);
+
+				// Update refraction index
+				index_refraction = hit.mat.refractance;
+			} */
 
 			// Calculate reflection
 			Hit refl_hit = closest_object(refl_ray);
@@ -464,7 +488,10 @@ vec3 color_at(Ray ray)
 			// Add contribution regardless of whether
 			// the reflection hit an object (background counts)
 			refl_coef *= hit.mat.reflectance;
-			color = mix(color, color_calc(refl_hit, refl_ray), refl_coef);
+			
+			vec3 crefl = color_calc(refl_hit, refl_ray);
+			
+			color = mix(color, crefl, refl_coef);
 			hit = refl_hit;
 
 			// Decrement reflection count

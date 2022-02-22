@@ -10,6 +10,7 @@ definitions:
     thirdparty/imgui/backends/imgui_impl_glfw.cpp,
     thirdparty/imgui/backends/imgui_impl_vulkan.cpp'
   - mercury_source: 'main.cpp,
+    mercury.cpp,
     render.cpp,
     source/vulkan.cpp,
     source/logger.cpp,

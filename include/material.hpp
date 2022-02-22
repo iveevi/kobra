@@ -14,13 +14,13 @@ struct Material {
 
 	float specular		= 32.0f;
 	float reflectance	= 0.0f;
-	float refraction	= 0.0f;
+	float refractance	= 0.0f;
 
 	// Write to buffer
 	void write_material(mercury::WorldUpdate &wu) const {
 		wu.bf_mats->push_back(aligned_vec4(albedo, shading));
 		wu.bf_mats->push_back(aligned_vec4(
-			{specular, reflectance, refraction, 0.0f}
+			{specular, reflectance, refractance, 0.0f}
 		));
 	}
 };
