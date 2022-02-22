@@ -117,22 +117,28 @@ public:
 		uint mati = wu.bf_mats->push_size();
 		material.write_material(wu);
 
-		// Write each triangle
+		// Push all vertices
+		uint offset = wu.bf_verts->push_size();
+		for (const auto &v : _vertices)
+			wu.bf_verts->push_back(v.pos);
+
+		// Dummy triangle instance
+		Triangle triangle {
+			glm::vec3 {0.0f, 0.0f, 0.0f},
+			glm::vec3 {0.0f, 0.0f, 0.0f},
+			glm::vec3 {0.0f, 0.0f, 0.0f},
+			material
+		};
+
+		// Write indices
 		for (size_t i = 0; i < _indices.size(); i += 3) {
-			// Get each vertex
-			const Vertex <T> &v0 = _vertices[_indices[i + 0]];
-			const Vertex <T> &v1 = _vertices[_indices[i + 1]];
-			const Vertex <T> &v2 = _vertices[_indices[i + 2]];
-
-			// Construct triangle
-			Triangle triangle {
-				v0.pos, v1.pos, v2.pos,
-				material
-			};
-
-			// Write triangle to buffer
 			wu.indices.push_back(wu.bf_objs->push_size());
-			triangle.write_object_mati(wu, mati);
+			triangle.write_indexed(wu,
+				_indices[i] + offset,
+				_indices[i + 1] + offset,
+				_indices[i + 2] + offset,
+				mati
+			);	
 		}
 	}
 

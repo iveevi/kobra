@@ -47,6 +47,16 @@ struct Primitive {
 	// Extract bounding boxes
 	virtual void extract_bboxes(std::vector <mercury::BoundingBox> &bboxes) const = 0;
 
+	// Write header
+	void write_header(mercury::WorldUpdate &wu, uint mati) const {
+		float index = *reinterpret_cast <float *> (&mati);
+
+		// Push ID and material, then everything else
+		wu.bf_objs->push_back(aligned_vec4 {
+			glm::vec4(id, index, 0.0, 0.0)
+		});
+	}
+
 	// Write full object data
 	// TODO: const?
 	virtual void write_object(mercury::WorldUpdate &wu) {
@@ -54,26 +64,27 @@ struct Primitive {
 		uint mati = wu.bf_mats->push_size();
 		material.write_material(wu);
 
-		float index = *reinterpret_cast <float *> (&mati);
+		/* float index = *reinterpret_cast <float *> (&mati);
 
 		// Push ID and material, then everything else
 		wu.bf_objs->push_back(aligned_vec4 {
 			glm::vec4(id, index, 0.0, 0.0)
-		});
-
+		}); */
+		write_header(wu, mati);
 		this->write(wu);
 	}
 
 	// Write full object data, but takes index to material
 	virtual void write_object_mati(mercury::WorldUpdate &wu, uint mati) {
-		// Deal with material
+		/* Deal with material
 		float index = *reinterpret_cast <float *> (&mati);
 
 		// Push ID and material, then everything else
 		wu.bf_objs->push_back(aligned_vec4 {
 			glm::vec4(id, index, 0.0, 0.0)
-		});
+		}); */
 
+		write_header(wu, mati);
 		this->write(wu);
 	}
 };
@@ -108,9 +119,38 @@ struct Triangle : public Primitive {
 	}
 
 	void write(mercury::WorldUpdate &wu) const override {
-		wu.bf_objs->push_back(aligned_vec4(a));
+		/* wu.bf_objs->push_back(aligned_vec4(a));
 		wu.bf_objs->push_back(aligned_vec4(b));
-		wu.bf_objs->push_back(aligned_vec4(c));
+		wu.bf_objs->push_back(aligned_vec4(c)); */
+		
+		uint index = wu.bf_verts->push_size();
+		wu.bf_verts->push_back(aligned_vec4(a));
+		wu.bf_verts->push_back(aligned_vec4(b));
+		wu.bf_verts->push_back(aligned_vec4(c));
+
+		uint ia = index, ib = index + 1, ic = index + 2;
+		float *iaf = reinterpret_cast <float *> (&ia);
+		float *ibf = reinterpret_cast <float *> (&ib);
+		float *icf = reinterpret_cast <float *> (&ic);
+
+		wu.bf_objs->push_back(aligned_vec4 {
+			glm::vec4(*iaf, *ibf, *icf, 0.0)
+		});
+	}
+
+	// Write, but indices are given
+	void write_indexed(mercury::WorldUpdate &wu,
+			uint a, uint b, uint c, uint mati) const {
+		// Header from parent
+		write_header(wu, mati);
+		
+		float *iaf = reinterpret_cast <float *> (&a);
+		float *ibf = reinterpret_cast <float *> (&b);
+		float *icf = reinterpret_cast <float *> (&c);
+
+		wu.bf_objs->push_back(aligned_vec4 {
+			glm::vec4(*iaf, *ibf, *icf, 0.0)
+		});		
 	}
 
 	void extract_bboxes(std::vector <mercury::BoundingBox> &bboxes) const override {

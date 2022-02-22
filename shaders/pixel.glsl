@@ -102,6 +102,13 @@ layout (set = 0, binding = 7, std430) buffer Debug
 	vec4 data[];
 } debug;
 
+// Vertex buffer
+layout (set = 0, binding = 8, std430) buffer Vertices
+{
+	// For now is just a vec3 position
+	vec4 data[];
+} vertices;
+
 // Closest object information
 // TODO: this should be obslete
 struct Hit {
@@ -131,9 +138,15 @@ Intersection intersect_triangle(Ray ray, uint index)
 {
 	// Create sphere from object data
 	vec4 prop = objects.data[index];
-	vec3 v1 = objects.data[index + 1].xyz;
-	vec3 v2 = objects.data[index + 2].xyz;
-	vec3 v3 = objects.data[index + 3].xyz;
+	vec4 indices = objects.data[index + 1];
+
+	uint a = floatBitsToUint(indices.x);
+	uint b = floatBitsToUint(indices.y);
+	uint c = floatBitsToUint(indices.z);
+
+	vec3 v1 = vertices.data[a].xyz;
+	vec3 v2 = vertices.data[b].xyz;
+	vec3 v3 = vertices.data[c].xyz;
 
 	Triangle triangle = Triangle(v1, v2, v3);
 

@@ -320,9 +320,10 @@ class MercuryApplication : public mercury::App {
 	// GPU buffers
 	BufferManager <uint>	_bf_pixels;
 	BufferManager <uint8_t>	_bf_world;
-	Buffer4f		_bf_objects;
+	Buffer4f		_bf_objects;	// TODO: at some point change to aligned_uvec4
 	Buffer4f		_bf_lights;
 	Buffer4f		_bf_materials;
+	Buffer4f		_bf_vertices;
 	Buffer4f		_bf_debug;
 
 	// BVH resources
@@ -336,21 +337,24 @@ class MercuryApplication : public mercury::App {
 	GPUWorld gworld;
 
 	// Map all the buffers
-	// TODO: deal with resizing buffers
 	bool map_buffers(Vulkan *vk) {
 		// Reset pushback indices
 		_bf_objects.reset_push_back();
 		_bf_lights.reset_push_back();
 		_bf_materials.reset_push_back();
+		_bf_vertices.reset_push_back();
 		
 		// Resizing and remaking buffers
 		int resized = 0;
 
 		// World update
+		// TODO: constructor that resets pushback indices,
+		// and a method to sync and flush the buffers
 		WorldUpdate wu {
 			.bf_objs = &_bf_objects,
 			.bf_lights = &_bf_lights,
-			.bf_mats = &_bf_materials
+			.bf_mats = &_bf_materials,
+			.bf_verts = &_bf_vertices
 		};
 
 		// Generate world data and write to buffers
@@ -383,12 +387,14 @@ class MercuryApplication : public mercury::App {
 		resized += _bf_objects.sync_size();
 		resized += _bf_lights.sync_size();
 		resized += _bf_materials.sync_size();
+		resized += _bf_vertices.sync_size();
 
 		// Map buffers
 		_bf_world.flush();
 		_bf_objects.flush();
 		_bf_lights.flush();
 		_bf_materials.flush();
+		_bf_vertices.flush();
 
 		// Return true if any buffers were resized
 		return (resized > 0);
@@ -403,13 +409,7 @@ class MercuryApplication : public mercury::App {
 		// Allocate buffers
 		size_t pixels = 800 * 600;
 
-		// BFM_Settings for write buffers
-		BFM_Settings bfm_wo_settings {
-			.size = 1024,
-			.usage = buffer_usage,
-			.usage_type = BFM_WRITE_ONLY
-		};
-
+		// Read only buffers
 		_bf_pixels = BufferManager <uint> {
 			context,
 			BFM_Settings {
@@ -417,26 +417,6 @@ class MercuryApplication : public mercury::App {
 				.usage = buffer_usage | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 				.usage_type = BFM_READ_ONLY
 			}
-		};
-
-		_bf_world = BufferManager <uint8_t> {
-			context,
-			bfm_wo_settings
-		};
-
-		_bf_objects = Buffer4f {
-			context,
-			bfm_wo_settings
-		};
-
-		_bf_lights = Buffer4f {
-			context,
-			bfm_wo_settings
-		};
-
-		_bf_materials = Buffer4f {
-			context,
-			bfm_wo_settings
 		};
 
 		_bf_debug = Buffer4f {
@@ -447,6 +427,20 @@ class MercuryApplication : public mercury::App {
 				.usage_type = BFM_READ_ONLY
 			}
 		};
+
+		// BFM_Settings for write buffers
+		BFM_Settings bfm_wo_settings {
+			.size = 1024,
+			.usage = buffer_usage,
+			.usage_type = BFM_WRITE_ONLY
+		};
+
+		// Write onlt buffers
+		_bf_world = BufferManager <uint8_t> {context, bfm_wo_settings};
+		_bf_objects = Buffer4f {context, bfm_wo_settings};
+		_bf_lights = Buffer4f {context, bfm_wo_settings};
+		_bf_materials = Buffer4f {context, bfm_wo_settings};
+		_bf_vertices = Buffer4f {context, bfm_wo_settings};
 	}
 
 	// ImGui context and methods
@@ -558,6 +552,7 @@ class MercuryApplication : public mercury::App {
 					ImGui::Text("Objects buffer:   %5.2f MB", to_mb(_bf_objects.bytes()));
 					ImGui::Text("Lights buffer:    %5.2f MB", to_mb(_bf_lights.bytes()));
 					ImGui::Text("Materials buffer: %5.2f MB", to_mb(_bf_materials.bytes()));
+					ImGui::Text("Vertex buffer:    %5.2f MB", to_mb(_bf_vertices.bytes()));
 					ImGui::Text("BVH buffer:       %5.2f MB", to_mb(bvh.buffer.size));
 					ImGui::Text("Debug buffer:     %5.2f MB", to_mb(_bf_debug.bytes()));
 					ImGui::TreePop();
@@ -973,8 +968,6 @@ public:
 		};
 
 		VkWriteDescriptorSet writes[] = {
-			// wb_write,
-			// ob_write,
 			bvh_write,
 			stack_write
 		};
@@ -985,12 +978,14 @@ public:
 			0, nullptr
 		);
 
+		// Make indiviual descriptor set udpates
 		_bf_pixels.update_descriptor_set(descriptor_set, 0);
 		_bf_world.update_descriptor_set(descriptor_set, 1);
 		_bf_objects.update_descriptor_set(descriptor_set, 2);
 		_bf_lights.update_descriptor_set(descriptor_set, 3);
 		_bf_materials.update_descriptor_set(descriptor_set, 4);
 		_bf_debug.update_descriptor_set(descriptor_set, 7);
+		_bf_vertices.update_descriptor_set(descriptor_set, 8);
 	}
 
 	// Desctiptor set layout bindings
@@ -1061,7 +1056,15 @@ const std::vector <VkDescriptorSetLayoutBinding> MercuryApplication::dsl_binding
 		.descriptorCount = 1,
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 		.pImmutableSamplers = nullptr
-	}
+	},
+
+	VkDescriptorSetLayoutBinding {
+		.binding = 8,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.pImmutableSamplers = nullptr
+	},
 };
 
 // Profiler application

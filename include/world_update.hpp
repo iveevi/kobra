@@ -12,6 +12,7 @@ struct WorldUpdate {
 	Buffer4f *	bf_objs;
 	Buffer4f *	bf_lights;
 	Buffer4f *	bf_mats;
+	Buffer4f *	bf_verts;
 	
 	Indices		indices;
 };
