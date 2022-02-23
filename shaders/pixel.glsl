@@ -354,7 +354,7 @@ Hit closest_object(Ray ray)
 	);
 }
 
-// "Phong"
+// "Phong" calculation
 vec3 color_calc(Hit hit, Ray ray)
 {
 	// If no hit, just return background color
@@ -506,7 +506,7 @@ vec3 color_at(Ray ray)
 			max_refls--;
 		} while (max_refls > 0 && hit.object >= 0
 				&& hit.mat.reflectance > 0.0);
-
+		
 		return color;
 	}
 

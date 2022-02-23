@@ -532,12 +532,9 @@ void MercuryApplication::make_imgui(size_t image_index)
 		{
 			if (ImGui::Button("Capture image")) {
 				vkQueueWaitIdle(context.device.graphics_queue);
-				mercury::capture::write(
-					context.vk, context.device,
-					_bf_pixels.buffer(),
-					800, 600,
-					"capture.png"
-				);
+				Image image {.width = 800, .height = 600};
+				Capture::snapshot(_bf_pixels, image);
+				image.write("capture.png");
 			}
 
 			// TODO: will need to set the fps of the phsyics simulation
@@ -560,11 +557,11 @@ void MercuryApplication::make_imgui(size_t image_index)
 						capture_timer.elapsed_start() / 1000000.0f
 					);
 
-					capture.write(
+					/* capture.write(
 						context.vk, context.device,
 						_bf_pixels.buffer(),
 						800, 600
-					);
+					); */
 				} else {
 					capture.flush();
 				}

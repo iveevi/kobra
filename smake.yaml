@@ -29,10 +29,7 @@ builds:
     - libraries: 'glfw,
       vulkan,
       assimp,
-      pthread,
-      opencv_core,
-      opencv_imgcodecs,
-      opencv_videoio'
+      pthread'
   - mercury_debug:
     - sources: 'mercury_source,
       thirdparty/imgui/imgui.cpp,
@@ -48,10 +45,7 @@ builds:
     - libraries: 'glfw,
       vulkan,
       assimp,
-      pthread,
-      opencv_core,
-      opencv_imgcodecs,
-      opencv_videoio'
+      pthread'
     - flags: '-std=c++17 -g'
 
 targets:
