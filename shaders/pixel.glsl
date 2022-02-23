@@ -117,6 +117,9 @@ layout (set = 0, binding = 9, std430) buffer Transforms
 	mat4 data[];
 } transforms;
 
+// Texture module
+#include "textures.glsl"
+
 // Closest object information
 // TODO: this should be obslete
 struct Hit {
@@ -132,13 +135,17 @@ struct Hit {
 // corresponds to a sky like gradient
 vec3 background(Ray ray)
 {
-	vec3 direction = normalize(ray.direction);
+	/* vec3 direction = normalize(ray.direction);
 	float t = 0.5 * (1.0 + direction.y);
 	return  mix(
 		vec3(1.0, 1.0, 1.0),
 		vec3(0.5, 0.7, 1.0),
 		t
-	);
+	); */
+
+	// Sample sky texture
+	vec3 dir = normalize(ray.direction);
+	return sample_texture(dir, 0).xyz;
 }
 
 // Intersection between a ray and a triangle

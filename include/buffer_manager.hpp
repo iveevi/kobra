@@ -138,8 +138,23 @@ public:
 		push_index++;
 	}
 
+	void push_back(const T *data, size_t size) {
+		// Don't bother resizing all the time
+		if (cpu_buffer.size() <= push_index + size)
+			cpu_buffer.resize(push_index + size);
+
+		// Copy data
+		std::memcpy(
+			cpu_buffer.data() + push_index,
+			data,
+			size * sizeof(T)
+		);
+
+		push_index += size;
+	}
+
 	// Flush cpu buffer to gpu (must have write property)
-	void flush() {
+	void upload() {
 		if (settings.usage_type == BFM_WRITE_ONLY) {
 			context.vk->map_buffer(
 				context.device,

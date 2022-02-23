@@ -14,16 +14,38 @@
 
 namespace mercury {
 
+// Texture structure
+struct Texture {
+	// Texture data
+	uint width;
+	uint height;
+	uint channels;
+
+	bytes data;
+};
+
 // Load texture as byte array
-bytes load_image_texture(const std::string &);
+Texture load_image_texture(const std::string &);
 
 // Textures for ray tracing
 namespace raytracing {
 
+// Convert bytes to aligned_vec4 array
+Buffer convert_vec4(const Texture &);
+
 // Texture update data
 struct TextureUpdate {
-	// BufferManager <byte> *_textures;
-	Buffer4u *_texture_info;
+	Buffer4f	*textures;
+	Buffer4u	*texture_info;
+
+	// Reset indices
+	void reset();
+
+	// Write texture data
+	void write(const Texture &);
+
+	// Upload texture data
+	void upload();
 };
 
 }

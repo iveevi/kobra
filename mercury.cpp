@@ -1,4 +1,6 @@
 #include "mercury.hpp"
+#include "imgui.h"
+#include "include/texture.hpp"
 
 // Static member variables
 
@@ -82,7 +84,24 @@ const std::vector <VkDescriptorSetLayoutBinding> MercuryApplication::dsl_binding
 		.descriptorCount = 1,
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 		.pImmutableSamplers = nullptr
-	}
+	},
+
+	// Texture module
+	VkDescriptorSetLayoutBinding {
+		.binding = 10,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.pImmutableSamplers = nullptr
+	},
+
+	VkDescriptorSetLayoutBinding {
+		.binding = 11,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.pImmutableSamplers = nullptr
+	},
 };
 	
 // Fill out command buffer
@@ -313,12 +332,12 @@ bool MercuryApplication::map_buffers(Vulkan *vk)
 	resized += _bf_transforms.sync_size();
 
 	// Map buffers
-	_bf_world.flush();
-	_bf_objects.flush();
-	_bf_lights.flush();
-	_bf_materials.flush();
-	_bf_vertices.flush();
-	_bf_transforms.flush();
+	_bf_world.upload();
+	_bf_objects.upload();
+	_bf_lights.upload();
+	_bf_materials.upload();
+	_bf_vertices.upload();
+	_bf_transforms.upload();
 
 	// Return true if any buffers were resized
 	return (resized > 0);
@@ -367,6 +386,24 @@ void MercuryApplication::allocate_buffers()
 	_bf_materials = Buffer4f {context, bfm_wo_settings};
 	_bf_vertices = Buffer4f {context, bfm_wo_settings};
 	_bf_transforms = Buffer4m {context, bfm_wo_settings};
+
+	_bf_textures = Buffer4f {context, bfm_wo_settings};
+	_bf_texture_info = Buffer4u {context, bfm_wo_settings};
+
+	// TODO: initialization function (preload)
+
+	// Load sky texture
+	Texture sky = load_image_texture("resources/sky.jpg");
+
+	// Upload sky texture
+	raytracing::TextureUpdate tu {
+		.textures = &_bf_textures,
+		.texture_info = &_bf_texture_info,
+	};
+
+	tu.reset();
+	tu.write(sky);
+	tu.upload();
 }
 
 // Dump debug data to file
@@ -466,6 +503,7 @@ void MercuryApplication::make_imgui(size_t image_index)
 				return size / (1024.0f * 1024.0f);
 			};
 
+			// TODO: function
 			if (ImGui::TreeNode("Buffer sizes")) {
 				ImGui::Text("Pixel buffer:     %5.2f MB", to_mb(_bf_pixels.bytes()));
 
@@ -476,6 +514,10 @@ void MercuryApplication::make_imgui(size_t image_index)
 				ImGui::Text("Materials buffer: %5.2f MB", to_mb(_bf_materials.bytes()));
 				ImGui::Text("Vertex buffer:    %5.2f MB", to_mb(_bf_vertices.bytes()));
 				ImGui::Text("Transform buffer: %5.2f MB", to_mb(_bf_transforms.bytes()));
+
+				ImGui::Separator();
+				ImGui::Text("Textures buffer:   %5.2f MB", to_mb(_bf_textures.bytes()));
+				ImGui::Text("TexInfos buffer:   %5.2f MB", to_mb(_bf_texture_info.bytes()));
 
 				ImGui::Separator();
 				ImGui::Text("BVH buffer:       %5.2f MB", to_mb(bvh.buffer.size));
@@ -916,4 +958,8 @@ void MercuryApplication::update_descriptor_set()
 	_bf_debug.update_descriptor_set(descriptor_set, 7);
 	_bf_vertices.update_descriptor_set(descriptor_set, 8);
 	_bf_transforms.update_descriptor_set(descriptor_set, 9);
+
+	// Texture module
+	_bf_textures.update_descriptor_set(descriptor_set, 10);
+	_bf_texture_info.update_descriptor_set(descriptor_set, 11);
 }

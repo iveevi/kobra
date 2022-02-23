@@ -74,6 +74,10 @@ class MercuryApplication : public mercury::App {
 	Buffer4m		_bf_transforms;
 	Buffer4f		_bf_debug;
 
+	// Textures
+	Buffer4f		_bf_textures;
+	Buffer4u		_bf_texture_info;
+
 	// ImGui context and methods
 	// TODO: the context should not have any sync objects
 	Vulkan::ImGuiContext imgui_ctx;

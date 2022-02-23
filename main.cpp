@@ -15,9 +15,9 @@ using namespace mercury;
 Material materials[] {
 	{.albedo = glm::vec3 {0.1f, 0.5f, 0.2f}},
 	{
-		.albedo = glm::vec3 {1.0f, 1.0f, 1.0f},
+		.albedo = glm::vec3 {1.0f, .7f, .7f},
 		.specular = 32.0f,
-		.reflectance = 0.9f,
+		.reflectance = 0.3f,
 		.refractance = 0.0f	// TODO: refractance should be a complex number
 	},
 	{
@@ -66,7 +66,7 @@ World world {
 		World::PrimitivePtr(new Sphere(1.0f, transforms[0],
 			{
 				.albedo = glm::vec3 {1.0f},
-				.refractance = 1.5f
+				.reflectance = 1.0f
 			}
 		)),
 
@@ -112,7 +112,7 @@ int main()
 	// Redirect logger to file
 	// Logger::switch_file("mercury.log");
 
-	mercury::Model <mercury::VERTEX_TYPE_POSITION> model("resources/benchmark/bunny_res_2.ply");
+	mercury::Model <mercury::VERTEX_TYPE_POSITION> model("resources/benchmark/bunny_res_1.ply");
 	model[0].material = materials[1];
 	model[0].transform.scale = glm::vec3(10.0f);
 
