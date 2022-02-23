@@ -23,13 +23,15 @@ builds:
     - idirs: 'thirdparty,
       thirdparty/glm,
       thirdparty/imgui,
-      thirdparty/assimp/include,
-      /usr/include/opencv4'
+      thirdparty/assimp/include'
     - flags: '-O3 -std=c++17'
     - libraries: 'glfw,
       vulkan,
       assimp,
-      pthread'
+      pthread,
+      avcodec,
+      avformat,
+      avutil'
   - mercury_debug:
     - sources: 'mercury_source,
       thirdparty/imgui/imgui.cpp,
@@ -39,13 +41,16 @@ builds:
       thirdparty/imgui/imgui_tables.cpp,
       thirdparty/imgui/backends/imgui_impl_glfw.cpp,
       thirdparty/imgui/backends/imgui_impl_vulkan.cpp'
-    - idirs: 'thirdparty/glm,
-      thirdparty/imgui,
-      /usr/include/opencv4'
+    - idirs: 'thirdparty,
+      thirdparty/glm,
+      thirdparty/imgui'
     - libraries: 'glfw,
       vulkan,
       assimp,
-      pthread'
+      pthread,
+      avcodec,
+      avformat,
+      avutil'
     - flags: '-std=c++17 -g'
 
 targets:

@@ -546,22 +546,33 @@ void MercuryApplication::make_imgui(size_t image_index)
 				if (!capturing) {
 					capturing = true;
 					capture_timer.start();
-					capture.start("capture.avi", 800, 600);
+					// capture.start("capture.avi", 800, 600);
+
+					Capture::Format fmt {
+						.bitrate = 1000000,
+						.width = 800,
+						.height = 600,
+						.framerate = 60,
+						.gop = 60
+					};
+
+					capture.start("capture.avi", fmt);
 				} else {
 					capturing = false;
 				}
 			} else {
 				if (capturing) {
 					ImGui::Text(
-						"Capture: %5.3f s",
+						"Capture (real time): %5.3f s",
 						capture_timer.elapsed_start() / 1000000.0f
 					);
-
-					/* capture.write(
-						context.vk, context.device,
-						_bf_pixels.buffer(),
-						800, 600
-					); */
+					
+					ImGui::Text(
+						"Capture (video time): %5.3f s",
+						capture.time()
+					);
+					
+					capture.write(_bf_pixels);
 				} else {
 					capture.flush();
 				}
