@@ -24,7 +24,7 @@ Material materials[] {
 		.albedo = glm::vec3 {1.0f, 1.0f, 1.0f},
 		.specular = 1.0,
 		.reflectance = 0.01,
-		.refractance = 1.5
+		.refractance = 0.0
 	},
 	{.albedo = glm::vec3 {0.5f, 0.1f, 0.6f}},
 	{.albedo = glm::vec3 {0.6f, 0.5f, 0.3f}},
@@ -37,7 +37,7 @@ Material materials[] {
 
 // List of object transforms
 Transform transforms[] {
-	glm::vec3 {-1.0f, 0.0f, 4.0f},
+	glm::vec3 {3.0f, 1.3f, 1.0f},
 	glm::vec3 {0.5f, 5.0f, 3.5f},
 	glm::vec3 {6.0f, -2.0f, 5.0f},
 	glm::vec3 {6.0f, 3.0f, 11.5f},
@@ -50,7 +50,7 @@ World world {
 	// Camera
 	Camera {
 		Transform {
-			glm::vec3(0.0f, 0.0f, -4.0f)
+			glm::vec3(0.0f, 2.0f, -8.0f)
 		},
 	 
 		Tunings {
@@ -63,7 +63,13 @@ World world {
 	std::vector <World::PrimitivePtr> {
 		World::PrimitivePtr(new Sphere(0.25f, transforms[0], materials[6])),
 
-		// World::PrimitivePtr(new Sphere(1.0f, transforms[0], materials[0])),
+		World::PrimitivePtr(new Sphere(1.0f, transforms[0],
+			{
+				.albedo = glm::vec3 {1.0f},
+				.refractance = 1.5f
+			}
+		)),
+
 		// World::PrimitivePtr(new Sphere(3.0f, transforms[1], materials[1])),
 		/* World::PrimitivePtr(new Sphere(6.0f, transforms[2], materials[2])),
 		World::PrimitivePtr(new Sphere(2.0f, transforms[3], materials[3])),
@@ -106,9 +112,9 @@ int main()
 	// Redirect logger to file
 	// Logger::switch_file("mercury.log");
 
-	mercury::Model <mercury::VERTEX_TYPE_POSITION> model("resources/debug.obj");
+	mercury::Model <mercury::VERTEX_TYPE_POSITION> model("resources/benchmark/bunny_res_2.ply");
 	model[0].material = materials[1];
-	model[0].transform.scale = glm::vec3(0.5f);
+	model[0].transform.scale = glm::vec3(10.0f);
 
 	auto m1 = model[0];
 	auto m2 = model[0];
@@ -140,10 +146,10 @@ int main()
 
 	mercury::Mesh <mercury::VERTEX_TYPE_POSITION> plane_mesh {
 		{
-			glm::vec3(-width/2, -0.1f, -length/2),
-			glm::vec3(width/2, -0.1f, -length/2),
-			glm::vec3(width/2, -0.1f, length/2),
-			glm::vec3(-width/2, -0.1f, length/2)
+			glm::vec3(-width/2, 0.3f, -length/2),
+			glm::vec3(width/2, 0.3f, -length/2),
+			glm::vec3(width/2, 0.3f, length/2),
+			glm::vec3(-width/2, 0.3f, length/2)
 		},
 		{
 			0, 1, 2,
@@ -152,7 +158,6 @@ int main()
 		{
 			.albedo = glm::vec3(1.0f, 1.0f, 0.7f),
 			.reflectance = 0.0f,
-			.refractance = 1.5f
 		}
 	};
 

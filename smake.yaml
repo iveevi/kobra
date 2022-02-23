@@ -14,12 +14,14 @@ definitions:
     render.cpp,
     source/vulkan.cpp,
     source/logger.cpp,
-    source/capture.cpp'
+    source/capture.cpp,
+    source/texture.cpp'
 
 builds:
   - mercury_release:
     - sources: mercury_source, imgui_source
-    - idirs: 'thirdparty/glm,
+    - idirs: 'thirdparty,
+      thirdparty/glm,
       thirdparty/imgui,
       thirdparty/assimp/include,
       /usr/include/opencv4'

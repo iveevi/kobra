@@ -22,6 +22,7 @@
 #include "include/primitive.hpp"
 #include "include/profiler.hpp"
 #include "include/scene.hpp"
+#include "include/texture.hpp"
 #include "include/timer.hpp"
 #include "include/types.hpp"
 #include "include/world.hpp"

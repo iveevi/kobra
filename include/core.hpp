@@ -18,6 +18,13 @@ struct alignas(16) aligned_vec4 {
 	aligned_vec4(const glm::vec3 &d, float w) : data(d, w) {}
 };
 
+struct alignas(16) aligned_uvec4 {
+	glm::uvec4 data;
+
+	aligned_uvec4() {}
+	aligned_uvec4(const glm::uvec4 &d) : data(d) {}
+};
+
 struct alignas(16) aligned_mat4 {
 	glm::mat4 data;
 
@@ -28,5 +35,9 @@ struct alignas(16) aligned_mat4 {
 // Buffer type aliases
 using Buffer = std::vector <aligned_vec4>;	// TODO: remove?
 using Indices = std::vector <uint32_t>;
+
+// Other type aliases
+using byte = uint8_t;
+using bytes = std::vector <byte>;
 
 #endif

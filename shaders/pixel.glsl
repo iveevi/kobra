@@ -467,20 +467,21 @@ vec3 color_at(Ray ray)
 			vec3 refl_dir = reflect(ray.direction, hit.normal);
 			Ray refl_ray = Ray(hit.point + hit.normal * bias, refl_dir);
 
-			/* Refraction ray
+			// Refraction ray
 			vec3 refr_color = vec3(0.0);
 			if (hit.mat.refractance != 0.0) {
 				float eta = index_refraction / hit.mat.refractance;
-				vec3 refr_dir = refract(ray.direction, -hit.normal, eta);
-				Ray refr_ray = Ray(hit.point + hit.normal * bias, refr_dir);
+				vec3 refr_dir = refract(ray.direction, hit.normal, eta);
+				Ray refr_ray = Ray(hit.point - hit.normal * bias, refr_dir);
 
 				// Calculate refraction
 				Hit refr_hit = closest_object(refr_ray);
 				refr_color = color_calc(refr_hit, refr_ray);
+				return refr_color;
 
 				// Update refraction index
 				index_refraction = hit.mat.refractance;
-			} */
+			}
 
 			// Calculate reflection
 			Hit refl_hit = closest_object(refl_ray);
