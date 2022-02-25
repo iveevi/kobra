@@ -99,56 +99,8 @@ public:
 	using DS = VkDescriptorSet;
 	using DSLayout = VkDescriptorSetLayout;
 
-	/////////////////////
-	// Exposed members //
-	/////////////////////
-	
-	// GLFW window
-	// GLFWwindow *window;
-
 	// Vulkan basic context
 	VkInstance instance;
-	
-	/* VkSurfaceKHR surface;
-
-	VkPhysicalDevice physical_device = VK_NULL_HANDLE;
-	VkDevice device;
-
-	// Queues
-	VkQueue graphics_queue;
-	VkQueue present_queue;
-
-	// Swapchain variables
-	VkSwapchainKHR			swch;
-	VkExtent2D			swch_extent;
-	VkFormat			swch_image_format;
-	std::vector <VkFramebuffer>	swch_framebuffers;
-	std::vector <VkImage>		swch_images;
-	std::vector <VkImageView>	swch_image_views;
-
-	// Rendering variables
-	VkRenderPass			render_pass;
-
-	VkCommandPool			command_pool;
-
-	std::vector <VkCommandBuffer>	command_buffers;
-	
-	std::vector <VkFence>		in_flight_fences;
-	std::vector <VkFence>		images_in_flight;
-
-	std::vector <VkSemaphore>	image_available_semaphores;
-	std::vector <VkSemaphore>	render_finished_semaphores;
-
-	// Miscellaneous
-	VkAllocationCallbacks *		allocator = nullptr;
-	
-	// Descriptor pool
-	VkDescriptorPool		descriptor_pool;
-
-	// Descriptor sets
-	DSLayout			ds_layout;
-	std::vector <DSLayout>		descriptor_set_layouts;
-	std::vector <DS>		descriptor_sets; */
 private:
 
 	// Internal structures
@@ -324,7 +276,7 @@ private:
 
 	VkSurfaceFormatKHR _choose_swch_surface_format(const std::vector <VkSurfaceFormatKHR> &fmts) {
 		for (const auto &fmt : fmts) {
-			if (fmt.format == VK_FORMAT_B8G8R8A8_SRGB
+			if (fmt.format == VK_FORMAT_R8G8B8A8_SINT
 					&& fmt.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
 				return fmt;
 		}

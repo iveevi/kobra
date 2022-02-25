@@ -67,8 +67,14 @@ World world {
 		World::PrimitivePtr(new Sphere(1.0f, transforms[0],
 			{
 				.albedo = glm::vec3 {1.0f},
-				// .reflectance = 1.0f
 				.refractance = 1.5f
+			}
+		)),
+		
+		World::PrimitivePtr(new Sphere(1.0f, glm::vec3 {-3.0f, 1.3f, 1.0f},
+			{
+				.albedo = glm::vec3 {1.0f},
+				.reflectance = 1.0f
 			}
 		)),
 
