@@ -1,11 +1,12 @@
 #include "mercury.hpp"
 #include "imgui.h"
 #include "include/texture.hpp"
+#include <vulkan/vulkan_core.h>
 
 // Static member variables
 
 // TODO: cache in constructor or something...
-const std::vector <VkDescriptorSetLayoutBinding> MercuryApplication::dsl_bindings = {
+const std::vector <VkDescriptorSetLayoutBinding> MercuryApplication::compute_dsl_bindings = {
 	VkDescriptorSetLayoutBinding {
 		.binding = 0,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -103,74 +104,29 @@ const std::vector <VkDescriptorSetLayoutBinding> MercuryApplication::dsl_binding
 		.pImmutableSamplers = nullptr
 	},
 };
+
+const std::vector <VkDescriptorSetLayoutBinding> MercuryApplication::preproc_dsl_bindings = {
+	VkDescriptorSetLayoutBinding {
+		.binding = 0,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+		.pImmutableSamplers = nullptr
+	},
+
+	VkDescriptorSetLayoutBinding {
+		.binding = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+		.pImmutableSamplers = nullptr
+	},
+};
 	
 // Fill out command buffer
 // TODO: do we need the vk parameter?
 void MercuryApplication::maker(const Vulkan *vk, size_t i)
 {
-	// Get image at current index
-	VkImage image = swapchain.images[i];
-
-	// Transition image layout to present
-	// TODO: method to transition image layout,
-	//	includes pipeline barrier functoin exeution
-	VkImageMemoryBarrier image_memory_barrier {
-		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-		.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
-		.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT,
-		.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-		.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-		.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-		.image = image,
-		.subresourceRange = {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-			.baseMipLevel = 0,
-			.levelCount = 1,
-			.baseArrayLayer = 0,
-			.layerCount = 1
-		}
-	};
-
-	vkCmdPipelineBarrier(
-		command_buffers[i],
-		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-		VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-		0,
-		0, nullptr,
-		0, nullptr,
-		1, &image_memory_barrier
-	);
-
-	// Buffer copy regions
-	VkBufferImageCopy buffer_copy_region {
-		.bufferOffset = 0,
-		.bufferRowLength = 0,
-		.bufferImageHeight = 0,
-		.imageSubresource = {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-			.mipLevel = 0,
-			.baseArrayLayer = 0,
-			.layerCount = 1
-		},
-		.imageOffset = {0, 0, 0},
-		.imageExtent = {
-			swapchain.extent.width,
-			swapchain.extent.height,
-			1
-		}
-	};
-
-	// Copy buffer to image
-	vkCmdCopyBufferToImage(
-		command_buffers[i],
-		_bf_pixels.vk_buffer(),
-		image,
-		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		1,
-		&buffer_copy_region
-	);
-	
 	// Render pass creation info
 	VkRenderPassBeginInfo render_pass_info {
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -243,14 +199,152 @@ void MercuryApplication::maker(const Vulkan *vk, size_t i)
 			return;
 		}
 
-		// Bind pipeline
+		//////////////////////////
+		// Post process shaders //
+		//////////////////////////
+
+		// Append post processing graphics pipeline
+		VkPipelineShaderStageCreateInfo vertex {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+			.stage = VK_SHADER_STAGE_VERTEX_BIT,
+			.module = pp_vert_shader,
+			.pName = "main"
+		};
+
+		VkPipelineShaderStageCreateInfo fragment {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+			.stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+			.module = pp_frag_shader,
+			.pName = "main"
+		};
+
+		VkPipelineShaderStageCreateInfo shader_stages[] = {vertex, fragment};
+
+		// TODO: clean
+                VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+                vertexInputInfo.sType =
+                    VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+                vertexInputInfo.vertexBindingDescriptionCount = 0;
+                vertexInputInfo.vertexAttributeDescriptionCount = 0;
+
+                VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+                inputAssembly.sType =
+                    VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+                inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+                inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+		VkViewport viewport{};
+		viewport.x = 0.0f;
+		viewport.y = 0.0f;
+		viewport.width = (float) swapchain.extent.width;
+		viewport.height = (float) swapchain.extent.height;
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+
+		VkRect2D scissor{};
+		scissor.offset = {0, 0};
+		scissor.extent = swapchain.extent;
+
+		VkPipelineViewportStateCreateInfo viewportState{};
+		viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+		viewportState.viewportCount = 1;
+		viewportState.pViewports = &viewport;
+		viewportState.scissorCount = 1;
+		viewportState.pScissors = &scissor;
+
+		VkPipelineRasterizationStateCreateInfo rasterizer{};
+		rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+		rasterizer.depthClampEnable = VK_FALSE;
+		rasterizer.rasterizerDiscardEnable = VK_FALSE;
+		rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+		rasterizer.lineWidth = 1.0f;
+		rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+		rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+		rasterizer.depthBiasEnable = VK_FALSE;
+
+		VkPipelineMultisampleStateCreateInfo multisampling{};
+		multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+		multisampling.sampleShadingEnable = VK_FALSE;
+		multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+		VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+		colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+		colorBlendAttachment.blendEnable = VK_FALSE;
+
+		VkPipelineColorBlendStateCreateInfo colorBlending{};
+		colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+		colorBlending.logicOpEnable = VK_FALSE;
+		colorBlending.logicOp = VK_LOGIC_OP_COPY;
+		colorBlending.attachmentCount = 1;
+		colorBlending.pAttachments = &colorBlendAttachment;
+		colorBlending.blendConstants[0] = 0.0f;
+		colorBlending.blendConstants[1] = 0.0f;
+		colorBlending.blendConstants[2] = 0.0f;
+		colorBlending.blendConstants[3] = 0.0f;
+		
+		// Create pipeline
+		VkPipelineLayoutCreateInfo preproc_pli {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+			.setLayoutCount = 1,
+			.pSetLayouts = &preproc_dsl,
+			.pushConstantRangeCount = 0,
+			.pPushConstantRanges = nullptr
+		};
+
+		VkPipelineLayout preproc_pl;
+
+		res = vkCreatePipelineLayout(
+			context.vk_device(),
+			&preproc_pli,
+			nullptr,
+			&preproc_pl
+		);
+
+                VkGraphicsPipelineCreateInfo graphics_pipeline_info {
+			.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+			.stageCount = 2,
+			.pStages = shader_stages,
+			.pVertexInputState = &vertexInputInfo,
+			.pInputAssemblyState = &inputAssembly,
+			.pViewportState = &viewportState,
+			.pRasterizationState = &rasterizer,
+			.pMultisampleState = &multisampling,
+			.pDepthStencilState = nullptr,
+			.pColorBlendState = &colorBlending,
+			.pDynamicState = nullptr,
+			.layout = preproc_pl,
+			.renderPass = render_pass,
+			.subpass = 0,
+			.basePipelineHandle = VK_NULL_HANDLE,
+		};
+
+		// Create graphics pipeline
+		VkPipeline graphics_pipeline;
+		res = vkCreateGraphicsPipelines(
+			context.vk_device(), VK_NULL_HANDLE,
+			1, &graphics_pipeline_info,
+			nullptr, &graphics_pipeline
+		);
+
+		if (res != VK_SUCCESS) {
+			Logger::error("[main] Failed to create graphics pipeline");
+			throw -1;
+		}
+
+		// Bind pipelines
 		vkCmdBindPipeline(
 			command_buffers[i],
 			VK_PIPELINE_BIND_POINT_COMPUTE,
 			pipeline
 		);
+		
+		vkCmdBindPipeline(
+			command_buffers[i],
+			VK_PIPELINE_BIND_POINT_GRAPHICS,
+			graphics_pipeline
+		);
 
-		// Bind buffer
+		// Bind buffers
 		vkCmdBindDescriptorSets(
 			command_buffers[i],
 			VK_PIPELINE_BIND_POINT_COMPUTE,
@@ -258,6 +352,16 @@ void MercuryApplication::maker(const Vulkan *vk, size_t i)
 			0, 1, &descriptor_set,
 			0, nullptr
 		);
+		
+		vkCmdBindDescriptorSets(
+			command_buffers[i],
+			VK_PIPELINE_BIND_POINT_GRAPHICS,
+			preproc_pl,
+			0, 1, &preproc_ds,
+			0, nullptr
+		);
+
+		vkCmdDraw(command_buffers[i], 6, 1, 0, 0);
 
 	// TODO: use the methods
 	vkCmdEndRenderPass(command_buffers[i]);
@@ -644,17 +748,26 @@ MercuryApplication::MercuryApplication(Vulkan *vk)
 	descriptor_pool = context.vk->make_descriptor_pool(context.device);
 
 	// Create descriptor set layout
-	descriptor_set_layout = context.vk->make_descriptor_set_layout(context.device, dsl_bindings);
+	descriptor_set_layout = context.vk->make_descriptor_set_layout(context.device, compute_dsl_bindings);
+	preproc_dsl = context.vk->make_descriptor_set_layout(context.device, preproc_dsl_bindings);
 
-	// Create descriptor set
+	// Create descriptor sets
 	descriptor_set = context.vk->make_descriptor_set(
 		context.device,
 		descriptor_pool,
 		descriptor_set_layout
 	);
 
+	preproc_ds = context.vk->make_descriptor_set(
+		context.device,
+		descriptor_pool,
+		preproc_dsl
+	);
+
 	// Load compute shader
-	compute_shader = context.vk->make_shader(context.device, "shaders/pixel.spv");
+	compute_shader = context.vk->make_shader(context.device, "shaders/bin/generic/pixel.spv");
+	pp_vert_shader = context.vk->make_shader(context.device, "shaders/bin/generic/pp_vert.spv");
+	pp_frag_shader = context.vk->make_shader(context.device, "shaders/bin/generic/pp_frag.spv");
 
 	// Create sync objects
 	// TODO: use max frames in flight
@@ -970,4 +1083,11 @@ void MercuryApplication::update_descriptor_set()
 	// Texture module
 	_bf_textures.update_descriptor_set(descriptor_set, 10);
 	_bf_texture_info.update_descriptor_set(descriptor_set, 11);
+
+	///////////////////////////
+	// Preprocessing shaders //
+	///////////////////////////
+
+	_bf_pixels.update_descriptor_set(preproc_ds, 0);
+	_bf_world.update_descriptor_set(preproc_ds, 1);
 }

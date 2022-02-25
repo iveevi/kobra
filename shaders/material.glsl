@@ -5,7 +5,9 @@ struct Material {
 
 	float specular;
 	float reflectance;
-	float refractance;
+	
+	// Index of refraction as a complex number
+	vec2 ior;
 };
 
 // Default "constructor"
@@ -13,6 +15,6 @@ Material mat_default()
 {
 	return Material(
 		vec3(0.5f, 0.5f, 0.5f), 0.0f,
-		0.0f, 0.0f, 0.0f
+		0.0f, 0.0f, vec2(0.0f, 0.0f)
 	);
 }

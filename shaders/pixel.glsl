@@ -77,7 +77,7 @@ Material material_for(uint mati)
 
 	return Material(
 		vec3(r1.x, r1.y, r1.z), r1.w,
-		r2.x, r2.y, r2.z
+		r2.x, r2.y, vec2(r2.z, r2.w)
 	);
 }
 
@@ -476,8 +476,8 @@ vec3 color_at(Ray ray)
 
 			// Refraction ray
 			vec3 refr_color = vec3(0.0);
-			if (hit.mat.refractance != 0.0) {
-				float eta = index_refraction / hit.mat.refractance;
+			if (hit.mat.ior.x != 0.0) {
+				float eta = index_refraction / hit.mat.ior.x;
 				vec3 refr_dir = refract(ray.direction, hit.normal, eta);
 				Ray refr_ray = Ray(hit.point - hit.normal * bias, refr_dir);
 
@@ -487,7 +487,7 @@ vec3 color_at(Ray ray)
 				return refr_color;
 
 				// Update refraction index
-				index_refraction = hit.mat.refractance;
+				index_refraction = hit.mat.ior.x;
 			}
 
 			// Calculate reflection

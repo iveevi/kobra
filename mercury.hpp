@@ -43,10 +43,19 @@ class MercuryApplication : public mercury::App {
 	std::vector <VkCommandBuffer>	command_buffers;
 
 	VkDescriptorPool		descriptor_pool;
+
+	// Compute shader
 	VkDescriptorSetLayout		descriptor_set_layout;
 	VkDescriptorSet			descriptor_set;
 
+	// Post processing shaders
+	VkDescriptorSetLayout		preproc_dsl;
+	VkDescriptorSet			preproc_ds;
+
+	// Shaders
 	VkShaderModule			compute_shader;
+	VkShaderModule			pp_vert_shader;
+	VkShaderModule			pp_frag_shader;
 
 	// Sync objects
 	std::vector <VkFence>		in_flight_fences;
@@ -109,7 +118,8 @@ public:
 	void update_descriptor_set();
 
 	// Desctiptor set layout bindings
-	static const std::vector <VkDescriptorSetLayoutBinding> dsl_bindings;
+	static const std::vector <VkDescriptorSetLayoutBinding> compute_dsl_bindings;
+	static const std::vector <VkDescriptorSetLayoutBinding> preproc_dsl_bindings;
 };
 
 // Profiler application

@@ -17,8 +17,9 @@ Material materials[] {
 	{
 		.albedo = glm::vec3 {1.0f, .7f, .7f},
 		.specular = 32.0f,
-		.reflectance = 0.3f,
-		.refractance = 0.0f	// TODO: refractance should be a complex number
+		.reflectance = 0.7f,
+		// .refractance = 0.27035f,
+		.extinction = 2.77f
 	},
 	{
 		.albedo = glm::vec3 {1.0f, 1.0f, 1.0f},
@@ -66,7 +67,8 @@ World world {
 		World::PrimitivePtr(new Sphere(1.0f, transforms[0],
 			{
 				.albedo = glm::vec3 {1.0f},
-				.reflectance = 1.0f
+				// .reflectance = 1.0f
+				.refractance = 1.5f
 			}
 		)),
 
@@ -146,10 +148,10 @@ int main()
 
 	mercury::Mesh <mercury::VERTEX_TYPE_POSITION> plane_mesh {
 		{
-			glm::vec3(-width/2, 0.3f, -length/2),
-			glm::vec3(width/2, 0.3f, -length/2),
-			glm::vec3(width/2, 0.3f, length/2),
-			glm::vec3(-width/2, 0.3f, length/2)
+			glm::vec3(-width/2, 0.27f, -length/2),
+			glm::vec3(width/2, 0.27f, -length/2),
+			glm::vec3(width/2, 0.27f, length/2),
+			glm::vec3(-width/2, 0.27f, length/2)
 		},
 		{
 			0, 1, 2,
@@ -157,7 +159,9 @@ int main()
 		},
 		{
 			.albedo = glm::vec3(1.0f, 1.0f, 0.7f),
-			.reflectance = 0.0f,
+			// .reflectance = 0.0f,
+			.refractance = 0.0f,
+			.extinction = 0.28176f
 		}
 	};
 
