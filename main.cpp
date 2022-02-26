@@ -8,6 +8,7 @@
 // Local headers
 #include "global.hpp"
 #include "mercury.hpp"
+#include "profiler.hpp"
 
 using namespace mercury;
 
@@ -120,6 +121,16 @@ int main()
 	// Redirect logger to file
 	// Logger::switch_file("mercury.log");
 
+	// Initialize Vulkan
+	Vulkan *vulkan = new Vulkan();
+
+#if 1
+
+	ProfilerApplication app {vulkan};
+	app.run();
+
+#else
+
 	mercury::Model <mercury::VERTEX_TYPE_POSITION> model("resources/benchmark/bunny_res_1.ply");
 	model[0].material = materials[1];
 	model[0].transform.scale = glm::vec3(10.0f);
@@ -199,4 +210,7 @@ int main()
 	app.run();
 
 	delete vulkan;
+
+#endif
+
 }

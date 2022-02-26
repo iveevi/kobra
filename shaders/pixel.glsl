@@ -135,14 +135,6 @@ struct Hit {
 // corresponds to a sky like gradient
 vec3 background(Ray ray)
 {
-	/* vec3 direction = normalize(ray.direction);
-	float t = 0.5 * (1.0 + direction.y);
-	return  mix(
-		vec3(1.0, 1.0, 1.0),
-		vec3(0.5, 0.7, 1.0),
-		t
-	); */
-
 	// Sample sky texture
 	vec3 dir = normalize(ray.direction);
 	return sample_texture(dir, 0).xyz;
@@ -273,6 +265,10 @@ Hit closest_object(Ray ray)
 		1.0/0.0, vec3(0.0),
 		mat_default()
 	);
+
+	// If the ray is null
+	if (ray.direction == vec3(0.0))
+		return Hit(min_index, 0.0, vec3(0.0), vec3(0.0), mat_default());
 
 #if 1
 
@@ -442,6 +438,58 @@ vec3 color_calc_flat(Hit hit)
 	return hit.mat.albedo * factor;
 }
 
+struct Branch {
+	Ray	refl;
+	float	erefl;
+	
+	Ray	refr;
+	float	erefr;
+
+	float	prefr;
+};
+
+Branch null_branch()
+{
+	return Branch(
+		Ray(vec3(0.0), vec3(0.0)),
+		0.0,
+		Ray(vec3(0.0), vec3(0.0)),
+		0.0,
+		0.0
+	);
+}
+
+Branch branch(Hit hit, Ray ray, float prefr)
+{
+	// If the ray is null
+	if (ray.direction == vec3(0.0))
+		return null_branch();
+	
+	// Intersection bias
+	float bias = 0.1;
+
+	// New origins
+	vec3 refl_origin = hit.point + hit.normal * bias;
+	vec3 refr_origin = hit.point - hit.normal * bias;
+
+	// New directions
+	float eta = prefr/hit.mat.ior.x;
+	vec3 refl_direction = reflect(ray.direction, hit.normal);
+	vec3 refr_direction = refract(ray.direction, hit.normal, hit.mat.ior.x);
+
+	// Return reflection structure
+	// TODO: fresnel calculation for energy
+	return Branch(
+		Ray(refl_origin, refl_direction),
+		hit.mat.ior.x,
+		Ray(refr_origin, refr_direction),
+		1 - hit.mat.ior.x,
+		hit.mat.ior.x
+	);
+}
+
+#include "transport.glsl"
+
 vec3 color_at(Ray ray)
 {
 	// Bias for intersection
@@ -455,7 +503,7 @@ vec3 color_at(Ray ray)
 			return color_calc_flat(hit);
 		}
 
-		// Calculate lighting normally
+		/* Calculate lighting normally
 		vec3 color = color_calc(hit, ray);
 
 		// Reflections
@@ -505,9 +553,55 @@ vec3 color_at(Ray ray)
 			// Decrement reflection count
 			max_refls--;
 		} while (max_refls > 0 && hit.object >= 0
-				&& hit.mat.reflectance > 0.0);
+				&& hit.mat.reflectance > 0.0); */
 		
-		return color;
+		// TODO: different method, check shading type at the start
+
+		// TODO: optimize
+
+		// Apply 1/2/3 bounces
+		Ray r1 = ray;
+		Branch b1 = null_branch(),
+			b2 = null_branch(),
+			b3 = null_branch();
+		
+		Hit h1 = hit;
+		b1 = branch(h1, r1, h1.mat.ior.x);
+		
+		Hit h2 = closest_object(b1.refl);
+		Hit h3 = closest_object(b1.refr);
+		
+		/* b2 = branch(h2, b1.refl, h2.mat.ior.x);
+		b3 = branch(h3, b1.refr, h3.mat.ior.x);
+
+		Hit h4 = closest_object(b2.refl);
+		Hit h5 = closest_object(b2.refr);
+		Hit h6 = closest_object(b3.refl);
+		Hit h7 = closest_object(b3.refr); */
+
+		// Get individual colors
+		vec3 c1 = diffuse(h1, r1);
+		vec3 c2 = diffuse(h2, b1.refl);
+		vec3 c3 = diffuse(h3, b1.refr);
+		
+		/* vec3 c4 = color_calc(h4, b2.refl);
+		vec3 c5 = color_calc(h5, b2.refr);
+		vec3 c6 = color_calc(h6, b3.refl);
+		vec3 c7 = color_calc(h7, b3.refr); */
+		
+		// Color mixing
+		/* vec3 m67 = mix(c6, c7, b3.prefr);
+		vec3 m3 = mix(c3, m67, b1.prefr);
+		
+		vec3 m45 = mix(c4, c5, b2.prefr);
+		vec3 m2 = mix(c2, m45, b1.prefr); */
+
+		/* vec3 m23 = mix(c2, c3, b1.prefr);
+		vec3 m1 = mix(c1, m23, b1.prefr);
+
+		return m1; */
+
+		return clamp(c1 + b1.erefl * c2 + b1.erefr * c3, 0, 1);
 	}
 
 	return hit.mat.albedo;

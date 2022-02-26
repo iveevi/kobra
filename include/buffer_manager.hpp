@@ -128,6 +128,7 @@ public:
 		push_index = 0;
 	}
 
+	// Push back overloads
 	void push_back(const T &data) {
 		// Don't bother resizing all the time
 		if (cpu_buffer.size() <= push_index)
@@ -151,6 +152,15 @@ public:
 		);
 
 		push_index += size;
+	}
+
+	void push_back(const std::vector <T> &data) {
+		push_back(data.data(), data.size());
+	}
+
+	template <size_t N>
+	void push_back(const std::array <T, N> &data) {
+		push_back(data.data(), data.size());
 	}
 
 	// Flush cpu buffer to gpu (must have write property)

@@ -91,7 +91,7 @@ void main()
 
 	// Calculate the blur
 	vec4 blur = vec4(0.0, 0.0, 0.0, 0.0);
-	vec4 m = 0.7 * vec4(1.0, 1.0, 1.0, 0.0);
+	vec4 m = 0.9 * vec4(1.0, 1.0, 1.0, 0.0);
 	for (uint i = 0; i < blur_samples; i++)
 	{
 		uint x = uint(gl_FragCoord.x) + uint(i % blur_width - blur_radius);

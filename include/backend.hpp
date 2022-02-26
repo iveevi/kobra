@@ -11,6 +11,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <vulkan/vulkan_core.h>
 
 // TODO: remove the glad diretcory/deps
 // GLFW and Vulkan
@@ -1319,5 +1320,11 @@ public:
 	static const std::vector <const char *> device_extensions;
 	static const std::vector <const char *> validation_layers;
 };
+
+// Extra aliases
+using DSLBinding = VkDescriptorSetLayoutBinding;
+
+using VertexBinding = VkVertexInputBindingDescription;
+using VertexAttribute = VkVertexInputAttributeDescription;
 
 #endif

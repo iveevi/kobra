@@ -122,10 +122,4 @@ public:
 	static const std::vector <VkDescriptorSetLayoutBinding> preproc_dsl_bindings;
 };
 
-// Profiler application
-class ProfilerApplication : public mercury::App {
-
-};
-
-
 #endif

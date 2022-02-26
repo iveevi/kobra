@@ -27,6 +27,9 @@
 #include "include/types.hpp"
 #include "include/world.hpp"
 
+#include "include/gui/gui.hpp"
+#include "include/gui/rect.hpp"
+
 // Global world data
 extern mercury::World world;
 

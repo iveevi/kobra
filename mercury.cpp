@@ -849,7 +849,8 @@ void MercuryApplication::update_world() {
 }
 
 // Present the frame
-void MercuryApplication::present() {
+void MercuryApplication::present()
+{
 	// Wait for the next image in the swap chain
 	vkWaitForFences(
 		context.vk_device(), 1,
@@ -922,72 +923,83 @@ void MercuryApplication::present() {
 		.pSignalSemaphores = signal_semaphores
 	};
 
-	// Submit the command buffer
-	vkResetFences(context.device.device, 1, &in_flight_fences[frame_index]);
+	profiler.frame("Submit RT command buffer");
+	{
+		// Submit the command buffer
+		vkResetFences(context.device.device, 1, &in_flight_fences[frame_index]);
 
-	profiler.frame("Queue submit");
-	result = vkQueueSubmit(
-		context.device.graphics_queue, 1, &submit_info,
-		in_flight_fences[frame_index]
-	);
+		result = vkQueueSubmit(
+			context.device.graphics_queue, 1, &submit_info,
+			in_flight_fences[frame_index]
+		);
+
+		if (result != VK_SUCCESS) {
+			Logger::error("[main] Failed to submit draw command buffer!");
+			throw (-1);
+		}
+	}
 	profiler.end();
 
-	if (result != VK_SUCCESS) {
-		Logger::error("[main] Failed to submit draw command buffer!");
-		throw (-1);
+	profiler.frame("ImGui command buffer");
+	{
+		// Wait for the first command buffer to finish
+		// TODO: use wait semaphores
+		vkQueueWaitIdle(context.device.graphics_queue);
+
+		// Submit ImGui command buffer
+		submit_info.waitSemaphoreCount = 0;
+		submit_info.pSignalSemaphores = &imgui_ctx.semaphore;
+		submit_info.pCommandBuffers = &imgui_ctx.command_buffer;
+
+		// Submit the command buffer
+		// TODO: Vulkan method
+		vkResetFences(context.vk_device(), 1, &imgui_ctx.fence);
+		result = vkQueueSubmit(
+			context.device.graphics_queue, 1, &submit_info,
+			imgui_ctx.fence
+		);
+
+		if (result != VK_SUCCESS) {
+			Logger::error("[main] Failed to submit draw ImGui command buffer!");
+			throw (-1);
+		}
 	}
-
-	// Wait for the first command buffer to finish
-	// TODO: use wait semaphores
-	vkQueueWaitIdle(context.device.graphics_queue);
-
-	// Submit ImGui command buffer
-	submit_info.waitSemaphoreCount = 0;
-	submit_info.pSignalSemaphores = &imgui_ctx.semaphore;
-	submit_info.pCommandBuffers = &imgui_ctx.command_buffer;
-
-	// Submit the command buffer
-	// TODO: Vulkan method
-	vkResetFences(context.vk_device(), 1, &imgui_ctx.fence);
-	result = vkQueueSubmit(
-		context.device.graphics_queue, 1, &submit_info,
-		imgui_ctx.fence
-	);
-
-	if (result != VK_SUCCESS) {
-		Logger::error("[main] Failed to submit draw ImGui command buffer!");
-		throw (-1);
-	}
-	
-	// Present the image to the swap chain
-	VkSwapchainKHR swchs[] = {swapchain.swch};
-	
-	VkPresentInfoKHR present_info {
-		.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-		.waitSemaphoreCount = 2,
-		.pWaitSemaphores = signal_semaphores,
-		.swapchainCount = 1,
-		.pSwapchains = swchs,
-		.pImageIndices = &image_index,
-		.pResults = nullptr
-	};
+	profiler.end();
 
 	profiler.frame("vkQueuePresentKHR");
-	result = vkQueuePresentKHR(context.device.present_queue, &present_info);
-	profiler.end();
+	{
+		// Present the image to the swap chain
+		VkSwapchainKHR swchs[] = {swapchain.swch};
+		
+		VkPresentInfoKHR present_info {
+			.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+			.waitSemaphoreCount = 2,
+			.pWaitSemaphores = signal_semaphores,
+			.swapchainCount = 1,
+			.pSwapchains = swchs,
+			.pImageIndices = &image_index,
+			.pResults = nullptr
+		};
+		
+		result = vkQueuePresentKHR(
+			context.device.present_queue,
+			&present_info
+		);
 	
-	/* if (result == VK_ERROR_OUT_OF_DATE_KHR
-			|| result == VK_SUBOPTIMAL_KHR
-			|| framebuffer_resized) {
-		framebuffer_resized = false;
-		_remk_swapchain();
-	} else*/
-	
-	// TODO: check resizing (in app)
-	if (result != VK_SUCCESS) {
-		Logger::error("[Vulkan] Failed to present swap chain image!");
-		throw (-1);
+		/* if (result == VK_ERROR_OUT_OF_DATE_KHR
+				|| result == VK_SUBOPTIMAL_KHR
+				|| framebuffer_resized) {
+			framebuffer_resized = false;
+			_remk_swapchain();
+		} else*/
+		
+		// TODO: check resizing (in app)
+		if (result != VK_SUCCESS) {
+			Logger::error("[Vulkan] Failed to present swap chain image!");
+			throw (-1);
+		}
 	}
+	profiler.end();
 }
 
 void MercuryApplication::frame()
