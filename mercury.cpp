@@ -748,6 +748,7 @@ MercuryApplication::MercuryApplication(Vulkan *vk)
 	descriptor_pool = context.vk->make_descriptor_pool(context.device);
 
 	// Create descriptor set layout
+	// TODO: context method
 	descriptor_set_layout = context.vk->make_descriptor_set_layout(context.device, compute_dsl_bindings);
 	preproc_dsl = context.vk->make_descriptor_set_layout(context.device, preproc_dsl_bindings);
 
@@ -1083,23 +1084,23 @@ void MercuryApplication::update_descriptor_set()
 	);
 
 	// Make indiviual descriptor set udpates
-	_bf_pixels.update_descriptor_set(descriptor_set, 0);
-	_bf_world.update_descriptor_set(descriptor_set, 1);
-	_bf_objects.update_descriptor_set(descriptor_set, 2);
-	_bf_lights.update_descriptor_set(descriptor_set, 3);
-	_bf_materials.update_descriptor_set(descriptor_set, 4);
-	_bf_debug.update_descriptor_set(descriptor_set, 7);
-	_bf_vertices.update_descriptor_set(descriptor_set, 8);
-	_bf_transforms.update_descriptor_set(descriptor_set, 9);
+	_bf_pixels.bind(descriptor_set, 0);
+	_bf_world.bind(descriptor_set, 1);
+	_bf_objects.bind(descriptor_set, 2);
+	_bf_lights.bind(descriptor_set, 3);
+	_bf_materials.bind(descriptor_set, 4);
+	_bf_debug.bind(descriptor_set, 7);
+	_bf_vertices.bind(descriptor_set, 8);
+	_bf_transforms.bind(descriptor_set, 9);
 
 	// Texture module
-	_bf_textures.update_descriptor_set(descriptor_set, 10);
-	_bf_texture_info.update_descriptor_set(descriptor_set, 11);
+	_bf_textures.bind(descriptor_set, 10);
+	_bf_texture_info.bind(descriptor_set, 11);
 
 	///////////////////////////
 	// Preprocessing shaders //
 	///////////////////////////
 
-	_bf_pixels.update_descriptor_set(preproc_ds, 0);
-	_bf_world.update_descriptor_set(preproc_ds, 1);
+	_bf_pixels.bind(preproc_ds, 0);
+	_bf_world.bind(preproc_ds, 1);
 }

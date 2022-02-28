@@ -19,6 +19,7 @@ class Rect : public Object {
 	// Store normalized coordinates
 	//	(0, 0) is the top-left corner
 	//	(1, 1) is the bottom-right corner
+	// TODO: store as vec4 instead
 	glm::vec2 min;
 	glm::vec2 max;
 	glm::vec3 color;

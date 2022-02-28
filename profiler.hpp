@@ -4,6 +4,7 @@
 #include "global.hpp"
 #include "include/backend.hpp"
 #include "include/buffer_manager.hpp"
+#include "include/gui/font.hpp"
 #include "include/gui/gui.hpp"
 #include <vulkan/vulkan_core.h>
 
@@ -22,6 +23,10 @@ class ProfilerApplication : public mercury::App {
 	VkShaderModule			basic_vert;
 	VkShaderModule			basic_frag;
 
+	// Descriptor sets
+	VkDescriptorSetLayout		glyphs_dsl;
+	VkDescriptorSet			glyphs_ds;
+
 	// Sync objects
 	std::vector <VkFence>		in_flight_fences;
 	std::vector <VkFence>		images_in_flight;
@@ -33,28 +38,41 @@ class ProfilerApplication : public mercury::App {
 	gui::VertexBuffer		vb;
 	gui::IndexBuffer		ib;
 
-	VkPipeline graphics_pipeline;
-	void make_pipeline() {
+	// Buffers for glyphs
+	gui::VertexBuffer		glyph_vb;
+	gui::IndexBuffer		glyph_ib;
+
+	VkPipeline			graphics_pipeline;
+	VkPipeline			glyphs_pipeline;
+
+	VkPipelineLayout		graphics_pl;
+	VkPipelineLayout		glyphs_pl;
+
+	// Font
+	gui::Font			font;
+
+	std::pair <VkPipeline, VkPipelineLayout> make_pipeline(VkShaderModule vert, VkShaderModule frag,
+			const std::vector <VkDescriptorSetLayout> &sets) {
 		// Create pipeline stages
 		VkPipelineShaderStageCreateInfo vertex {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 			.stage = VK_SHADER_STAGE_VERTEX_BIT,
-			.module = basic_vert,
+			.module = vert,
 			.pName = "main"
 		};
 
 		VkPipelineShaderStageCreateInfo fragment {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 			.stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-			.module = basic_frag,
+			.module = frag,
 			.pName = "main"
 		};
 
 		VkPipelineShaderStageCreateInfo shader_stages[] = { vertex, fragment };
 
 		// Vertex input
-		auto binding_description = gui::Object::vertex_binding();
-		auto attribute_descriptions = gui::Object::vertex_attributes();
+		auto binding_description = gui::Vertex::vertex_binding();
+		auto attribute_descriptions = gui::Vertex::vertex_attributes();
 
 		VkPipelineVertexInputStateCreateInfo vertex_input {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
@@ -141,7 +159,8 @@ class ProfilerApplication : public mercury::App {
 		// Pipeline layout
 		VkPipelineLayoutCreateInfo pipeline_layout_info {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-			.setLayoutCount = 0,
+			.setLayoutCount = static_cast <uint32_t> (sets.size()),
+			.pSetLayouts = sets.data(),
 			.pushConstantRangeCount = 0
 		};
 
@@ -177,20 +196,22 @@ class ProfilerApplication : public mercury::App {
 			.basePipelineIndex = -1
 		};
 
+		VkPipeline pipeline;
 		result = vkCreateGraphicsPipelines(
 			context.vk_device(),
 			VK_NULL_HANDLE,
 			1,
 			&pipeline_info,
 			nullptr,
-			&graphics_pipeline
+			&pipeline
 		);
 
 		if (result != VK_SUCCESS) {
 			throw std::runtime_error("failed to create graphics pipeline!");
 		}
 
-		Logger::ok("[profiler] Graphics pipeline created");
+		Logger::ok("[profiler] Pipeline created");
+		return {pipeline, pipeline_layout};
 	}
 public:
 	ProfilerApplication(Vulkan *vk) : App({
@@ -235,8 +256,22 @@ public:
 		basic_vert = context.vk->make_shader(context.device, "shaders/bin/gui/basic_vert.spv");
 		basic_frag = context.vk->make_shader(context.device, "shaders/bin/gui/basic_frag.spv");
 
-		// Create pipeline
-		make_pipeline();
+		VkShaderModule glyph_vert = context.vk->make_shader(context.device, "shaders/bin/gui/glyph_vert.spv");
+		VkShaderModule glyph_frag = context.vk->make_shader(context.device, "shaders/bin/gui/glyph_frag.spv");
+
+		// Create descriptor set
+		glyphs_dsl = gui::Glyph::make_glyph_dsl(context);
+		glyphs_ds = gui::Glyph::make_glyph_ds(context, descriptor_pool);
+
+		// Create pipelines
+		auto grp = make_pipeline(basic_vert, basic_frag, {});
+		auto glp = make_pipeline(glyph_vert, glyph_frag, {glyphs_dsl});
+
+		graphics_pipeline = grp.first;
+		graphics_pl = grp.second;
+
+		glyphs_pipeline = glp.first;
+		glyphs_pl = glp.second;
 
 		// Allocate the vertex buffer
 		BFM_Settings vb_settings {
@@ -254,11 +289,14 @@ public:
 		vb = gui::VertexBuffer(context, vb_settings);
 		ib = gui::IndexBuffer(context, ib_settings);
 
+		glyph_vb = gui::VertexBuffer(context, gui::Glyph::vb_settings);
+		glyph_ib = gui::IndexBuffer(context, gui::Glyph::ib_settings);
+
 		// Create command buffers
 		// update_command_buffers();
 
 		// Load font
-		// gui::Font font = gui::Font("resources/courier_new.ttf");
+		font = gui::Font(context, "resources/courier_new.ttf");
 
 		// TODO: context method
 		context.vk->make_command_buffers(
@@ -291,18 +329,34 @@ public:
 
 		vkCmdBeginRenderPass(cbuf, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
 
-		// Bind pipeline
+		// Bind basic pipeline
 		vkCmdBindPipeline(cbuf, VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline);
 		
+		// Draw
 		VkBuffer vertex_buffers[] = {vb.vk_buffer()};
 		VkDeviceSize offsets[] = {0};
-
 		vkCmdBindVertexBuffers(cbuf, 0, 1, vertex_buffers, offsets);
-
 		vkCmdBindIndexBuffer(cbuf, ib.vk_buffer(), 0, VK_INDEX_TYPE_UINT32);
-
-		// Draw
 		vkCmdDrawIndexed(cbuf, ib.size(), 1, 0, 0, 0);
+		
+		// Bind glyphs pipeline
+		vkCmdBindPipeline(cbuf, VK_PIPELINE_BIND_POINT_GRAPHICS, glyphs_pipeline);
+
+		// Bind descriptor set
+		vkCmdBindDescriptorSets(
+			cbuf, VK_PIPELINE_BIND_POINT_GRAPHICS,
+			glyphs_pl, 0, 1, &glyphs_ds, 0, nullptr
+		);
+
+		// Bind glyph
+		gui::GlyphOutline go = font['c'];
+		go.bind(glyphs_ds, 0);
+		
+		VkBuffer glyph_vbs[] = {glyph_vb.vk_buffer()};
+		VkDeviceSize glyph_offsets[] = {0};
+		vkCmdBindVertexBuffers(cbuf, 0, 1, glyph_vbs, glyph_offsets);
+		vkCmdBindIndexBuffer(cbuf, glyph_ib.vk_buffer(), 0, VK_INDEX_TYPE_UINT32);
+		vkCmdDrawIndexed(cbuf, glyph_ib.size(), 1, 0, 0, 0);
 
 		// End render pass
 		vkCmdEndRenderPass(cbuf);
@@ -440,6 +494,18 @@ public:
 
 		vb.upload();
 		ib.upload();
+
+		// Glyphs
+		glyph_vb.reset_push_back();
+		glyph_ib.reset_push_back();
+
+		gui::Glyph({-1.0, -1.0, -0.2, -0.5}).upload(glyph_vb, glyph_ib);
+
+		glyph_vb.sync_size();
+		glyph_ib.sync_size();
+
+		glyph_vb.upload();
+		glyph_ib.upload();
 	}
 
 	void frame() override {

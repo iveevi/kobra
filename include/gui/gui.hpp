@@ -20,14 +20,7 @@ namespace gui {
 struct Vertex {
 	glm::vec2 pos;
 	glm::vec3 color;
-};
-
-// Aliases
-using VertexBuffer = BufferManager <Vertex>;
-using IndexBuffer = BufferManager <uint32_t>;
-
-// Abstract object template
-struct Object {
+	
 	// Get vertex binding description
 	static VertexBinding vertex_binding() {
 		return VertexBinding {
@@ -56,6 +49,13 @@ struct Object {
 		};
 	}
 };
+
+// Aliases
+using VertexBuffer = BufferManager <Vertex>;
+using IndexBuffer = BufferManager <uint32_t>;
+
+// Abstract object template
+struct Object {};
 
 // Aliases
 using ObjectPtr = std::shared_ptr <Object>;

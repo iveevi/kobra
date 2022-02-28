@@ -101,6 +101,11 @@ public:
 		return gpu_buffer.buffer;
 	}
 
+	// Get underlying vector
+	const std::vector <T> &vector() const {
+		return cpu_buffer;
+	}
+
 	// Write to buffer (must have write property)
 	size_t write(const T *data, size_t size, size_t offset = 0) {
 		if (settings.usage_type == BFM_WRITE_ONLY) {
@@ -223,7 +228,7 @@ public:
 	} */
 
 	// Update descriptor set
-	void update_descriptor_set(VkDescriptorSet descriptor_set, uint32_t binding) const {
+	void bind(VkDescriptorSet descriptor_set, uint32_t binding) const {
 		VkDescriptorBufferInfo buffer_info {
 			.buffer = gpu_buffer.buffer,
 			.offset = 0,
