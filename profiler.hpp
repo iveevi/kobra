@@ -22,9 +22,6 @@ class ProfilerApplication : public mercury::App {
 	VkShaderModule			basic_vert;
 	VkShaderModule			basic_frag;
 
-	VkDescriptorSetLayout		descriptor_set_layout;
-	VkDescriptorSet			descriptor_set;
-
 	// Sync objects
 	std::vector <VkFence>		in_flight_fences;
 	std::vector <VkFence>		images_in_flight;
@@ -105,18 +102,18 @@ class ProfilerApplication : public mercury::App {
 			.depthClampEnable = VK_FALSE,
 			.rasterizerDiscardEnable = VK_FALSE,
 			.polygonMode = VK_POLYGON_MODE_FILL,
-			.lineWidth = 1.0f,
 			.cullMode = VK_CULL_MODE_BACK_BIT,
 			.frontFace = VK_FRONT_FACE_CLOCKWISE,
-			.depthBiasEnable = VK_FALSE
+			.depthBiasEnable = VK_FALSE,
+			.lineWidth = 1.0f
 		};
 
 		// Multisampling
 		// TODO: method
 		VkPipelineMultisampleStateCreateInfo multisampling {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-			.sampleShadingEnable = VK_FALSE,
 			.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+			.sampleShadingEnable = VK_FALSE,
 			.minSampleShading = 1.0f,
 			.pSampleMask = nullptr,
 			.alphaToCoverageEnable = VK_FALSE,
@@ -125,8 +122,11 @@ class ProfilerApplication : public mercury::App {
 
 		// Color blending
 		VkPipelineColorBlendAttachmentState color_blend_attachment {
-			.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
-			.blendEnable = VK_FALSE
+			.blendEnable = VK_FALSE,
+			.colorWriteMask = VK_COLOR_COMPONENT_R_BIT
+				| VK_COLOR_COMPONENT_G_BIT
+				| VK_COLOR_COMPONENT_B_BIT
+				| VK_COLOR_COMPONENT_A_BIT
 		};
 
 		VkPipelineColorBlendStateCreateInfo color_blending {
@@ -192,69 +192,6 @@ class ProfilerApplication : public mercury::App {
 
 		Logger::ok("[profiler] Graphics pipeline created");
 	}
-
-	// Program the command buffer
-	void maker(size_t i) {
-		// Clear color
-		VkClearValue clear_color = { 0.0f, 0.0f, 0.0f, 1.0f };
-
-		// Render pass creation info
-		VkRenderPassBeginInfo render_pass_info {
-			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-			.renderPass = render_pass,
-			.framebuffer = swapchain.framebuffers[i],
-			.renderArea = {
-				.offset = {0, 0},
-				.extent = swapchain.extent
-			},
-			.clearValueCount = 1,
-			.pClearValues = &clear_color
-		};
-
-		// TODO: use method to being and end render pass
-		vkCmdBeginRenderPass(
-			command_buffers[i],
-			&render_pass_info,
-			VK_SUBPASS_CONTENTS_INLINE
-		);
-
-		// Bind pipeline
-		vkCmdBindPipeline(
-			command_buffers[i],
-			VK_PIPELINE_BIND_POINT_GRAPHICS,
-			graphics_pipeline
-		);
-
-		// Bind vertex buffer
-		VkBuffer vertex_buffers[] = {vb.vk_buffer()};
-		VkDeviceSize offsets[] = {0};
-
-		vkCmdBindVertexBuffers(
-			command_buffers[i],
-			0,
-			1,
-			vertex_buffers,
-			offsets
-		);
-
-		// Bind index buffer
-		vkCmdBindIndexBuffer(
-			command_buffers[i],
-			ib.vk_buffer(),
-			0,
-			VK_INDEX_TYPE_UINT32
-		);
-
-		// Draw
-		vkCmdDrawIndexed(
-			command_buffers[i],
-			ib.size(),
-			1, 0, 0, 0
-		);
-
-		// TODO: use the methods
-		vkCmdEndRenderPass(command_buffers[i]);
-	}
 public:
 	ProfilerApplication(Vulkan *vk) : App({
 		.ctx = vk,
@@ -274,25 +211,16 @@ public:
 		context.vk->make_framebuffers(context.device, swapchain, render_pass);
 
 		// Create command pool
+		// TODO: context method
 		command_pool = context.vk->make_command_pool(
 			context.phdev,
 			surface,
 			context.device,
-			VK_COMMAND_POOL_CREATE_TRANSIENT_BIT
+			VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
 		);
 
 		// Create descriptor pool
 		descriptor_pool = context.vk->make_descriptor_pool(context.device);
-
-		// Create descriptor set layout
-		descriptor_set_layout = context.vk->make_descriptor_set_layout(context.device, dsl_bindings);
-
-		// Create descriptor sets
-		descriptor_set = context.vk->make_descriptor_set(
-			context.device,
-			descriptor_pool,
-			descriptor_set_layout
-		); 
 
 		// Create sync objects
 		// TODO: use max frames in flight
@@ -316,12 +244,71 @@ public:
 			.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
 			.usage_type = BFM_WRITE_ONLY
 		};
+		
+		BFM_Settings ib_settings {
+			.size = 1024,
+			.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+			.usage_type = BFM_WRITE_ONLY
+		};
 
 		vb = gui::VertexBuffer(context, vb_settings);
-		ib = gui::IndexBuffer(context, vb_settings);
+		ib = gui::IndexBuffer(context, ib_settings);
 
 		// Create command buffers
-		update_command_buffers();
+		// update_command_buffers();
+
+		// Load font
+		// gui::Font font = gui::Font("resources/courier_new.ttf");
+
+		// TODO: context method
+		context.vk->make_command_buffers(
+			context.device,
+			command_pool,
+			command_buffers,
+			swapchain.images.size()
+		);
+	}
+
+	// Record command buffers
+	void record(VkCommandBuffer cbuf, VkFramebuffer fbuf) {
+		// Begin recording
+		Vulkan::begin(cbuf);
+
+		// Begin render pass
+		// TODO: vulkan static method
+		VkClearValue clear_color = { 0.0f, 0.0f, 0.0f, 1.0f };
+		VkRenderPassBeginInfo render_pass_info {
+			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+			.renderPass = render_pass,
+			.framebuffer = fbuf,
+			.renderArea = {
+				.offset = {0, 0},
+				.extent = swapchain.extent
+			},
+			.clearValueCount = 1,
+			.pClearValues = &clear_color
+		};
+
+		vkCmdBeginRenderPass(cbuf, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
+
+		// Bind pipeline
+		vkCmdBindPipeline(cbuf, VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline);
+		
+		VkBuffer vertex_buffers[] = {vb.vk_buffer()};
+		VkDeviceSize offsets[] = {0};
+
+		vkCmdBindVertexBuffers(cbuf, 0, 1, vertex_buffers, offsets);
+
+		vkCmdBindIndexBuffer(cbuf, ib.vk_buffer(), 0, VK_INDEX_TYPE_UINT32);
+
+		// Draw
+		vkCmdDrawIndexed(cbuf, ib.size(), 1, 0, 0, 0);
+
+		// End render pass
+		vkCmdEndRenderPass(cbuf);
+
+		// End the command buffer
+		Vulkan::end(cbuf);
 	}
 
 	// Present frame
@@ -376,6 +363,9 @@ public:
 		VkSemaphore signal_semaphores[] = {
 			smph_render_finished[frame_index],
 		};
+
+		// Record commands
+		record(command_buffers[image_index], swapchain.framebuffers[image_index]);
 
 		// Create information
 		// TODO: method
@@ -459,33 +449,6 @@ public:
 		// Present the frame
 		present();
 	}
-
-	// Update command buffers
-	void update_command_buffers() {
-		auto ftn = [this](const Vulkan *ctx, size_t i) {
-			maker(i);
-		};
-
-		// TODO: static methods
-		context.vk->set_command_buffers(
-			context.device,
-			swapchain, command_pool,
-			command_buffers,
-			ftn
-		);
-	}
-
-	// Static variables
-	static const std::vector <DSLBinding> dsl_bindings;
-};
-
-const std::vector <DSLBinding> ProfilerApplication::dsl_bindings {
-	/* DSLBinding {
-		.binding = 0,
-		.descriptor_type = VK_DESCRIPTOR_TYPE_VERTEX_BUFFER,
-		.descriptor_count = 1,
-		.stage_flags = VK_SHADER_STAGE_VERTEX_BIT
-	} */
 };
 
 #endif

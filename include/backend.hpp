@@ -889,6 +889,9 @@ public:
 
 	// Creating multiple command buffers
 	void make_command_buffers(const Device &device, VkCommandPool command_pool, std::vector <VkCommandBuffer> &buffers, size_t size) const {
+		// First resize
+		buffers.resize(size);
+
 		// Fill command buffer info
 		VkCommandBufferAllocateInfo alloc_info {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -1315,6 +1318,20 @@ public:
 
 	// Other methods
 	void idle(const Device &) const;
+
+	// Static methods
+	static void begin(const VkCommandBuffer cbuf) {
+		VkCommandBufferBeginInfo begin_info {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+			.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT
+		};
+
+		vkBeginCommandBuffer(cbuf, &begin_info);
+	}
+
+	static void end(const VkCommandBuffer cbuf) {
+		vkEndCommandBuffer(cbuf);
+	}
 
 	// Static member variables
 	static const std::vector <const char *> device_extensions;

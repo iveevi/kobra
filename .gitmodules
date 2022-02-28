@@ -10,3 +10,6 @@
 [submodule "thirdparty/Vulkan-ValidationLayers"]
 	path = thirdparty/Vulkan-ValidationLayers
 	url = https://github.com/KhronosGroup/Vulkan-ValidationLayers
+[submodule "thirdparty/freetype"]
+	path = thirdparty/freetype
+	url = https://github.com/freetype/freetype

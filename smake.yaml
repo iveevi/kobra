@@ -21,6 +21,7 @@ builds:
   - mercury_release:
     - sources: mercury_source, imgui_source
     - idirs: 'thirdparty,
+      thirdparty/freetype/include,
       thirdparty/glm,
       thirdparty/imgui,
       thirdparty/assimp/include'
@@ -31,7 +32,8 @@ builds:
       pthread,
       avcodec,
       avformat,
-      avutil'
+      avutil,
+      freetype'
   - mercury_debug:
     - sources: 'mercury_source,
       thirdparty/imgui/imgui.cpp,
@@ -42,8 +44,10 @@ builds:
       thirdparty/imgui/backends/imgui_impl_glfw.cpp,
       thirdparty/imgui/backends/imgui_impl_vulkan.cpp'
     - idirs: 'thirdparty,
+      thirdparty/freetype/include,
       thirdparty/glm,
-      thirdparty/imgui'
+      thirdparty/imgui,
+      thirdparty/assimp/include'
     - libraries: 'glfw,
       vulkan,
       assimp,

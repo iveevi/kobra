@@ -3,7 +3,7 @@
 
 #define MERCURY_VALIDATION_LAYERS
 #define MERCURY_VALIDATION_ERROR_ONLY
-// #define MERCURY_THROW_ERROR
+#define MERCURY_THROW_ERROR
 
 // Standard headers
 #include <memory>
@@ -29,6 +29,7 @@
 
 #include "include/gui/gui.hpp"
 #include "include/gui/rect.hpp"
+#include "include/gui/font.hpp"
 
 // Global world data
 extern mercury::World world;
