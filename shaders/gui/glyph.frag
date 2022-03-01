@@ -1,7 +1,8 @@
 #version 450
 
 // Glyph outlines
-layout (binding = 0) buffer GlyphOutlines {
+layout (binding = 0) buffer GlyphOutlines
+{
 	vec2 points[];
 } outlines;
 
@@ -27,22 +28,62 @@ float d2line(vec2 a, vec2 b, vec2 p)
 	return dot(p - a, normalize(norm));
 }
 
-float d2bezier(vec2 p0, vec2 p1, vec2 p2, vec2 p)
+float d2bezier(vec2 p0, vec2 p1, vec2 p2, vec2 p, float t)
 {
-	float t = time(p0, p2, p);
 	vec2 q0 = mix(p0, p1, t);
 	vec2 q1 = mix(p1, p2, t);
 	return d2line(q0, q1, p);
 }
 
+#define BIAS 0.001
+
 // Main function
 void main()
 {
-	vec2 p0 = vec2(-0.808, 0.33);
-	vec2 p1 = vec2(-0.807, 0.744);
-	vec2 p2 = vec2(-0.083, 0.82);
+	// Get number of points
+	int n = int(outlines.points[0].x);
 
-	float v = d2bezier(p0, p1, p2, fpos);
-	float alpha = clamp(v + 0.5, 0.0, 1.0);
-	color = vec4(fcolor, alpha);
+	/* Min distance to bezier
+	float v = 1.0/0.0;
+	float min_udist = 1.0/0.0;
+
+	// Loop through all quadratic bezier curves
+	for (int i = 0; i < n - 1; i++) {
+		// Get points
+		vec2 p0 = outlines.points[i + 1];
+		vec2 p1 = outlines.points[i + 2];
+		vec2 p2 = outlines.points[i + 3];
+
+		// Time of closest point on bezier
+		float t = time(p0, p1, fpos);
+		float udist = distance(mix(p0, p1, t), fpos);
+
+		if (udist <= min_udist + BIAS) {
+			float bez = d2bezier(p0, p1, p2, fpos, t);
+
+			if (udist >= min_udist - BIAS) {
+				vec2 prevp = outlines.points[i - 1];
+				float prevd = d2line(p0, p2, prevp);
+				v = mix(min(v, bez), max(v, bez), step(prevd, 0.0));
+			} else {
+				v = bez;
+			}
+
+			min_udist = min(min_udist, udist);
+		}
+	} */
+
+	// float alpha = clamp(v + 0.5, 0.0, 1.0);
+	// color = vec4(fcolor, alpha);
+	color = vec4(fpos.x, 0.0, fpos.y, 1.0);
+	
+	/* Basic bezier curve
+	vec2 p0 = vec2(0.0, 0.0);
+	vec2 p1 = vec2(1.0, 0.0);
+	vec2 p2 = vec2(1.0, 1.0);
+
+	float t = time(p0, p1, fpos);
+	float dist = d2bezier(p0, p1, p2, fpos, t);
+	
+	color = abs(dist) * vec4(0.0, 1.0, 0.0, 1.0); */
 }

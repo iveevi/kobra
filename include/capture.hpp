@@ -77,7 +77,7 @@ public:
 	// Constructor
 	Capture() {
 		// Find codec
-		codec = avcodec_find_encoder(AV_CODEC_ID_PNG);
+		codec = const_cast <AVCodec *> (avcodec_find_encoder(AV_CODEC_ID_PNG));
 		if (!codec) {
 			Logger::error("[Capture] Failed to find codec");
 			return;
@@ -179,7 +179,8 @@ public:
 		av_init_packet(&pkt);
 		pkt.data = buffer;
 		pkt.size = buffer_size;
-		avcodec_encode_video2(codec_ctx, &pkt, frame, &got_packet);
+		// TODO: fix
+		// avcodec_encode_video2(codec_ctx, &pkt, frame, &got_packet);
 
 		// Write to file
 		file.write((char *) buffer, pkt.size);

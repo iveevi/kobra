@@ -4,8 +4,8 @@
 #include "global.hpp"
 #include "include/backend.hpp"
 #include "include/buffer_manager.hpp"
-#include "include/gui/font.hpp"
 #include "include/gui/gui.hpp"
+#include "include/gui/font.hpp"
 #include <vulkan/vulkan_core.h>
 
 using namespace mercury;
@@ -298,6 +298,10 @@ public:
 		// Load font
 		font = gui::Font(context, "resources/courier_new.ttf");
 
+		// Bind glyph
+		gui::GlyphOutline go = font['c'];
+		go.bind(glyphs_ds, 0);
+
 		// TODO: context method
 		context.vk->make_command_buffers(
 			context.device,
@@ -347,10 +351,6 @@ public:
 			cbuf, VK_PIPELINE_BIND_POINT_GRAPHICS,
 			glyphs_pl, 0, 1, &glyphs_ds, 0, nullptr
 		);
-
-		// Bind glyph
-		gui::GlyphOutline go = font['c'];
-		go.bind(glyphs_ds, 0);
 		
 		VkBuffer glyph_vbs[] = {glyph_vb.vk_buffer()};
 		VkDeviceSize glyph_offsets[] = {0};

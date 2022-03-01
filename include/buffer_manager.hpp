@@ -168,6 +168,13 @@ public:
 		push_back(data.data(), data.size());
 	}
 
+	// Push front
+	void push_front(const T &data) {
+		// Don't bother resizing all the time
+		cpu_buffer.insert(cpu_buffer.begin(), data);
+		push_index++;
+	}
+
 	// Flush cpu buffer to gpu (must have write property)
 	void upload() {
 		if (settings.usage_type == BFM_WRITE_ONLY) {

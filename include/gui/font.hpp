@@ -67,6 +67,13 @@ struct GlyphOutline {
 
 	// Sync and upload data to GPU
 	void upload() {
+		// Insert size vector
+		size_t size = outline.push_size();
+		outline.push_front(glm::vec2 {
+			static_cast <float> (size),
+			0.0f
+		});
+
 		outline.sync_size();
 		outline.upload();
 	}
@@ -256,7 +263,9 @@ class Font {
 			Logger::warn() << "\tWidth: " << width << std::endl;
 			Logger::warn() << "\tHeight: " << height << std::endl;
 
+			// Get number of curves
 			FT_Outline_Decompose(&face->glyph->outline, &funcs, &outline);
+			outline.upload();
 			outline.dump();
 
 			// Add to glyphs

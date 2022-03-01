@@ -54,7 +54,8 @@ builds:
       pthread,
       avcodec,
       avformat,
-      avutil'
+      avutil,
+      freetype'
     - flags: '-std=c++17 -g'
 
 targets:
