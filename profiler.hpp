@@ -23,7 +23,7 @@ class ProfilerApplication : public mercury::App {
 	VkShaderModule			basic_vert;
 	VkShaderModule			basic_frag;
 
-	// Descriptor sets
+	// Descriptor set
 	VkDescriptorSetLayout		glyphs_dsl;
 	VkDescriptorSet			glyphs_ds;
 
@@ -39,8 +39,8 @@ class ProfilerApplication : public mercury::App {
 	gui::IndexBuffer		ib;
 
 	// Buffers for glyphs
-	gui::VertexBuffer		glyph_vb;
-	gui::IndexBuffer		glyph_ib;
+	gui::Glyph::VertexBuffer	glyph_vb;
+	// gui::IndexBuffer		glyph_ib;
 
 	VkPipeline			graphics_pipeline;
 	VkPipeline			glyphs_pipeline;
@@ -51,8 +51,15 @@ class ProfilerApplication : public mercury::App {
 	// Font
 	gui::Font			font;
 
-	std::pair <VkPipeline, VkPipelineLayout> make_pipeline(VkShaderModule vert, VkShaderModule frag,
-			const std::vector <VkDescriptorSetLayout> &sets) {
+	// TODO: struct pass parameters?
+	template <size_t N>
+	std::pair <VkPipeline, VkPipelineLayout> make_pipeline(
+			VkShaderModule vert,
+			VkShaderModule frag,
+			const std::vector <VkDescriptorSetLayout> &sets,
+			VertexBinding binding_description,
+			const std::array <VertexAttribute, N> &attribute_descriptions,
+			VkPrimitiveTopology top = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST) {
 		// Create pipeline stages
 		VkPipelineShaderStageCreateInfo vertex {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -71,8 +78,8 @@ class ProfilerApplication : public mercury::App {
 		VkPipelineShaderStageCreateInfo shader_stages[] = { vertex, fragment };
 
 		// Vertex input
-		auto binding_description = gui::Vertex::vertex_binding();
-		auto attribute_descriptions = gui::Vertex::vertex_attributes();
+		// auto binding_description = gui::Vertex::vertex_binding();
+		// auto attribute_descriptions = gui::Vertex::vertex_attributes();
 
 		VkPipelineVertexInputStateCreateInfo vertex_input {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
@@ -85,7 +92,7 @@ class ProfilerApplication : public mercury::App {
 		// Input assembly
 		VkPipelineInputAssemblyStateCreateInfo input_assembly {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-			.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+			.topology = top,
 			.primitiveRestartEnable = VK_FALSE
 		};
 
@@ -140,7 +147,13 @@ class ProfilerApplication : public mercury::App {
 
 		// Color blending
 		VkPipelineColorBlendAttachmentState color_blend_attachment {
-			.blendEnable = VK_FALSE,
+			.blendEnable = VK_TRUE,
+			.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+			.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+			.colorBlendOp = VK_BLEND_OP_ADD,
+			.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+			.dstAlphaBlendFactor = VK_BLEND_FACTOR_DST_ALPHA,
+			.alphaBlendOp = VK_BLEND_OP_MAX,
 			.colorWriteMask = VK_COLOR_COMPONENT_R_BIT
 				| VK_COLOR_COMPONENT_G_BIT
 				| VK_COLOR_COMPONENT_B_BIT
@@ -263,9 +276,19 @@ public:
 		glyphs_dsl = gui::Glyph::make_glyph_dsl(context);
 		glyphs_ds = gui::Glyph::make_glyph_ds(context, descriptor_pool);
 
+		// Get vertex descriptors
+		auto gr_vb = gui::Vertex::vertex_binding();
+		auto gr_va = gui::Vertex::vertex_attributes();
+
+		auto gl_vb = gui::Glyph::Vertex::vertex_binding();
+		auto gl_va = gui::Glyph::Vertex::vertex_attributes();
+
 		// Create pipelines
-		auto grp = make_pipeline(basic_vert, basic_frag, {});
-		auto glp = make_pipeline(glyph_vert, glyph_frag, {glyphs_dsl});
+		auto grp = make_pipeline(basic_vert, basic_frag, {}, gr_vb, gr_va);
+		auto glp = make_pipeline(
+			glyph_vert, glyph_frag, {glyphs_dsl},
+			gl_vb, gl_va
+		);
 
 		graphics_pipeline = grp.first;
 		graphics_pl = grp.second;
@@ -279,7 +302,7 @@ public:
 			.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
 			.usage_type = BFM_WRITE_ONLY
 		};
-		
+
 		BFM_Settings ib_settings {
 			.size = 1024,
 			.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
@@ -289,17 +312,18 @@ public:
 		vb = gui::VertexBuffer(context, vb_settings);
 		ib = gui::IndexBuffer(context, ib_settings);
 
-		glyph_vb = gui::VertexBuffer(context, gui::Glyph::vb_settings);
-		glyph_ib = gui::IndexBuffer(context, gui::Glyph::ib_settings);
+		glyph_vb = gui::Glyph::VertexBuffer(context, gui::Glyph::vb_settings);
+		// glyph_ib = gui::IndexBuffer(context, gui::Glyph::ib_settings);
 
 		// Create command buffers
 		// update_command_buffers();
 
 		// Load font
-		font = gui::Font(context, "resources/courier_new.ttf");
+		font = gui::Font(context, "resources/arial.ttf");
 
 		// Bind glyph
-		gui::GlyphOutline go = font['c'];
+		gui::GlyphOutline go = font['y'];
+		go.dump();
 		go.bind(glyphs_ds, 0);
 
 		// TODO: context method
@@ -335,14 +359,14 @@ public:
 
 		// Bind basic pipeline
 		vkCmdBindPipeline(cbuf, VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline);
-		
+
 		// Draw
 		VkBuffer vertex_buffers[] = {vb.vk_buffer()};
 		VkDeviceSize offsets[] = {0};
 		vkCmdBindVertexBuffers(cbuf, 0, 1, vertex_buffers, offsets);
 		vkCmdBindIndexBuffer(cbuf, ib.vk_buffer(), 0, VK_INDEX_TYPE_UINT32);
 		vkCmdDrawIndexed(cbuf, ib.size(), 1, 0, 0, 0);
-		
+
 		// Bind glyphs pipeline
 		vkCmdBindPipeline(cbuf, VK_PIPELINE_BIND_POINT_GRAPHICS, glyphs_pipeline);
 
@@ -351,12 +375,14 @@ public:
 			cbuf, VK_PIPELINE_BIND_POINT_GRAPHICS,
 			glyphs_pl, 0, 1, &glyphs_ds, 0, nullptr
 		);
-		
+
 		VkBuffer glyph_vbs[] = {glyph_vb.vk_buffer()};
 		VkDeviceSize glyph_offsets[] = {0};
 		vkCmdBindVertexBuffers(cbuf, 0, 1, glyph_vbs, glyph_offsets);
-		vkCmdBindIndexBuffer(cbuf, glyph_ib.vk_buffer(), 0, VK_INDEX_TYPE_UINT32);
-		vkCmdDrawIndexed(cbuf, glyph_ib.size(), 1, 0, 0, 0);
+		vkCmdDraw(cbuf, 6, 1, 0, 0);
+
+		// vkCmdBindIndexBuffer(cbuf, glyph_ib.vk_buffer(), 0, VK_INDEX_TYPE_UINT32);
+		// vkCmdDrawIndexed(cbuf, glyph_ib.size(), 1, 0, 0, 0);
 
 		// End render pass
 		vkCmdEndRenderPass(cbuf);
@@ -451,7 +477,7 @@ public:
 
 		// Present the image to the swap chain
 		VkSwapchainKHR swchs[] = {swapchain.swch};
-		
+
 		VkPresentInfoKHR present_info {
 			.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
 			.waitSemaphoreCount = 1,
@@ -461,19 +487,19 @@ public:
 			.pImageIndices = &image_index,
 			.pResults = nullptr
 		};
-		
+
 		result = vkQueuePresentKHR(
 			context.device.present_queue,
 			&present_info
 		);
-	
+
 		/* if (result == VK_ERROR_OUT_OF_DATE_KHR
 				|| result == VK_SUBOPTIMAL_KHR
 				|| framebuffer_resized) {
 			framebuffer_resized = false;
 			_remk_swapchain();
 		} else*/
-		
+
 		// TODO: check resizing (in app)
 		if (result != VK_SUCCESS) {
 			Logger::error("[Vulkan] Failed to present swap chain image!");
@@ -485,10 +511,10 @@ public:
 	void update_geometry() {
 		vb.reset_push_back();
 		ib.reset_push_back();
-		
+
 		gui::Rect({0, 0.2}, {0.5, 0.5}, {1.0, 0.5, 0.0}).upload(vb, ib);
 		gui::Rect({0.2, -0.2}, {0.6, 0.1}, {0.0, 0.5, 1.0}).upload(vb, ib);
-		
+
 		vb.sync_size();
 		ib.sync_size();
 
@@ -497,15 +523,15 @@ public:
 
 		// Glyphs
 		glyph_vb.reset_push_back();
-		glyph_ib.reset_push_back();
+		// glyph_ib.reset_push_back();
 
-		gui::Glyph({-1.0, -1.0, -0.2, -0.5}).upload(glyph_vb, glyph_ib);
+		gui::Glyph({-1, -1, 0, 0}).upload(glyph_vb);
 
 		glyph_vb.sync_size();
-		glyph_ib.sync_size();
+		// glyph_ib.sync_size();
 
 		glyph_vb.upload();
-		glyph_ib.upload();
+		// glyph_ib.upload();
 	}
 
 	void frame() override {

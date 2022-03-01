@@ -24,19 +24,28 @@ namespace gui {
 
 // Glyph outline structure
 struct GlyphOutline {
-	// Glyph bounding box
-	glm::vec4 bbox;
+	// Glyph metrics
+	struct Metrics {
+		float xbear;
+		float ybear;
+
+		float width;
+		float height;
+	} metrics;
+
+	// Previously inserted glyph point
+	glm::vec2 prev;
 
 	// Store outline data as a list
 	// of quadratic bezier curves
 	BufferManager <glm::vec2> outline;
 
 	// Default constructor
-	GlyphOutline() : bbox {0.0f} {}
+	GlyphOutline() {}
 
 	// Constructor takes bounding box
 	// TODO: first vec2 contains number of curves
-	GlyphOutline(const Vulkan::Context &ctx, const glm::vec4 &b) : bbox {b} {
+	GlyphOutline(const Vulkan::Context &ctx, const Metrics &m) : metrics(m) {
 		// Allocate space for outline data
 		BFM_Settings outline_settings {
 			.size = 100,
@@ -50,14 +59,14 @@ struct GlyphOutline {
 	// Push a new point to the list
 	void push(const glm::vec2 &p) {
 		outline.push_back(p);
+		prev = p;
 	}
 
-	void push(const FT_Vector *point) {
+	glm::vec2 convert(const FT_Vector *point) {
 		// Normalize coordinates
-		outline.push_back(glm::vec2 {
-			static_cast <float> (point->x) / (bbox.z - bbox.x),
-			static_cast <float> (point->y) / (bbox.w - bbox.y)
-		});
+		float x = (point->x - metrics.xbear) / metrics.width;
+		float y = (point->y + metrics.height - metrics.ybear) / metrics.height;
+		return glm::vec2 {x, y/2};
 	}
 
 	// Bind buffer to descriptor set
@@ -83,7 +92,7 @@ struct GlyphOutline {
 	void dump() const {
 		Logger::ok() << "Glyph outline: ";
 		for (const auto &p : outline.vector())
-			Logger::plain() << "(" << p.x << ", " << p.y << "); ";
+			Logger::plain() << "(" << p.x << ", " << p.y << "), ";
 		Logger::plain() << std::endl;
 	}
 };
@@ -91,6 +100,35 @@ struct GlyphOutline {
 // Glyph structure
 // TODO: text class will hold shaders and stuff
 class Glyph {
+public:
+	// Vertex and buffer type
+	struct Vertex {
+		glm::vec4 bounds;
+
+		// Get vertex binding description
+		static VertexBinding vertex_binding() {
+			return VertexBinding {
+				.binding = 0,
+				.stride = sizeof(Vertex),
+				.inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+			};
+		}
+
+		// Get vertex attribute descriptions
+		static std::array <VertexAttribute, 1> vertex_attributes() {
+			return std::array <VertexAttribute, 1> {
+				VertexAttribute {
+					.location = 0,
+					.binding = 0,
+					.format = VK_FORMAT_R32G32B32A32_SFLOAT,
+					.offset = offsetof(Vertex, bounds)
+				},
+			};
+		}
+	};
+
+	using VertexBuffer = BufferManager <Vertex>;
+private:
 	// Vertex and index data
 	glm::vec4	_bounds;
 	glm::vec3	_color	= glm::vec3 {1.0};
@@ -100,24 +138,18 @@ public:
 	Glyph(glm::vec4 bounds) : _bounds(bounds) {}
 
 	// Render the glyph
-	void upload(VertexBuffer &vb, IndexBuffer &ib) {
-		// Create vertex data
-		std::array <Vertex, 4> vertices {
-			Vertex { glm::vec2 { _bounds.x, _bounds.y }, _color },
-			Vertex { glm::vec2 { _bounds.x, _bounds.w }, _color },
-			Vertex { glm::vec2 { _bounds.z, _bounds.w }, _color },
-			Vertex { glm::vec2 { _bounds.z, _bounds.y }, _color }
+	// TODO: render method or upload method (instacing)?
+	void upload(VertexBuffer &vb) {
+		std::array <Vertex, 6> vertices {
+			Vertex {_bounds},
+			Vertex {_bounds},
+			Vertex {_bounds},
+			Vertex {_bounds},
+			Vertex {_bounds},
+			Vertex {_bounds}
 		};
 
-		uint32_t vsize = vb.push_size();
-		std::array <uint32_t, 6> indices {
-			vsize, vsize + 2, vsize + 1,
-			vsize, vsize + 3, vsize + 2
-		};
-
-		// Upload vertex data
 		vb.push_back(vertices);
-		ib.push_back(indices);
 	}
 
 	// Static buffer properties
@@ -127,6 +159,7 @@ public:
 		.usage_type = BFM_WRITE_ONLY
 	};
 
+	// TODO: remove
 	static constexpr BFM_Settings ib_settings {
 		.size = 1024,
 		.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
@@ -147,7 +180,7 @@ public:
 
 		if (dsl != VK_NULL_HANDLE)
 			return dsl;
-		
+
 		// Create layout if not created
 		dsl = ctx.vk->make_descriptor_set_layout(
 			ctx.device,
@@ -163,7 +196,7 @@ public:
 
 		if (ds != VK_NULL_HANDLE)
 			return ds;
-		
+
 		// Create descriptor set
 		ds = ctx.vk->make_descriptor_set(
 			ctx.device,
@@ -194,24 +227,37 @@ class Font {
 	static FT_Error _outline_move_to(const FT_Vector *to, void *user) {
 		GlyphOutline *outline = (GlyphOutline *) user;
 		outline->push({0, 0});
-		outline->push(to);
+		outline->push(outline->convert(to));
 		return 0;
 	}
 
 	static FT_Error _outline_line_to(const FT_Vector *to, void *user) {
 		GlyphOutline *outline = (GlyphOutline *) user;
-		outline->push(to);
+		glm::vec2 prev = outline->prev;
+		glm::vec2 curr = outline->convert(to);
+		// Lerped point for a line
+		glm::vec2 lerped = glm::mix(prev, curr, 0.5f);
+		// outline->push((prev + curr) / 2.0f);
+		outline->push(lerped);
+		outline->push(curr);
 		return 0;
 	}
 
 	static FT_Error _outline_conic_to(const FT_Vector *control, const FT_Vector *to, void *user) {
 		GlyphOutline *outline = (GlyphOutline *) user;
-		outline->push(control);
-		outline->push(to);
+		outline->push(outline->convert(control));
+		outline->push(outline->convert(to));
 		return 0;
 	}
 
-	// Ignore cubic bezier curves
+	static FT_Error _outline_cubic_to(const FT_Vector *control1, const FT_Vector *control2, const FT_Vector *to, void *user) {
+		GlyphOutline *outline = (GlyphOutline *) user;
+		/* outline->push(control1);
+		outline->push(control2);
+		outline->push(to); */
+		Logger::error() << "IGNORED CUBIC TO" << std::endl;
+		return 0;
+	}
 
 	// Load FreeType library
 	void load_font(const Vulkan::Context &ctx, const std::string &file) {
@@ -243,25 +289,16 @@ class Font {
 				.move_to = _outline_move_to,
 				.line_to = _outline_line_to,
 				.conic_to = _outline_conic_to,
-				.cubic_to = nullptr
+				.cubic_to = _outline_cubic_to,
 			};
 
 			// Get bounding box
-			FT_BBox bbox;
-			FT_Outline_Get_BBox(&face->glyph->outline, &bbox);
-
-			GlyphOutline outline = {ctx, glm::vec4 {
-				bbox.xMin, bbox.yMin, bbox.xMax, bbox.yMax
+			GlyphOutline outline = {ctx, {
+				.xbear = (float) face->glyph->bitmap_left,
+				.ybear = (float) face->glyph->bitmap_top,
+				.width = (float) face->glyph->metrics.width,
+				.height = (float) face->glyph->metrics.height
 			}};
-
-			float width = bbox.xMax - bbox.xMin;
-			float height = bbox.yMax - bbox.yMin;
-
-			Logger::ok() << "Bounding box: "
-				<< bbox.xMin << ", " << bbox.yMin << ", "
-				<< bbox.xMax << ", " << bbox.yMax << std::endl;
-			Logger::warn() << "\tWidth: " << width << std::endl;
-			Logger::warn() << "\tHeight: " << height << std::endl;
 
 			// Get number of curves
 			FT_Outline_Decompose(&face->glyph->outline, &funcs, &outline);
