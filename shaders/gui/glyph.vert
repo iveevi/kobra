@@ -10,14 +10,14 @@ layout (location = 1) out vec2 fpos;
 // Normalized vertex positions
 vec2 nvecs[6] = vec2[6] (
 	// Triangle 1
-	vec2(0.0, 1.0),
-	vec2(1.0, 1.0),
 	vec2(0.0, 0.0),
+	vec2(1.0, 0.0),
+	vec2(0.0, 1.0),
 
 	// Triangle 2
-	vec2(1.0, 1.0),
 	vec2(1.0, 0.0),
-	vec2(0.0, 0.0)
+	vec2(1.0, 1.0),
+	vec2(0.0, 1.0)
 );
 
 // Main function

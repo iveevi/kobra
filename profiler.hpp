@@ -322,6 +322,9 @@ public:
 		font = gui::Font(context, command_pool, "resources/times.ttf");
 
 		// Bind glyph
+		auto texture = font.bitmap('h');
+		texture.bind(context.vk_device(), glyphs_ds, 0);
+
 		// gui::GlyphOutline go = font['g'];
 		// go.dump();
 		// go.bind(glyphs_ds, 0);
@@ -376,10 +379,10 @@ public:
 			glyphs_pl, 0, 1, &glyphs_ds, 0, nullptr
 		);
 
-		/* VkBuffer glyph_vbs[] = {glyph_vb.vk_buffer()};
+		VkBuffer glyph_vbs[] = {glyph_vb.vk_buffer()};
 		VkDeviceSize glyph_offsets[] = {0};
 		vkCmdBindVertexBuffers(cbuf, 0, 1, glyph_vbs, glyph_offsets);
-		vkCmdDraw(cbuf, 6, 1, 0, 0); */
+		vkCmdDraw(cbuf, 6, 1, 0, 0);
 
 		// vkCmdBindIndexBuffer(cbuf, glyph_ib.vk_buffer(), 0, VK_INDEX_TYPE_UINT32);
 		// vkCmdDrawIndexed(cbuf, glyph_ib.size(), 1, 0, 0, 0);

@@ -39,6 +39,27 @@ struct TexturePacket {
 
 	size_t		width;
 	size_t		height;
+
+	// Bind to descriptor set
+	void bind(VkDevice device, VkDescriptorSet ds, uint32_t binding) const {
+		VkDescriptorImageInfo image_info {
+			.sampler = sampler,
+			.imageView = view,
+			.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+		};
+
+		VkWriteDescriptorSet descriptor_write {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = ds,
+			.dstBinding = binding,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.pImageInfo = &image_info
+		};
+
+		vkUpdateDescriptorSets(device, 1, &descriptor_write, 0, nullptr);
+	}
 };
 
 // Create Vulkan image
@@ -130,31 +151,27 @@ inline void transition_image_layout(const Vulkan::Context &ctx,
 	};
 
 	// Source layout
+	VkPipelineStageFlags src_stage;
+	VkPipelineStageFlags dst_stage;
+	
 	if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED
 			&& new_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
 		barrier.srcAccessMask = 0;
 		barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-	}
-	else if (old_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+		src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+		dst_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+	} else if (old_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
 			&& new_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
 		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-	}
-	else if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED
-			&& new_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
-		barrier.srcAccessMask = 0;
-		barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT
-			| VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+		src_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		dst_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+	} else {
+		Logger::error("[raster::transition_image_layout] Invalid layout transition!");
+		return;
 	}
 
-	vkCmdPipelineBarrier(cmd_buffer,
-		0,
-		0,
-		0,
-		0, nullptr,
-		0, nullptr,
-		1, &barrier
-	);
+	vkCmdPipelineBarrier(cmd_buffer, src_stage, dst_stage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 
 	Vulkan::submit_single_time_commands(ctx, cpool, cmd_buffer);
 }
@@ -279,6 +296,8 @@ inline TexturePacket make_texture(const Vulkan::Context &ctx,
 	};
 
 	BufferManager <byte> staging_buffer {ctx, staging_settings};
+	staging_buffer.write(texture.data.data(), texture.data.size());
+	staging_buffer.upload();
 
 	// Allocate image
 	TexturePacket image_packet = make_image(ctx, texture, fmt);

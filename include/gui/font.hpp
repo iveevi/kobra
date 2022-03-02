@@ -396,6 +396,22 @@ class Font {
 			memcpy(tex.data.data(), face->glyph->bitmap.buffer, width * height);
 			Logger::warn() << "data size = " << tex.data.size() << std::endl;
 
+			int nulls = 0;
+			for (auto &b : tex.data) {
+				if (b == 0)
+					nulls++;
+			}
+
+			Logger::warn() << "tex.data Nulls: " << nulls << std::endl;
+
+			nulls = 0;
+			for (int i = 0; i < tex.data.size(); i++) {
+				if (face->glyph->bitmap.buffer[i] == 0)
+					nulls++;
+			}
+
+			Logger::warn() << "face->glyph->bitmap.buffer Nulls: " << nulls << std::endl;
+
 			// Create texture
 			raster::TexturePacket tp = raster::make_texture(
 				ctx, cpool, tex,
