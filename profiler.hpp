@@ -322,7 +322,7 @@ public:
 		font = gui::Font(context, "resources/arial.ttf");
 
 		// Bind glyph
-		gui::GlyphOutline go = font['y'];
+		gui::GlyphOutline go = font['g'];
 		go.dump();
 		go.bind(glyphs_ds, 0);
 
@@ -525,7 +525,7 @@ public:
 		glyph_vb.reset_push_back();
 		// glyph_ib.reset_push_back();
 
-		gui::Glyph({-1, -1, 0, 0}).upload(glyph_vb);
+		gui::Glyph({-1, -1, -0.5, 0}).upload(glyph_vb);
 
 		glyph_vb.sync_size();
 		// glyph_ib.sync_size();

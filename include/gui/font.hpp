@@ -66,7 +66,7 @@ struct GlyphOutline {
 		// Normalize coordinates
 		float x = (point->x - metrics.xbear) / metrics.width;
 		float y = (point->y + metrics.height - metrics.ybear) / metrics.height;
-		return glm::vec2 {x, y/2};
+		return glm::vec2 {x, y};
 	}
 
 	// Bind buffer to descriptor set
@@ -82,6 +82,8 @@ struct GlyphOutline {
 			static_cast <float> (size),
 			0.0f
 		});
+
+		// TODO: brute force normalize?
 
 		outline.sync_size();
 		outline.upload();
@@ -226,20 +228,22 @@ class Font {
 	// Outline processors
 	static FT_Error _outline_move_to(const FT_Vector *to, void *user) {
 		GlyphOutline *outline = (GlyphOutline *) user;
-		outline->push({0, 0});
+		if (outline->outline.push_size() > 0)
+			outline->push(outline->convert(to));
 		outline->push(outline->convert(to));
+		Logger::ok() << "Move to: " << to->x << ", " << to->y << std::endl;
 		return 0;
 	}
 
 	static FT_Error _outline_line_to(const FT_Vector *to, void *user) {
 		GlyphOutline *outline = (GlyphOutline *) user;
+		
 		glm::vec2 prev = outline->prev;
 		glm::vec2 curr = outline->convert(to);
-		// Lerped point for a line
-		glm::vec2 lerped = glm::mix(prev, curr, 0.5f);
-		// outline->push((prev + curr) / 2.0f);
-		outline->push(lerped);
+
 		outline->push(curr);
+		outline->push(curr);
+		Logger::ok() << "Line to: " << to->x << ", " << to->y << std::endl;
 		return 0;
 	}
 
@@ -247,6 +251,7 @@ class Font {
 		GlyphOutline *outline = (GlyphOutline *) user;
 		outline->push(outline->convert(control));
 		outline->push(outline->convert(to));
+		Logger::ok() << "Conic to: " << control->x << ", " << control->y << ", " << to->x << ", " << to->y << std::endl;
 		return 0;
 	}
 
@@ -294,8 +299,8 @@ class Font {
 
 			// Get bounding box
 			GlyphOutline outline = {ctx, {
-				.xbear = (float) face->glyph->bitmap_left,
-				.ybear = (float) face->glyph->bitmap_top,
+				.xbear = (float) face->glyph->metrics.horiBearingX,
+				.ybear = (float) face->glyph->metrics.horiBearingY,
 				.width = (float) face->glyph->metrics.width,
 				.height = (float) face->glyph->metrics.height
 			}};
@@ -303,6 +308,9 @@ class Font {
 			// Get number of curves
 			FT_Outline_Decompose(&face->glyph->outline, &funcs, &outline);
 			outline.upload();
+			Logger::warn() << "GLYPH: " << c << std::endl;
+			Logger::warn() << "\txbear: " << outline.metrics.xbear << std::endl;
+			Logger::warn() << "\tybear: " << outline.metrics.ybear << std::endl;
 			outline.dump();
 
 			// Add to glyphs

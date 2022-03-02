@@ -791,6 +791,53 @@ public:
 		_deletion_tasks.push_back(task);
 	}
 
+	// TODO: pop deletion tasks
+	
+
+	// Single use command buffers
+	static VkCommandBuffer begin_single_time_commands(const Context &ctx, const VkCommandPool &pool)
+	{
+		// Create command buffer
+		VkCommandBufferAllocateInfo alloc_info = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+			.commandPool = pool,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = 1
+		};
+
+		VkCommandBuffer tmp_cmd_buffer;
+		vkAllocateCommandBuffers(ctx.device.device, &alloc_info, &tmp_cmd_buffer);
+
+		// Start recording the command buffer
+		VkCommandBufferBeginInfo begin_info = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+			.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+		};
+
+		vkBeginCommandBuffer(tmp_cmd_buffer, &begin_info);
+	}
+
+	static void submit_single_time_commands(const Context &ctx, const VkCommandPool &pool, const VkCommandBuffer &cmd_buffer)
+	{
+		// End recording the command buffer
+		vkEndCommandBuffer(cmd_buffer);
+
+		// Submit the command buffer
+		VkSubmitInfo submit_info = {
+			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+			.commandBufferCount = 1,
+			.pCommandBuffers = &cmd_buffer
+		};
+
+		vkQueueSubmit(ctx.device.graphics_queue, 1, &submit_info, VK_NULL_HANDLE);
+
+		// Wait for the command buffer to finish
+		vkQueueWaitIdle(ctx.device.graphics_queue);
+
+		// Destroy the command buffer
+		vkFreeCommandBuffers(ctx.vk_device(), pool, 1, &cmd_buffer);
+	}
+
 	// Set command buffer for each frame
 	void set_command_buffers(const Device &device,
 			const Swapchain &swch,

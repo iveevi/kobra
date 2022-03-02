@@ -35,7 +35,7 @@ float d2bezier(vec2 p0, vec2 p1, vec2 p2, vec2 p, float t)
 	return d2line(q0, q1, p);
 }
 
-#define BIAS 0.001
+#define BIAS 0.0001
 
 // Main function
 void main()
@@ -48,7 +48,7 @@ void main()
 	float min_udist = 1.0/0.0;
 
 	// Loop through all quadratic bezier curves
-	for (int i = 1; i < n - 2; i += 2) {
+	for (int i = 1; i < n -  1; i += 2) {
 		// Get points
 		vec2 p0 = outlines.points[i];
 		vec2 p1 = outlines.points[i + 1];
@@ -88,4 +88,6 @@ void main()
 	float alpha = clamp(100 * v + 0.5, 0.0, 1.0);
 
 	color = vec4(fcolor, alpha);
+	if (alpha < 0.5)
+		color = vec4(1.0, 0.0, 1.0, 1.0);
 }
