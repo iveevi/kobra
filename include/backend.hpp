@@ -38,7 +38,7 @@ public:
 	///////////////////////
 	// Public structures //
 	///////////////////////
-	
+
 	// Buffer structure
 	struct Buffer {
 		VkBuffer	buffer;
@@ -122,11 +122,11 @@ private:
 		std::vector <VkSurfaceFormatKHR>	formats;
 		std::vector <VkPresentModeKHR>		present_modes;
 	};
-	
+
 	//////////////////////////////
 	// Private member variables //
 	//////////////////////////////
-	
+
 	VkDebugUtilsMessengerEXT _debug_messenger;
 
 	// Frame and window variables
@@ -168,7 +168,7 @@ private:
 
 	// TODO: modifiable by the user
 	// TODO: method to set default layout, and rebuild descriptor sets
-	
+
 	//////////////////////
 	// Cleanup routines //
 	//////////////////////
@@ -257,6 +257,7 @@ private:
 	// TODO: depreciate
 
 	// Find memory type for a given type and properties
+	// TODO: public overload only
 	uint32_t _find_memory_type(const VkPhysicalDevice &phdev,
 			uint32_t type_filter,
 			VkMemoryPropertyFlags properties) {
@@ -300,7 +301,7 @@ private:
 	VkExtent2D _choose_swch_extent(const Surface &surface, const VkSurfaceCapabilitiesKHR &capabilities) {
 		if (capabilities.currentExtent.width != UINT32_MAX)
 			return capabilities.currentExtent;
-	
+
 		int width, height;
 		glfwGetFramebufferSize(surface.window, &width, &height);
 
@@ -321,7 +322,7 @@ private:
 
 		return ext;
 	}
-	
+
 	SwapchainSupport _query_swch_support(const VkPhysicalDevice &device, const Surface &surface) const {
 		SwapchainSupport details;
 
@@ -394,7 +395,7 @@ private:
 
 		return requiredExtensions.empty();
 	}
-	
+
 	QueueFamilyIndices _find_queue_families(const VkPhysicalDevice &device, const Surface &surface) const {
 		// Structure to return
 		QueueFamilyIndices indices;
@@ -421,7 +422,7 @@ private:
 				device, i, surface.surface,
 				&present_support
 			);
-			
+
 			if (present_support)
 				indices.present = i;
 
@@ -450,7 +451,7 @@ private:
 	////////////////////
 	// Shader modules //
 	////////////////////
-	
+
 	// Read file glob
 	static Glob _read_file(const std::string &path) {
 		std::ifstream file(path, std::ios::ate | std::ios::binary);
@@ -510,7 +511,7 @@ private:
 	// TODO: public method
 
 	// TODO: separate from this backend class
-	
+
 	/////////////////////////////////////
 	// Debugging and validation layers //
 	/////////////////////////////////////
@@ -556,7 +557,7 @@ private:
 				pAllocator, pDebugMessenger
 			);
 		}
-		
+
 		return VK_ERROR_EXTENSION_NOT_PRESENT;
 	}
 
@@ -609,7 +610,7 @@ public:
 		// TODO: initglfw function
 		glfwInit();
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-		
+
 		_init_vulkan();
 		Logger::ok("[Vulkan] Vulkan instance completely initialized");
 	}
@@ -626,7 +627,7 @@ public:
 	}
 
 	// TODO: move to global scope
-	
+
 	// ImGui window context variables
 	struct ImGuiContext {
 		VkDescriptorPool	descriptor_pool;
@@ -636,7 +637,7 @@ public:
 		VkSemaphore		semaphore;
 		VkFence			fence;
 	};
-	
+
 	ImGuiContext init_imgui_glfw(const VkPhysicalDevice &phdev, const Device &device, const Surface &surface, const Swapchain &swapchain) {
 		// Context to return
 		ImGuiContext context;
@@ -672,7 +673,7 @@ public:
 			Logger::error("[Vulkan-ImGui] Failed to create descriptor pool");
 			throw (-1);
 		}
-		
+
 		// Create render pass
 		context.render_pass = make_render_pass(
 			device, swapchain,
@@ -698,7 +699,7 @@ public:
 		init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 
 		ImGui_ImplVulkan_Init(&init_info, context.render_pass);
-		
+
 		// Create command pool
 		context.command_pool = make_command_pool(
 			phdev, surface, device,
@@ -792,7 +793,7 @@ public:
 	}
 
 	// TODO: pop deletion tasks
-	
+
 
 	// Single use command buffers
 	static VkCommandBuffer begin_single_time_commands(const Context &ctx, const VkCommandPool &pool)
@@ -815,6 +816,8 @@ public:
 		};
 
 		vkBeginCommandBuffer(tmp_cmd_buffer, &begin_info);
+
+		return tmp_cmd_buffer;
 	}
 
 	static void submit_single_time_commands(const Context &ctx, const VkCommandPool &pool, const VkCommandBuffer &cmd_buffer)
@@ -903,6 +906,24 @@ public:
 	// Allocation methods //
 	////////////////////////
 	
+	uint32_t find_memory_type(const VkPhysicalDevice &phdev,
+			uint32_t type_filter,
+			VkMemoryPropertyFlags properties) {
+		VkPhysicalDeviceMemoryProperties mem_props;
+		vkGetPhysicalDeviceMemoryProperties(
+			phdev, &mem_props
+		);
+
+		for (uint32_t i = 0; i < mem_props.memoryTypeCount; i++) {
+			unsigned int props = (mem_props.memoryTypes[i].propertyFlags & properties);
+			if ((type_filter & (1 << i)) && props == properties)
+				return i;
+		}
+
+		Logger::error("[Vulkan] Failed to find suitable memory type!");
+		throw(-1);
+	}
+
 	// Allocate shader
 	// TODO: wrap in struct?
 	VkShaderModule make_shader(const Device &device, const std::string &path) {
@@ -1000,7 +1021,7 @@ public:
 			throw(-1);
 		}
 	}
-	
+
 	// Buffer methods
 	// TODO: pass buffer propreties as a struct
 	void make_buffer(const VkPhysicalDevice &, const Device &, Buffer &, size_t, VkBufferUsageFlags);
@@ -1013,7 +1034,7 @@ public:
 		vkMapMemory(device.device, buffer.memory, 0, buffer.size, 0, &data);
 		return data;
 	}
-	
+
 	// Create a render pass
 	VkRenderPass make_render_pass(const Device &device,
 		const Swapchain &swch,
@@ -1186,7 +1207,7 @@ public:
 
 		return new_descriptor_pool;
 	}
-	
+
 	// Create a descriptor set layout
 	VkDescriptorSetLayout make_descriptor_set_layout(const Device &device,
 			const std::vector <VkDescriptorSetLayoutBinding> &bindings,
@@ -1252,7 +1273,7 @@ public:
 	VkPhysicalDevice select_phdev(const Surface &surface) const {
 		// Physical device to return
 		VkPhysicalDevice new_physical_device = VK_NULL_HANDLE;
-	
+
 		// Get the number of physical devices
 		uint32_t device_count = 0;
 		vkEnumeratePhysicalDevices(
@@ -1297,7 +1318,7 @@ public:
 			.graphics_queue = VK_NULL_HANDLE,
 			.present_queue = VK_NULL_HANDLE
 		};
-		
+
 		// Queue family indices
 		QueueFamilyIndices indices = _find_queue_families(phdev, surface);
 

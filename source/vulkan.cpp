@@ -78,10 +78,11 @@ void Vulkan::make_buffer(const VkPhysicalDevice &phdev,
 	bf.size = size;
 	bf.offset = 0;
 
-	// Log creation
+	// TODO: macro control logging
+	/* Log creation
 	Logger::ok() << "[Vulkan] Buffer created (VkBuffer="
 		<< bf.buffer << ", VkDeviceMemory=" << bf.memory
-		<< ", size=" << size << ")\n";
+		<< ", size=" << size << ")\n"; */
 }
 
 // Destroy a buffer

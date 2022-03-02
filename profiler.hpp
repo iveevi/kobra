@@ -270,11 +270,11 @@ public:
 		basic_frag = context.vk->make_shader(context.device, "shaders/bin/gui/basic_frag.spv");
 
 		VkShaderModule glyph_vert = context.vk->make_shader(context.device, "shaders/bin/gui/glyph_vert.spv");
-		VkShaderModule glyph_frag = context.vk->make_shader(context.device, "shaders/bin/gui/glyph_frag.spv");
+		VkShaderModule glyph_frag = context.vk->make_shader(context.device, "shaders/bin/gui/bitmap_frag.spv");
 
 		// Create descriptor set
-		glyphs_dsl = gui::Glyph::make_glyph_dsl(context);
-		glyphs_ds = gui::Glyph::make_glyph_ds(context, descriptor_pool);
+		glyphs_dsl = gui::Glyph::make_bitmap_dsl(context);
+		glyphs_ds = gui::Glyph::make_bitmap_ds(context, descriptor_pool);
 
 		// Get vertex descriptors
 		auto gr_vb = gui::Vertex::vertex_binding();
@@ -319,12 +319,12 @@ public:
 		// update_command_buffers();
 
 		// Load font
-		font = gui::Font(context, "resources/arial.ttf");
+		font = gui::Font(context, command_pool, "resources/times.ttf");
 
 		// Bind glyph
-		gui::GlyphOutline go = font['g'];
-		go.dump();
-		go.bind(glyphs_ds, 0);
+		// gui::GlyphOutline go = font['g'];
+		// go.dump();
+		// go.bind(glyphs_ds, 0);
 
 		// TODO: context method
 		context.vk->make_command_buffers(
@@ -376,10 +376,10 @@ public:
 			glyphs_pl, 0, 1, &glyphs_ds, 0, nullptr
 		);
 
-		VkBuffer glyph_vbs[] = {glyph_vb.vk_buffer()};
+		/* VkBuffer glyph_vbs[] = {glyph_vb.vk_buffer()};
 		VkDeviceSize glyph_offsets[] = {0};
 		vkCmdBindVertexBuffers(cbuf, 0, 1, glyph_vbs, glyph_offsets);
-		vkCmdDraw(cbuf, 6, 1, 0, 0);
+		vkCmdDraw(cbuf, 6, 1, 0, 0); */
 
 		// vkCmdBindIndexBuffer(cbuf, glyph_ib.vk_buffer(), 0, VK_INDEX_TYPE_UINT32);
 		// vkCmdDrawIndexed(cbuf, glyph_ib.size(), 1, 0, 0, 0);

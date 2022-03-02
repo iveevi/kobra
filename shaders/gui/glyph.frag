@@ -7,11 +7,11 @@ layout (binding = 0) buffer GlyphOutlines
 } outlines;
 
 // Inputs
-layout(location = 0) in vec3 fcolor;
-layout(location = 1) in vec2 fpos;
+layout (location = 0) in vec3 fcolor;
+layout (location = 1) in vec2 fpos;
 
 // Outputs
-layout(location = 0) out vec4 color;
+layout (location = 0) out vec4 color;
 
 // Bezier methods
 float time(vec2 a, vec2 b, vec2 p)
@@ -48,11 +48,12 @@ void main()
 	float min_udist = 1.0/0.0;
 
 	// Loop through all quadratic bezier curves
-	for (int i = 1; i < n -  1; i += 2) {
+	for (int i = 1; i < n - 1; i += 2) {
 		// Get points
 		vec2 p0 = outlines.points[i];
 		vec2 p1 = outlines.points[i + 1];
 		vec2 p2 = outlines.points[i + 2];
+		if (p0.x < -0.5 || p1.x < -0.5 || p2.x < -0.5) continue;
 
 		// Time of closest point on bezier
 		float t = time(p0, p2, fpos);

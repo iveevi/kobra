@@ -31,17 +31,18 @@ Texture load_image_texture(const std::string &);
 namespace raster {
 
 // Image packet
-struct ImagePacket {
+struct TexturePacket {
 	VkImage		image;
 	VkDeviceMemory	memory;
 	VkImageView	view;
+	VkSampler	sampler;
+
 	size_t		width;
 	size_t		height;
 };
 
-/*
 // Create Vulkan image
-ImagePacket make_image(const Vulkan::Context &ctx, const Texture &texture, const VkFormat &fmt)
+inline TexturePacket make_image(const Vulkan::Context &ctx, const Texture &texture, const VkFormat &fmt)
 {
 	// Create image
 	VkImageCreateInfo image_info {
@@ -61,7 +62,7 @@ ImagePacket make_image(const Vulkan::Context &ctx, const Texture &texture, const
 	};
 
 	VkImage image;
-	VkResult result = vkCreateImage(ctx.device, &image_info, nullptr, &image);
+	VkResult result = vkCreateImage(ctx.vk_device(), &image_info, nullptr, &image);
 	if (result != VK_SUCCESS) {
 		Logger::error("[raster::make_texture] Failed to create image!");
 		return {};
@@ -69,25 +70,25 @@ ImagePacket make_image(const Vulkan::Context &ctx, const Texture &texture, const
 
 	// Get memory requirements
 	VkMemoryRequirements mem_reqs;
-	vkGetImageMemoryRequirements(ctx.device, image, &mem_reqs);
+	vkGetImageMemoryRequirements(ctx.vk_device(), image, &mem_reqs);
 
 	// Allocate memory
 	VkMemoryAllocateInfo alloc_info {
 		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
 		.allocationSize = mem_reqs.size,
-		.memoryTypeIndex = ctx.find_memory_type(mem_reqs.memoryTypeBits,
+		.memoryTypeIndex = ctx.vk->find_memory_type(ctx.phdev, mem_reqs.memoryTypeBits,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
 	};
 
 	VkDeviceMemory mem;
-	result = vkAllocateMemory(ctx.device, &alloc_info, nullptr, &mem);
+	result = vkAllocateMemory(ctx.vk_device(), &alloc_info, nullptr, &mem);
 	if (result != VK_SUCCESS) {
 		Logger::error("[raster::make_texture] Failed to allocate image memory!");
 		return {};
 	}
 
 	// Bind memory
-	result = vkBindImageMemory(ctx.device, image, mem, 0);
+	result = vkBindImageMemory(ctx.vk_device(), image, mem, 0);
 	if (result != VK_SUCCESS) {
 		Logger::error("[raster::make_texture] Failed to bind image memory!");
 		return {};
@@ -102,9 +103,9 @@ ImagePacket make_image(const Vulkan::Context &ctx, const Texture &texture, const
 }
 
 // Transition image layout
-void transition_image_layout(const Vulkan::Context &ctx,
+inline void transition_image_layout(const Vulkan::Context &ctx,
 		const VkCommandPool &cpool,
-		const ImagePacket &packet,
+		const TexturePacket &packet,
 		const VkImageLayout &old_layout,
 		const VkImageLayout &new_layout)
 {
@@ -159,9 +160,9 @@ void transition_image_layout(const Vulkan::Context &ctx,
 }
 
 // Copy buffer to image
-void copy_buffer_to_image(const Vulkan::Context &ctx,
+inline void copy_buffer_to_image(const Vulkan::Context &ctx,
 		const VkCommandPool &cpool,
-		const ImagePacket &packet,
+		const TexturePacket &packet,
 		const VkBuffer &buffer)
 {
 	VkCommandBuffer cmd_buffer = Vulkan::begin_single_time_commands(ctx, cpool);
@@ -194,8 +195,78 @@ void copy_buffer_to_image(const Vulkan::Context &ctx,
 	Vulkan::submit_single_time_commands(ctx, cpool, cmd_buffer);
 }
 
+// Create texture sampler
+inline VkSampler make_sampler(const Vulkan::Context &ctx,
+		const VkFilter &filter,
+		const VkSamplerAddressMode &address_mode)
+{
+	VkSamplerCreateInfo sampler_info {
+		.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+		.magFilter = filter,
+		.minFilter = filter,
+		.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+		.addressModeU = address_mode,
+		.addressModeV = address_mode,
+		.addressModeW = address_mode,
+		.mipLodBias = 0.0f,
+		.anisotropyEnable = VK_FALSE,	// TODO: enable later
+		.maxAnisotropy = 16.0f,
+		.compareEnable = VK_FALSE,
+		.compareOp = VK_COMPARE_OP_ALWAYS,
+		.minLod = 0.0f,
+		.maxLod = 0.0f,
+		.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
+		.unnormalizedCoordinates = VK_FALSE
+	};
+
+	VkSampler sampler;
+	VkResult result = vkCreateSampler(ctx.vk_device(), &sampler_info, nullptr, &sampler);
+	if (result != VK_SUCCESS) {
+		Logger::error("[raster::make_sampler] Failed to create sampler!");
+		return {};
+	}
+
+	return sampler;
+}
+
+// Create image view
+inline VkImageView make_image_view(const Vulkan::Context &ctx,
+		const TexturePacket &packet,
+		const VkImageViewType &view_type,
+		const VkFormat &format)
+{
+	VkImageViewCreateInfo view_info {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+		.image = packet.image,
+		.viewType = view_type,
+		.format = format,
+		.components = {
+			.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+			.g = VK_COMPONENT_SWIZZLE_IDENTITY,
+			.b = VK_COMPONENT_SWIZZLE_IDENTITY,
+			.a = VK_COMPONENT_SWIZZLE_IDENTITY
+		},
+		.subresourceRange = {
+			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.baseMipLevel = 0,
+			.levelCount = 1,
+			.baseArrayLayer = 0,
+			.layerCount = 1
+		}
+	};
+
+	VkImageView view;
+	VkResult result = vkCreateImageView(ctx.vk_device(), &view_info, nullptr, &view);
+	if (result != VK_SUCCESS) {
+		Logger::error("[raster::make_image_view] Failed to create image view!");
+		return {};
+	}
+
+	return view;
+}
+
 // Create texture (as VkImage)
-VkImage make_texture(const Vulkan::Context &ctx,
+inline TexturePacket make_texture(const Vulkan::Context &ctx,
 		const VkCommandPool &cpool,
 		const Texture &texture,
 		const VkFormat &fmt)
@@ -210,7 +281,7 @@ VkImage make_texture(const Vulkan::Context &ctx,
 	BufferManager <byte> staging_buffer {ctx, staging_settings};
 
 	// Allocate image
-	ImagePacket image_packet = make_image(ctx, texture, fmt);
+	TexturePacket image_packet = make_image(ctx, texture, fmt);
 
 	// Copy data from staging buffer to image
 	transition_image_layout(ctx, cpool, image_packet,
@@ -226,7 +297,21 @@ VkImage make_texture(const Vulkan::Context &ctx,
 	);
 
 	// TODO: buffer copy method
-} */
+	
+	// Create image view
+	image_packet.view = make_image_view(
+		ctx, image_packet,
+		VK_IMAGE_VIEW_TYPE_2D, fmt
+	);
+
+	// Create sampler
+	image_packet.sampler = make_sampler(ctx,
+		VK_FILTER_LINEAR,
+		VK_SAMPLER_ADDRESS_MODE_REPEAT
+	);
+	
+	return image_packet;
+}
 
 }
 

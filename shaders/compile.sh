@@ -12,3 +12,5 @@ glslc -fshader-stage=fragment gui/basic.frag -o bin/gui/basic_frag.spv
 
 glslc -fshader-stage=vertex gui/glyph.vert -o bin/gui/glyph_vert.spv
 glslc -fshader-stage=fragment gui/glyph.frag -o bin/gui/glyph_frag.spv
+
+glslc -fshader-stage=fragment gui/bitmap.frag -o bin/gui/bitmap_frag.spv

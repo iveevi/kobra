@@ -16,6 +16,7 @@
 // Engine headers
 #include "../common.hpp"
 #include "../logger.hpp"
+#include "../texture.hpp"
 #include "gui.hpp"
 
 namespace mercury {
@@ -24,6 +25,9 @@ namespace gui {
 
 // Glyph outline structure
 struct GlyphOutline {
+	// Character code
+	uint32_t code;
+
 	// Glyph metrics
 	struct Metrics {
 		float xbear;
@@ -33,8 +37,8 @@ struct GlyphOutline {
 		float height;
 	} metrics;
 
-	// Previously inserted glyph point
-	glm::vec2 prev;
+	// Start of current contour
+	glm::vec2 start;
 
 	// Store outline data as a list
 	// of quadratic bezier curves
@@ -45,10 +49,11 @@ struct GlyphOutline {
 
 	// Constructor takes bounding box
 	// TODO: first vec2 contains number of curves
-	GlyphOutline(const Vulkan::Context &ctx, const Metrics &m) : metrics(m) {
+	GlyphOutline(const Vulkan::Context &ctx, uint32_t c, const Metrics &m)
+			: code(c), metrics(m) {
 		// Allocate space for outline data
 		BFM_Settings outline_settings {
-			.size = 100,
+			.size = 256,
 			.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 			.usage_type = BFM_WRITE_ONLY
 		};
@@ -59,14 +64,13 @@ struct GlyphOutline {
 	// Push a new point to the list
 	void push(const glm::vec2 &p) {
 		outline.push_back(p);
-		prev = p;
 	}
 
 	glm::vec2 convert(const FT_Vector *point) {
 		// Normalize coordinates
 		float x = (point->x - metrics.xbear) / metrics.width;
 		float y = (point->y + metrics.height - metrics.ybear) / metrics.height;
-		return glm::vec2 {x, y};
+		return glm::vec2 {x/2 + 0.1, y/2 + 0.1};
 	}
 
 	// Bind buffer to descriptor set
@@ -77,6 +81,7 @@ struct GlyphOutline {
 	// Sync and upload data to GPU
 	void upload() {
 		// Insert size vector
+		outline.push_back(start);
 		size_t size = outline.push_size();
 		outline.push_front(glm::vec2 {
 			static_cast <float> (size),
@@ -168,8 +173,15 @@ public:
 		.usage_type = BFM_WRITE_ONLY
 	};
 
-	// Descriptor set for shader
-	static constexpr VkDescriptorSetLayoutBinding glyph_dsl {
+	// Descriptor sets for shader
+	static constexpr VkDescriptorSetLayoutBinding bitmap_dsl {
+		.binding = 0,
+		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+	};
+
+	static constexpr VkDescriptorSetLayoutBinding outline_dsl {
 		.binding = 0,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 		.descriptorCount = 1,
@@ -177,7 +189,7 @@ public:
 	};
 
 	// Make descriptor set layout
-	static VkDescriptorSetLayout make_glyph_dsl(const Vulkan::Context &ctx) {
+	static VkDescriptorSetLayout make_bitmap_dsl(const Vulkan::Context &ctx) {
 		static VkDescriptorSetLayout dsl = VK_NULL_HANDLE;
 
 		if (dsl != VK_NULL_HANDLE)
@@ -186,14 +198,29 @@ public:
 		// Create layout if not created
 		dsl = ctx.vk->make_descriptor_set_layout(
 			ctx.device,
-			{ glyph_dsl }
+			{ bitmap_dsl }
+		);
+
+		return dsl;
+	}
+
+	static VkDescriptorSetLayout make_outline_dsl(const Vulkan::Context &ctx) {
+		static VkDescriptorSetLayout dsl = VK_NULL_HANDLE;
+
+		if (dsl != VK_NULL_HANDLE)
+			return dsl;
+
+		// Create layout if not created
+		dsl = ctx.vk->make_descriptor_set_layout(
+			ctx.device,
+			{ outline_dsl }
 		);
 
 		return dsl;
 	}
 
 	// Make descriptor set
-	static VkDescriptorSet make_glyph_ds(const Vulkan::Context &ctx, const VkDescriptorPool &pool) {
+	static VkDescriptorSet make_bitmap_ds(const Vulkan::Context &ctx, const VkDescriptorPool &pool) {
 		static VkDescriptorSet ds = VK_NULL_HANDLE;
 
 		if (ds != VK_NULL_HANDLE)
@@ -203,7 +230,23 @@ public:
 		ds = ctx.vk->make_descriptor_set(
 			ctx.device,
 			pool,
-			make_glyph_dsl(ctx)
+			make_bitmap_dsl(ctx)
+		);
+
+		return ds;
+	}
+
+	static VkDescriptorSet make_outline_ds(const Vulkan::Context &ctx, const VkDescriptorPool &pool) {
+		static VkDescriptorSet ds = VK_NULL_HANDLE;
+
+		if (ds != VK_NULL_HANDLE)
+			return ds;
+
+		// Create descriptor set
+		ds = ctx.vk->make_descriptor_set(
+			ctx.device,
+			pool,
+			make_outline_dsl(ctx)
 		);
 
 		return ds;
@@ -213,8 +256,11 @@ public:
 // Font class holds information
 //	about a single font
 class Font {
-	// Font data
-	std::unordered_map <char, GlyphOutline> _glyphs;
+	// Font bitmaps
+	std::unordered_map <char, raster::TexturePacket>	_bitmaps;
+
+	// Font outlines
+	std::unordered_map <char, GlyphOutline>			_glyphs;
 
 	// Check FreeType error
 	void check_error(FT_Error error) const {
@@ -228,22 +274,33 @@ class Font {
 	// Outline processors
 	static FT_Error _outline_move_to(const FT_Vector *to, void *user) {
 		GlyphOutline *outline = (GlyphOutline *) user;
-		if (outline->outline.push_size() > 0)
-			outline->push(outline->convert(to));
-		outline->push(outline->convert(to));
-		Logger::ok() << "Move to: " << to->x << ", " << to->y << std::endl;
+		glm::vec2 pt = outline->convert(to);
+		if (outline->outline.push_size() > 0) {
+			Logger::warn() << "Move pre --> " << outline->start.x << ", "
+				<< outline->start.y << " --> size = " << outline->outline.push_size()
+				<< std::endl;
+			// outline->push(pt);
+			// outline->push({-1, -1});
+			outline->push(pt);
+		}
+
+		assert(outline->outline.push_size() % 2 == 0);
+
+		outline->push(pt);
+		outline->start = pt;
+		if (outline->code == 'g') {
+			Logger::ok() << "Move to: " << pt.x << ", " << pt.y << std::endl;
+		}
 		return 0;
 	}
 
 	static FT_Error _outline_line_to(const FT_Vector *to, void *user) {
 		GlyphOutline *outline = (GlyphOutline *) user;
-		
-		glm::vec2 prev = outline->prev;
 		glm::vec2 curr = outline->convert(to);
-
 		outline->push(curr);
 		outline->push(curr);
-		Logger::ok() << "Line to: " << to->x << ", " << to->y << std::endl;
+		if (outline->code == 'g')
+			Logger::ok() << "Line to: " << to->x << ", " << to->y << std::endl;
 		return 0;
 	}
 
@@ -251,7 +308,8 @@ class Font {
 		GlyphOutline *outline = (GlyphOutline *) user;
 		outline->push(outline->convert(control));
 		outline->push(outline->convert(to));
-		Logger::ok() << "Conic to: " << control->x << ", " << control->y << ", " << to->x << ", " << to->y << std::endl;
+		if (outline->code == 'g')
+			Logger::ok() << "Conic to: " << control->x << ", " << control->y << ", " << to->x << ", " << to->y << std::endl;
 		return 0;
 	}
 
@@ -265,7 +323,7 @@ class Font {
 	}
 
 	// Load FreeType library
-	void load_font(const Vulkan::Context &ctx, const std::string &file) {
+	void load_font(const Vulkan::Context &ctx, const VkCommandPool &cpool, const std::string &file) {
 		// Load library
 		FT_Library library;
 		check_error(FT_Init_FreeType(&library));
@@ -285,7 +343,7 @@ class Font {
 			char c = i + ' ';
 			std::cout << "Processing character '" << c << "'" << std::endl;
 
-			// Get outline
+			/* Get outline
 			FT_UInt glyph_index = FT_Get_Char_Index(face, c);
 			check_error(FT_Load_Glyph(face, glyph_index, FT_LOAD_DEFAULT));
 
@@ -298,7 +356,7 @@ class Font {
 			};
 
 			// Get bounding box
-			GlyphOutline outline = {ctx, {
+			GlyphOutline outline = {ctx, (uint32_t) c, {
 				.xbear = (float) face->glyph->metrics.horiBearingX,
 				.ybear = (float) face->glyph->metrics.horiBearingY,
 				.width = (float) face->glyph->metrics.width,
@@ -308,18 +366,49 @@ class Font {
 			// Get number of curves
 			FT_Outline_Decompose(&face->glyph->outline, &funcs, &outline);
 			outline.upload();
-			Logger::warn() << "GLYPH: " << c << std::endl;
-			Logger::warn() << "\txbear: " << outline.metrics.xbear << std::endl;
-			Logger::warn() << "\tybear: " << outline.metrics.ybear << std::endl;
-			outline.dump();
+
+			if (c == 'g') {
+				Logger::warn() << "GLYPH: " << c << std::endl;
+				Logger::warn() << "\txbear: " << outline.metrics.xbear << std::endl;
+				Logger::warn() << "\tybear: " << outline.metrics.ybear << std::endl;
+				outline.dump();
+			}
 
 			// Add to glyphs
-			_glyphs[c] = outline;
+			_glyphs[c] = outline; */
+
+			// Load bitmap into texture
+			FT_Load_Char(face, c, FT_LOAD_RENDER);
+			uint width = face->glyph->bitmap.width;
+			uint height = face->glyph->bitmap.rows;
+			Texture tex {
+				.width = width,
+				.height = height,
+				.channels = 1
+			};
+
+			Logger::warn() << "Glyph: " << width << " x " << height << std::endl;
+			if (width * height == 0)
+				continue;
+
+			// Load texture
+			tex.data = bytes(width * height);
+			memcpy(tex.data.data(), face->glyph->bitmap.buffer, width * height);
+			Logger::warn() << "data size = " << tex.data.size() << std::endl;
+
+			// Create texture
+			raster::TexturePacket tp = raster::make_texture(
+				ctx, cpool, tex,
+				VK_FORMAT_R8_UNORM
+			);
+
+			// Add to dictionary
+			_bitmaps[c] = tp;
 		}
 	}
 public:
 	Font() {}
-	Font(const Vulkan::Context &ctx, const std::string &file) {
+	Font(const Vulkan::Context &ctx, const VkCommandPool &cpool, const std::string &file) {
 		// Check that the file exists
 		if (!file_exists(file)) {
 			Logger::error("Font file not found: " + file);
@@ -327,13 +416,24 @@ public:
 		}
 
 		// Load font
-		load_font(ctx, file);
+		load_font(ctx, cpool, file);
 	}
 
-	// Retrieve glyph
+	// Retrieve glyph outline
 	const GlyphOutline &operator[](char c) const {
 		auto it = _glyphs.find(c);
 		if (it == _glyphs.end()) {
+			Logger::error() << "Glyph not found: " << c << std::endl;
+			throw -1;
+		}
+
+		return it->second;
+	}
+
+	// Retrieve glyph bitmap
+	const raster::TexturePacket &bitmap(char c) const {
+		auto it = _bitmaps.find(c);
+		if (it == _bitmaps.end()) {
 			Logger::error() << "Glyph not found: " << c << std::endl;
 			throw -1;
 		}
