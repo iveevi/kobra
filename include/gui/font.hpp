@@ -23,87 +23,6 @@ namespace mercury {
 
 namespace gui {
 
-// Glyph outline structure
-struct GlyphOutline {
-	// Character code
-	uint32_t code;
-
-	// Glyph metrics
-	struct Metrics {
-		float xbear;
-		float ybear;
-
-		float width;
-		float height;
-	} metrics;
-
-	// Start of current contour
-	glm::vec2 start;
-
-	// Store outline data as a list
-	// of quadratic bezier curves
-	BufferManager <glm::vec2> outline;
-
-	// Default constructor
-	GlyphOutline() {}
-
-	// Constructor takes bounding box
-	// TODO: first vec2 contains number of curves
-	GlyphOutline(const Vulkan::Context &ctx, uint32_t c, const Metrics &m)
-			: code(c), metrics(m) {
-		// Allocate space for outline data
-		BFM_Settings outline_settings {
-			.size = 256,
-			.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-			.usage_type = BFM_WRITE_ONLY
-		};
-
-		outline = BufferManager <glm::vec2> (ctx, outline_settings);
-	}
-
-	// Push a new point to the list
-	void push(const glm::vec2 &p) {
-		outline.push_back(p);
-	}
-
-	glm::vec2 convert(const FT_Vector *point) {
-		// Normalize coordinates
-		float x = (point->x - metrics.xbear) / metrics.width;
-		float y = (point->y + metrics.height - metrics.ybear) / metrics.height;
-		return glm::vec2 {x/2 + 0.1, y/2 + 0.1};
-	}
-
-	// Bind buffer to descriptor set
-	void bind(const VkDescriptorSet &ds, uint32_t binding) {
-		outline.bind(ds, binding);
-	}
-
-	// Sync and upload data to GPU
-	void upload() {
-		// Insert size vector
-		outline.push_back(start);
-		size_t size = outline.push_size();
-		outline.push_front(glm::vec2 {
-			static_cast <float> (size),
-			0.0f
-		});
-
-		// TODO: brute force normalize?
-
-		outline.sync_size();
-		outline.upload();
-	}
-
-	// TODO: debugging only
-	// Dump outline data to console
-	void dump() const {
-		Logger::ok() << "Glyph outline: ";
-		for (const auto &p : outline.vector())
-			Logger::plain() << "(" << p.x << ", " << p.y << "), ";
-		Logger::plain() << std::endl;
-	}
-};
-
 // Glyph structure
 // TODO: text class will hold shaders and stuff
 class Glyph {
@@ -181,13 +100,6 @@ public:
 		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
 	};
 
-	static constexpr VkDescriptorSetLayoutBinding outline_dsl {
-		.binding = 0,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-	};
-
 	// Make descriptor set layout
 	static VkDescriptorSetLayout make_bitmap_dsl(const Vulkan::Context &ctx) {
 		static VkDescriptorSetLayout dsl = VK_NULL_HANDLE;
@@ -199,21 +111,6 @@ public:
 		dsl = ctx.vk->make_descriptor_set_layout(
 			ctx.device,
 			{ bitmap_dsl }
-		);
-
-		return dsl;
-	}
-
-	static VkDescriptorSetLayout make_outline_dsl(const Vulkan::Context &ctx) {
-		static VkDescriptorSetLayout dsl = VK_NULL_HANDLE;
-
-		if (dsl != VK_NULL_HANDLE)
-			return dsl;
-
-		// Create layout if not created
-		dsl = ctx.vk->make_descriptor_set_layout(
-			ctx.device,
-			{ outline_dsl }
 		);
 
 		return dsl;
@@ -235,22 +132,6 @@ public:
 
 		return ds;
 	}
-
-	static VkDescriptorSet make_outline_ds(const Vulkan::Context &ctx, const VkDescriptorPool &pool) {
-		static VkDescriptorSet ds = VK_NULL_HANDLE;
-
-		if (ds != VK_NULL_HANDLE)
-			return ds;
-
-		// Create descriptor set
-		ds = ctx.vk->make_descriptor_set(
-			ctx.device,
-			pool,
-			make_outline_dsl(ctx)
-		);
-
-		return ds;
-	}
 };
 
 // Font class holds information
@@ -259,8 +140,8 @@ class Font {
 	// Font bitmaps
 	std::unordered_map <char, raster::TexturePacket>	_bitmaps;
 
-	// Font outlines
-	std::unordered_map <char, GlyphOutline>			_glyphs;
+	// Font metrics
+	std::unordered_map <char, FT_Glyph_Metrics>		_metrics;
 
 	// Check FreeType error
 	void check_error(FT_Error error) const {
@@ -269,57 +150,6 @@ class Font {
 				<< error << std::endl;
 			throw -1;
 		}
-	}
-
-	// Outline processors
-	static FT_Error _outline_move_to(const FT_Vector *to, void *user) {
-		GlyphOutline *outline = (GlyphOutline *) user;
-		glm::vec2 pt = outline->convert(to);
-		if (outline->outline.push_size() > 0) {
-			Logger::warn() << "Move pre --> " << outline->start.x << ", "
-				<< outline->start.y << " --> size = " << outline->outline.push_size()
-				<< std::endl;
-			// outline->push(pt);
-			// outline->push({-1, -1});
-			outline->push(pt);
-		}
-
-		assert(outline->outline.push_size() % 2 == 0);
-
-		outline->push(pt);
-		outline->start = pt;
-		if (outline->code == 'g') {
-			Logger::ok() << "Move to: " << pt.x << ", " << pt.y << std::endl;
-		}
-		return 0;
-	}
-
-	static FT_Error _outline_line_to(const FT_Vector *to, void *user) {
-		GlyphOutline *outline = (GlyphOutline *) user;
-		glm::vec2 curr = outline->convert(to);
-		outline->push(curr);
-		outline->push(curr);
-		if (outline->code == 'g')
-			Logger::ok() << "Line to: " << to->x << ", " << to->y << std::endl;
-		return 0;
-	}
-
-	static FT_Error _outline_conic_to(const FT_Vector *control, const FT_Vector *to, void *user) {
-		GlyphOutline *outline = (GlyphOutline *) user;
-		outline->push(outline->convert(control));
-		outline->push(outline->convert(to));
-		if (outline->code == 'g')
-			Logger::ok() << "Conic to: " << control->x << ", " << control->y << ", " << to->x << ", " << to->y << std::endl;
-		return 0;
-	}
-
-	static FT_Error _outline_cubic_to(const FT_Vector *control1, const FT_Vector *control2, const FT_Vector *to, void *user) {
-		GlyphOutline *outline = (GlyphOutline *) user;
-		/* outline->push(control1);
-		outline->push(control2);
-		outline->push(to); */
-		Logger::error() << "IGNORED CUBIC TO" << std::endl;
-		return 0;
 	}
 
 	// Load FreeType library
@@ -341,41 +171,6 @@ class Font {
 
 		for (size_t i = 0; i < 96; i++) {
 			char c = i + ' ';
-			std::cout << "Processing character '" << c << "'" << std::endl;
-
-			/* Get outline
-			FT_UInt glyph_index = FT_Get_Char_Index(face, c);
-			check_error(FT_Load_Glyph(face, glyph_index, FT_LOAD_DEFAULT));
-
-			// Process outline
-			FT_Outline_Funcs funcs = {
-				.move_to = _outline_move_to,
-				.line_to = _outline_line_to,
-				.conic_to = _outline_conic_to,
-				.cubic_to = _outline_cubic_to,
-			};
-
-			// Get bounding box
-			GlyphOutline outline = {ctx, (uint32_t) c, {
-				.xbear = (float) face->glyph->metrics.horiBearingX,
-				.ybear = (float) face->glyph->metrics.horiBearingY,
-				.width = (float) face->glyph->metrics.width,
-				.height = (float) face->glyph->metrics.height
-			}};
-
-			// Get number of curves
-			FT_Outline_Decompose(&face->glyph->outline, &funcs, &outline);
-			outline.upload();
-
-			if (c == 'g') {
-				Logger::warn() << "GLYPH: " << c << std::endl;
-				Logger::warn() << "\txbear: " << outline.metrics.xbear << std::endl;
-				Logger::warn() << "\tybear: " << outline.metrics.ybear << std::endl;
-				outline.dump();
-			}
-
-			// Add to glyphs
-			_glyphs[c] = outline; */
 
 			// Load bitmap into texture
 			FT_Load_Char(face, c, FT_LOAD_RENDER);
@@ -420,6 +215,7 @@ class Font {
 
 			// Add to dictionary
 			_bitmaps[c] = tp;
+			_metrics[c] = face->glyph->metrics;
 		}
 	}
 public:
@@ -433,17 +229,6 @@ public:
 
 		// Load font
 		load_font(ctx, cpool, file);
-	}
-
-	// Retrieve glyph outline
-	const GlyphOutline &operator[](char c) const {
-		auto it = _glyphs.find(c);
-		if (it == _glyphs.end()) {
-			Logger::error() << "Glyph not found: " << c << std::endl;
-			throw -1;
-		}
-
-		return it->second;
 	}
 
 	// Retrieve glyph bitmap
