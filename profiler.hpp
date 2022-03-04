@@ -2,10 +2,6 @@
 #define PROFILER_APPLICATION_H_
 
 #include "global.hpp"
-#include "include/backend.hpp"
-#include "include/buffer_manager.hpp"
-#include "include/gui/gui.hpp"
-#include "include/gui/font.hpp"
 #include <vulkan/vulkan_core.h>
 
 using namespace mercury;
@@ -49,6 +45,10 @@ class ProfilerApplication : public mercury::App {
 
 	// Font
 	gui::Font			font;
+
+	// Character map texture and sampler
+	raster::TexturePacket		cmap;
+	raster::Sampler			sampler;
 
 	// TODO: struct pass parameters?
 	template <size_t N>
@@ -320,6 +320,25 @@ public:
 		// Load font
 		font = gui::Font(context, command_pool, "resources/times.ttf");
 
+		cmap = raster::make_texture(context, command_pool,
+			{.width = 1024, .height = 1024, .channels = 1},
+			VK_FORMAT_R8_UNORM,
+			VK_IMAGE_USAGE_SAMPLED_BIT
+				| VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+			VK_IMAGE_LAYOUT_UNDEFINED
+		);
+
+		cmap.transition_manual(context, command_pool,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+		);
+
+		// Create the sampler and bind to the descriptor set
+		sampler = raster::Sampler(context, cmap);
+		sampler.bind(context, glyphs_ds, 0);
+
 		// gui::GlyphOutline go = font['g'];
 		// go.dump();
 		// go.bind(glyphs_ds, 0);
@@ -376,7 +395,28 @@ public:
 
 		// Bind glyph
 		auto texture = font.bitmap('h');
-		texture.bind(context.vk_device(), glyphs_ds, 0);
+
+		cmap.transition_manual(context, command_pool,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+		);
+
+		cmap.copy(context, command_pool, texture,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+		);
+		
+		cmap.transition_manual(context, command_pool,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+		);
+
+		// texture.bind(context.vk_device(), glyphs_ds, 0);
+		// sampler.assign(context, texture, VK_IMAGE_VIEW_TYPE_2D);
 
 		VkBuffer glyph_vbs[] = {glyph_vb.vk_buffer()};
 		VkDeviceSize glyph_offsets[] = {0};

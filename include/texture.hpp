@@ -36,52 +36,171 @@ struct TexturePacket {
 	VkDeviceMemory	memory;
 	VkFormat	format;
 
-	VkImageView	view;
-	VkSampler	sampler;
+	uint32_t	width;
+	uint32_t	height;
 
-	size_t		width;
-	size_t		height;
+	// Copy another texture to this one
+	// TODO: store image layout
+	void copy(const Vulkan::Context &ctx,
+			const VkCommandPool &cpool,
+			const TexturePacket &tp,
+			const VkImageLayout &our_format,
+			const VkImageLayout &their_format) {
+		// Only same format
+		if (tp.format != format) {
+			Logger::error() << __PRETTY_FUNCTION__
+				<< ": Texture format mismatch" << std::endl;
+			return;
+		}
 
-	// Bind to descriptor set
-	void bind(VkDevice device, VkDescriptorSet ds, uint32_t binding) const {
-		VkDescriptorImageInfo image_info {
-			.sampler = sampler,
-			.imageView = view,
-			.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+		// Copy image
+		VkCommandBuffer copy_cmd = Vulkan::begin_single_time_commands(ctx, cpool);
+
+		VkImageCopy copy_region = {
+			.srcSubresource = {
+				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+				.mipLevel = 0,
+				.baseArrayLayer = 0,
+				.layerCount = 1
+			},
+			.srcOffset = { 0, 0, 0 },
+			.dstSubresource = {
+				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+				.mipLevel = 0,
+				.baseArrayLayer = 0,
+				.layerCount = 1
+			},
+			.dstOffset = { 0, 0, 0 },
+			.extent = {
+				.width = tp.width,
+				.height = tp.height,
+				.depth = 1
+			}
 		};
 
-		VkWriteDescriptorSet descriptor_write {
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = ds,
-			.dstBinding = binding,
-			.dstArrayElement = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.pImageInfo = &image_info
+		vkCmdCopyImage(copy_cmd,
+			tp.image, their_format,
+			image, our_format,
+			1, &copy_region
+		);
+
+		Vulkan::submit_single_time_commands(ctx, cpool, copy_cmd);
+	}
+
+	inline void transition_image_layout(const Vulkan::Context &ctx,
+			const VkCommandPool &cpool,
+			const VkImageLayout &old_layout,
+			const VkImageLayout &new_layout) const
+	{
+		VkCommandBuffer cmd_buffer = Vulkan::begin_single_time_commands(ctx, cpool);
+
+		VkImageMemoryBarrier barrier {
+			.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+			.oldLayout = old_layout,
+			.newLayout = new_layout,
+			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+			.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+			.image = image,
+			.subresourceRange = {
+				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+				.baseMipLevel = 0,
+				.levelCount = 1,
+				.baseArrayLayer = 0,
+				.layerCount = 1
+			},
+			.srcAccessMask = 0,
+			.dstAccessMask = 0
 		};
 
-		vkUpdateDescriptorSets(device, 1, &descriptor_write, 0, nullptr);
+		// Source layout
+		VkPipelineStageFlags src_stage = 0;
+		VkPipelineStageFlags dst_stage = 0;
+
+		if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED
+				&& new_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+			barrier.srcAccessMask = 0;
+			barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+			dst_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		} else if (old_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+				&& new_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+			barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			src_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+			dst_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		} else {
+			// Logger::error("[raster::transition_image_layout] Invalid layout transition!");
+			// return;
+
+			Logger::warn("[raster::transition_image_layout] Invalid layout transition!");
+		}
+
+		vkCmdPipelineBarrier(cmd_buffer,
+			src_stage, dst_stage, 0,
+			0, nullptr, 0, nullptr,
+			1, &barrier
+		);
+
+		Vulkan::submit_single_time_commands(ctx, cpool, cmd_buffer);
+	}
+	
+	inline void transition_manual(const Vulkan::Context &ctx,
+			const VkCommandPool &cpool,
+			const VkImageLayout &old_layout,
+			const VkImageLayout &new_layout,
+			VkPipelineStageFlags src_stage,
+			VkPipelineStageFlags dst_stage) const
+	{
+		VkCommandBuffer cmd_buffer = Vulkan::begin_single_time_commands(ctx, cpool);
+
+		VkImageMemoryBarrier barrier {
+			.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+			.oldLayout = old_layout,
+			.newLayout = new_layout,
+			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+			.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+			.image = image,
+			.subresourceRange = {
+				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+				.baseMipLevel = 0,
+				.levelCount = 1,
+				.baseArrayLayer = 0,
+				.layerCount = 1
+			},
+			.srcAccessMask = 0,
+			.dstAccessMask = 0
+		};
+
+		vkCmdPipelineBarrier(cmd_buffer,
+			src_stage, dst_stage, 0,
+			0, nullptr, 0, nullptr,
+			1, &barrier
+		);
+
+		Vulkan::submit_single_time_commands(ctx, cpool, cmd_buffer);
 	}
 };
 
 // Create Vulkan image
-inline TexturePacket make_image(const Vulkan::Context &ctx, const Texture &texture, const VkFormat &fmt)
+inline TexturePacket make_image(const Vulkan::Context &ctx,
+		const Texture &texture,
+		const VkFormat &fmt,
+		const VkImageUsageFlags &usage_flags)
 {
 	// Create image
 	VkImageCreateInfo image_info {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+		.flags = 0,
 		.imageType = VK_IMAGE_TYPE_2D,
 		.format = fmt,
 		.extent = { texture.width, texture.height, 1 },
 		.mipLevels = 1,
 		.arrayLayers = 1,
-		.tiling = VK_IMAGE_TILING_OPTIMAL,
-		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-		.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT
-			| VK_IMAGE_USAGE_SAMPLED_BIT,
-		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
 		.samples = VK_SAMPLE_COUNT_1_BIT,
-		.flags = 0
+		.tiling = VK_IMAGE_TILING_OPTIMAL,
+		.usage = usage_flags,
+		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
 	};
 
 	VkImage image;
@@ -124,59 +243,6 @@ inline TexturePacket make_image(const Vulkan::Context &ctx, const Texture &textu
 		.width = texture.width,
 		.height = texture.height
 	};
-}
-
-// Transition image layout
-inline void transition_image_layout(const Vulkan::Context &ctx,
-		const VkCommandPool &cpool,
-		const TexturePacket &packet,
-		const VkImageLayout &old_layout,
-		const VkImageLayout &new_layout)
-{
-	VkCommandBuffer cmd_buffer = Vulkan::begin_single_time_commands(ctx, cpool);
-
-	VkImageMemoryBarrier barrier {
-		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-		.oldLayout = old_layout,
-		.newLayout = new_layout,
-		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-		.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-		.image = packet.image,
-		.subresourceRange = {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-			.baseMipLevel = 0,
-			.levelCount = 1,
-			.baseArrayLayer = 0,
-			.layerCount = 1
-		},
-		.srcAccessMask = 0,
-		.dstAccessMask = 0
-	};
-
-	// Source layout
-	VkPipelineStageFlags src_stage;
-	VkPipelineStageFlags dst_stage;
-	
-	if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED
-			&& new_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-		barrier.srcAccessMask = 0;
-		barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-		src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-		dst_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-	} else if (old_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-			&& new_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
-		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-		src_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-		dst_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-	} else {
-		Logger::error("[raster::transition_image_layout] Invalid layout transition!");
-		return;
-	}
-
-	vkCmdPipelineBarrier(cmd_buffer, src_stage, dst_stage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
-
-	Vulkan::submit_single_time_commands(ctx, cpool, cmd_buffer);
 }
 
 // Copy buffer to image
@@ -252,14 +318,13 @@ inline VkSampler make_sampler(const Vulkan::Context &ctx,
 // Create image view
 inline VkImageView make_image_view(const Vulkan::Context &ctx,
 		const TexturePacket &packet,
-		const VkImageViewType &view_type,
-		const VkFormat &format)
+		const VkImageViewType &view_type)
 {
 	VkImageViewCreateInfo view_info {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
 		.image = packet.image,
 		.viewType = view_type,
-		.format = format,
+		.format = packet.format,
 		.components = {
 			.r = VK_COMPONENT_SWIZZLE_IDENTITY,
 			.g = VK_COMPONENT_SWIZZLE_IDENTITY,
@@ -286,53 +351,40 @@ inline VkImageView make_image_view(const Vulkan::Context &ctx,
 }
 
 // Create texture (as VkImage)
+// TODO: seriously, save the image layoutttt
 inline TexturePacket make_texture(const Vulkan::Context &ctx,
 		const VkCommandPool &cpool,
 		const Texture &texture,
-		const VkFormat &fmt)
+		const VkFormat &fmt,
+		const VkImageUsageFlags &usage_flags,
+		const VkImageLayout &layout)
 {
-	// Create staging buffer
-	BFM_Settings staging_settings {
-		.size = texture.data.size(),
-		.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-		.usage_type = BFM_WRITE_ONLY
-	};
-
-	BufferManager <byte> staging_buffer {ctx, staging_settings};
-	staging_buffer.write(texture.data.data(), texture.data.size());
-	staging_buffer.upload();
-
 	// Allocate image
-	TexturePacket image_packet = make_image(ctx, texture, fmt);
+	TexturePacket packet = make_image(ctx, texture, fmt, usage_flags);
 
-	// Copy data from staging buffer to image
-	transition_image_layout(ctx, cpool, image_packet,
-		VK_IMAGE_LAYOUT_UNDEFINED,
-		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-	);
+	// Create staging buffer
+	if (texture.data.size() > 0) {
+		BFM_Settings staging_settings {
+			.size = texture.data.size(),
+			.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			.usage_type = BFM_WRITE_ONLY
+		};
 
-	copy_buffer_to_image(ctx, cpool, image_packet, staging_buffer.vk_buffer());
+		BufferManager <byte> staging_buffer {ctx, staging_settings};
+		staging_buffer.write(texture.data.data(), texture.data.size());
+		staging_buffer.upload();
 
-	transition_image_layout(ctx, cpool, image_packet,
-		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-	);
+		// Copy data from staging buffer to image
+		packet.transition_image_layout(ctx, cpool,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+		);
+
+		copy_buffer_to_image(ctx, cpool, packet, staging_buffer.vk_buffer());
+	}
 
 	// TODO: buffer copy method
-	
-	// Create image view
-	image_packet.view = make_image_view(
-		ctx, image_packet,
-		VK_IMAGE_VIEW_TYPE_2D, fmt
-	);
-
-	// Create sampler
-	image_packet.sampler = make_sampler(ctx,
-		VK_FILTER_LINEAR,
-		VK_SAMPLER_ADDRESS_MODE_REPEAT
-	);
-	
-	return image_packet;
+	return packet;
 }
 
 // Sampler structure
@@ -341,18 +393,40 @@ struct Sampler {
 	VkImageView	view;
 	VkSampler	sampler;
 
-	// Constructor
-	Sampler(const Vulkan::Context &ctx, TexturePacket &tp) {
+	// Constructors
+	Sampler() = default;
+	Sampler(const Vulkan::Context &ctx, const TexturePacket &packet) {
 		view = make_image_view(
-			ctx, tp,
-			VK_IMAGE_VIEW_TYPE_2D,
-			tp.format
+			ctx,
+			packet,
+			VK_IMAGE_VIEW_TYPE_2D
 		);
 
 		sampler = make_sampler(ctx,
 			VK_FILTER_LINEAR,
 			VK_SAMPLER_ADDRESS_MODE_REPEAT
 		);
+	}
+
+	// Bind sampler to pipeline
+	void bind(const Vulkan::Context &ctx, VkDescriptorSet ds, uint32_t binding) {
+		VkDescriptorImageInfo image_info {
+			.sampler = sampler,
+			.imageView = view,
+			.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+		};
+
+		VkWriteDescriptorSet descriptor_write {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = ds,
+			.dstBinding = binding,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.pImageInfo = &image_info
+		};
+
+		vkUpdateDescriptorSets(ctx.vk_device(), 1, &descriptor_write, 0, nullptr);
 	}
 };
 

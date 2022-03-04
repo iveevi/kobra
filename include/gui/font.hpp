@@ -6,9 +6,11 @@
 #include <string>
 #include <unordered_map>
 
+// Vulkan headers
+#include <vulkan/vulkan_core.h>
+
 // FreeType headers
 #include <ft2build.h>
-#include <vulkan/vulkan_core.h>
 #include FT_FREETYPE_H
 #include FT_BBOX_H
 #include FT_OUTLINE_H
@@ -210,7 +212,16 @@ class Font {
 			// Create texture
 			raster::TexturePacket tp = raster::make_texture(
 				ctx, cpool, tex,
-				VK_FORMAT_R8_UNORM
+				VK_FORMAT_R8_UNORM,
+				VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+				VK_IMAGE_LAYOUT_UNDEFINED
+			);
+
+			tp.transition_manual(ctx, cpool,
+				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+				VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+				VK_PIPELINE_STAGE_TRANSFER_BIT,
+				VK_PIPELINE_STAGE_TRANSFER_BIT
 			);
 
 			// Add to dictionary
