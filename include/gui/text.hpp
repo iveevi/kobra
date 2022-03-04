@@ -17,10 +17,11 @@ namespace gui {
 
 // Text class
 // 	contains glyphs
-class Text {
+// 	and is served by
+// 	the text render class
+struct Text {
 	std::string		_str;
 	std::vector <Glyph>	_glyphs;
-public:
 };
 
 // TextRender class

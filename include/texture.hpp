@@ -34,6 +34,8 @@ namespace raster {
 struct TexturePacket {
 	VkImage		image;
 	VkDeviceMemory	memory;
+	VkFormat	format;
+
 	VkImageView	view;
 	VkSampler	sampler;
 
@@ -69,10 +71,10 @@ inline TexturePacket make_image(const Vulkan::Context &ctx, const Texture &textu
 	VkImageCreateInfo image_info {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
 		.imageType = VK_IMAGE_TYPE_2D,
+		.format = fmt,
 		.extent = { texture.width, texture.height, 1 },
 		.mipLevels = 1,
 		.arrayLayers = 1,
-		.format = fmt,
 		.tiling = VK_IMAGE_TILING_OPTIMAL,
 		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
 		.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT
@@ -118,6 +120,7 @@ inline TexturePacket make_image(const Vulkan::Context &ctx, const Texture &textu
 	return {
 		.image = image,
 		.memory = mem,
+		.format = fmt,
 		.width = texture.width,
 		.height = texture.height
 	};
@@ -331,6 +334,27 @@ inline TexturePacket make_texture(const Vulkan::Context &ctx,
 	
 	return image_packet;
 }
+
+// Sampler structure
+// TODO: remove from TexturePacket
+struct Sampler {
+	VkImageView	view;
+	VkSampler	sampler;
+
+	// Constructor
+	Sampler(const Vulkan::Context &ctx, TexturePacket &tp) {
+		view = make_image_view(
+			ctx, tp,
+			VK_IMAGE_VIEW_TYPE_2D,
+			tp.format
+		);
+
+		sampler = make_sampler(ctx,
+			VK_FILTER_LINEAR,
+			VK_SAMPLER_ADDRESS_MODE_REPEAT
+		);
+	}
+};
 
 }
 

@@ -40,7 +40,6 @@ class ProfilerApplication : public mercury::App {
 
 	// Buffers for glyphs
 	gui::Glyph::VertexBuffer	glyph_vb;
-	// gui::IndexBuffer		glyph_ib;
 
 	VkPipeline			graphics_pipeline;
 	VkPipeline			glyphs_pipeline;
@@ -321,10 +320,6 @@ public:
 		// Load font
 		font = gui::Font(context, command_pool, "resources/times.ttf");
 
-		// Bind glyph
-		auto texture = font.bitmap('h');
-		texture.bind(context.vk_device(), glyphs_ds, 0);
-
 		// gui::GlyphOutline go = font['g'];
 		// go.dump();
 		// go.bind(glyphs_ds, 0);
@@ -378,6 +373,10 @@ public:
 			cbuf, VK_PIPELINE_BIND_POINT_GRAPHICS,
 			glyphs_pl, 0, 1, &glyphs_ds, 0, nullptr
 		);
+
+		// Bind glyph
+		auto texture = font.bitmap('h');
+		texture.bind(context.vk_device(), glyphs_ds, 0);
 
 		VkBuffer glyph_vbs[] = {glyph_vb.vk_buffer()};
 		VkDeviceSize glyph_offsets[] = {0};
