@@ -142,6 +142,7 @@ public:
 //	about a single font
 class Font {
 	// Font bitmaps
+	// TODO: remove, replaced by descritpor sets
 	std::unordered_map <char, raster::TexturePacket>	_bitmaps;
 
 	// Descriptor set for each glyph texture
@@ -179,9 +180,44 @@ class Font {
 		size_t total_points = 0;
 		size_t total_cells = 0;
 
-		for (size_t i = 0; i < 96; i++) {
-			char c = i + ' ';
+		// Add space character
+		{
+			raster::TexturePacket tp = raster::make_texture(
+				ctx,
+				cpool,
+				Texture {
+					.width = 1024,
+					.height = 1024
+				},
+				VK_FORMAT_R8_UNORM,
+				VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+			);
 
+			tp.transition_manual(ctx, cpool,
+				VK_IMAGE_LAYOUT_UNDEFINED,
+				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+				VK_PIPELINE_STAGE_TRANSFER_BIT,
+				VK_PIPELINE_STAGE_TRANSFER_BIT
+			);
+
+			raster::Sampler sampler(ctx, tp);
+
+			VkDescriptorSet ds = Glyph::make_bitmap_ds(ctx, dpool);
+			sampler.bind(ctx, ds, 0);
+
+			_glyph_ds[' '] = ds;
+			_metrics[' '] = FT_Glyph_Metrics {
+				.horiBearingX = 0,
+				.horiBearingY = 0,
+				.horiAdvance = 32 * 1000,
+				.vertBearingX = 0,
+				.vertBearingY = 0,
+				.vertAdvance = 0,
+			};
+		}
+
+		for (char c = 0; c < 127; c++) {
 			// Load bitmap into texture
 			FT_Load_Char(face, c, FT_LOAD_RENDER);
 			uint width = face->glyph->bitmap.width;
@@ -281,7 +317,8 @@ public:
 	const VkDescriptorSet &glyph_ds(char c) const {
 		auto it = _glyph_ds.find(c);
 		if (it == _glyph_ds.end()) {
-			Logger::error() << "Glyph descriptor set not found: " << c << std::endl;
+			Logger::error() << "Glyph descriptor set not found: "
+				<< (int) c << "(\'" << c << "\')" << std::endl;
 			throw -1;
 		}
 

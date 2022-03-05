@@ -12,7 +12,7 @@ layout (location = 0) out vec4 color;
 // Main function
 void main()
 {
-	vec4 a_color = texture(tex, fpos);
-	color = vec4(1.0, 0.0, 1.0, 1.0);
-	color = mix(color, a_color, 0.5);
+	float t = texture(tex, fpos).r;
+	color = vec4(fcolor, 1.0) * t;
+	// color = mix(color, vec4(1.0, 0.0, 0.0, 1.0), 0.5);
 }

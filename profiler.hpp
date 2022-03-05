@@ -335,10 +335,10 @@ public:
 				.renderpass = render_pass,
 				.cpool = command_pool
 			},
-			"resources/times.ttf"
+			"resources/courier_new.ttf"
 		);
 
-		auto txt = text_render.text("Hello", {400, 300}, {1, 1, 1, 1});
+		auto txt = text_render.text("Hello World!", {100, 300}, {1, 1, 1, 1});
 		text_render.add(txt);
 	}
 

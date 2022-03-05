@@ -22,6 +22,7 @@ namespace gui {
 struct Text {
 	std::string		str;
 	std::vector <Glyph>	glyphs;
+	glm::vec4		bounds;
 };
 
 // TextRender class
@@ -74,14 +75,9 @@ private:
 
 	// Descriptors
 	VkDescriptorSetLayout			_layout;
-	VkDescriptorSet				_set;
 
 	// Vertex buffer for text
 	Glyph::VertexBuffer			_vbuf;
-
-	// Texture and sampler for characters
-	raster::TexturePacket			_tex;
-	raster::Sampler				_sampler;
 
 	// Screen dimensions
 	float					_width;
@@ -273,7 +269,6 @@ public:
 		// Create the descriptor set
 		// TODO: remove later, use the ones from font
 		_layout = Glyph::make_bitmap_dsl(bs.ctx);
-		_set = Glyph::make_bitmap_ds(bs.ctx, bs.dpool);
 
 		// Load shaders
 		_vertex = context.vk->make_shader(context.device, "shaders/bin/gui/glyph_vert.spv");
@@ -281,29 +276,6 @@ public:
 
 		// Allocate vertex buffer
 		_vbuf = Glyph::VertexBuffer(bs.ctx, Glyph::vb_settings);
-
-		// Create staging texture and sampler
-		_tex = raster::make_texture(bs.ctx, bs.cpool,
-			{
-				.width = 1024,
-				.height = 1024,
-				.channels = 1
-			},
-			VK_FORMAT_R8_UNORM,
-			VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-			VK_IMAGE_LAYOUT_UNDEFINED
-		);
-
-		// Transition layout appropriately
-		_tex.transition_manual(bs.ctx, bs.cpool,
-			VK_IMAGE_LAYOUT_UNDEFINED,
-			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-			VK_PIPELINE_STAGE_TRANSFER_BIT,
-			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
-		);
-
-		_sampler = raster::Sampler(bs.ctx, _tex);
-		_sampler.bind(bs.ctx, _set, 0);
 
 		// Create pipeline
 		_make_pipeline(bs);
@@ -317,10 +289,18 @@ public:
 	}
 
 	// Create text object
-	Text *text(const std::string &text, const glm::vec2 &pos, const glm::vec4 &color) {
+	Text *text(const std::string &text, const glm::vec2 &pos, const glm::vec4 &color, float scale = 1.0f) {
+		static const float factor = 1/1000.0f;
+
 		// NOTE: pos is the origin pos, not the top-left corner
-		float x = pos.x/_width;
-		float y = pos.y/_height;
+		float x = 2 * pos.x/_width - 1.0f;
+		float y = 2 * pos.y/_height - 1.0f;
+
+		float minx = x, maxx = x;
+		float miny = y, maxy = y;
+
+		float iwidth = scale * factor/_width;
+		float iheight = scale * factor/_height;
 
 		// Initialize text object
 		Text *txt = new Text {.str = text};
@@ -330,25 +310,36 @@ public:
 			// Get metrics for current character
 			FT_Glyph_Metrics metrics = _font.metrics(c);
 
-			// Get glyph bounds
-			float w = metrics.width/(_width * 8 * 64);
-			float h = metrics.height/(_height * 8 * 64);
+			// Get glyph top-left
+			float x0 = x + (metrics.horiBearingX * iwidth);
+			float y0 = y - (metrics.horiBearingY * iheight);
 
-			std::cout << "Character = " << c << std::endl;
-			std::cout << "\tx, y = " << x << ", " << y << std::endl;
-			std::cout << "\twidth, height = " << w << ", " << h << std::endl;
+			float miny = std::min(miny, y0);
+
+			// Get glyph bounds
+			float w = metrics.width * iwidth;
+			float h = metrics.height * iheight;
+
+			float maxy = std::max(maxy, y0 + h);
 
 			// Create glyph
 			Glyph g {
-				{x, y, x + w, y + h},
+				{x0, y0, x0 + w, y0 + h},
 				color
 			};
 
 			txt->glyphs.push_back(g);
 
 			// Advance
-			x += w;
+			x += metrics.horiAdvance * iwidth;
 		}
+
+		// Update text bounds
+		maxx = x;
+		txt->bounds = {
+			minx, miny,
+			maxx, maxy
+		};
 
 		// Return text
 		return txt;
@@ -357,11 +348,9 @@ public:
 	// Add text to render
 	// TODO: store and free text
 	void add(Text *txt) {
-		std::cout << "Adding text: " << txt->str << std::endl;
 		// Add each character to the table
 		for (int i = 0; i < txt->str.size(); i++) {
 			// Add to table
-			std::cout << "\tglyph: " << txt->glyphs[i].bounds() << std::endl;
 			RefSet &refs = _chars[txt->str[i]];
 			refs.insert(refs.begin(), Ref {i, txt});
 		}
@@ -420,34 +409,8 @@ public:
 
 		// Iterate over characters
 		for (auto &c : _chars) {
-			// Get texture for character
-			const raster::TexturePacket &tp = _font.bitmap(c.first);
-
-			/* Transition for copying
-			_tex.transition_manual(ctx, cpool,
-				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-				VK_PIPELINE_STAGE_TRANSFER_BIT,
-				VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
-			);
-
-			// Copy to staging texture
-			_tex.copy(ctx, cpool, tp,
-				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-				VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
-			);
-
-			// Transition back
-			_tex.transition_manual(ctx, cpool,
-				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				VK_PIPELINE_STAGE_TRANSFER_BIT,
-				VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
-			); */
-
+			// Get descriptor set for glyph
 			VkDescriptorSet set = _font.glyph_ds(c.first);
-
-			// std::cout << "Char = " << c.first << ", ds = " << set << std::endl;
 
 			// Bind descriptor set
 			vkCmdBindDescriptorSets(
@@ -472,8 +435,6 @@ public:
 			Draw draw = draws[i++];
 
 			// Draw
-			// TODO: could use ofset instead of repeatedly upload
-			// buffer
 			vkCmdDraw(
 				cmd,
 				6 * draw.number, 1,

@@ -56,28 +56,6 @@ struct TexturePacket {
 		// Copy image
 		VkCommandBuffer copy_cmd = Vulkan::begin_single_time_commands(ctx, cpool);
 
-		/* VkImageCopy copy_region = {
-			.srcSubresource = {
-				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-				.mipLevel = 0,
-				.baseArrayLayer = 0,
-				.layerCount = 1
-			},
-			.srcOffset = { 0, 0, 0 },
-			.dstSubresource = {
-				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-				.mipLevel = 0,
-				.baseArrayLayer = 0,
-				.layerCount = 1
-			},
-			.dstOffset = { 0, 0, 0 },
-			.extent = {
-				.width = width,
-				.height = height,
-				.depth = 1
-			}
-		}; */
-
 		// Use blit
 		VkImageBlit blit = {
 			.srcSubresource = {
@@ -108,12 +86,6 @@ struct TexturePacket {
 			1, &blit,
 			VK_FILTER_LINEAR
 		);
-
-		/* vkCmdCopyImage(copy_cmd,
-			tp.image, their_format,
-			image, our_format,
-			1, &copy_region
-		); */
 
 		Vulkan::submit_single_time_commands(ctx, cpool, copy_cmd);
 	}
@@ -174,7 +146,7 @@ struct TexturePacket {
 
 		Vulkan::submit_single_time_commands(ctx, cpool, cmd_buffer);
 	}
-	
+
 	inline void transition_manual(const Vulkan::Context &ctx,
 			const VkCommandPool &cpool,
 			const VkImageLayout &old_layout,
