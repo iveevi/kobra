@@ -56,7 +56,7 @@ struct TexturePacket {
 		// Copy image
 		VkCommandBuffer copy_cmd = Vulkan::begin_single_time_commands(ctx, cpool);
 
-		VkImageCopy copy_region = {
+		/* VkImageCopy copy_region = {
 			.srcSubresource = {
 				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 				.mipLevel = 0,
@@ -72,17 +72,48 @@ struct TexturePacket {
 			},
 			.dstOffset = { 0, 0, 0 },
 			.extent = {
-				.width = tp.width,
-				.height = tp.height,
+				.width = width,
+				.height = height,
 				.depth = 1
+			}
+		}; */
+
+		// Use blit
+		VkImageBlit blit = {
+			.srcSubresource = {
+				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+				.mipLevel = 0,
+				.baseArrayLayer = 0,
+				.layerCount = 1
+			},
+			.srcOffsets = {
+				{ 0, 0, 0 },
+				{ (int32_t) tp.width, (int32_t) tp.height, 1 }
+			},
+			.dstSubresource = {
+				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+				.mipLevel = 0,
+				.baseArrayLayer = 0,
+				.layerCount = 1
+			},
+			.dstOffsets = {
+				{ 0, 0, 0 },
+				{ (int32_t) width, (int32_t) height, 1 }
 			}
 		};
 
-		vkCmdCopyImage(copy_cmd,
+		vkCmdBlitImage(copy_cmd,
+			tp.image, their_format,
+			image, our_format,
+			1, &blit,
+			VK_FILTER_LINEAR
+		);
+
+		/* vkCmdCopyImage(copy_cmd,
 			tp.image, their_format,
 			image, our_format,
 			1, &copy_region
-		);
+		); */
 
 		Vulkan::submit_single_time_commands(ctx, cpool, copy_cmd);
 	}

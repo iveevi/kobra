@@ -2,6 +2,7 @@
 #define PROFILER_APPLICATION_H_
 
 #include "global.hpp"
+#include "include/gui/text.hpp"
 #include <vulkan/vulkan_core.h>
 
 using namespace mercury;
@@ -49,6 +50,9 @@ class ProfilerApplication : public mercury::App {
 	// Character map texture and sampler
 	raster::TexturePacket		cmap;
 	raster::Sampler			sampler;
+
+	// Text render
+	gui::TextRender			text_render;
 
 	// TODO: struct pass parameters?
 	template <size_t N>
@@ -350,6 +354,21 @@ public:
 			command_buffers,
 			swapchain.images.size()
 		);
+
+		// Create text render
+		text_render = gui::TextRender(
+			gui::TextRender::Bootstrap {
+				.ctx = context,
+				.pool = descriptor_pool,
+				.swapchain = swapchain,
+				.renderpass = render_pass,
+				.cpool = command_pool
+			},
+			"resources/times.ttf"
+		);
+
+		auto txt = text_render.text("Hello", {400, 300}, {1, 1, 1, 1});
+		text_render.add(txt);
 	}
 
 	// Record command buffers
@@ -425,6 +444,8 @@ public:
 
 		// vkCmdBindIndexBuffer(cbuf, glyph_ib.vk_buffer(), 0, VK_INDEX_TYPE_UINT32);
 		// vkCmdDrawIndexed(cbuf, glyph_ib.size(), 1, 0, 0, 0);
+
+		text_render.render(context, command_pool, cbuf);
 
 		// End render pass
 		vkCmdEndRenderPass(cbuf);

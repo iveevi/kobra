@@ -64,10 +64,12 @@ public:
 	// Constructor
 	Glyph() {}
 	Glyph(glm::vec4 bounds) : _bounds(bounds) {}
+	Glyph(glm::vec4 bounds, glm::vec3 color)
+			: _bounds(bounds), _color(color) {}
 
 	// Render the glyph
 	// TODO: render method or upload method (instacing)?
-	void upload(VertexBuffer &vb) {
+	void upload(VertexBuffer &vb) const {
 		std::array <Vertex, 6> vertices {
 			Vertex {_bounds},
 			Vertex {_bounds},
@@ -247,6 +249,16 @@ public:
 		auto it = _bitmaps.find(c);
 		if (it == _bitmaps.end()) {
 			Logger::error() << "Glyph not found: " << c << std::endl;
+			throw -1;
+		}
+
+		return it->second;
+	}
+
+	const FT_Glyph_Metrics &metrics(char c) const {
+		auto it = _metrics.find(c);
+		if (it == _metrics.end()) {
+			Logger::error() << "Glyph metrics not found: " << c << std::endl;
 			throw -1;
 		}
 

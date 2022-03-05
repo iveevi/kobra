@@ -20,8 +20,8 @@ namespace gui {
 // 	and is served by
 // 	the text render class
 struct Text {
-	std::string		_str;
-	std::vector <Glyph>	_glyphs;
+	std::string		str;
+	std::vector <Glyph>	glyphs;
 };
 
 // TextRender class
@@ -42,12 +42,16 @@ private:
 	// Reference to glyph (in a text class)
 	//	so that updating text is not a pain
 	struct Ref {
-		int	index;
-		Text	*text;
+		int		index;
+		const Text	*text;
 
 		// For sets
 		bool operator==(const Ref &r) const {
 			return index == r.index && text == r.text;
+		}
+
+		bool operator<(const Ref &r) const {
+			return index < r.index;
 		}
 	};
 
@@ -74,6 +78,14 @@ private:
 
 	// Vertex buffer for text
 	Glyph::VertexBuffer			_vbuf;
+
+	// Texture and sampler for characters
+	raster::TexturePacket			_tex;
+	raster::Sampler				_sampler;
+
+	// Screen dimensions
+	float					_width;
+	float					_height;
 
 	// Create the pipeline
 	void _make_pipeline(const Bootstrap &bs) {
@@ -250,6 +262,9 @@ private:
 		_pipeline_layout = pipeline_layout;
 	}
 public:
+	// Default constructor
+	TextRender() {}
+
 	// Constructor from paht to font file
 	TextRender(const Bootstrap &bs, const std::string &path) {
 		// Get context
@@ -266,13 +281,150 @@ public:
 		// Allocate vertex buffer
 		_vbuf = Glyph::VertexBuffer(bs.ctx, Glyph::vb_settings);
 
+		// Create staging texture and sampler
+		_tex = raster::make_texture(bs.ctx, bs.cpool,
+			{
+				.width = 1024,
+				.height = 1024,
+				.channels = 1
+			},
+			VK_FORMAT_R8_UNORM,
+			VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+			VK_IMAGE_LAYOUT_UNDEFINED
+		);
+
+		// Transition layout appropriately
+		_tex.transition_manual(bs.ctx, bs.cpool,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+		);
+
+		_sampler = raster::Sampler(bs.ctx, _tex);
+		_sampler.bind(bs.ctx, _set, 0);
+
 		// Create pipeline
 		_make_pipeline(bs);
 
 		// Load font
 		_font = Font(bs.ctx, bs.cpool, path);
+
+		// Dimensions
+		_width = bs.swapchain.extent.width;
+		_height = bs.swapchain.extent.height;
 	}
 
+	// Create text object
+	Text text(const std::string &text, const glm::vec2 &pos, const glm::vec4 &color) {
+		float x = pos.x/_width;
+		float y = pos.y/_height;
+
+		// Initialize text object
+		Text txt {.str = text};
+
+		// Create glyphs
+		for (char c : text) {
+			// Get metrics for current character
+			FT_Glyph_Metrics metrics = _font.metrics(c);
+
+			// Get glyph bounds
+			float w = metrics.width/_width;
+			float h = metrics.height/_height;
+
+			// Create glyph
+			Glyph g {
+				{x, y, x + w, y + h},
+				color
+			};
+
+			txt.glyphs.push_back(g);
+
+			// Advance
+			x += w;
+		}
+
+		// Return text
+		return txt;
+	}
+
+	// Add text to render
+	void add(const Text &txt) {
+		// Add each character to the table
+		for (int i = 0; i < txt.str.size(); i++) {
+			// Add to table
+			RefSet &refs = _chars[txt.str[i]];
+			refs.insert(refs.begin(), Ref {i, &txt});
+		}
+	}
+
+	// Update vertex buffer
+	void update(char c) {
+		// Get context
+		_vbuf.reset_push_back();
+
+		// Get glyphs
+		RefSet &refs = _chars[c];
+
+		// Iterate over glyphs
+		for (auto &ref : refs)
+			ref.text->glyphs[ref.index].upload(_vbuf);
+
+		// Update vertex buffer
+		_vbuf.sync_size();
+		_vbuf.upload();
+	}
+
+	// Render text
+	void render(const Vulkan::Context &ctx, const VkCommandPool &cpool, const VkCommandBuffer &cmd) {
+		// Iterate over characters
+		for (auto &c : _chars) {
+			// Get texture for character
+			const raster::TexturePacket &tp = _font.bitmap(c.first);
+
+			// Transition for copying
+			_tex.transition_manual(ctx, cpool,
+				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+				VK_PIPELINE_STAGE_TRANSFER_BIT,
+				VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+			);
+
+			// Copy to staging texture
+			_tex.copy(ctx, cpool, tp,
+				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+				VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+			);
+			
+			// Transition back
+			_tex.transition_manual(ctx, cpool,
+				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+				VK_PIPELINE_STAGE_TRANSFER_BIT,
+				VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+			);
+
+			// Update vertex buffer
+			update(c.first);
+
+			// Bind pipeline
+			vkCmdBindPipeline(
+				cmd,
+				VK_PIPELINE_BIND_POINT_GRAPHICS,
+				_pipeline
+			);
+
+			// Bind descriptor set
+			vkCmdBindDescriptorSets(
+				cmd,
+				VK_PIPELINE_BIND_POINT_GRAPHICS,
+				_pipeline_layout,
+				0,
+				1, &_set,
+				0, nullptr
+			);
+		}
+	}
 };
 
 }
