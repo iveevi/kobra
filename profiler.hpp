@@ -50,6 +50,7 @@ class ProfilerApplication : public mercury::App {
 
 	// Text render
 	gui::TextRender			text_render;
+	gui::Text *			text;
 
 	// TODO: struct pass parameters?
 	template <size_t N>
@@ -338,8 +339,8 @@ public:
 			"resources/courier_new.ttf"
 		);
 
-		auto txt = text_render.text("Hello World!", {100, 300}, {1, 1, 1, 1});
-		text_render.add(txt);
+		text = text_render.text("Hello World!", {100, 300}, {1, 1, 1, 1});
+		text_render.add(text);
 	}
 
 	// Record command buffers
@@ -438,6 +439,10 @@ public:
 		};
 
 		// Record commands
+		text->str = "time: " + std::to_string(1000 * frame_time) + " ms";
+		std::cout << "text: \" " << text->str << " \"\n";
+		text->refresh();
+
 		record(command_buffers[image_index], swapchain.framebuffers[image_index]);
 
 		// Create information
@@ -502,29 +507,19 @@ public:
 
 	// Update geometry
 	void update_geometry() {
+		// TODO: geometry render class
 		vb.reset_push_back();
 		ib.reset_push_back();
 
 		gui::Rect({0, 0.2}, {0.5, 0.5}, {1.0, 0.5, 0.0}).upload(vb, ib);
 		gui::Rect({0.2, -0.2}, {0.6, 0.1}, {0.0, 0.5, 1.0}).upload(vb, ib);
+		gui::Rect(text->bounds, {0.0, 0.5, 1.0}).upload(vb, ib);
 
 		vb.sync_size();
 		ib.sync_size();
 
 		vb.upload();
 		ib.upload();
-
-		// Glyphs
-		glyph_vb.reset_push_back();
-		// glyph_ib.reset_push_back();
-
-		gui::Glyph({-1, -1, -0.5, 0}).upload(glyph_vb);
-
-		glyph_vb.sync_size();
-		// glyph_ib.sync_size();
-
-		glyph_vb.upload();
-		// glyph_ib.upload();
 	}
 
 	void frame() override {

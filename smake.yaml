@@ -15,7 +15,8 @@ definitions:
     source/vulkan.cpp,
     source/logger.cpp,
     source/capture.cpp,
-    source/texture.cpp'
+    source/texture.cpp,
+    source/gui/text.cpp'
 
 builds:
   - mercury_release:

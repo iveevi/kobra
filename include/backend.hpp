@@ -1263,9 +1263,13 @@ public:
 			throw(-1);
 		}
 
-		// Log creation and return
+#ifdef MERCURY_LOG_ALL
+
 		Logger::ok() << "[Vulkan] Descriptor set created (VkDescriptorSet="
 			<< new_descriptor_set << ")\n";
+
+#endif
+
 		return new_descriptor_set;
 	}
 

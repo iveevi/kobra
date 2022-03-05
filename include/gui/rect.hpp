@@ -26,6 +26,8 @@ class Rect : public Object {
 public:
 	// Constructors
 	Rect() : min(0.0f), max(0.0f) {}
+	Rect(const glm::vec4 &bounds, const glm::vec3 &c = glm::vec3 {1.0})
+		: min(bounds.x, bounds.y), max(bounds.z, bounds.w), color(c) {}
 	Rect(const glm::vec2 &min, const glm::vec2 &max, const glm::vec3 &c = glm::vec3 {1.0})
 		: min(min), max(max), color(c) {}
 	
