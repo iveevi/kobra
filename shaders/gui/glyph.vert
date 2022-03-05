@@ -37,9 +37,9 @@ void main()
 	);
 
 	// Set the vertex position
-	gl_Position = vec4(pos[gl_VertexIndex], 0.0, 1.0);
+	gl_Position = vec4(pos[gl_VertexIndex % 6], 0.0, 1.0);
 	
 	// Fragment shader outputs
 	fcolor = vec3(1.0, 1.0, 1.0);
-	fpos = nvecs[gl_VertexIndex];
+	fpos = nvecs[gl_VertexIndex % 6];
 }

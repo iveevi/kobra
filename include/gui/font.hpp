@@ -67,6 +67,9 @@ public:
 	Glyph(glm::vec4 bounds, glm::vec3 color)
 			: _bounds(bounds), _color(color) {}
 
+	// Getters
+	inline glm::vec4 bounds() const { return _bounds; }
+
 	// Render the glyph
 	// TODO: render method or upload method (instacing)?
 	void upload(VertexBuffer &vb) const {
@@ -122,10 +125,7 @@ public:
 
 	// Make descriptor set
 	static VkDescriptorSet make_bitmap_ds(const Vulkan::Context &ctx, const VkDescriptorPool &pool) {
-		static VkDescriptorSet ds = VK_NULL_HANDLE;
-
-		if (ds != VK_NULL_HANDLE)
-			return ds;
+		VkDescriptorSet ds = VK_NULL_HANDLE;
 
 		// Create descriptor set
 		ds = ctx.vk->make_descriptor_set(
@@ -144,6 +144,9 @@ class Font {
 	// Font bitmaps
 	std::unordered_map <char, raster::TexturePacket>	_bitmaps;
 
+	// Descriptor set for each glyph texture
+	std::unordered_map <char, VkDescriptorSet>		_glyph_ds;
+
 	// Font metrics
 	std::unordered_map <char, FT_Glyph_Metrics>		_metrics;
 
@@ -157,7 +160,10 @@ class Font {
 	}
 
 	// Load FreeType library
-	void load_font(const Vulkan::Context &ctx, const VkCommandPool &cpool, const std::string &file) {
+	void load_font(const Vulkan::Context &ctx,
+			const VkCommandPool &cpool,
+			const VkDescriptorPool &dpool,
+			const std::string &file) {
 		// Load library
 		FT_Library library;
 		check_error(FT_Init_FreeType(&library));
@@ -186,14 +192,14 @@ class Font {
 				.channels = 1
 			};
 
-			Logger::warn() << "Glyph: " << width << " x " << height << std::endl;
+			// Logger::warn() << "Glyph: " << width << " x " << height << std::endl;
 			if (width * height == 0)
 				continue;
 
 			// Load texture
 			tex.data = bytes(width * height);
 			memcpy(tex.data.data(), face->glyph->bitmap.buffer, width * height);
-			Logger::warn() << "data size = " << tex.data.size() << std::endl;
+			// Logger::warn() << "data size = " << tex.data.size() << std::endl;
 
 			int nulls = 0;
 			for (auto &b : tex.data) {
@@ -201,7 +207,7 @@ class Font {
 					nulls++;
 			}
 
-			Logger::warn() << "tex.data Nulls: " << nulls << std::endl;
+			// Logger::warn() << "tex.data Nulls: " << nulls << std::endl;
 
 			nulls = 0;
 			for (int i = 0; i < tex.data.size(); i++) {
@@ -209,19 +215,20 @@ class Font {
 					nulls++;
 			}
 
-			Logger::warn() << "face->glyph->bitmap.buffer Nulls: " << nulls << std::endl;
+			// Logger::warn() << "face->glyph->bitmap.buffer Nulls: " << nulls << std::endl;
 
 			// Create texture
 			raster::TexturePacket tp = raster::make_texture(
 				ctx, cpool, tex,
 				VK_FORMAT_R8_UNORM,
-				VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+				VK_IMAGE_USAGE_TRANSFER_DST_BIT
+					| VK_IMAGE_USAGE_SAMPLED_BIT,
 				VK_IMAGE_LAYOUT_UNDEFINED
 			);
 
 			tp.transition_manual(ctx, cpool,
 				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-				VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 				VK_PIPELINE_STAGE_TRANSFER_BIT,
 				VK_PIPELINE_STAGE_TRANSFER_BIT
 			);
@@ -229,11 +236,17 @@ class Font {
 			// Add to dictionary
 			_bitmaps[c] = tp;
 			_metrics[c] = face->glyph->metrics;
+
+			VkDescriptorSet ds = Glyph::make_bitmap_ds(ctx, dpool);
+			raster::Sampler sampler = raster::Sampler(ctx, tp);
+			sampler.bind(ctx, ds, 0);
+
+			_glyph_ds[c] = ds;
 		}
 	}
 public:
 	Font() {}
-	Font(const Vulkan::Context &ctx, const VkCommandPool &cpool, const std::string &file) {
+	Font(const Vulkan::Context &ctx, const VkCommandPool &cpool, const VkDescriptorPool &dpool, const std::string &file) {
 		// Check that the file exists
 		if (!file_exists(file)) {
 			Logger::error("Font file not found: " + file);
@@ -241,7 +254,7 @@ public:
 		}
 
 		// Load font
-		load_font(ctx, cpool, file);
+		load_font(ctx, cpool, dpool, file);
 	}
 
 	// Retrieve glyph bitmap
@@ -259,6 +272,16 @@ public:
 		auto it = _metrics.find(c);
 		if (it == _metrics.end()) {
 			Logger::error() << "Glyph metrics not found: " << c << std::endl;
+			throw -1;
+		}
+
+		return it->second;
+	}
+
+	const VkDescriptorSet &glyph_ds(char c) const {
+		auto it = _glyph_ds.find(c);
+		if (it == _glyph_ds.end()) {
+			Logger::error() << "Glyph descriptor set not found: " << c << std::endl;
 			throw -1;
 		}
 

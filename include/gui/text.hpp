@@ -33,7 +33,7 @@ public:
 	// TODO: subcontext structure?
 	struct Bootstrap {
 		Vulkan::Context		ctx;
-		VkDescriptorPool	pool;
+		VkDescriptorPool	dpool;
 		Vulkan::Swapchain	swapchain;
 		VkRenderPass		renderpass;
 		VkCommandPool		cpool;
@@ -110,8 +110,8 @@ private:
 		VkPipelineShaderStageCreateInfo shader_stages[] = { vertex, fragment };
 
 		// Vertex input
-		auto binding_description = gui::Vertex::vertex_binding();
-		auto attribute_descriptions = gui::Vertex::vertex_attributes();
+		auto binding_description = gui::Glyph::Vertex::vertex_binding();
+		auto attribute_descriptions = gui::Glyph::Vertex::vertex_attributes();
 
 		VkPipelineVertexInputStateCreateInfo vertex_input {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
@@ -271,8 +271,9 @@ public:
 		Vulkan::Context context = bs.ctx;
 
 		// Create the descriptor set
+		// TODO: remove later, use the ones from font
 		_layout = Glyph::make_bitmap_dsl(bs.ctx);
-		_set = Glyph::make_bitmap_ds(bs.ctx, bs.pool);
+		_set = Glyph::make_bitmap_ds(bs.ctx, bs.dpool);
 
 		// Load shaders
 		_vertex = context.vk->make_shader(context.device, "shaders/bin/gui/glyph_vert.spv");
@@ -308,7 +309,7 @@ public:
 		_make_pipeline(bs);
 
 		// Load font
-		_font = Font(bs.ctx, bs.cpool, path);
+		_font = Font(bs.ctx, bs.cpool, bs.dpool, path);
 
 		// Dimensions
 		_width = bs.swapchain.extent.width;
@@ -316,12 +317,13 @@ public:
 	}
 
 	// Create text object
-	Text text(const std::string &text, const glm::vec2 &pos, const glm::vec4 &color) {
+	Text *text(const std::string &text, const glm::vec2 &pos, const glm::vec4 &color) {
+		// NOTE: pos is the origin pos, not the top-left corner
 		float x = pos.x/_width;
 		float y = pos.y/_height;
 
 		// Initialize text object
-		Text txt {.str = text};
+		Text *txt = new Text {.str = text};
 
 		// Create glyphs
 		for (char c : text) {
@@ -329,8 +331,12 @@ public:
 			FT_Glyph_Metrics metrics = _font.metrics(c);
 
 			// Get glyph bounds
-			float w = metrics.width/_width;
-			float h = metrics.height/_height;
+			float w = metrics.width/(_width * 8 * 64);
+			float h = metrics.height/(_height * 8 * 64);
+
+			std::cout << "Character = " << c << std::endl;
+			std::cout << "\tx, y = " << x << ", " << y << std::endl;
+			std::cout << "\twidth, height = " << w << ", " << h << std::endl;
 
 			// Create glyph
 			Glyph g {
@@ -338,7 +344,7 @@ public:
 				color
 			};
 
-			txt.glyphs.push_back(g);
+			txt->glyphs.push_back(g);
 
 			// Advance
 			x += w;
@@ -349,20 +355,20 @@ public:
 	}
 
 	// Add text to render
-	void add(const Text &txt) {
+	// TODO: store and free text
+	void add(Text *txt) {
+		std::cout << "Adding text: " << txt->str << std::endl;
 		// Add each character to the table
-		for (int i = 0; i < txt.str.size(); i++) {
+		for (int i = 0; i < txt->str.size(); i++) {
 			// Add to table
-			RefSet &refs = _chars[txt.str[i]];
-			refs.insert(refs.begin(), Ref {i, &txt});
+			std::cout << "\tglyph: " << txt->glyphs[i].bounds() << std::endl;
+			RefSet &refs = _chars[txt->str[i]];
+			refs.insert(refs.begin(), Ref {i, txt});
 		}
 	}
 
 	// Update vertex buffer
-	void update(char c) {
-		// Get context
-		_vbuf.reset_push_back();
-
+	size_t update(char c) {
 		// Get glyphs
 		RefSet &refs = _chars[c];
 
@@ -370,19 +376,54 @@ public:
 		for (auto &ref : refs)
 			ref.text->glyphs[ref.index].upload(_vbuf);
 
-		// Update vertex buffer
+		return refs.size();
+	}
+
+	// Draw call structure
+	struct Draw {
+		size_t offset;
+		size_t number;
+	};
+
+	std::vector <Draw> update() {
+		_vbuf.reset_push_back();
+
+		// Get glyphs
+		std::vector <Draw> draws;
+
+		// Iterate over glyphs
+		for (auto &refs : _chars) {
+			size_t offset = _vbuf.push_size();
+			size_t number = update(refs.first);
+
+			draws.push_back({offset, number});
+		}
+
 		_vbuf.sync_size();
 		_vbuf.upload();
+
+		return draws;
 	}
 
 	// Render text
 	void render(const Vulkan::Context &ctx, const VkCommandPool &cpool, const VkCommandBuffer &cmd) {
+		// Bind pipeline
+		vkCmdBindPipeline(
+			cmd,
+			VK_PIPELINE_BIND_POINT_GRAPHICS,
+			_pipeline
+		);
+
+		// Update vertex buffer
+		std::vector <Draw> draws = update();
+		size_t i = 0;
+
 		// Iterate over characters
 		for (auto &c : _chars) {
 			// Get texture for character
 			const raster::TexturePacket &tp = _font.bitmap(c.first);
 
-			// Transition for copying
+			/* Transition for copying
 			_tex.transition_manual(ctx, cpool,
 				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -395,24 +436,18 @@ public:
 				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 				VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
 			);
-			
+
 			// Transition back
 			_tex.transition_manual(ctx, cpool,
 				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 				VK_PIPELINE_STAGE_TRANSFER_BIT,
 				VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
-			);
+			); */
 
-			// Update vertex buffer
-			update(c.first);
+			VkDescriptorSet set = _font.glyph_ds(c.first);
 
-			// Bind pipeline
-			vkCmdBindPipeline(
-				cmd,
-				VK_PIPELINE_BIND_POINT_GRAPHICS,
-				_pipeline
-			);
+			// std::cout << "Char = " << c.first << ", ds = " << set << std::endl;
 
 			// Bind descriptor set
 			vkCmdBindDescriptorSets(
@@ -420,8 +455,29 @@ public:
 				VK_PIPELINE_BIND_POINT_GRAPHICS,
 				_pipeline_layout,
 				0,
-				1, &_set,
+				1, &set,
 				0, nullptr
+			);
+
+			// Bind vertex buffer
+			VkBuffer buffers[] {_vbuf.vk_buffer()};
+			VkDeviceSize offsets[] {0};
+
+			vkCmdBindVertexBuffers(
+				cmd,
+				0, 1, buffers, offsets
+			);
+
+			// Draw call info
+			Draw draw = draws[i++];
+
+			// Draw
+			// TODO: could use ofset instead of repeatedly upload
+			// buffer
+			vkCmdDraw(
+				cmd,
+				6 * draw.number, 1,
+				draw.offset, 0
 			);
 		}
 	}

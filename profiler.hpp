@@ -44,9 +44,6 @@ class ProfilerApplication : public mercury::App {
 	VkPipelineLayout		graphics_pl;
 	VkPipelineLayout		glyphs_pl;
 
-	// Font
-	gui::Font			font;
-
 	// Character map texture and sampler
 	raster::TexturePacket		cmap;
 	raster::Sampler			sampler;
@@ -321,32 +318,6 @@ public:
 		// Create command buffers
 		// update_command_buffers();
 
-		// Load font
-		font = gui::Font(context, command_pool, "resources/times.ttf");
-
-		cmap = raster::make_texture(context, command_pool,
-			{.width = 1024, .height = 1024, .channels = 1},
-			VK_FORMAT_R8_UNORM,
-			VK_IMAGE_USAGE_SAMPLED_BIT
-				| VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-			VK_IMAGE_LAYOUT_UNDEFINED
-		);
-
-		cmap.transition_manual(context, command_pool,
-			VK_IMAGE_LAYOUT_UNDEFINED,
-			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-			VK_PIPELINE_STAGE_TRANSFER_BIT,
-			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
-		);
-
-		// Create the sampler and bind to the descriptor set
-		sampler = raster::Sampler(context, cmap);
-		sampler.bind(context, glyphs_ds, 0);
-
-		// gui::GlyphOutline go = font['g'];
-		// go.dump();
-		// go.bind(glyphs_ds, 0);
-
 		// TODO: context method
 		context.vk->make_command_buffers(
 			context.device,
@@ -359,7 +330,7 @@ public:
 		text_render = gui::TextRender(
 			gui::TextRender::Bootstrap {
 				.ctx = context,
-				.pool = descriptor_pool,
+				.dpool = descriptor_pool,
 				.swapchain = swapchain,
 				.renderpass = render_pass,
 				.cpool = command_pool
@@ -403,48 +374,7 @@ public:
 		vkCmdBindIndexBuffer(cbuf, ib.vk_buffer(), 0, VK_INDEX_TYPE_UINT32);
 		vkCmdDrawIndexed(cbuf, ib.size(), 1, 0, 0, 0);
 
-		// Bind glyphs pipeline
-		vkCmdBindPipeline(cbuf, VK_PIPELINE_BIND_POINT_GRAPHICS, glyphs_pipeline);
-
-		// Bind descriptor set
-		vkCmdBindDescriptorSets(
-			cbuf, VK_PIPELINE_BIND_POINT_GRAPHICS,
-			glyphs_pl, 0, 1, &glyphs_ds, 0, nullptr
-		);
-
-		// Bind glyph
-		auto texture = font.bitmap('h');
-
-		cmap.transition_manual(context, command_pool,
-			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			VK_PIPELINE_STAGE_TRANSFER_BIT,
-			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
-		);
-
-		cmap.copy(context, command_pool, texture,
-			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
-		);
-		
-		cmap.transition_manual(context, command_pool,
-			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-			VK_PIPELINE_STAGE_TRANSFER_BIT,
-			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
-		);
-
-		// texture.bind(context.vk_device(), glyphs_ds, 0);
-		// sampler.assign(context, texture, VK_IMAGE_VIEW_TYPE_2D);
-
-		VkBuffer glyph_vbs[] = {glyph_vb.vk_buffer()};
-		VkDeviceSize glyph_offsets[] = {0};
-		vkCmdBindVertexBuffers(cbuf, 0, 1, glyph_vbs, glyph_offsets);
-		vkCmdDraw(cbuf, 6, 1, 0, 0);
-
-		// vkCmdBindIndexBuffer(cbuf, glyph_ib.vk_buffer(), 0, VK_INDEX_TYPE_UINT32);
-		// vkCmdDrawIndexed(cbuf, glyph_ib.size(), 1, 0, 0, 0);
-
+		// Draw text
 		text_render.render(context, command_pool, cbuf);
 
 		// End render pass
