@@ -3,7 +3,8 @@
 
 #include "global.hpp"
 #include "include/gui/text.hpp"
-#include <vulkan/vulkan_core.h>
+#include "include/gui/area.hpp"
+#include "include/gui/button.hpp"
 
 using namespace mercury;
 
@@ -51,6 +52,9 @@ class ProfilerApplication : public mercury::App {
 	// Text render
 	gui::TextRender			text_render;
 	gui::Text *			text;
+
+	// Buttons
+	gui::Button *			button;
 
 	// TODO: struct pass parameters?
 	template <size_t N>
@@ -341,6 +345,19 @@ public:
 
 		text = text_render.text("Hello World!", {100, 300}, {1, 1, 1, 1});
 		text_render.add(text);
+
+		/* gui::Rect idle = gui::Rect({0.1, 0.1}, {0.5, 0.5}, {1.0, 0.0, 1.0});
+		gui::Rect hover = gui::Rect({0.1, 0.1}, {0.5, 0.5}, {0.0, 1.0, 1.0});
+		gui::Rect active = gui::Rect({0.1, 0.1}, {0.5, 0.5}, {1.0, 1.0, 0.0}); */
+
+		gui::Rect idle(window, 0, 0, 300, 300, {0.8, 1.0, 0.8});
+		gui::Rect hover(window, 0, 0, 300, 300, {0.6, 1.0, 0.6});
+		gui::Rect active(window, 0, 0, 300, 300, {0.4, 1.0, 0.4});
+
+		button = new gui::Button(window,
+			std::shared_ptr <gui::Area> (new gui::RectArea(0, 0, 300, 300)),
+			idle, hover, active
+		);
 	}
 
 	// Record command buffers
@@ -440,8 +457,12 @@ public:
 
 		// Record commands
 		text->str = "time: " + std::to_string(1000 * frame_time) + " ms";
-		std::cout << "text: \" " << text->str << " \"\n";
 		text->refresh();
+
+		/* glm::vec2 mpos = input.mouse_position();
+		if (area.contains(mpos)) {
+			std::cout << "mouse in area!" << std::endl;
+		} */
 
 		record(command_buffers[image_index], swapchain.framebuffers[image_index]);
 
@@ -515,6 +536,8 @@ public:
 		gui::Rect({0.2, -0.2}, {0.6, 0.1}, {0.0, 0.5, 1.0}).upload(vb, ib);
 		gui::Rect(text->bounds, {0.0, 0.5, 1.0}).upload(vb, ib);
 
+		button->render(vb, ib);
+
 		vb.sync_size();
 		ib.sync_size();
 
@@ -523,6 +546,12 @@ public:
 	}
 
 	void frame() override {
+		// Check input
+		if (input.is_key_down(GLFW_KEY_ESCAPE)) {
+			glfwSetWindowShouldClose(surface.window, true);
+			return;
+		}
+
 		// Update geometry
 		update_geometry();
 

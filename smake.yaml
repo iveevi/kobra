@@ -16,7 +16,8 @@ definitions:
     source/logger.cpp,
     source/capture.cpp,
     source/texture.cpp,
-    source/gui/text.cpp'
+    source/gui/text.cpp,
+    source/io/event.cpp'
 
 builds:
   - mercury_release:
