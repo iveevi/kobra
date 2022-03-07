@@ -15,12 +15,11 @@ namespace mercury {
 
 // Core definitions for GUI
 namespace gui {
-
 // Vertex data
 struct Vertex {
 	glm::vec2 pos;
 	glm::vec3 color;
-	
+
 	// Get vertex binding description
 	static VertexBinding vertex_binding() {
 		return VertexBinding {
@@ -54,11 +53,58 @@ struct Vertex {
 using VertexBuffer = BufferManager <Vertex>;
 using IndexBuffer = BufferManager <uint32_t>;
 
-// Abstract object template
-struct Object {};
+// RenderPacket structure contains
+// 	the data needed to render all
+// 	the GUI elements in a Layer object
+struct RenderPacket {
+	// Rectangles
+	struct {
+		VertexBuffer *vb;
+		IndexBuffer *ib;
+	} rects;
+
+	// TODO: text renders so that text can become an object
+
+	// Reset the render packet
+	void reset() {
+		rects.vb->reset_push_back();
+		rects.ib->reset_push_back();
+	}
+
+	// Sync the render packet
+	void sync() {
+		// Sync sizes
+		rects.vb->sync_size();
+		rects.ib->sync_size();
+
+		// Upload
+		rects.vb->upload();
+		rects.ib->upload();
+	}
+};
+
+
+// Abstract GUI element type
+struct _element {
+	// Child elements
+	std::vector <std::shared_ptr <_element>> children;
+
+	// Pure virtual function to render
+	virtual void render(RenderPacket &) = 0;
+
+	// Wrapper function to render
+	void render_element(RenderPacket &packet) {
+		// Render this
+		render(packet);
+
+		// Render all children
+		for (auto &child : children)
+			child->render(packet);
+	}
+};
 
 // Aliases
-using ObjectPtr = std::shared_ptr <Object>;
+using Element = std::shared_ptr <_element>;
 
 }
 

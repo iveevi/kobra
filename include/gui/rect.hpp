@@ -16,7 +16,7 @@ namespace mercury {
 
 namespace gui {
 
-class Rect : public Object {
+class Rect : public _element {
 	// Store normalized coordinates
 	//	(0, 0) is the top-left corner
 	//	(1, 1) is the bottom-right corner
@@ -45,10 +45,13 @@ public:
 		min = glm::vec2 {nx, ny};
 		max = glm::vec2 {nx + nw, ny + nh};
 	}
-	
-	// Upload vertex data to GPU
-	// TODO: a common structure for rendering
-	void upload(VertexBuffer &vb, IndexBuffer &ib) const {
+
+	// Render
+	void render(RenderPacket &packet) override {
+		// Get vertex and index buffers
+		auto &vb = packet.rects.vb;
+		auto &ib = packet.rects.ib;
+
 		// Create vertex data
 		std::array <Vertex, 4> vertices {
 			Vertex { min, color },
@@ -57,15 +60,15 @@ public:
 			Vertex { glm::vec2 { max.x, min.y }, color }
 		};
 
-		uint32_t vsize = vb.push_size();
+		uint32_t vsize = vb->push_size();
 		std::array <uint32_t, 6> indices {
 			vsize, vsize + 2, vsize + 1,
 			vsize, vsize + 3, vsize + 2
 		};
 		
 		// Upload vertex data
-		vb.push_back(vertices);
-		ib.push_back(indices);
+		vb->push_back(vertices);
+		ib->push_back(indices);
 	}
 };
 

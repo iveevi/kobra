@@ -12,9 +12,10 @@ namespace mercury {
 namespace gui {
 
 // Contains a set of
-// GUI objects to render
+//	GUI elements to render
 class Layer {
-	std::vector <ObjectPtr>	_objects;
+	std::vector <Element> _elements;
+public:
 };
 
 }

@@ -17,11 +17,26 @@ namespace mercury {
 namespace gui {
 
 // Button class
-class Button {
+class Button : public _element {
+public:
+	// Specialized button maker
+	struct RectButton {
+		float x;
+		float y;
+		float w;
+		float h;
+
+		int button;
+
+		glm::vec3 idle;
+		glm::vec3 hover;
+		glm::vec3 active;
+	};
+private:
 	// TODO: allow a variety of shapes after abstraction
 	std::shared_ptr <Area>	_area;
 
-	Rect			_idle;		// TODO: shapes
+	Rect			_idle;		// TODO: elements
 	Rect			_hover;
 	Rect			_pressed;
 
@@ -62,17 +77,26 @@ public:
 		wctx.mouse_events.subscribe(mouse_callback, this);
 	}
 
+	// Specialized constructors
+	Button(App::Window &wctx, RectButton rb)
+			: Button(wctx,
+				std::shared_ptr <Area> (new RectArea(rb.x, rb.y, rb.w, rb.h)),
+				Rect(wctx, rb.x, rb.y, rb.w, rb.h, rb.idle),
+				Rect(wctx, rb.x, rb.y, rb.w, rb.h, rb.hover),
+				Rect(wctx, rb.x, rb.y, rb.w, rb.h, rb.active),
+				rb.button) {}
+
 	// Render
-	void render(VertexBuffer &vb, IndexBuffer &ib) {
+	void render(RenderPacket &rp) override {
 		switch (_state) {
 		case 0:
-			_idle.upload(vb, ib);
+			_idle.render(rp);
 			break;
 		case 1:
-			_hover.upload(vb, ib);
+			_hover.render(rp);
 			break;
 		case 2:
-			_pressed.upload(vb, ib);
+			_pressed.render(rp);
 			break;
 		}
 	}

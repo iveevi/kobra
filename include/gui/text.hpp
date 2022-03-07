@@ -206,6 +206,9 @@ public:
 		return txt;
 	}
 
+	// TODO: use a more immediate approach
+	// 	since every text object holds the text render origin,
+	// 	we can add the text and then render
 	void text(Text *txt) {
 		static const float factor = 1/1000.0f;
 
