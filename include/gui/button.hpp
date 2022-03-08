@@ -74,7 +74,7 @@ public:
 		};
 
 		// TODO: later subscribe to specific events
-		wctx.mouse_events.subscribe(mouse_callback, this);
+		wctx.mouse_events->subscribe(mouse_callback, this);
 	}
 
 	// Specialized constructors

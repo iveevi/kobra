@@ -19,10 +19,10 @@ void Text::refresh()
 //////////////////////
 
 // Create the pipeline
-void TextRender::_make_pipeline(const Bootstrap &bs)
+void TextRender::_make_pipeline(const App::Window &wctx, const VkRenderPass &render_pass)
 {
-	auto context = bs.ctx;
-	auto swapchain = bs.swapchain;
+	auto context = wctx.context;
+	auto swapchain = wctx.swapchain;
 
 	// Create pipeline stages
 	VkPipelineShaderStageCreateInfo vertex {
@@ -167,7 +167,7 @@ void TextRender::_make_pipeline(const Bootstrap &bs)
 		.pColorBlendState = &color_blending,
 		.pDynamicState = nullptr,
 		.layout = pipeline_layout,
-		.renderPass = bs.renderpass,
+		.renderPass = render_pass,
 		.subpass = 0,
 		.basePipelineHandle = VK_NULL_HANDLE,
 		.basePipelineIndex = -1

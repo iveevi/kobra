@@ -70,6 +70,18 @@ public:
 	// Getters
 	inline glm::vec4 bounds() const { return _bounds; }
 
+	// Move
+	void move(const glm::vec2 &offset) {
+		_bounds.x += offset.x;
+		_bounds.y += offset.y;
+
+		_bounds.z += offset.x;
+		_bounds.w += offset.y;
+	}
+
+	// Color
+	glm::vec3 &color() { return _color; }
+
 	// Render the glyph
 	// TODO: render method or upload method (instacing)?
 	void upload(VertexBuffer &vb) const {

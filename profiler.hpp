@@ -5,6 +5,7 @@
 #include "include/gui/text.hpp"
 #include "include/gui/area.hpp"
 #include "include/gui/button.hpp"
+#include "include/gui/layer.hpp"
 
 using namespace mercury;
 
@@ -55,6 +56,9 @@ class ProfilerApplication : public mercury::App {
 
 	// Buttons
 	gui::Button *			button;
+
+	// GUI layers
+	gui::Layer			layer;
 
 	// TODO: struct pass parameters?
 	template <size_t N>
@@ -261,6 +265,10 @@ public:
 		// Create descriptor pool
 		descriptor_pool = context.vk->make_descriptor_pool(context.device);
 
+		// Copy to window context
+		window.command_pool = command_pool;
+		window.descriptor_pool = descriptor_pool;
+
 		// Create sync objects
 		// TODO: use max frames in flight
 		images_in_flight.resize(swapchain.images.size(), VK_NULL_HANDLE);
@@ -333,13 +341,15 @@ public:
 
 		// Create text render
 		text_render = gui::TextRender(
-			gui::TextRender::Bootstrap {
+			/* gui::TextRender::Bootstrap {
 				.ctx = context,
 				.dpool = descriptor_pool,
 				.swapchain = swapchain,
 				.renderpass = render_pass,
 				.cpool = command_pool
-			},
+			}, */
+			window,
+			render_pass,
 			"resources/courier_new.ttf"
 		);
 
@@ -348,13 +358,29 @@ public:
 
 		button = new gui::Button(window,
 			{
-				0, 0, 300, 300,
+				400, 500, 100, 100,
 				GLFW_MOUSE_BUTTON_LEFT,
 				{0.8, 1.0, 0.8},
 				{0.6, 1.0, 0.6},
 				{0.4, 1.0, 0.4}
 			}
 		);
+
+		// Initialize GUI layers
+		layer = gui::Layer(window);
+		layer.load_font("default", "resources/courier_new.ttf");
+
+		gui::Text *t1 = layer.text_render("default")->text("[Text] from layer!", {100, 500}, {1, 1, 1, 1});
+
+		std::vector <gui::_element *> elements {
+			button,
+			new gui::Rect({0, 0.2}, {0.5, 0.5}, {1.0, 0.5, 0.0}),
+			new gui::Rect({0.2, -0.2}, {0.6, 0.1}, {0.0, 0.5, 1.0}),
+			new gui::Rect(text->bounds, {0.0, 0.5, 1.0}),
+			t1
+		};
+
+		layer.add(elements);
 	}
 
 	// Record command buffers
@@ -394,6 +420,8 @@ public:
 
 		// End render pass
 		vkCmdEndRenderPass(cbuf);
+
+		layer.render(cbuf, fbuf);
 
 		// End the command buffer
 		Vulkan::end(cbuf);
@@ -533,10 +561,6 @@ public:
 		};
 
 		rp.reset();
-		gui::Rect({0, 0.2}, {0.5, 0.5}, {1.0, 0.5, 0.0}).render(rp);
-		gui::Rect({0.2, -0.2}, {0.6, 0.1}, {0.0, 0.5, 1.0}).render(rp);
-		gui::Rect(text->bounds, {0.0, 0.5, 1.0}).render(rp);
-		button->render(rp);
 		rp.sync();
 	}
 

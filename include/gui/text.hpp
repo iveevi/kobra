@@ -8,8 +8,10 @@
 #include <vector>
 
 // Engine headers
+#include "../app.hpp"
 #include "../backend.hpp"
 #include "font.hpp"
+#include "gui.hpp"
 
 namespace mercury {
 
@@ -22,9 +24,17 @@ class TextRender;
 // 	contains glyphs
 // 	and is served by
 // 	the text render class
-class Text {
+class Text : public _element {
 	std::vector <Glyph>	_glyphs;
 	TextRender *		_origin;
+
+	// Cache previous text properties
+	std::string		_str;
+
+	glm::vec2		_pos;
+	glm::vec3		_color;
+	glm::vec4		_bounds;
+	float			_scale;
 public:
 	std::string		str;
 
@@ -36,6 +46,35 @@ public:
 	// Update by using the TextRender class
 	void refresh();
 
+	// Render
+	void render(RenderPacket &rp) override {
+		// Check if the text has changed
+		if (scale != _scale || bounds != _bounds || _str != str) {
+			// Update the text
+			refresh();
+		} else {
+			// These changes do not need a full refresh
+			if (color != _color) {
+				// Update the color
+				for (Glyph &g : _glyphs)
+					g.color() = color;
+			}
+
+			if (position != _pos) {
+				glm::vec2 delta = position - _pos;
+				for (Glyph &g : _glyphs)
+					g.move(delta);
+			}
+		}
+
+		// Update values
+		_str = str;
+		_pos = position;
+		_color = color;
+		_bounds = bounds;
+		_scale = scale;
+	}
+
 	// Friend classes
 	friend class TextRender;
 };
@@ -44,16 +83,6 @@ public:
 // 	holds Vulkan structures
 // 	and renders for a single font
 class TextRender {
-public:
-	// Required elements for construction
-	// TODO: subcontext structure?
-	struct Bootstrap {
-		Vulkan::Context		ctx;
-		VkDescriptorPool	dpool;
-		Vulkan::Swapchain	swapchain;
-		VkRenderPass		renderpass;
-		VkCommandPool		cpool;
-	};
 private:
 	// Reference to glyph (in a text class)
 	//	so that updating text is not a pain
@@ -95,7 +124,7 @@ private:
 	float					_height;
 
 	// Create the pipeline
-	void _make_pipeline(const Bootstrap &);
+	void _make_pipeline(const App::Window &, const VkRenderPass &);
 
 	// Remove previous references to a Text object
 	void remove(Text *text) {
@@ -115,30 +144,34 @@ public:
 	TextRender() {}
 
 	// Constructor from paht to font file
-	TextRender(const Bootstrap &bs, const std::string &path) {
+	TextRender(const App::Window &wctx, const VkRenderPass &render_pass, const std::string &path) {
 		// Get context
-		Vulkan::Context context = bs.ctx;
+		Vulkan::Context context = wctx.context;
 
 		// Create the descriptor set
 		// TODO: remove later, use the ones from font
-		_layout = Glyph::make_bitmap_dsl(bs.ctx);
+		_layout = Glyph::make_bitmap_dsl(context);
 
 		// Load shaders
 		_vertex = context.vk->make_shader(context.device, "shaders/bin/gui/glyph_vert.spv");
 		_fragment = context.vk->make_shader(context.device, "shaders/bin/gui/bitmap_frag.spv");
 
 		// Allocate vertex buffer
-		_vbuf = Glyph::VertexBuffer(bs.ctx, Glyph::vb_settings);
+		_vbuf = Glyph::VertexBuffer(context, Glyph::vb_settings);
 
 		// Create pipeline
-		_make_pipeline(bs);
+		_make_pipeline(wctx, render_pass);
 
 		// Load font
-		_font = Font(bs.ctx, bs.cpool, bs.dpool, path);
+		_font = Font(context,
+			wctx.command_pool,
+			wctx.descriptor_pool,
+			path
+		);
 
 		// Dimensions
-		_width = bs.swapchain.extent.width;
-		_height = bs.swapchain.extent.height;
+		_width = wctx.width;
+		_height = wctx.height;
 	}
 
 	// Create text object

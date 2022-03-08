@@ -99,6 +99,8 @@ struct TexturePacket {
 
 		VkImageMemoryBarrier barrier {
 			.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+			.srcAccessMask = 0,
+			.dstAccessMask = 0,
 			.oldLayout = old_layout,
 			.newLayout = new_layout,
 			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
@@ -110,9 +112,7 @@ struct TexturePacket {
 				.levelCount = 1,
 				.baseArrayLayer = 0,
 				.layerCount = 1
-			},
-			.srcAccessMask = 0,
-			.dstAccessMask = 0
+			}
 		};
 
 		// Source layout
@@ -158,6 +158,8 @@ struct TexturePacket {
 
 		VkImageMemoryBarrier barrier {
 			.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+			.srcAccessMask = 0,
+			.dstAccessMask = 0,
 			.oldLayout = old_layout,
 			.newLayout = new_layout,
 			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
@@ -169,9 +171,7 @@ struct TexturePacket {
 				.levelCount = 1,
 				.baseArrayLayer = 0,
 				.layerCount = 1
-			},
-			.srcAccessMask = 0,
-			.dstAccessMask = 0
+			}
 		};
 
 		vkCmdPipelineBarrier(cmd_buffer,

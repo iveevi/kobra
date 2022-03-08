@@ -31,9 +31,12 @@ public:
 		Vulkan::Surface		surface;
 		Vulkan::Swapchain	swapchain;
 
+		VkCommandPool		command_pool = VK_NULL_HANDLE;
+		VkDescriptorPool	descriptor_pool = VK_NULL_HANDLE;
+
 		// Event based IO
-		io::MouseEventQueue	mouse_events;
-		io::KeyboardEventQueue	keyboard_events;
+		io::MouseEventQueue *	mouse_events;
+		io::KeyboardEventQueue *keyboard_events;
 
 		// Immediate IO (keyboard)
 		io::Input *		input;
@@ -101,6 +104,8 @@ public:
 		window.context = context;
 		window.surface = surface;
 		window.swapchain = swapchain;
+		window.mouse_events = new io::MouseEventQueue();
+		window.keyboard_events = new io::KeyboardEventQueue();
 		window.input = &input;
 		window.width = width;
 		window.height = height;

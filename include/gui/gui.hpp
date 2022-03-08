@@ -86,6 +86,9 @@ struct RenderPacket {
 
 // Abstract GUI element type
 struct _element {
+	// Virtual destructor
+	virtual ~_element() {}
+
 	// Child elements
 	std::vector <std::shared_ptr <_element>> children;
 
