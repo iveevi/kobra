@@ -9,8 +9,8 @@ definitions:
     thirdparty/imgui/imgui_tables.cpp,
     thirdparty/imgui/backends/imgui_impl_glfw.cpp,
     thirdparty/imgui/backends/imgui_impl_vulkan.cpp'
-  - mercury_source: 'main.cpp,
-    mercury.cpp,
+  - kobra_source: 'main.cpp,
+    kobra.cpp,
     render.cpp,
     source/vulkan.cpp,
     source/logger.cpp,
@@ -20,8 +20,8 @@ definitions:
     source/io/event.cpp'
 
 builds:
-  - mercury_release:
-    - sources: mercury_source, imgui_source
+  - kobra_release:
+    - sources: kobra_source, imgui_source
     - idirs: 'thirdparty,
       thirdparty/freetype/include,
       thirdparty/glm,
@@ -36,8 +36,8 @@ builds:
       avformat,
       avutil,
       freetype'
-  - mercury_debug:
-    - sources: 'mercury_source,
+  - kobra_debug:
+    - sources: 'kobra_source,
       thirdparty/imgui/imgui.cpp,
       thirdparty/imgui/imgui_draw.cpp,
       thirdparty/imgui/imgui_demo.cpp,
@@ -61,11 +61,11 @@ builds:
     - flags: '-std=c++17 -g'
 
 targets:
-  - mercury:
+  - kobra:
     - modes: 'gdb'
     - builds:
-      - default: mercury_release
-      - gdb: mercury_debug
+      - default: kobra_release
+      - gdb: kobra_debug
     - postbuilds:
       - default: '{}'
       - gdb: 'gdb {}'
