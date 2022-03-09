@@ -11,20 +11,11 @@ using namespace mercury;
 
 // Profiler application
 class ProfilerApplication : public mercury::App {
+	// Vulkan structures
 	VkRenderPass			render_pass;
 	VkCommandPool			command_pool;
-
 	std::vector <VkCommandBuffer>	command_buffers;
-
 	VkDescriptorPool		descriptor_pool;
-
-	// Shaders
-	VkShaderModule			basic_vert;
-	VkShaderModule			basic_frag;
-
-	// Descriptor set
-	VkDescriptorSetLayout		glyphs_dsl;
-	VkDescriptorSet			glyphs_ds;
 
 	// Sync objects
 	std::vector <VkFence>		in_flight_fences;
@@ -33,215 +24,23 @@ class ProfilerApplication : public mercury::App {
 	std::vector <VkSemaphore>	smph_image_available;
 	std::vector <VkSemaphore>	smph_render_finished;
 
-	// Vertex buffer
-	gui::VertexBuffer		vb;
-	gui::IndexBuffer		ib;
-
-	// Buffers for glyphs
-	gui::Glyph::VertexBuffer	glyph_vb;
-
-	VkPipeline			graphics_pipeline;
-	VkPipeline			glyphs_pipeline;
-
-	VkPipelineLayout		graphics_pl;
-	VkPipelineLayout		glyphs_pl;
-
-	// Character map texture and sampler
-	raster::TexturePacket		cmap;
-	raster::Sampler			sampler;
-
-	// Text render
-	gui::TextRender			text_render;
-	gui::Text *			text;
-
-	// Buttons
-	gui::Button *			button;
+	// Reference to the profiler
+	Profiler *			profiler;
 
 	// GUI layers
 	gui::Layer			layer;
 
-	// TODO: struct pass parameters?
-	template <size_t N>
-	std::pair <VkPipeline, VkPipelineLayout> make_pipeline(
-			VkShaderModule vert,
-			VkShaderModule frag,
-			const std::vector <VkDescriptorSetLayout> &sets,
-			VertexBinding binding_description,
-			const std::array <VertexAttribute, N> &attribute_descriptions,
-			VkPrimitiveTopology top = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST) {
-		// Create pipeline stages
-		VkPipelineShaderStageCreateInfo vertex {
-			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-			.stage = VK_SHADER_STAGE_VERTEX_BIT,
-			.module = vert,
-			.pName = "main"
-		};
-
-		VkPipelineShaderStageCreateInfo fragment {
-			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-			.stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-			.module = frag,
-			.pName = "main"
-		};
-
-		VkPipelineShaderStageCreateInfo shader_stages[] = { vertex, fragment };
-
-		// Vertex input
-		// auto binding_description = gui::Vertex::vertex_binding();
-		// auto attribute_descriptions = gui::Vertex::vertex_attributes();
-
-		VkPipelineVertexInputStateCreateInfo vertex_input {
-			.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-			.vertexBindingDescriptionCount = 1,
-			.pVertexBindingDescriptions = &binding_description,
-			.vertexAttributeDescriptionCount = static_cast <uint32_t> (attribute_descriptions.size()),
-			.pVertexAttributeDescriptions = attribute_descriptions.data()
-		};
-
-		// Input assembly
-		VkPipelineInputAssemblyStateCreateInfo input_assembly {
-			.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-			.topology = top,
-			.primitiveRestartEnable = VK_FALSE
-		};
-
-		// Viewport
-		VkViewport viewport {
-			.x = 0.0f,
-			.y = 0.0f,
-			.width = (float) swapchain.extent.width,
-			.height = (float) swapchain.extent.height,
-			.minDepth = 0.0f,
-			.maxDepth = 1.0f
-		};
-
-		// Scissor
-		VkRect2D scissor {
-			.offset = {0, 0},
-			.extent = swapchain.extent
-		};
-
-		VkPipelineViewportStateCreateInfo viewport_state {
-			.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-			.viewportCount = 1,
-			.pViewports = &viewport,
-			.scissorCount = 1,
-			.pScissors = &scissor
-		};
-
-		// Rasterizer
-		// TODO: method
-		VkPipelineRasterizationStateCreateInfo rasterizer {
-			.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-			.depthClampEnable = VK_FALSE,
-			.rasterizerDiscardEnable = VK_FALSE,
-			.polygonMode = VK_POLYGON_MODE_FILL,
-			.cullMode = VK_CULL_MODE_BACK_BIT,
-			.frontFace = VK_FRONT_FACE_CLOCKWISE,
-			.depthBiasEnable = VK_FALSE,
-			.lineWidth = 1.0f
-		};
-
-		// Multisampling
-		// TODO: method
-		VkPipelineMultisampleStateCreateInfo multisampling {
-			.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-			.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
-			.sampleShadingEnable = VK_FALSE,
-			.minSampleShading = 1.0f,
-			.pSampleMask = nullptr,
-			.alphaToCoverageEnable = VK_FALSE,
-			.alphaToOneEnable = VK_FALSE
-		};
-
-		// Color blending
-		VkPipelineColorBlendAttachmentState color_blend_attachment {
-			.blendEnable = VK_TRUE,
-			.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
-			.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-			.colorBlendOp = VK_BLEND_OP_ADD,
-			.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
-			.dstAlphaBlendFactor = VK_BLEND_FACTOR_DST_ALPHA,
-			.alphaBlendOp = VK_BLEND_OP_MAX,
-			.colorWriteMask = VK_COLOR_COMPONENT_R_BIT
-				| VK_COLOR_COMPONENT_G_BIT
-				| VK_COLOR_COMPONENT_B_BIT
-				| VK_COLOR_COMPONENT_A_BIT
-		};
-
-		VkPipelineColorBlendStateCreateInfo color_blending {
-			.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-			.logicOpEnable = VK_FALSE,
-			.logicOp = VK_LOGIC_OP_COPY,
-			.attachmentCount = 1,
-			.pAttachments = &color_blend_attachment,
-			.blendConstants = {0.0f, 0.0f, 0.0f, 0.0f}
-		};
-
-		// Pipeline layout
-		VkPipelineLayoutCreateInfo pipeline_layout_info {
-			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-			.setLayoutCount = static_cast <uint32_t> (sets.size()),
-			.pSetLayouts = sets.data(),
-			.pushConstantRangeCount = 0
-		};
-
-		VkPipelineLayout pipeline_layout;
-		VkResult result = vkCreatePipelineLayout(
-			context.vk_device(),
-			&pipeline_layout_info,
-			nullptr,
-			&pipeline_layout
-		);
-
-		if (result != VK_SUCCESS) {
-			throw std::runtime_error("failed to create pipeline layout!");
-		}
-
-		// Graphics pipeline
-		VkGraphicsPipelineCreateInfo pipeline_info {
-			.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-			.stageCount = 2,
-			.pStages = shader_stages,
-			.pVertexInputState = &vertex_input,
-			.pInputAssemblyState = &input_assembly,
-			.pViewportState = &viewport_state,
-			.pRasterizationState = &rasterizer,
-			.pMultisampleState = &multisampling,
-			.pDepthStencilState = nullptr,
-			.pColorBlendState = &color_blending,
-			.pDynamicState = nullptr,
-			.layout = pipeline_layout,
-			.renderPass = render_pass,
-			.subpass = 0,
-			.basePipelineHandle = VK_NULL_HANDLE,
-			.basePipelineIndex = -1
-		};
-
-		VkPipeline pipeline;
-		result = vkCreateGraphicsPipelines(
-			context.vk_device(),
-			VK_NULL_HANDLE,
-			1,
-			&pipeline_info,
-			nullptr,
-			&pipeline
-		);
-
-		if (result != VK_SUCCESS) {
-			throw std::runtime_error("failed to create graphics pipeline!");
-		}
-
-		Logger::ok("[profiler] Pipeline created");
-		return {pipeline, pipeline_layout};
-	}
+	// Objects to save
+	gui::Text *			t1;
 public:
-	ProfilerApplication(Vulkan *vk) : App({
+	// TODO: base app class that initializes vulkun structures and does the
+	// presenting
+	ProfilerApplication(Vulkan *vk, Profiler *p) : App({
 		.ctx = vk,
 		.width = 800,
 		.height = 600,
 		.name = "Mercury Profiler"
-	}) {
+	}), profiler(p) {
 		// Create render pass
 		render_pass = context.vk->make_render_pass(
 			context.device,
@@ -278,59 +77,6 @@ public:
 			smph_render_finished.push_back(context.vk->make_semaphore(context.device));
 		}
 
-		// Load shaders
-		basic_vert = context.vk->make_shader(context.device, "shaders/bin/gui/basic_vert.spv");
-		basic_frag = context.vk->make_shader(context.device, "shaders/bin/gui/basic_frag.spv");
-
-		VkShaderModule glyph_vert = context.vk->make_shader(context.device, "shaders/bin/gui/glyph_vert.spv");
-		VkShaderModule glyph_frag = context.vk->make_shader(context.device, "shaders/bin/gui/bitmap_frag.spv");
-
-		// Create descriptor set
-		glyphs_dsl = gui::Glyph::make_bitmap_dsl(context);
-		glyphs_ds = gui::Glyph::make_bitmap_ds(context, descriptor_pool);
-
-		// Get vertex descriptors
-		auto gr_vb = gui::Vertex::vertex_binding();
-		auto gr_va = gui::Vertex::vertex_attributes();
-
-		auto gl_vb = gui::Glyph::Vertex::vertex_binding();
-		auto gl_va = gui::Glyph::Vertex::vertex_attributes();
-
-		// Create pipelines
-		auto grp = make_pipeline(basic_vert, basic_frag, {}, gr_vb, gr_va);
-		auto glp = make_pipeline(
-			glyph_vert, glyph_frag, {glyphs_dsl},
-			gl_vb, gl_va
-		);
-
-		graphics_pipeline = grp.first;
-		graphics_pl = grp.second;
-
-		glyphs_pipeline = glp.first;
-		glyphs_pl = glp.second;
-
-		// Allocate the vertex buffer
-		BFM_Settings vb_settings {
-			.size = 1024,
-			.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-			.usage_type = BFM_WRITE_ONLY
-		};
-
-		BFM_Settings ib_settings {
-			.size = 1024,
-			.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-			.usage_type = BFM_WRITE_ONLY
-		};
-
-		vb = gui::VertexBuffer(context, vb_settings);
-		ib = gui::IndexBuffer(context, ib_settings);
-
-		glyph_vb = gui::Glyph::VertexBuffer(context, gui::Glyph::vb_settings);
-		// glyph_ib = gui::IndexBuffer(context, gui::Glyph::ib_settings);
-
-		// Create command buffers
-		// update_command_buffers();
-
 		// TODO: context method
 		context.vk->make_command_buffers(
 			context.device,
@@ -339,24 +85,8 @@ public:
 			swapchain.images.size()
 		);
 
-		// Create text render
-		text_render = gui::TextRender(
-			/* gui::TextRender::Bootstrap {
-				.ctx = context,
-				.dpool = descriptor_pool,
-				.swapchain = swapchain,
-				.renderpass = render_pass,
-				.cpool = command_pool
-			}, */
-			window,
-			render_pass,
-			"resources/courier_new.ttf"
-		);
-
-		text = text_render.text("Hello World!", {100, 300}, {1, 1, 1, 1});
-		text_render.add(text);
-
-		button = new gui::Button(window,
+		// Create GUI layer
+		gui::Button *button = new gui::Button(window,
 			{
 				400, 500, 100, 100,
 				GLFW_MOUSE_BUTTON_LEFT,
@@ -367,59 +97,109 @@ public:
 		);
 
 		// Initialize GUI layers
-		layer = gui::Layer(window);
-		layer.load_font("default", "resources/courier_new.ttf");
-
-		gui::Text *t1 = layer.text_render("default")->text("[Text] from layer!", {100, 500}, {1, 1, 1, 1});
+		layer = gui::Layer(window, VK_ATTACHMENT_LOAD_OP_CLEAR);
+		layer.load_font("default", "resources/fonts/noto_sans.ttf");
 
 		std::vector <gui::_element *> elements {
-			button,
-			new gui::Rect({0, 0.2}, {0.5, 0.5}, {1.0, 0.5, 0.0}),
-			new gui::Rect({0.2, -0.2}, {0.6, 0.1}, {0.0, 0.5, 1.0}),
-			new gui::Rect(text->bounds, {0.0, 0.5, 1.0}),
-			t1
+			button
 		};
 
 		layer.add(elements);
+
+		make_window();
+	}
+
+	// Element that contains the profiler info
+	gui::_element *content = nullptr;
+
+	void make_window() {
+		int x = 400;
+		int y = 200;
+
+		gui::Text *t = layer.text_render("default")->text(
+			"My window", {x, y}, {1, 1, 1, 1}
+		);
+
+		glm::vec4 bounds = t->bounds;
+		bounds += 0.01f * glm::vec4 {-1, -1, 1, 1};
+
+		glm::vec3 color = {0.0, 0.5, 1.0};
+
+		gui::Rect *tborder = new gui::Rect(bounds, color * 0.5f);
+
+		glm::vec4 cbounds = bounds + 0.2f * glm::vec4 {0, 1, 0, 1};
+		gui::Rect *cborder = new gui::Rect(cbounds, color * 0.5f);
+
+		bounds += 0.01f * glm::vec4 {-1, -1, 1, 1};
+		gui::Rect *wborder = new gui::Rect(bounds, color);
+
+		tborder->children.push_back(gui::Element(t));
+		wborder->children.push_back(gui::Element(tborder));
+		wborder->children.push_back(gui::Element(cborder));
+
+		layer.add(wborder);
+
+		content = cborder;
+	}
+
+	// Update the profiler
+	void update_profiler(const Profiler::Frame &frame, gui::_element *element, float parent = -1.0f) {
+		glm::vec2 tpos = {0, 0};
+		float scale = 0.25f;
+
+		// Only add if not already added
+		if (element->children.size() == 3) {
+			// Time and parent have been expanded
+			gui::Text *t = reinterpret_cast <gui::Text *>
+				(element->children[1].get());
+			t->str = "time: " + std::to_string(frame.time/1000) + " us";
+
+			gui::Text *p = reinterpret_cast <gui::Text *>
+				(element->children[2].get());
+			
+			std::string parent_str = "parent: ";
+			if (parent > 0) {
+				float ratio = 100 * (frame.time / parent);
+				parent_str += std::to_string(ratio) + "%";
+			} else {
+				parent_str += "-NA-";
+			}
+
+			p->str = parent_str;
+		} else {
+			// Frame (name) text
+			gui::Text *text_frame = layer.text_render("default")->text(
+				frame.name, tpos, {1, 1, 1, 1}
+			);
+
+			// Time text
+			// TODO: use a format string
+			gui::Text *text_time = layer.text_render("default")->text(
+				"time:", tpos + glm::vec2 {25, 50}, {1, 1, 1, 1}
+			);
+
+			// Parent text
+			gui::Text *text_parent = layer.text_render("default")->text(
+				"parent:", tpos + glm::vec2 {25, 100}, {1, 1, 1, 1}
+			);
+
+			// Add to the element
+			element->children.push_back(gui::Element(text_frame));
+			element->children.push_back(gui::Element(text_time));
+			element->children.push_back(gui::Element(text_parent));
+		}
 	}
 
 	// Record command buffers
 	void record(VkCommandBuffer cbuf, VkFramebuffer fbuf) {
+		// Pop frame from the profiler
+		if (profiler->size() > 0) {
+			auto frame = profiler->pop();
+			update_profiler(frame, content);
+		}
+
 		// Begin recording
 		Vulkan::begin(cbuf);
-
-		// Begin render pass
-		// TODO: vulkan static method
-		VkClearValue clear_color = { 0.0f, 0.0f, 0.0f, 1.0f };
-		VkRenderPassBeginInfo render_pass_info {
-			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-			.renderPass = render_pass,
-			.framebuffer = fbuf,
-			.renderArea = {
-				.offset = {0, 0},
-				.extent = swapchain.extent
-			},
-			.clearValueCount = 1,
-			.pClearValues = &clear_color
-		};
-
-		vkCmdBeginRenderPass(cbuf, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
-
-		// Bind basic pipeline
-		vkCmdBindPipeline(cbuf, VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline);
-
-		// Draw
-		VkBuffer vertex_buffers[] = {vb.vk_buffer()};
-		VkDeviceSize offsets[] = {0};
-		vkCmdBindVertexBuffers(cbuf, 0, 1, vertex_buffers, offsets);
-		vkCmdBindIndexBuffer(cbuf, ib.vk_buffer(), 0, VK_INDEX_TYPE_UINT32);
-		vkCmdDrawIndexed(cbuf, ib.size(), 1, 0, 0, 0);
-
-		// Draw text
-		text_render.render(context, command_pool, cbuf);
-
-		// End render pass
-		vkCmdEndRenderPass(cbuf);
 
 		layer.render(cbuf, fbuf);
 
@@ -479,15 +259,6 @@ public:
 		VkSemaphore signal_semaphores[] = {
 			smph_render_finished[frame_index],
 		};
-
-		// Record commands
-		text->str = "time: " + std::to_string(1000 * frame_time) + " ms";
-		text->refresh();
-
-		/* glm::vec2 mpos = input.mouse_position();
-		if (area.contains(mpos)) {
-			std::cout << "mouse in area!" << std::endl;
-		} */
 
 		record(command_buffers[image_index], swapchain.framebuffers[image_index]);
 
@@ -551,28 +322,12 @@ public:
 		}
 	}
 
-	// Update geometry
-	void update_geometry() {
-		gui::RenderPacket rp {
-			.rects {
-				.vb = &vb,
-				.ib = &ib
-			}
-		};
-
-		rp.reset();
-		rp.sync();
-	}
-
 	void frame() override {
 		// Check input
 		if (input.is_key_down(GLFW_KEY_ESCAPE)) {
 			glfwSetWindowShouldClose(surface.window, true);
 			return;
 		}
-
-		// Update geometry
-		update_geometry();
 
 		// Present the frame
 		present();

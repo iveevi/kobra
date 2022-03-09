@@ -44,13 +44,13 @@ class Layer {
 	Pipeline			_grp_shapes;
 
 	// Allocation methods
-	void _init_vulkan_structures() {
+	void _init_vulkan_structures(VkAttachmentLoadOp load) {
 		// Create render pass
 		// 	load previous contents
 		_render_pass = _wctx.context.vk->make_render_pass(
 			_wctx.context.device,
 			_wctx.swapchain,
-			VK_ATTACHMENT_LOAD_OP_LOAD,
+			load,
 			VK_ATTACHMENT_STORE_OP_STORE
 		);
 	}
@@ -269,9 +269,9 @@ public:
 	Layer() = default;
 
 	// Constructor
-	Layer(const App::Window &wctx) : _wctx(wctx) {
+	Layer(const App::Window &wctx, const VkAttachmentLoadOp &load = VK_ATTACHMENT_LOAD_OP_LOAD) : _wctx(wctx) {
 		// Initialize all Vulkan objects
-		_init_vulkan_structures();
+		_init_vulkan_structures(load);
 
 		// Allocate RenderPacket data
 		_alloc_rects();
@@ -375,7 +375,7 @@ public:
 
 		// Render all elements onto the RenderPacket
 		for (auto &elem : _elements)
-			elem->render(rp);
+			elem->render_element(rp);
 
 		// Sync RenderPacket
 		rp.sync();

@@ -684,13 +684,13 @@ void MercuryApplication::make_imgui(size_t image_index)
 		}
 		ImGui::End();
 		
-		if (profiler.size() > 0) {
+		/* if (profiler.size() > 0) {
 			auto frame = profiler.pop();
 
 			ImGui::Begin("Profiler");
 			make_profiler_tree(frame);
 			ImGui::End();
-		}
+		} */
 
 		ImGui::EndFrame();
 		ImGui::Render();

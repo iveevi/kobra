@@ -110,6 +110,9 @@ public:
 	// Constructor
 	MercuryApplication(Vulkan *);
 
+	// Get profiler
+	Profiler *get_profiler() { return &profiler; }
+
 	void update_world();
 	void present();
 	void frame() override;

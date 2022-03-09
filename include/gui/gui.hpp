@@ -102,7 +102,7 @@ struct _element {
 
 		// Render all children
 		for (auto &child : children)
-			child->render(packet);
+			child->render_element(packet);
 	}
 };
 

@@ -235,6 +235,8 @@ public:
 			maxx, maxy
 		};
 
+		// TODO: use set position on text to correct its position
+
 		// Return text
 		return txt;
 	}

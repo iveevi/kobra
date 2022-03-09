@@ -54,7 +54,6 @@ World world {
 		Transform {
 			glm::vec3(0.0f, 2.0f, -8.0f)
 		},
-	 
 		Tunings {
 			45.0f, 800, 600
 		}
@@ -71,7 +70,6 @@ World world {
 				.refractance = 1.5f
 			}
 		)),
-		
 		World::PrimitivePtr(new Sphere(1.0f, glm::vec3 {-3.0f, 1.3f, 1.0f},
 			{
 				.albedo = glm::vec3 {1.0f},
@@ -124,13 +122,6 @@ int main()
 	// Initialize Vulkan
 	Vulkan *vulkan = new Vulkan();
 
-#if 1
-
-	ProfilerApplication app {vulkan};
-	app.run();
-
-#else
-
 	mercury::Model <mercury::VERTEX_TYPE_POSITION> model("resources/benchmark/bunny_res_1.ply");
 	model[0].material = materials[1];
 	model[0].transform.scale = glm::vec3(10.0f);
@@ -145,11 +136,11 @@ int main()
 	world.objects.push_back(std::shared_ptr <mercury::Mesh <mercury::VERTEX_TYPE_POSITION>> (
 		new mercury::Mesh <mercury::VERTEX_TYPE_POSITION> (m1)
 	));
-	
+
 	world.objects.push_back(std::shared_ptr <mercury::Mesh <mercury::VERTEX_TYPE_POSITION>> (
 		new mercury::Mesh <mercury::VERTEX_TYPE_POSITION> (m2)
 	));
-	
+
 	world.objects.push_back(std::shared_ptr <mercury::Mesh <mercury::VERTEX_TYPE_POSITION>> (
 		new mercury::Mesh <mercury::VERTEX_TYPE_POSITION> (m3)
 	));
@@ -199,18 +190,21 @@ int main()
 	scene.save("resources/default_world.hg");
 
 	// Initialize Vulkan
-	Vulkan *vulkan = new Vulkan();
 	vulkan->init_imgui();
 
 	// Create sample scene
-	MercuryApplication app(vulkan);
+	MercuryApplication mapp(vulkan);
 
-	app.update_descriptor_set();
-	app.update_command_buffers();
-	app.run();
+	mapp.update_descriptor_set();
+	mapp.update_command_buffers();
+	
+	ProfilerApplication app {vulkan, mapp.get_profiler()};
+	std::thread thread {
+		[&]() { app.run(); }
+	};
+
+	mapp.run();
+	thread.join();
 
 	delete vulkan;
-
-#endif
-
 }
