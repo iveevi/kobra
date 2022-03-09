@@ -38,13 +38,22 @@ class Text : public _element {
 public:
 	std::string		str;
 
-	glm::vec2		position;
+	glm::vec2		pos;
 	glm::vec3		color;
 	glm::vec4		bounds;
 	float			scale;
 
 	// Update by using the TextRender class
 	void refresh();
+
+	// Virtual methods
+	glm::vec2 position() const override {
+		return pos;
+	}
+
+	glm::vec4 bounding_box() const override {
+		return bounds;
+	}
 
 	// Render
 	void render(RenderPacket &rp) override {
@@ -60,8 +69,8 @@ public:
 					g.color() = color;
 			}
 
-			if (position != _pos) {
-				glm::vec2 delta = position - _pos;
+			if (pos != _pos) {
+				glm::vec2 delta = pos - _pos;
 				for (Glyph &g : _glyphs)
 					g.move(delta);
 			}
@@ -69,7 +78,7 @@ public:
 
 		// Update values
 		_str = str;
-		_pos = position;
+		_pos = pos;
 		_color = color;
 		_bounds = bounds;
 		_scale = scale;
@@ -196,7 +205,7 @@ public:
 		txt->str = text;
 		txt->color = color;
 		txt->scale = scale;
-		txt->position = pos;
+		txt->pos = {x, y};
 		txt->_origin = this;
 
 		// Create glyphs
@@ -235,6 +244,20 @@ public:
 			maxx, maxy
 		};
 
+		// Reasses positioning
+		float real_x = 2 * pos.x/_width - 1.0f;
+		float real_y = 2 * pos.y/_height - 1.0f;
+
+		float dx = real_x - minx;
+		float dy = real_y - miny;
+
+		// Move glyphs
+		for (Glyph &g : txt->_glyphs)
+			g.move({dx, dy});
+
+		// Change bounds
+		txt->bounds += glm::vec4(dx, dy, dx, dy);
+
 		// TODO: use set position on text to correct its position
 
 		// Return text
@@ -247,9 +270,12 @@ public:
 	void text(Text *txt) {
 		static const float factor = 1/1000.0f;
 
-		// NOTE: pos is the origin pos, not the top-left corner
-		float x = 2 * txt->position.x/_width - 1.0f;
-		float y = 2 * txt->position.y/_height - 1.0f;
+		/* NOTE: pos is the origin pos, not the top-left corner
+		float x = 2 * txt->pos.x/_width - 1.0f;
+		float y = 2 * txt->pos.y/_height - 1.0f; */
+
+		float x = txt->pos.x;
+		float y = txt->pos.y;
 
 		float minx = x, maxx = x;
 		float miny = y, maxy = y;
@@ -298,6 +324,21 @@ public:
 			minx, miny,
 			maxx, maxy
 		};
+
+		// Reasses positioning
+		// TODO: method
+		float real_x = 2 * txt->pos.x/_width - 1.0f;
+		float real_y = 2 * txt->pos.y/_height - 1.0f;
+
+		float dx = real_x - minx;
+		float dy = real_y - miny;
+
+		// Move glyphs
+		for (Glyph &g : txt->_glyphs)
+			g.move({dx, dy});
+
+		// Change bounds
+		txt->bounds += glm::vec4(dx, dy, dx, dy);
 	}
 
 	// Add text to render

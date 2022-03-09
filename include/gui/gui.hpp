@@ -83,7 +83,6 @@ struct RenderPacket {
 	}
 };
 
-
 // Abstract GUI element type
 struct _element {
 	// Virtual destructor
@@ -94,6 +93,10 @@ struct _element {
 
 	// Pure virtual function to render
 	virtual void render(RenderPacket &) = 0;
+
+	// Position and bounding box
+	virtual glm::vec2 position() const = 0;
+	virtual glm::vec4 bounding_box() const = 0;
 
 	// Wrapper function to render
 	void render_element(RenderPacket &packet) {
@@ -108,6 +111,65 @@ struct _element {
 
 // Aliases
 using Element = std::shared_ptr <_element>;
+
+// Bounding box for a list of elements
+inline glm::vec4 get_bounding_box(const std::vector <_element *> &elements) {
+	// Throw on empty list
+	if (elements.empty())
+		throw std::runtime_error("Empty list of elements");
+
+	// Initialize bounding box
+	glm::vec4 bounding_box = glm::vec4 {
+		std::numeric_limits <float>::max(),
+		std::numeric_limits <float>::max(),
+		-std::numeric_limits <float>::max(),
+		-std::numeric_limits <float>::max()
+	};
+
+	// Loop through all elements
+	for (auto &element : elements) {
+		// Get the bounding box
+		auto bb = element->bounding_box();
+
+		// Update bounding box
+		bounding_box.x = std::min(bounding_box.x, bb.x);
+		bounding_box.y = std::min(bounding_box.y, bb.y);
+		bounding_box.z = std::max(bounding_box.z, bb.z);
+		bounding_box.w = std::max(bounding_box.w, bb.w);
+	}
+
+	// Return bounding box
+	return bounding_box;
+}
+
+inline glm::vec4 get_bounding_box(const std::vector <Element> &elements) {
+	// Throw on empty list
+	if (elements.empty())
+		throw std::runtime_error("Empty list of elements");
+
+	// Initialize bounding box
+	glm::vec4 bounding_box = glm::vec4 {
+		std::numeric_limits <float>::max(),
+		std::numeric_limits <float>::max(),
+		-std::numeric_limits <float>::max(),
+		-std::numeric_limits <float>::max()
+	};
+
+	// Loop through all elements
+	for (auto &element : elements) {
+		// Get the bounding box
+		auto bb = element->bounding_box();
+
+		// Update bounding box
+		bounding_box.x = std::min(bounding_box.x, bb.x);
+		bounding_box.y = std::min(bounding_box.y, bb.y);
+		bounding_box.z = std::max(bounding_box.z, bb.z);
+		bounding_box.w = std::max(bounding_box.w, bb.w);
+	}
+
+	// Return bounding box
+	return bounding_box;
+}
 
 }
 

@@ -10,6 +10,7 @@
 // Engine headers
 #include "../app.hpp"
 #include "area.hpp"
+#include "gui.hpp"
 #include "rect.hpp"
 
 namespace mercury {
@@ -85,6 +86,25 @@ public:
 				Rect(wctx, rb.x, rb.y, rb.w, rb.h, rb.hover),
 				Rect(wctx, rb.x, rb.y, rb.w, rb.h, rb.active),
 				rb.button) {}
+
+	// Virtual methods
+	glm::vec2 position() const override {
+		// Get min position of all elements
+		glm::vec2 p = _idle.position();
+		p = glm::min(p, _hover.position());
+		p = glm::min(p, _pressed.position());
+		return p;
+	}
+
+	glm::vec4 bounding_box() const override {
+		std::vector <_element *> elements {
+			(_element *) &_idle,
+			(_element *) &_hover,
+			(_element *) &_pressed
+		};
+
+		return get_bounding_box(elements);
+	}
 
 	// Render
 	void render(RenderPacket &rp) override {

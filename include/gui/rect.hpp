@@ -46,6 +46,21 @@ public:
 		max = glm::vec2 {nx + nw, ny + nh};
 	}
 
+	// Setters
+	void set_bounds(const glm::vec4 &bounds) {
+		min = glm::vec2 {bounds.x, bounds.y};
+		max = glm::vec2 {bounds.z, bounds.w};
+	}
+
+	// Virtual method
+	glm::vec2 position() const override {
+		return min;
+	}
+
+	glm::vec4 bounding_box() const override {
+		return glm::vec4 {min.x, min.y, max.x, max.y};
+	}
+
 	// Render
 	void render(RenderPacket &packet) override {
 		// Get vertex and index buffers
@@ -65,7 +80,7 @@ public:
 			vsize, vsize + 2, vsize + 1,
 			vsize, vsize + 3, vsize + 2
 		};
-		
+
 		// Upload vertex data
 		vb->push_back(vertices);
 		ib->push_back(indices);

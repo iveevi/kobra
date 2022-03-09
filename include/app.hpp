@@ -4,6 +4,7 @@
 // Engine headers
 #include "backend.hpp"
 #include "timer.hpp"
+#include "coords.hpp"
 #include "io/event.hpp"
 #include "io/input.hpp"
 
@@ -44,6 +45,11 @@ public:
 		// Dimensions
 		size_t			width;
 		size_t			height;
+
+		// Generate screen coords
+		coordinates::Screen coordinates(float x, float y) {
+			return coordinates::Screen {x, y, width, height};
+		}
 	};
 protected:
 	// This application's window context
@@ -70,6 +76,8 @@ public:
 		// Create surface
 		width = info.width;
 		height = info.height;
+
+		Logger::ok() << "width = " << width << ", height = " << height << std::endl;
 
 		surface = info.ctx->make_surface(
 			info.name, width, height
