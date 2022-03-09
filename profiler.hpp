@@ -89,7 +89,8 @@ public:
 		// Create GUI layer
 		gui::Button *button = new gui::Button(window,
 			{
-				400, 500, 100, 100,
+				window.coordinates(200, 200),
+				window.coordinates(100, 100),
 				GLFW_MOUSE_BUTTON_LEFT,
 				{0.8, 1.0, 0.8},
 				{0.6, 1.0, 0.6},
@@ -102,7 +103,11 @@ public:
 		layer.load_font("default", "resources/fonts/noto_sans.ttf");
 
 		std::vector <gui::_element *> elements {
-			button
+			button,
+			new gui::Rect(
+				window.coordinates(100, 100),
+				window.coordinates(100, 100)
+			)
 		};
 
 		layer.add(elements);
@@ -114,159 +119,22 @@ public:
 	gui::Rect *content = nullptr;
 
 	void make_window() {
-		int x = 400;
-		int y = 200;
-
 		gui::Text *t = layer.text_render("default")->text(
-			"My window", {x, y}, {1, 1, 1, 1}
+			"My window",
+			window.coordinates(300, 400),
+			{1, 1, 1, 1}
+		);
+		gui::Rect *wborder = new gui::Rect(
+			t->bounding_box(),
+			{0.5, 0.5, 0.5}
 		);
 
-		glm::vec4 bounds = t->bounds;
-		bounds += 0.01f * glm::vec4 {-1, -1, 1, 1};
-
-		glm::vec3 color = {0.0, 0.5, 1.0};
-
-		gui::Rect *tborder = new gui::Rect(bounds, color * 0.5f);
-
-		glm::vec4 cbounds = bounds + 0.2f * glm::vec4 {0, 1, 0, 1};
-		gui::Rect *cborder = new gui::Rect(cbounds, color * 0.5f);
-
-		bounds += 0.01f * glm::vec4 {-1, -1, 1, 1};
-		gui::Rect *wborder = new gui::Rect(bounds, color);
-
-		tborder->children.push_back(gui::Element(t));
-		wborder->children.push_back(gui::Element(tborder));
-		wborder->children.push_back(gui::Element(cborder));
-
+		wborder->children.push_back(gui::Element(t));
 		layer.add(wborder);
-
-		content = cborder;
 	}
 
 	// Update the profiler
-	void update_profiler(const Profiler::Frame &frame, gui::Rect *element, float parent = -1.0f) {
-		glm::vec3 color = {0.0, 0.5, 1.0};
-		glm::vec2 tpos = element->position();
-		float scale = 0.4f;
-
-		// Only add if not already added
-		if (element->children.size() >= 3) {
-			std::cout << "Frame \"" << frame.name << "\", position = " << tpos.x << ", " << tpos.y << std::endl;
-			std::cout << "\telement position = " << element->position().x << ", " << element->position().y << std::endl;
-
-			// Time and parent have been expanded
-			gui::Text *f = reinterpret_cast <gui::Text *> (element->children[0].get());
-			gui::Text *t = reinterpret_cast <gui::Text *> (element->children[1].get());
-			gui::Text *p = reinterpret_cast <gui::Text *> (element->children[2].get());
-			
-			// Update positions
-			f->pos = tpos;
-			t->pos = tpos + glm::vec2 {0, 0.01};
-			p->pos = tpos + glm::vec2 {0, 0.02};
-
-			f->refresh();
-			t->refresh();
-			p->refresh();
-
-			std::cout << "\t\tf->bounds = " << f->bounds.x << ", " << f->bounds.y << ", " << f->bounds.z << ", " << f->bounds.w << std::endl;
-			std::cout << "\t\tt->bounds = " << t->bounds.x << ", " << t->bounds.y << ", " << t->bounds.z << ", " << t->bounds.w << std::endl;
-			std::cout << "\t\tp->bounds = " << p->bounds.x << ", " << p->bounds.y << ", " << p->bounds.z << ", " << p->bounds.w << std::endl;
-
-			t->str = "time: " + std::to_string(frame.time/1000) + " us";
-
-			std::string parent_str = "parent: ";
-			if (parent > 0) {
-				float ratio = 100 * (frame.time / parent);
-				parent_str += std::to_string(ratio) + "%";
-			} else {
-				parent_str += "-NA-";
-			}
-
-			p->str = parent_str;
-
-			// Set bounds of element rect
-			glm::vec4 bounds = gui::get_bounding_box({f, t, p});
-			bounds += 0.01f * glm::vec4 {-1, -1, 1, 1};
-
-			std::cout << "\tinitial bounds position = " << bounds.x
-				<< ", " << bounds.y
-				<< ", " << bounds.z
-				<< ", " << bounds.w << std::endl;
-
-			/* Go through each child box
-			size_t n = element->children.size();
-
-			float y = bounds.w + 0.01;
-			for (size_t i = 3; i < n; i++) {
-				gui::Rect *child = reinterpret_cast <gui::Rect *>
-					(element->children[i].get());
-				glm::vec4 cbounds = {
-					bounds.x, y,
-					0, 0
-				};
-				child->set_bounds(cbounds);
-
-				// Update child
-				update_profiler(frame.children[i-3], child, frame.time);
-				y = child->bounding_box().w + 0.01;
-			}
-
-			std::vector <gui::Element> children = element->children;
-			// children.erase(children.begin(), children.begin() + 3);
-			bounds = gui::get_bounding_box(children);
-			std::cout << "\tupdated bounds position = " << bounds.x << ", " << bounds.y << std::endl;
-			// element->set_bounds(bounds); */
-		} else {
-			Logger::warn() << "Initializing frame \"" << frame.name << "\"" << std::endl;
-
-			// Frame (name) text
-			gui::Text *text_frame = layer.text_render("default")->text(
-				frame.name, tpos,
-				{1, 1, 1, 1}, scale
-			);
-
-			// Time text
-			// TODO: use a format string
-			gui::Text *text_time = layer.text_render("default")->text(
-				"time:", tpos,
-				{1, 1, 1, 1}, scale
-			);
-
-			// Parent text
-			gui::Text *text_parent = layer.text_render("default")->text(
-				"parent:", tpos,
-				{1, 1, 1, 1}, scale
-			);
-
-			/* Box around next frame
-			gui::Rect *frame_box = new gui::Rect(
-				{0, 0, 0, 0}, color * 0.5f
-			); */
-
-			// Add to the element
-			element->children.push_back(gui::Element(text_frame));
-			element->children.push_back(gui::Element(text_time));
-			element->children.push_back(gui::Element(text_parent));
-
-			// element->children.push_back(gui::Element(frame_box));
-
-			/* Recursively add children
-			size_t n = 0;
-			for (auto &child : frame.children) {
-				// One bounding box for each child
-				glm::vec4 bounds = {0, 0, 0, 0};
-				gui::Rect *child_box = new gui::Rect(
-					bounds, color * 0.5f
-				);
-
-				element->children.push_back(gui::Element(child_box));
-				update_profiler(child, child_box, frame.time);
-				n++;
-			}
-
-			std::cout << "frame = \"" << frame.name << "\" element position = " << element->position().x << ", " << element->position().y << std::endl; */
-		}
-	}
+	void update_profiler(const Profiler::Frame &frame, gui::Rect *element, float parent = -1.0f) {}
 
 	// Record command buffers
 	void record(VkCommandBuffer cbuf, VkFramebuffer fbuf) {

@@ -22,10 +22,8 @@ class Button : public _element {
 public:
 	// Specialized button maker
 	struct RectButton {
-		float x;
-		float y;
-		float w;
-		float h;
+		coordinates::Screen pos;
+		coordinates::Screen size;
 
 		int button;
 
@@ -81,10 +79,13 @@ public:
 	// Specialized constructors
 	Button(App::Window &wctx, RectButton rb)
 			: Button(wctx,
-				std::shared_ptr <Area> (new RectArea(rb.x, rb.y, rb.w, rb.h)),
-				Rect(wctx, rb.x, rb.y, rb.w, rb.h, rb.idle),
-				Rect(wctx, rb.x, rb.y, rb.w, rb.h, rb.hover),
-				Rect(wctx, rb.x, rb.y, rb.w, rb.h, rb.active),
+				std::shared_ptr <Area> (new RectArea(
+					rb.pos.x, rb.pos.y,
+					rb.size.x, rb.size.y
+				)),
+				Rect(rb.pos, rb.size, rb.idle),
+				Rect(rb.pos, rb.size, rb.hover),
+				Rect(rb.pos, rb.size, rb.active),
 				rb.button) {}
 
 	// Virtual methods

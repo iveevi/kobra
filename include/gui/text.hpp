@@ -190,8 +190,8 @@ public:
 		static const float factor = 1/1000.0f;
 
 		// NOTE: pos is the origin pos, not the top-left corner
-		float x = 2 * pos.x/_width - 1.0f;
-		float y = 2 * pos.y/_height - 1.0f;
+		float x = pos.x;
+		float y = pos.y;
 
 		float minx = x, maxx = x;
 		float miny = y, maxy = y;
@@ -205,7 +205,7 @@ public:
 		txt->str = text;
 		txt->color = color;
 		txt->scale = scale;
-		txt->pos = {x, y};
+		txt->pos = pos;
 		txt->_origin = this;
 
 		// Create glyphs
@@ -245,11 +245,8 @@ public:
 		};
 
 		// Reasses positioning
-		float real_x = 2 * pos.x/_width - 1.0f;
-		float real_y = 2 * pos.y/_height - 1.0f;
-
-		float dx = real_x - minx;
-		float dy = real_y - miny;
+		float dx = pos.x - minx;
+		float dy = pos.y - miny;
 
 		// Move glyphs
 		for (Glyph &g : txt->_glyphs)
@@ -262,6 +259,11 @@ public:
 
 		// Return text
 		return txt;
+	}
+
+	// With screen coordinates
+	Text *text(const std::string &str, const coordinates::Screen &sc, const glm::vec4 &color, float scale = 1.0f) {
+		return text(str, sc.to_ndc(), color, scale);
 	}
 
 	// TODO: use a more immediate approach
@@ -327,11 +329,8 @@ public:
 
 		// Reasses positioning
 		// TODO: method
-		float real_x = 2 * txt->pos.x/_width - 1.0f;
-		float real_y = 2 * txt->pos.y/_height - 1.0f;
-
-		float dx = real_x - minx;
-		float dy = real_y - miny;
+		float dx = txt->pos.x - minx;
+		float dy = txt->pos.y - miny;
 
 		// Move glyphs
 		for (Glyph &g : txt->_glyphs)

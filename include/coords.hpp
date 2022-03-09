@@ -17,10 +17,18 @@ struct Screen {
 	size_t height;
 
 	// Convert Screen to NDC
-	glm::vec2 to_ndc() {
+	glm::vec2 to_ndc() const {
 		return {
 			(2.0f * x) / width - 1.0f,
-			1.0f - (2.0f * y) / height
+			(2.0f * y) / height - 1.0f
+		};
+	}
+
+	// Scale by width
+	glm::vec2 to_unit() const {
+		return {
+			x/width,
+			y/height
 		};
 	}
 };

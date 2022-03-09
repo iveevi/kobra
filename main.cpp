@@ -192,18 +192,19 @@ int main()
 	// Initialize Vulkan
 	vulkan->init_imgui();
 
-	// Create sample scene
+	/* Create sample scene
 	MercuryApplication mapp(vulkan);
 
 	mapp.update_descriptor_set();
-	mapp.update_command_buffers();
-	
-	ProfilerApplication app {vulkan, mapp.get_profiler()};
+	mapp.update_command_buffers(); */
+
+	Profiler *pf = new Profiler();
+	ProfilerApplication app {vulkan, pf};
 	std::thread thread {
 		[&]() { app.run(); }
 	};
 
-	mapp.run();
+	// mapp.run();
 	thread.join();
 
 	delete vulkan;

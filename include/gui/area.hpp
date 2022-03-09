@@ -6,6 +6,7 @@
 
 // Engine headers
 #include "../app.hpp"
+#include "../coords.hpp"
 
 namespace mercury {
 
