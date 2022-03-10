@@ -13,7 +13,7 @@
 static const size_t MAX_OBJECT_SIZE = sizeof(Triangle);
 static const size_t MAX_LIGHT_SIZE = sizeof(PointLight);
 
-using namespace mercury;
+using namespace kobra;
 
 // Print aligned_vec4
 // TODO: common header
@@ -29,13 +29,13 @@ inline std::ostream &operator<<(std::ostream &os, const aligned_vec4 &v)
 }
 
 // Print BoundingBox
-inline std::ostream &operator<<(std::ostream &os, const mercury::BoundingBox &b)
+inline std::ostream &operator<<(std::ostream &os, const kobra::BoundingBox &b)
 {
 	return (os << "(" << b.min << " --> " << b.max << ")");
 }
 
 // App
-class MercuryApplication : public mercury::App {
+class MercuryApplication : public kobra::App {
 	// TODO: some of these member should be moved back to App
 	VkRenderPass			render_pass;
 	VkCommandPool			command_pool;
@@ -68,7 +68,7 @@ class MercuryApplication : public mercury::App {
 	Profiler		profiler;
 
 	// BVH resources
-	mercury::BVH bvh;
+	kobra::BVH bvh;
 
 	// Copy buffer helper
 	GPUWorld gworld;

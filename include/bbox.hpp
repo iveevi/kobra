@@ -4,7 +4,7 @@
 // GLM headers
 #include <glm/glm.hpp>
 
-namespace mercury {
+namespace kobra {
 
 // Axis Aligned Bounding Box
 struct BoundingBox {

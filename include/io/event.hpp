@@ -8,7 +8,7 @@
 // GLFW headers
 #include <GLFW/glfw3.h>
 
-namespace mercury {
+namespace kobra {
 
 namespace io {
 

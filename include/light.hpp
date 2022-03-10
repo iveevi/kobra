@@ -22,10 +22,10 @@ struct Light {
 	virtual ~Light() {}
 
 	// Write data to aligned_vec4 buffer
-	virtual void write(mercury::WorldUpdate &) const = 0;
+	virtual void write(kobra::WorldUpdate &) const = 0;
 
 	// Write full light data
-	void write_light(mercury::WorldUpdate &wu) {
+	void write_light(kobra::WorldUpdate &wu) {
 		// Push ID, then everythig else
 		wu.bf_lights->push_back(aligned_vec4 {
 			glm::vec4 {
@@ -45,7 +45,7 @@ struct PointLight : public Light {
 	PointLight(const Transform &t, float i)
 			: Light(LIGHT_TYPE_POINT, t, i) {}
 
-	void write(mercury::WorldUpdate &) const override {}
+	void write(kobra::WorldUpdate &) const override {}
 };
 
 #endif

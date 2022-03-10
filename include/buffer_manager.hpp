@@ -6,7 +6,7 @@
 #include "core.hpp"
 #include <vulkan/vulkan_core.h>
 
-namespace mercury {
+namespace kobra {
 
 // TODO: alloc subnamespace?
 // Usage types for buffer manager

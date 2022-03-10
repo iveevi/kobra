@@ -9,7 +9,7 @@
 #include "logger.hpp"
 #include "world.hpp"
 
-namespace mercury {
+namespace kobra {
 
 // Scene
 //	will eventually take care of

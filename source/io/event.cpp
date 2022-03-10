@@ -1,7 +1,7 @@
 #include "../../include/app.hpp"
 #include "../../include/io/event.hpp"
 
-namespace mercury {
+namespace kobra {
 
 namespace io {
 

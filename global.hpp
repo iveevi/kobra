@@ -32,7 +32,7 @@
 #include "include/gui/font.hpp"
 
 // Global world data
-extern mercury::World world;
+extern kobra::World world;
 
 // GLFW helpers
 void key_callback(GLFWwindow *, int, int, int, int);

@@ -15,7 +15,7 @@
 #include "logger.hpp"
 #include "world_update.hpp"
 
-namespace mercury {
+namespace kobra {
 
 // Model structure
 template <VertexType T>
@@ -67,7 +67,7 @@ public:
 	}
 
 	// Get bounding boxes
-	void extract_bboxes(std::vector <mercury::BoundingBox> &bboxes, const glm::mat4 &parent) const override {
+	void extract_bboxes(std::vector <kobra::BoundingBox> &bboxes, const glm::mat4 &parent) const override {
 		// Get combined transform
 		glm::mat4 combined = parent * transform.model();
 

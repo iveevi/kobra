@@ -10,7 +10,7 @@
 #include "gui.hpp"
 #include "text.hpp"
 
-namespace mercury {
+namespace kobra {
 
 namespace gui {
 

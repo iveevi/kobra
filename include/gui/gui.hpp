@@ -11,7 +11,7 @@
 #include "../backend.hpp"
 #include "../buffer_manager.hpp"
 
-namespace mercury {
+namespace kobra {
 
 // Core definitions for GUI
 namespace gui {

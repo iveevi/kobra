@@ -14,7 +14,7 @@
 #include "primitive.hpp"
 #include "world_update.hpp"
 
-namespace mercury {
+namespace kobra {
 
 // Rendering options
 struct Options {
@@ -137,8 +137,8 @@ struct World {
 	// TODO: update transforms specialized method
 
 	// Extract all bounding bxoes from the primitives
-	std::vector <mercury::BoundingBox> extract_bboxes() const {
-		std::vector <mercury::BoundingBox> bboxes;
+	std::vector <kobra::BoundingBox> extract_bboxes() const {
+		std::vector <kobra::BoundingBox> bboxes;
 		for (const auto &object : objects)
 			object->extract_bboxes(bboxes);
 		return bboxes;

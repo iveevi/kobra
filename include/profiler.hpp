@@ -13,7 +13,7 @@
 // Engine headers
 #include "timer.hpp"
 
-namespace mercury {
+namespace kobra {
 
 // Profiler class
 class Profiler {

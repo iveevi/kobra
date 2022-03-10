@@ -1,7 +1,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "../include/capture.hpp"
 
-namespace mercury {
+namespace kobra {
 
 // Convert uint32_t to uint8_ts
 bytes convert(const uint *ptr, size_t size) {

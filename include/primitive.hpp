@@ -42,14 +42,14 @@ struct Primitive {
 	}
 
 	// Write data to aligned_vec4 buffer (inherited)
-	virtual void write(mercury::WorldUpdate &) const = 0;
+	virtual void write(kobra::WorldUpdate &) const = 0;
 
 	// Extract bounding boxes
-	virtual void extract_bboxes(std::vector <mercury::BoundingBox> &,
+	virtual void extract_bboxes(std::vector <kobra::BoundingBox> &,
 			const glm::mat4 & = glm::mat4 {1.0}) const = 0;
 
 	// Write header
-	void write_header(mercury::WorldUpdate &wu, uint mati, uint tati) const {
+	void write_header(kobra::WorldUpdate &wu, uint mati, uint tati) const {
 		float material_index = *reinterpret_cast <float *> (&mati);
 		float transform_index = *reinterpret_cast <float *> (&tati);
 
@@ -61,7 +61,7 @@ struct Primitive {
 
 	// Write full object data
 	// TODO: const?
-	virtual void write_object(mercury::WorldUpdate &wu) {
+	virtual void write_object(kobra::WorldUpdate &wu) {
 		// Deal with material
 		uint mati = wu.bf_mats->push_size();
 		material.write_material(wu);
@@ -76,7 +76,7 @@ struct Primitive {
 
 	// Write full object data, but takes indices
 	// TODO: is this needed anymore?
-	virtual void write_object_mati(mercury::WorldUpdate &wu, uint mati, uint tati) {
+	virtual void write_object_mati(kobra::WorldUpdate &wu, uint mati, uint tati) {
 		write_header(wu, mati, tati);
 		this->write(wu);
 	}
@@ -111,7 +111,7 @@ struct Triangle : public Primitive {
 		file << "\n";
 	}
 
-	void write(mercury::WorldUpdate &wu) const override {
+	void write(kobra::WorldUpdate &wu) const override {
 		/* wu.bf_objs->push_back(aligned_vec4(a));
 		wu.bf_objs->push_back(aligned_vec4(b));
 		wu.bf_objs->push_back(aligned_vec4(c)); */
@@ -132,7 +132,7 @@ struct Triangle : public Primitive {
 	}
 
 	// Write, but indices are given
-	void write_indexed(mercury::WorldUpdate &wu,
+	void write_indexed(kobra::WorldUpdate &wu,
 			uint a, uint b, uint c, uint mati, uint tati) const {
 		// Header from parent
 		write_header(wu, mati, tati);
@@ -146,7 +146,7 @@ struct Triangle : public Primitive {
 		});		
 	}
 
-	void extract_bboxes(std::vector <mercury::BoundingBox> &bboxes, const glm::mat4 &parent) const override {
+	void extract_bboxes(std::vector <kobra::BoundingBox> &bboxes, const glm::mat4 &parent) const override {
 		// Get min and max coordinates 
 		// TODO: account for transform
 		glm::mat4 m = parent * transform.model();
@@ -158,7 +158,7 @@ struct Triangle : public Primitive {
 		glm::vec3 max = glm::max(ta, glm::max(tb, tc));
 
 		// Push bounding box
-		bboxes.push_back(mercury::BoundingBox(min, max));
+		bboxes.push_back(kobra::BoundingBox(min, max));
 	}
 };
 
@@ -184,13 +184,13 @@ struct Sphere : public Primitive {
 		file << "\n";
 	}
 
-	void write(mercury::WorldUpdate &wu) const override {
+	void write(kobra::WorldUpdate &wu) const override {
 		wu.bf_objs->push_back(aligned_vec4 {
 			glm::vec4(radius)
 		});
 	}
 
-	void extract_bboxes(std::vector <mercury::BoundingBox> &bboxes, const glm::mat4 &parent) const override {
+	void extract_bboxes(std::vector <kobra::BoundingBox> &bboxes, const glm::mat4 &parent) const override {
 		// Create bounding box
 		glm::mat4 m = parent * transform.model();
 		glm::vec3 pos = m * glm::vec4(0.0, 0.0, 0.0, 1.0);
@@ -198,7 +198,7 @@ struct Sphere : public Primitive {
 		glm::vec3 max = pos + glm::vec3(radius);
 
 		// Push bounding box
-		bboxes.push_back(mercury::BoundingBox(min, max));
+		bboxes.push_back(kobra::BoundingBox(min, max));
 	}
 };
 

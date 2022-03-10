@@ -8,7 +8,7 @@
 #include "io/event.hpp"
 #include "io/input.hpp"
 
-namespace mercury {
+namespace kobra {
 
 // Application class
 // (single window)

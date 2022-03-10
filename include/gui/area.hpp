@@ -8,7 +8,7 @@
 #include "../app.hpp"
 #include "../coords.hpp"
 
-namespace mercury {
+namespace kobra {
 
 namespace gui {
 

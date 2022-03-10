@@ -4,7 +4,7 @@
 // Standard headers
 #include <chrono>
 
-namespace mercury {
+namespace kobra {
 
 // Timer structure
 class Timer {

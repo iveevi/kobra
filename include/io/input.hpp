@@ -7,7 +7,7 @@
 // GLM headers
 #include <glm/glm.hpp>
 
-namespace mercury {
+namespace kobra {
 
 namespace io {
 

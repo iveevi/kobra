@@ -19,7 +19,7 @@ struct Material {
 	float extinction	= 0.0f;
 
 	// Write to buffer
-	void write_material(mercury::WorldUpdate &wu) const {
+	void write_material(kobra::WorldUpdate &wu) const {
 		wu.bf_mats->push_back(aligned_vec4(albedo, shading));
 		wu.bf_mats->push_back(aligned_vec4(
 			{specular, reflectance, refractance, extinction}

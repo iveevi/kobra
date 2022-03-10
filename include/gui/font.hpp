@@ -21,7 +21,7 @@
 #include "../texture.hpp"
 #include "gui.hpp"
 
-namespace mercury {
+namespace kobra {
 
 namespace gui {
 

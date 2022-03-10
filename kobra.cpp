@@ -1,4 +1,4 @@
-#include "mercury.hpp"
+#include "kobra.hpp"
 #include "imgui.h"
 #include "include/texture.hpp"
 #include <vulkan/vulkan_core.h>
@@ -539,7 +539,7 @@ void MercuryApplication::dump_debug_data(Vulkan *vk)
 }
 
 // Create ImGui profiler tree
-void MercuryApplication::make_profiler_tree(const mercury::Profiler::Frame &frame, float parent)
+void MercuryApplication::make_profiler_tree(const kobra::Profiler::Frame &frame, float parent)
 {
 	// Show tree
 	if (ImGui::TreeNode(frame.name.c_str())) {
@@ -710,7 +710,7 @@ void MercuryApplication::make_imgui(size_t image_index)
 
 // Constructor
 MercuryApplication::MercuryApplication(Vulkan *vk)
-		: mercury::App({
+		: kobra::App({
 			.ctx = vk,
 			.width = 800,
 			.height = 600,
@@ -783,10 +783,10 @@ MercuryApplication::MercuryApplication(Vulkan *vk)
 	allocate_buffers();
 
 	// Create BVH builder
-	bvh = mercury::BVH(context.vk, context.phdev, context.device, world);
+	bvh = kobra::BVH(context.vk, context.phdev, context.device, world);
 	Logger::ok() << "BVH: " << bvh.size << " nodes, " << bvh.primitives << " primitives" << std::endl;
 
-	mercury::BVHNode *root = bvh.nodes[0];
+	kobra::BVHNode *root = bvh.nodes[0];
 	Logger::warn() << "Checking BVH: should traverse through " << root->size()
 		<< " nodes if proper." << std::endl;
 

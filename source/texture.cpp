@@ -1,7 +1,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "../include/texture.hpp"
 
-namespace mercury {
+namespace kobra {
 
 Texture load_image_texture(const std::string &filename)
 {

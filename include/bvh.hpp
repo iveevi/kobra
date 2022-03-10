@@ -10,7 +10,7 @@
 #include "core.hpp"
 #include "world.hpp"
 
-namespace mercury {
+namespace kobra {
 
 // C++ representation of a BVH node
 struct BVHNode {

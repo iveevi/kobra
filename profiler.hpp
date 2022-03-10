@@ -8,10 +8,10 @@
 #include "include/gui/button.hpp"
 #include "include/gui/layer.hpp"
 
-using namespace mercury;
+using namespace kobra;
 
 // Profiler application
-class ProfilerApplication : public mercury::App {
+class ProfilerApplication : public kobra::App {
 	// Vulkan structures
 	VkRenderPass			render_pass;
 	VkCommandPool			command_pool;

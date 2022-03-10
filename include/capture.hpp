@@ -18,7 +18,7 @@ extern "C" {
 #include "buffer_manager.hpp"
 #include "core.hpp"
 
-namespace mercury {
+namespace kobra {
 
 // Image structure
 // TODO: eventually move to another header

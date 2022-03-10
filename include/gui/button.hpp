@@ -13,7 +13,7 @@
 #include "gui.hpp"
 #include "rect.hpp"
 
-namespace mercury {
+namespace kobra {
 
 namespace gui {
 

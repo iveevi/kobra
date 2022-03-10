@@ -1,6 +1,6 @@
 #include "../../include/gui/text.hpp"
 
-namespace mercury {
+namespace kobra {
 
 namespace gui {
 

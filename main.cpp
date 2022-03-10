@@ -7,10 +7,10 @@
 
 // Local headers
 #include "global.hpp"
-#include "mercury.hpp"
+#include "kobra.hpp"
 #include "profiler.hpp"
 
-using namespace mercury;
+using namespace kobra;
 
 // List of objet materials
 Material materials[] {
@@ -83,7 +83,7 @@ World world {
 		World::PrimitivePtr(new Sphere(2.0f, transforms[4], materials[4])),
 
 		// Cube mesh
-		World::PrimitivePtr(new mercury::Mesh <mercury::VERTEX_TYPE_POSITION> (
+		World::PrimitivePtr(new kobra::Mesh <kobra::VERTEX_TYPE_POSITION> (
 			{
 				glm::vec3(0.0f, 6.0f, -1.5f),
 				glm::vec3(1.0f, 6.0f, -1.5f),
@@ -117,12 +117,12 @@ World world {
 int main()
 {
 	// Redirect logger to file
-	// Logger::switch_file("mercury.log");
+	// Logger::switch_file("kobra.log");
 
 	// Initialize Vulkan
 	Vulkan *vulkan = new Vulkan();
 
-	mercury::Model <mercury::VERTEX_TYPE_POSITION> model("resources/benchmark/bunny_res_1.ply");
+	kobra::Model <kobra::VERTEX_TYPE_POSITION> model("resources/benchmark/bunny_res_1.ply");
 	model[0].material = materials[1];
 	model[0].transform.scale = glm::vec3(10.0f);
 
@@ -133,16 +133,16 @@ int main()
 	m2.transform.position = glm::vec3(-3.0f, 0.0f, -3.0f);
 	m3.transform.position = glm::vec3(3.0f, 0.0f, 3.0f);
 
-	world.objects.push_back(std::shared_ptr <mercury::Mesh <mercury::VERTEX_TYPE_POSITION>> (
-		new mercury::Mesh <mercury::VERTEX_TYPE_POSITION> (m1)
+	world.objects.push_back(std::shared_ptr <kobra::Mesh <kobra::VERTEX_TYPE_POSITION>> (
+		new kobra::Mesh <kobra::VERTEX_TYPE_POSITION> (m1)
 	));
 
-	world.objects.push_back(std::shared_ptr <mercury::Mesh <mercury::VERTEX_TYPE_POSITION>> (
-		new mercury::Mesh <mercury::VERTEX_TYPE_POSITION> (m2)
+	world.objects.push_back(std::shared_ptr <kobra::Mesh <kobra::VERTEX_TYPE_POSITION>> (
+		new kobra::Mesh <kobra::VERTEX_TYPE_POSITION> (m2)
 	));
 
-	world.objects.push_back(std::shared_ptr <mercury::Mesh <mercury::VERTEX_TYPE_POSITION>> (
-		new mercury::Mesh <mercury::VERTEX_TYPE_POSITION> (m3)
+	world.objects.push_back(std::shared_ptr <kobra::Mesh <kobra::VERTEX_TYPE_POSITION>> (
+		new kobra::Mesh <kobra::VERTEX_TYPE_POSITION> (m3)
 	));
 
 	Logger::ok() << "[main] Loaded model with "
@@ -154,7 +154,7 @@ int main()
 	float width = 10.0f;
 	float length = 10.0f;
 
-	mercury::Mesh <mercury::VERTEX_TYPE_POSITION> plane_mesh {
+	kobra::Mesh <kobra::VERTEX_TYPE_POSITION> plane_mesh {
 		{
 			glm::vec3(-width/2, 0.27f, -length/2),
 			glm::vec3(width/2, 0.27f, -length/2),
@@ -174,8 +174,8 @@ int main()
 	};
 
 	// Add plane to world
-	world.objects.push_back(std::shared_ptr <mercury::Mesh <mercury::VERTEX_TYPE_POSITION>> (
-		new mercury::Mesh <mercury::VERTEX_TYPE_POSITION> (plane_mesh)
+	world.objects.push_back(std::shared_ptr <kobra::Mesh <kobra::VERTEX_TYPE_POSITION>> (
+		new kobra::Mesh <kobra::VERTEX_TYPE_POSITION> (plane_mesh)
 	));
 
 	Logger::notify("Transforms (model matrices) of all objects:");
@@ -186,7 +186,7 @@ int main()
 	}
 
 	// Save world into scene
-	mercury::Scene scene("default_world", world);
+	kobra::Scene scene("default_world", world);
 	scene.save("resources/default_world.hg");
 
 	// Initialize Vulkan

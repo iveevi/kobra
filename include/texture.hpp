@@ -12,7 +12,7 @@
 #include "core.hpp"
 #include "logger.hpp"
 
-namespace mercury {
+namespace kobra {
 
 // Texture structure
 struct Texture {

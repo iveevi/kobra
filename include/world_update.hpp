@@ -5,7 +5,7 @@
 #include "core.hpp"
 #include "buffer_manager.hpp"
 
-namespace mercury {
+namespace kobra {
 
 // Update structure
 struct WorldUpdate {
