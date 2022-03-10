@@ -89,7 +89,7 @@ public:
 		// Create GUI layer
 		gui::Button *button = new gui::Button(window,
 			{
-				window.coordinates(200, 200),
+				window.coordinates(0, 0),
 				window.coordinates(100, 100),
 				GLFW_MOUSE_BUTTON_LEFT,
 				{0.8, 1.0, 0.8},
@@ -104,10 +104,6 @@ public:
 
 		std::vector <gui::_element *> elements {
 			button,
-			new gui::Rect(
-				window.coordinates(100, 100),
-				window.coordinates(100, 100)
-			)
 		};
 
 		layer.add(elements);
@@ -116,45 +112,180 @@ public:
 	}
 
 	// Element that contains the profiler info
+	gui::Rect *wborder = nullptr;
 	gui::Rect *content = nullptr;
 
 	void make_window() {
 		gui::Text *t = layer.text_render("default")->text(
 			"My window",
-			window.coordinates(300, 400),
+			window.coordinates(300, 50),
 			{1, 1, 1, 1}
 		);
-		gui::Rect *wborder = new gui::Rect(
+
+		wborder = new gui::Rect(
 			t->bounding_box(),
 			{0.5, 0.5, 0.5}
 		);
 
+		content = new gui::Rect(
+			window.coordinates(300, 100),
+			window.coordinates(100, 100),
+			{0.8, 0.8, 0.8}
+		);
+
 		wborder->children.push_back(gui::Element(t));
+		wborder->children.push_back(gui::Element(content));
 		layer.add(wborder);
 	}
 
+	std::string get_parent_ratio(float curr, float parent) {
+		if (parent < 0.0)
+			return "NaN";
+
+		return std::to_string(100 * curr / parent) + "%";
+	}
+
 	// Update the profiler
-	void update_profiler(const Profiler::Frame &frame, gui::Rect *element, float parent = -1.0f) {}
+	// TODO: implement as a nesting of GUI windows
+	void update_profiler(const Profiler::Frame &frame, gui::Rect *element, float parent = -1.0f) {
+		// TODO: window method -> pixels
+		static float padding = 0.01f;
+		static float scale = 0.6f;
+		static const int boxoff = 3;
+
+		// Get children
+		std::vector <gui::Element> &children = element->children;
+
+		if (children.empty()) {
+			// If there are no children, create them
+			gui::Text *name = layer.text_render("default")->text(
+				frame.name,
+				window.coordinates(0, 0),
+				{1, 1, 1, 1}, scale * 1.25
+			);
+
+			gui::Text *time = layer.text_render("default")->text(
+				"time: " + std::to_string(frame.time),
+				window.coordinates(0, 0),
+				{1, 1, 1, 1}, scale
+			);
+
+			gui::Text *parent = layer.text_render("default")->text(
+				"parent:",
+				window.coordinates(0, 0),
+				{1, 1, 1, 1}, scale
+			);
+
+			// Add children
+			element->children.push_back(gui::Element(name));
+			element->children.push_back(gui::Element(time));
+			element->children.push_back(gui::Element(parent));
+
+			// Add border boxes for each child
+			std::vector <Profiler::Frame> fchildren = frame.children;
+			for (size_t i = 0; i < fchildren.size(); i++) {
+				gui::Rect *border = new gui::Rect(
+					glm::vec4 {0, 0, 0, 0},
+					{0.5, 0.5, 0.5}
+				);
+
+				element->children.push_back(gui::Element(border));
+
+				// Then process the child frame
+				update_profiler(fchildren[i], border, frame.time);
+			}
+		} else {
+			// Get position
+			glm::vec2 pos = element->position() + glm::vec2 {padding};
+
+			// Update children
+			gui::Text *name = (gui::Text *) children[0].get();
+			name->str = frame.name;
+
+			gui::Text *time = (gui::Text *) children[1].get();
+			time->str = "time: " + std::to_string(frame.time);
+
+			gui::Text *par = (gui::Text *) children[2].get();
+			par->str = "parent: " + get_parent_ratio(frame.time, parent);
+
+			// Set element positions
+			name->pos = pos;
+			pos += glm::vec2 {0, name->height() + 0.01f};
+			time->pos = pos;
+			pos += glm::vec2 {0, time->height() + 0.01f};
+			par->pos = pos;
+
+			// Refresh elements
+			name->refresh();
+			time->refresh();
+			par->refresh();
+
+			// Update children
+			glm::vec2 offset = pos + glm::vec2 {0.05, 1.5f * par->height()};
+
+			std::vector <Profiler::Frame> fchildren = frame.children;
+			for (size_t i = 0; i < fchildren.size(); i++) {
+				// Get child element
+				gui::Rect *border = (gui::Rect *) children[i + boxoff].get();
+
+				// Update position
+				border->set_bounds(glm::vec4 {offset, offset});
+
+				// Update child
+				update_profiler(fchildren[i], border, frame.time);
+
+				// Get bbox of children
+				glm::vec4 bbox = border->bounding_box();
+
+				// Update offset
+				offset.y = bbox.w + 0.05;
+			}
+
+			// Get bbox of children and pad it
+			glm::vec4 bbox = gui::get_bounding_box(children);
+			bbox += padding * glm::vec4 {-1, -1, 1, 1};
+			element->set_bounds(bbox);
+
+			// Recalculate child box bounds
+			for (size_t i = boxoff; i < children.size(); i++) {
+				gui::Rect *border = (gui::Rect *) children[i].get();
+				glm::vec4 cbbox = border->bounding_box();
+				cbbox.z = bbox.z - padding;
+				border->set_bounds(cbbox);
+			}
+		}
+	}
 
 	// Record command buffers
 	void record(VkCommandBuffer cbuf, VkFramebuffer fbuf) {
+		profiler->frame("Frame window");
+
 		// Pop frame from the profiler
 		if (profiler->size() > 0) {
 			auto frame = profiler->pop();
 			update_profiler(frame, content);
+			glm::vec4 bbox = gui::get_bounding_box(wborder->children);
+			bbox += 0.025f * glm::vec4 {-1, -1, 1, 1};
+			wborder->set_bounds(bbox);
 		}
 
+		profiler->end();
+
 		// Begin recording
+		profiler->frame("Command buffer");
 		Vulkan::begin(cbuf);
 
 		layer.render(cbuf, fbuf);
 
 		// End the command buffer
 		Vulkan::end(cbuf);
+		profiler->end();
 	}
 
 	// Present frame
 	void present() {
+		profiler->frame("Present");
+
 		// Wait for the next image in the swap chain
 		vkWaitForFences(
 			context.vk_device(), 1,
@@ -206,7 +337,9 @@ public:
 			smph_render_finished[frame_index],
 		};
 
+		profiler->frame("Record");
 		record(command_buffers[image_index], swapchain.framebuffers[image_index]);
+		profiler->end();
 
 		// Create information
 		// TODO: method
@@ -226,10 +359,12 @@ public:
 		// Submit the command buffer
 		vkResetFences(context.device.device, 1, &in_flight_fences[frame_index]);
 
+		profiler->frame("Submit");
 		result = vkQueueSubmit(
 			context.device.graphics_queue, 1, &submit_info,
 			in_flight_fences[frame_index]
 		);
+		profiler->end();
 
 		if (result != VK_SUCCESS) {
 			Logger::error("[main] Failed to submit draw command buffer!");
@@ -266,6 +401,8 @@ public:
 			Logger::error("[Vulkan] Failed to present swap chain image!");
 			throw (-1);
 		}
+
+		profiler->end();
 	}
 
 	void frame() override {

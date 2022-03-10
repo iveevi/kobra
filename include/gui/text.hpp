@@ -40,7 +40,7 @@ public:
 
 	glm::vec2		pos;
 	glm::vec3		color;
-	glm::vec4		bounds;
+	// glm::vec4		bounds;
 	float			scale;
 
 	// Update by using the TextRender class
@@ -52,13 +52,22 @@ public:
 	}
 
 	glm::vec4 bounding_box() const override {
-		return bounds;
+		return _bounds;
+	}
+
+	// NDC width and height
+	float width() const {
+		return _bounds.z - _bounds.x;
+	}
+
+	float height() const {
+		return _bounds.w - _bounds.y;
 	}
 
 	// Render
 	void render(RenderPacket &rp) override {
 		// Check if the text has changed
-		if (scale != _scale || bounds != _bounds || _str != str) {
+		if (scale != _scale || _str != str) {
 			// Update the text
 			refresh();
 		} else {
@@ -71,6 +80,7 @@ public:
 
 			if (pos != _pos) {
 				glm::vec2 delta = pos - _pos;
+				_bounds += glm::vec4(delta, delta);
 				for (Glyph &g : _glyphs)
 					g.move(delta);
 			}
@@ -80,7 +90,6 @@ public:
 		_str = str;
 		_pos = pos;
 		_color = color;
-		_bounds = bounds;
 		_scale = scale;
 	}
 
@@ -239,7 +248,7 @@ public:
 
 		// Update text bounds
 		maxx = x;
-		txt->bounds = {
+		txt->_bounds = {
 			minx, miny,
 			maxx, maxy
 		};
@@ -253,7 +262,7 @@ public:
 			g.move({dx, dy});
 
 		// Change bounds
-		txt->bounds += glm::vec4(dx, dy, dx, dy);
+		txt->_bounds += glm::vec4(dx, dy, dx, dy);
 
 		// TODO: use set position on text to correct its position
 
@@ -322,7 +331,7 @@ public:
 
 		// Update text bounds
 		maxx = x;
-		txt->bounds = {
+		txt->_bounds = {
 			minx, miny,
 			maxx, maxy
 		};
@@ -337,7 +346,7 @@ public:
 			g.move({dx, dy});
 
 		// Change bounds
-		txt->bounds += glm::vec4(dx, dy, dx, dy);
+		txt->_bounds += glm::vec4(dx, dy, dx, dy);
 	}
 
 	// Add text to render
