@@ -296,7 +296,7 @@ public:
 	Font() {}
 	Font(const Vulkan::Context &ctx, const VkCommandPool &cpool, const VkDescriptorPool &dpool, const std::string &file) {
 		// Check that the file exists
-		if (!file_exists(file)) {
+		if (!common::file_exists(file)) {
 			Logger::error("Font file not found: " + file);
 			throw -1;
 		}

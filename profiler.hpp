@@ -1,7 +1,7 @@
 #ifndef PROFILER_APPLICATION_H_
 #define PROFILER_APPLICATION_H_
 
-#include "global.hpp"
+#include "include/profiler.hpp"
 #include "include/gui/gui.hpp"
 #include "include/gui/text.hpp"
 #include "include/gui/area.hpp"
@@ -138,15 +138,9 @@ public:
 		layer.add(wborder);
 	}
 
-	std::string get_parent_ratio(float curr, float parent) {
-		if (parent < 0.0)
-			return "NaN";
-
-		return std::to_string(100 * curr / parent) + "%";
-	}
-
 	// Update the profiler
 	// TODO: implement as a nesting of GUI windows
+	// TODO: fix bobbing
 	void update_profiler(const Profiler::Frame &frame, gui::Rect *element, float parent = -1.0f) {
 		// TODO: window method -> pixels
 		static float padding = 0.01f;
@@ -203,10 +197,14 @@ public:
 			name->str = frame.name;
 
 			gui::Text *time = (gui::Text *) children[1].get();
-			time->str = "time: " + std::to_string(frame.time);
+			time->str = common::sprintf("time:    %.2f ms", frame.time/1000.0f);
 
 			gui::Text *par = (gui::Text *) children[2].get();
-			par->str = "parent: " + get_parent_ratio(frame.time, parent);
+			par->str = "parent: NaN";
+			if (parent > 0.0f) {
+				float perc = 100 * frame.time / parent;
+				par->str = common::sprintf("parent: %.2f%%", perc);
+			}
 
 			// Set element positions
 			name->pos = pos;

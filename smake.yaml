@@ -10,8 +10,6 @@ definitions:
     thirdparty/imgui/backends/imgui_impl_glfw.cpp,
     thirdparty/imgui/backends/imgui_impl_vulkan.cpp'
   - kobra_source: 'main.cpp,
-    kobra.cpp,
-    render.cpp,
     source/vulkan.cpp,
     source/logger.cpp,
     source/capture.cpp,

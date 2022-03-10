@@ -6,197 +6,20 @@
 // #include <vulkan/vulkan_core.h>
 
 // Local headers
-#include "global.hpp"
-#include "kobra.hpp"
+#include "include/mesh.hpp"
 #include "profiler.hpp"
 
 using namespace kobra;
-
-// List of objet materials
-Material materials[] {
-	{.albedo = glm::vec3 {0.1f, 0.5f, 0.2f}},
-	{
-		.albedo = glm::vec3 {1.0f, .7f, .7f},
-		.specular = 32.0f,
-		.reflectance = 0.7f,
-		// .refractance = 0.27035f,
-		.extinction = 2.77f
-	},
-	{
-		.albedo = glm::vec3 {1.0f, 1.0f, 1.0f},
-		.specular = 1.0,
-		.reflectance = 0.01,
-		.refractance = 0.0
-	},
-	{.albedo = glm::vec3 {0.5f, 0.1f, 0.6f}},
-	{.albedo = glm::vec3 {0.6f, 0.5f, 0.3f}},
-	{.albedo = glm::vec3 {1.0f, 0.5f, 1.0f}},
-	{
-		.albedo = glm::vec3 {1.0f, 1.0f, 1.0f},
-		.shading = SHADING_TYPE_LIGHT
-	}
-};
-
-// List of object transforms
-Transform transforms[] {
-	glm::vec3 {3.0f, 1.3f, 1.0f},
-	glm::vec3 {0.5f, 5.0f, 3.5f},
-	glm::vec3 {6.0f, -2.0f, 5.0f},
-	glm::vec3 {6.0f, 3.0f, 11.5f},
-	glm::vec3 {6.0f, 3.0f, -2.0f},
-	glm::vec3 {0.0f, 0.0f, 0.0f},
-	glm::vec3 {0.0f, 0.0f, -1.0f}
-};
-
-World world {
-	// Camera
-	Camera {
-		Transform {
-			glm::vec3(0.0f, 2.0f, -8.0f)
-		},
-		Tunings {
-			45.0f, 800, 600
-		}
-	},
-
-	// Primitives
-	// TODO: later read from file
-	std::vector <World::PrimitivePtr> {
-		World::PrimitivePtr(new Sphere(0.25f, transforms[0], materials[6])),
-
-		World::PrimitivePtr(new Sphere(1.0f, transforms[0],
-			{
-				.albedo = glm::vec3 {1.0f},
-				.refractance = 1.5f
-			}
-		)),
-		World::PrimitivePtr(new Sphere(1.0f, glm::vec3 {-3.0f, 1.3f, 1.0f},
-			{
-				.albedo = glm::vec3 {1.0f},
-				.reflectance = 1.0f
-			}
-		)),
-
-		// World::PrimitivePtr(new Sphere(3.0f, transforms[1], materials[1])),
-		/* World::PrimitivePtr(new Sphere(6.0f, transforms[2], materials[2])),
-		World::PrimitivePtr(new Sphere(2.0f, transforms[3], materials[3])),
-		World::PrimitivePtr(new Sphere(2.0f, transforms[4], materials[4])),
-
-		// Cube mesh
-		World::PrimitivePtr(new kobra::Mesh <kobra::VERTEX_TYPE_POSITION> (
-			{
-				glm::vec3(0.0f, 6.0f, -1.5f),
-				glm::vec3(1.0f, 6.0f, -1.5f),
-				glm::vec3(1.0f, 7.0f, -1.5f),
-				glm::vec3(0.0f, 7.0f, -1.5),
-				glm::vec3(0.0f, 6.0f, 0.5f),
-				glm::vec3(1.0f, 6.0f, 0.5f),
-				glm::vec3(1.0f, 7.0f, 0.5f),
-				glm::vec3(0.0f, 7.0f, 0.5f)
-			},
-			{
-				0, 1, 2,	0, 2, 3,
-				4, 5, 6,	4, 6, 7,
-				0, 4, 7,	0, 7, 3,
-				1, 5, 6,	1, 6, 2,
-				0, 1, 4,	1, 4, 5,
-				2, 6, 7,	2, 7, 3
-			},
-			transforms[6],
-			materials[1]
-		)), */
-	},
-
-	// Lights
-	std::vector <World::LightPtr> {
-		// TODO: objects with emmision
-		World::LightPtr(new PointLight(transforms[0], 0.0f))
-	}
-};
 
 int main()
 {
 	// Redirect logger to file
 	// Logger::switch_file("kobra.log");
+	
+	Mesh <VERTEX_TYPE_NORMAL> mesh;
 
 	// Initialize Vulkan
 	Vulkan *vulkan = new Vulkan();
-
-	kobra::Model <kobra::VERTEX_TYPE_POSITION> model("resources/benchmark/bunny_res_1.ply");
-	model[0].material = materials[1];
-	model[0].transform.scale = glm::vec3(10.0f);
-
-	auto m1 = model[0];
-	auto m2 = model[0];
-	auto m3 = model[0];
-
-	m2.transform.position = glm::vec3(-3.0f, 0.0f, -3.0f);
-	m3.transform.position = glm::vec3(3.0f, 0.0f, 3.0f);
-
-	world.objects.push_back(std::shared_ptr <kobra::Mesh <kobra::VERTEX_TYPE_POSITION>> (
-		new kobra::Mesh <kobra::VERTEX_TYPE_POSITION> (m1)
-	));
-
-	world.objects.push_back(std::shared_ptr <kobra::Mesh <kobra::VERTEX_TYPE_POSITION>> (
-		new kobra::Mesh <kobra::VERTEX_TYPE_POSITION> (m2)
-	));
-
-	world.objects.push_back(std::shared_ptr <kobra::Mesh <kobra::VERTEX_TYPE_POSITION>> (
-		new kobra::Mesh <kobra::VERTEX_TYPE_POSITION> (m3)
-	));
-
-	Logger::ok() << "[main] Loaded model with "
-		<< model.mesh_count() << " meshe(s), "
-		<< model[0].vertex_count() << " vertices, "
-		<< model[0].triangle_count() << " triangles" << std::endl;
-
-	// Plane mesh
-	float width = 10.0f;
-	float length = 10.0f;
-
-	kobra::Mesh <kobra::VERTEX_TYPE_POSITION> plane_mesh {
-		{
-			glm::vec3(-width/2, 0.27f, -length/2),
-			glm::vec3(width/2, 0.27f, -length/2),
-			glm::vec3(width/2, 0.27f, length/2),
-			glm::vec3(-width/2, 0.27f, length/2)
-		},
-		{
-			0, 1, 2,
-			2, 3, 0
-		},
-		{
-			.albedo = glm::vec3(1.0f, 1.0f, 0.7f),
-			// .reflectance = 0.0f,
-			.refractance = 0.0f,
-			.extinction = 0.28176f
-		}
-	};
-
-	// Add plane to world
-	world.objects.push_back(std::shared_ptr <kobra::Mesh <kobra::VERTEX_TYPE_POSITION>> (
-		new kobra::Mesh <kobra::VERTEX_TYPE_POSITION> (plane_mesh)
-	));
-
-	Logger::notify("Transforms (model matrices) of all objects:");
-	for (auto &object : world.objects) {
-		glm::mat4 model = object->transform.model();
-		glm::vec4 pos = model[3];
-		Logger::notify() << "\t" << pos.x << ", " << pos.y << ", " << pos.z << std::endl;
-	}
-
-	// Save world into scene
-	kobra::Scene scene("default_world", world);
-	scene.save("resources/default_world.hg");
-
-	// Initialize Vulkan
-	vulkan->init_imgui();
-
-	/* Create sample scene
-	MercuryApplication mapp(vulkan);
-
-	mapp.update_descriptor_set();
-	mapp.update_command_buffers(); */
 
 	Profiler *pf = new Profiler();
 	ProfilerApplication app {vulkan, pf};
@@ -204,7 +27,6 @@ int main()
 		[&]() { app.run(); }
 	};
 
-	// mapp.run();
 	thread.join();
 
 	delete vulkan;

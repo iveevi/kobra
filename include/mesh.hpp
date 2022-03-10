@@ -5,65 +5,26 @@
 #include "primitive.hpp"
 #include "logger.hpp"	// TODO: remove
 #include "transform.hpp"
+#include "vertex.hpp"
 #include "world.hpp"
 #include "world_update.hpp"
 
 namespace kobra {
 
-// TODO: put vertex into own header file
-
-// Vertex types
-enum VertexType : uint32_t {
-	VERTEX_TYPE_POSITION	= 0,
-	VERTEX_TYPE_NORMAL	= 0x1,
-	VERTEX_TYPE_TEXCOORD	= 0x2,
-	VERTEX_TYPE_COLOR	= 0x4,
-	VERTEX_TYPE_TANGENT	= 0x8
-};
-
-// Position vertex
-struct PVert {
-	glm::vec3 pos;
-};
-
-// Vertex information (templated by vertex type)
+// Mesh class, just holds a list of vertices and indices
 template <VertexType T = VERTEX_TYPE_POSITION>
-struct Vertex : public PVert {
-	// Vertex type
-	static constexpr VertexType type = T;
-
-	// Vertex constructor
-	Vertex() {}
-
-	// Vertex constructor
-	Vertex(const glm::vec3& pos) : PVert {pos} {}
-};
-
-// TODO: vertex type specializations
-
-// Mesh class
-template <VertexType T = VERTEX_TYPE_POSITION>
-class Mesh : public Primitive {
-public:
-	// Public aliases
-	using VertexList = std::vector <Vertex <T>>;
-private:
+class Mesh {
+protected:
 	// List of vertices
-	VertexList	_vertices;
+	VertexList <T>	_vertices;
 
 	// List of indices
 	Indices		_indices;
 public:
-	// Constructors
+	// Simple constructor
 	Mesh() {}
-	Mesh(const VertexList &vertices, const Indices &indices,
-			const Material &material)
-			: _vertices {vertices}, _indices {indices},
-			Primitive {OBJECT_TYPE_NONE, Transform(), material} {}
-	Mesh(const VertexList &vertices, const Indices &indices,
-			const Transform &trans, const Material &mat)
-			: _vertices {vertices}, _indices {indices},
-			Primitive {OBJECT_TYPE_NONE, trans, mat} {}
+	Mesh(const VertexList <T> &vs, const Indices &is)
+			: _vertices {vs}, _indices {is} {}
 
 	// Properties
 	size_t vertex_count() const {
@@ -75,7 +36,7 @@ public:
 	}
 
 	// Get data
-	const VertexList &vertices() const {
+	const VertexList <T> &vertices() const {
 		return _vertices;
 	}
 
@@ -83,9 +44,38 @@ public:
 		return _indices;
 	}
 
-	// Count primitives
+	/* Count primitives
 	uint count() const override {
 		return triangle_count();
+	} */
+
+	// TODO: override save method
+};
+
+// Mesh for raytracing
+namespace raytracing {
+
+// Mesh class
+template <VertexType T = VERTEX_TYPE_POSITION>
+class Mesh : public Primitive, public kobra::Mesh <T> {
+public:
+	//
+	Mesh() {}
+
+	// TODO: are these obselete?
+	Mesh(const VertexList <T> &vertices, const Indices &indices,
+			const Material &material)
+			: Primitive {OBJECT_TYPE_NONE, Transform(), material},
+			kobra::Mesh <T> {vertices, indices} {}
+
+	Mesh(const VertexList <T> &vertices, const Indices &indices,
+			const Transform &trans, const Material &mat)
+			: Primitive {OBJECT_TYPE_NONE, trans, mat},
+			kobra::Mesh <T> {vertices, indices} {}
+
+	// Virtual methods
+	uint count() const override {
+		return this->triangle_count();
 	}
 
 	// Write to file
@@ -95,14 +85,20 @@ public:
 
 		// Write vertices in binary
 		file << "\tvertices:";
-		file.write(reinterpret_cast <const char *> (&_vertices[0]),
-				sizeof(Vertex <T>) * _vertices.size());
+		file.write(reinterpret_cast <const char *> (
+			&this->_vertices[0]),
+			sizeof(Vertex <T>) * this->_vertices.size()
+		);
+
 		file << "\n";
 
 		// Write indices in binary
 		file << "\tindices:";
-		file.write(reinterpret_cast <const char *> (&_indices[0]),
-				sizeof(uint32_t) * _indices.size());
+		file.write(reinterpret_cast <const char *> (
+			&this->_indices[0]),
+			sizeof(uint32_t) * this->_indices.size()
+		);
+
 		file << "\n";
 	}
 
@@ -128,7 +124,7 @@ public:
 
 		// Push all vertices
 		uint offset = wu.bf_verts->push_size();
-		for (const auto &v : _vertices)
+		for (const auto &v : this->_vertices)
 			wu.bf_verts->push_back({v.pos, 1.0});
 
 		// Dummy triangle instance
@@ -140,15 +136,15 @@ public:
 		};
 
 		// Write indices
-		for (size_t i = 0; i < _indices.size(); i += 3) {
+		for (size_t i = 0; i < this->_indices.size(); i += 3) {
 			wu.indices.push_back(wu.bf_objs->push_size());
 			triangle.write_indexed(wu,
-				_indices[i] + offset,
-				_indices[i + 1] + offset,
-				_indices[i + 2] + offset,
+				this->_indices[i] + offset,
+				this->_indices[i + 1] + offset,
+				this->_indices[i + 2] + offset,
 				mati,
 				tati
-			);	
+			);
 		}
 	}
 
@@ -158,11 +154,11 @@ public:
 		glm::mat4 combined = parent * transform.model();
 
 		// Get bounding box for each triangle
-		for (size_t i = 0; i < _indices.size(); i += 3) {
+		for (size_t i = 0; i < this->_indices.size(); i += 3) {
 			// Get each vertex
-			const Vertex <T> &v0 = _vertices[_indices[i + 0]];
-			const Vertex <T> &v1 = _vertices[_indices[i + 1]];
-			const Vertex <T> &v2 = _vertices[_indices[i + 2]];
+			const Vertex <T> &v0 = this->_vertices[this->_indices[i + 0]];
+			const Vertex <T> &v1 = this->_vertices[this->_indices[i + 1]];
+			const Vertex <T> &v2 = this->_vertices[this->_indices[i + 2]];
 
 			// Construct triangle
 			Triangle triangle {
@@ -174,6 +170,8 @@ public:
 		}
 	}
 };
+
+}
 
 }
 
