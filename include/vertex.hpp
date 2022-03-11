@@ -56,6 +56,16 @@ struct Vertex {
 			}
 		};
 	}
+
+	// Create descriptor set layout
+	static VkDescriptorSetLayout descriptor_set_layout() {
+		return VK_NULL_HANDLE;
+	}
+
+	// Create descriptor set
+	static VkDescriptorSet descriptor_set(VkDescriptorPool pool) {
+		return VK_NULL_HANDLE;
+	}
 };
 
 // Default vertex type
@@ -92,6 +102,16 @@ struct Vertex <VERTEX_TYPE_POSITION> {
 				.offset = offsetof(Vertex, pos)
 			}
 		};
+	}
+
+	// Create descriptor set layout
+	static VkDescriptorSetLayout descriptor_set_layout() {
+		return VK_NULL_HANDLE;
+	}
+
+	// Create descriptor set
+	static VkDescriptorSet descriptor_set(VkDescriptorPool pool) {
+		return VK_NULL_HANDLE;
 	}
 };
 
@@ -136,6 +156,16 @@ struct Vertex <VERTEX_TYPE_NORMAL> {
 				.offset = offsetof(Vertex, normal)
 			}
 		};
+	}
+
+	// Create descriptor set layout
+	static VkDescriptorSetLayout descriptor_set_layout() {
+		return VK_NULL_HANDLE;
+	}
+
+	// Create descriptor set
+	static VkDescriptorSet descriptor_set(VkDescriptorPool pool) {
+		return VK_NULL_HANDLE;
 	}
 };
 

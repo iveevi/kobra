@@ -16,6 +16,16 @@ using IndexBuffer = BufferManager <uint32_t>;
 
 // Rasterization abstraction and primitives
 struct RenderPacket {
+	VkCommandBuffer cmd;
+};
+
+// Rasterization elements
+struct _element {
+	// Vertex type
+	VertexType type;
+
+	// Virtual methods
+	virtual void render(RenderPacket &) = 0;
 };
 
 }
