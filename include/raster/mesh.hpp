@@ -16,6 +16,10 @@ class Mesh : kobra::Mesh <T> {
 	VertexBuffer <T>	_vb;
 	IndexBuffer		_ib;
 public:
+	// Default constructor
+	Mesh() : kobra::Mesh <T> () {}
+	Mesh (const kobra::Mesh <T> &mesh) : kobra::Mesh <T> (mesh) {}
+
 	// Render
 	void render(RenderPacket &rp) {
 		// Bind vertex buffer

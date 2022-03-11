@@ -61,7 +61,7 @@ template <VertexType T>
 void Model <T> ::_process_mesh(aiMesh *mesh, const aiScene *scene)
 {
 	// Mesh data
-	typename Mesh <T> ::VertexList vertices;
+	VertexList <T> vertices;
 	Indices indices;
 
 	// Process all the mesh's vertices
@@ -90,17 +90,7 @@ void Model <T> ::_process_mesh(aiMesh *mesh, const aiScene *scene)
 	}
 
 	// TODO: ignoring materials right now
-
-	// Push back the mesh, and its material
-	// 	default material is magenta
-	Material mat {
-		.albedo = glm::vec3 {
-			1.0f, 0.0f, 1.0f
-		},
-		.shading = SHADING_TYPE_FLAT
-	};
-
-	_meshes.push_back(Mesh <T> (vertices, indices, mat));
+	_meshes.push_back(Mesh <T> (vertices, indices));
 }
 
 // Constructors
