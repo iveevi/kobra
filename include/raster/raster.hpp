@@ -28,6 +28,9 @@ struct _element {
 	virtual void render(RenderPacket &) = 0;
 };
 
+// Shared pointer alias
+using Element = std::shared_ptr <_element>;
+
 }
 
 }

@@ -11,7 +11,7 @@ namespace raster {
 
 // Mesh for rasterization
 template <VertexType T>
-class Mesh : kobra::Mesh <T> {
+class Mesh : kobra::Mesh <T>, public _element {
 	// Vertex and index buffers
 	VertexBuffer <T>	_vb;
 	IndexBuffer		_ib;
@@ -21,7 +21,7 @@ public:
 	Mesh (const kobra::Mesh <T> &mesh) : kobra::Mesh <T> (mesh) {}
 
 	// Render
-	void render(RenderPacket &rp) {
+	void render(RenderPacket &rp) override {
 		// Bind vertex buffer
 		VkBuffer	buffers[] = {_vb.vk_buffer()};
 		VkDeviceSize	offsets[] = {0};
