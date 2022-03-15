@@ -4,21 +4,31 @@
 #include <thread>
 
 // Local headers
+#include "include/logger.hpp"
 #include "include/model.hpp"
 #include "include/vertex.hpp"
 #include "include/raster/mesh.hpp"
+#include "include/raster/layer.hpp"
 #include "profiler.hpp"
 
 using namespace kobra;
 
 // Rasterization app
 class RasterApp : public BaseApp {
+	raster::Layer layer;
 public:
 	RasterApp(Vulkan *vk) : BaseApp({
 		vk,
 		800, 800, 2,
 		"Rasterization"
-	}) {}
+	}) {
+		// Load meshes
+		std::string bunny_obj = "resources/benchmark/bunny_res_1.ply";
+		Model <VERTEX_TYPE_POSITION> model(bunny_obj);
+		raster::Mesh <VERTEX_TYPE_POSITION> mesh(model[0]);
+
+		KOBRA_LOG_FILE(ok) << "Loaded all models and meshes\n";
+	}
 
 	// Override record method
 	void record(const VkCommandBuffer &cmd, const VkFramebuffer &framebuffer) override {}

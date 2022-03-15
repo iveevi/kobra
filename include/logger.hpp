@@ -105,7 +105,7 @@ public:
 		oss << std::put_time(&tm, "%m/%d/%Y %H:%M:%S");
 		return oss.str();
 	}
-	
+
 	// For main stream
 	static std::ostream &plain() {
 		return _main_plain();
@@ -166,6 +166,40 @@ public:
 		notify(msg.c_str());
 	}
 
+	// With bracketed origin
+	static void ok(const char *origin, const char *msg) {
+		ok() << "[" << origin << "] " << msg << std::endl;
+	}
+
+	static void error(const char *origin, const char *msg) {
+		error() << "[" << origin << "] " << msg << std::endl;
+	}
+
+	static void warn(const char *origin, const char *msg) {
+		warn() << "[" << origin << "] " << msg << std::endl;
+	}
+
+	static void notify(const char *origin, const char *msg) {
+		notify() << "[" << origin << "] " << msg << std::endl;
+	}
+
+	// Bracketed origin and stream
+	static std::ostream &ok_from(const char *origin) {
+		return ok() << "[" << origin << "] ";
+	}
+
+	static std::ostream &error_from(const char *origin) {
+		return error() << "[" << origin << "] ";
+	}
+
+	static std::ostream &warn_from(const char *origin) {
+		return warn() << "[" << origin << "] ";
+	}
+
+	static std::ostream &notify_from(const char *origin) {
+		return notify() << "[" << origin << "] ";
+	}
+
 	// Cached logging
 	static void error_cached(const std::string &msg) {
 		static std::set <std::string> cached;
@@ -204,5 +238,13 @@ public:
 		console = false;
 	}
 };
+
+// Macros for logging
+#define KOBRA_LOG_FUNC(type) Logger::type##_from(__PRETTY_FUNCTION__)
+
+#define LINE_TO_STRING(line) #line
+#define LINE_TO_STRING2(line) LINE_TO_STRING(line)
+
+#define KOBRA_LOG_FILE(type) Logger::type##_from(__FILE__ ": " LINE_TO_STRING2(__LINE__))
 
 #endif

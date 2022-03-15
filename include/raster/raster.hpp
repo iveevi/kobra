@@ -21,6 +21,9 @@ struct RenderPacket {
 
 // Rasterization elements
 struct _element {
+	// Virtual destructor
+	virtual ~_element() = default;
+
 	// Vertex type
 	VertexType type;
 

@@ -122,9 +122,24 @@ public:
 			return device.device;
 		}
 
+		// Create a shader module
+		VkShaderModule make_shader(const std::string &path) {
+			Glob g = vk->_read_file(path);
+			return vk->_mk_shader_module(device, g);
+		}
+
+		// Create multiple shader modules
+		std::vector <VkShaderModule> make_shaders(const std::vector <std::string> &paths) {
+			std::vector <VkShaderModule> modules;
+			modules.reserve(paths.size());
+			for (const auto &path : paths)
+				modules.push_back(make_shader(path));
+			return modules;
+		}
+
 		// Create a graphics pipeline
 		template <size_t N>
-		Pipeline _make_pipeline(const PipelineInfo <N> &info) {
+		Pipeline make_pipeline(const PipelineInfo <N> &info) {
 			// Create pipeline stages
 			VkPipelineShaderStageCreateInfo vertex {
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,

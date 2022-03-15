@@ -12,7 +12,7 @@ namespace raster {
 // 	pipelines for each
 // 	vertex type
 template <VertexType T>
-VkPipeline make_pipeline()
+VkPipeline make_pipeline(const Vulkan::Context &ctx)
 {
 }
 
