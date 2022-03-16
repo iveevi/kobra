@@ -46,7 +46,6 @@ class Layer {
 	// Allocation methods
 	void _init_vulkan_structures(VkAttachmentLoadOp load) {
 		// Create render pass
-		// 	load previous contents
 		_render_pass = _wctx.context.vk->make_render_pass(
 			_wctx.context.device,
 			_wctx.swapchain,
@@ -269,6 +268,7 @@ public:
 	Layer() = default;
 
 	// Constructor
+	// TODO: _layer base class
 	Layer(const App::Window &wctx, const VkAttachmentLoadOp &load = VK_ATTACHMENT_LOAD_OP_LOAD) : _wctx(wctx) {
 		// Initialize all Vulkan objects
 		_init_vulkan_structures(load);

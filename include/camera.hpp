@@ -33,7 +33,7 @@ public:
 struct Camera {
         // Camera properties
         Tunings tunings;
-        
+
 	// Public member variables
         Transform transform;
 

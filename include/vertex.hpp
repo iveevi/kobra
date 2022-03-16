@@ -27,6 +27,9 @@ struct Vertex {
 	// Vertex type
 	static constexpr VertexType type = T;
 
+	// Number of attributes
+	static constexpr uint32_t attributes = 1;
+
 	// Data
 	glm::vec3 pos;
 
@@ -74,6 +77,9 @@ struct Vertex <VERTEX_TYPE_POSITION> {
 	// Vertex type
 	static constexpr VertexType type = VERTEX_TYPE_POSITION;
 
+	// Number of attributes
+	static constexpr uint32_t attributes = 1;
+
 	// Data
 	glm::vec3 pos;
 
@@ -120,6 +126,9 @@ template <>
 struct Vertex <VERTEX_TYPE_NORMAL> {
 	// Vertex type
 	static constexpr VertexType type = VERTEX_TYPE_NORMAL;
+
+	// Number of attributes
+	static constexpr uint32_t attributes = 2;
 
 	// Data
 	glm::vec3 pos;

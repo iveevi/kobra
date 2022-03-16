@@ -27,7 +27,7 @@ public:
 		Model <VERTEX_TYPE_POSITION> model(bunny_obj);
 		raster::Mesh <VERTEX_TYPE_POSITION> mesh(model[0]);
 
-		KOBRA_LOG_FILE(ok) << "Loaded all models and meshes\n";
+		KOBRA_LOG_FILE(notify) << "Loaded all models and meshes\n";
 	}
 
 	// Override record method
