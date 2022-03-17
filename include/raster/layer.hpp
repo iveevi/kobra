@@ -145,7 +145,12 @@ public:
 
 			.pipeline_layout = pipelines.vertex_position.layout,
 
-			.view = _camera.transform.model(),
+			.view = glm::lookAt(
+				glm::vec3 {0.0f, 0.0f, 0.0f},
+				glm::vec3 {0.0f, 0.0f, -1.0f},
+				glm::vec3 {0.0f, 1.0f, 0.0f}
+			),
+			// _camera.transform.model(),
 			.proj = glm::perspective(
 				glm::radians(_camera.tunings.fov),
 				_camera.tunings.aspect,

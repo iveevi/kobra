@@ -63,11 +63,6 @@ public:
 			rp.proj
 		};
 
-		std::cout << "Rendering mesh" << std::endl;
-		std::cout << "\tmodel: " << mvp.model[0][0] << " " << mvp.model[0][1] << " " << mvp.model[0][2] << " " << mvp.model[0][3] << std::endl;
-		std::cout << "\tview: " << mvp.view[0][0] << " " << mvp.view[0][1] << " " << mvp.view[0][2] << " " << mvp.view[0][3] << std::endl;
-		std::cout << "\tproj: " << mvp.projection[0][0] << " " << mvp.projection[0][1] << " " << mvp.projection[0][2] << " " << mvp.projection[0][3] << std::endl;
-
 		// Bind vertex buffer
 		VkBuffer	buffers[] = {_vb.vk_buffer()};
 		VkDeviceSize	offsets[] = {0};

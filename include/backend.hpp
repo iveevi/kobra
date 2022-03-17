@@ -108,8 +108,13 @@ public:
 
 		VkPrimitiveTopology			topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
-		size_t					width = 0;
-		size_t					height = 0;
+		struct {
+			// TODO: make floats
+			int				width = 0;
+			int				height = 0;
+			int				x = 0;
+			int				y = 0;
+		} viewport;
 	};
 
 	// Context, containing the device
@@ -182,10 +187,10 @@ public:
 
 			// Viewport
 			VkViewport viewport {
-				.x = 0.0f,
-				.y = 0.0f,
-				.width = (float) info.width,
-				.height = (float) info.height,
+				.x = (float) info.viewport.x,
+				.y = (float) info.viewport.y,
+				.width = (float) info.viewport.width,
+				.height = (float) info.viewport.height,
 				.minDepth = 0.0f,
 				.maxDepth = 1.0f
 			};

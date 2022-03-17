@@ -43,8 +43,12 @@ Vulkan::Pipeline make_pipeline(const App::Window &wctx,
 
 		.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
 
-		.width = wctx.width,
-		.height = wctx.height
+		.viewport {
+			.width = (int) wctx.width,
+			.height = - (int) wctx.height,
+			.x = 0,
+			.y = (int) wctx.height
+		}
 	};
 
 	return wctx.context.make_pipeline(info);

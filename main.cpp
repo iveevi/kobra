@@ -29,13 +29,14 @@ public:
 		Model <VERTEX_TYPE_POSITION> model(bunny_obj);
 
 		raster::Mesh <VERTEX_TYPE_POSITION> *mesh = new raster::Mesh <VERTEX_TYPE_POSITION> (window.context, model[0]);
-		mesh->transform() = Transform({0.0f, 1.0f, -4.0f});
+		mesh->transform() = Transform({0.0f, 0.0f, -4.0f});
+		mesh->transform().scale = glm::vec3(10.0f);
 
 		KOBRA_LOG_FILE(notify) << "Loaded all models and meshes\n";
 
 		// Initialize layer
 		Camera camera {
-			Transform { glm::vec3(0.0f, 2.0f, -8.0f) },
+			Transform { glm::vec3(0.0f, 0.0f, -1.0f) },
 			Tunings { 45.0f, 800, 600 }
 		};
 
