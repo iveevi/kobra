@@ -22,6 +22,7 @@ constexpr VertexType VERTEX_TYPE_COLOR		= 0x4;
 constexpr VertexType VERTEX_TYPE_TANGENT	= 0x8;
 
 // Vertex information (templated by vertex type)
+// TODO: header for each specialization (vertex directory)
 template <VertexType T = VERTEX_TYPE_POSITION>
 struct Vertex {
 	// Vertex type
@@ -60,9 +61,28 @@ struct Vertex {
 		};
 	}
 
-	// Create descriptor set layout
-	static VkDescriptorSetLayout descriptor_set_layout() {
-		return VK_NULL_HANDLE;
+	// Create descriptor set layouts
+	static constexpr VkDescriptorSetLayoutBinding _dsl {
+		.binding = 0,
+		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT
+	};
+
+	static VkDescriptorSetLayout descriptor_set_layout(const Vulkan::Context &ctx) {
+		static VkDescriptorSetLayout dsl = VK_NULL_HANDLE;
+
+		if (dsl != VK_NULL_HANDLE)
+			return dsl;
+
+		// Create layout if not already created
+		// TODO: context method
+		dsl = ctx.vk->make_descriptor_set_layout(
+			ctx.device,
+			{_dsl}
+		);
+
+		return dsl;
 	}
 
 	// Create descriptor set
@@ -109,10 +129,29 @@ struct Vertex <VERTEX_TYPE_POSITION> {
 			}
 		};
 	}
+	
+	// Create descriptor set layouts
+	static constexpr VkDescriptorSetLayoutBinding _dsl {
+		.binding = 0,
+		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT
+	};
 
-	// Create descriptor set layout
-	static VkDescriptorSetLayout descriptor_set_layout() {
-		return VK_NULL_HANDLE;
+	static VkDescriptorSetLayout descriptor_set_layout(const Vulkan::Context &ctx) {
+		static VkDescriptorSetLayout dsl = VK_NULL_HANDLE;
+
+		if (dsl != VK_NULL_HANDLE)
+			return dsl;
+
+		// Create layout if not already created
+		// TODO: context method
+		dsl = ctx.vk->make_descriptor_set_layout(
+			ctx.device,
+			{_dsl}
+		);
+
+		return dsl;
 	}
 
 	// Create descriptor set

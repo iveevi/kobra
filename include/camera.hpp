@@ -38,7 +38,7 @@ struct Camera {
         Transform transform;
 
         // Constructors
-        Camera();
+        Camera() {}
         Camera(const Transform& trans, const Tunings& tns)
                         : transform(trans), tunings(tns) {}
 };

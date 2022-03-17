@@ -17,6 +17,12 @@ using IndexBuffer = BufferManager <uint32_t>;
 // Rasterization abstraction and primitives
 struct RenderPacket {
 	VkCommandBuffer cmd;
+
+	VkPipelineLayout pipeline_layout;
+
+	// View and projection matrices
+	glm::mat4 view;
+	glm::mat4 proj;
 };
 
 // Rasterization elements

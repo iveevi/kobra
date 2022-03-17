@@ -12,6 +12,7 @@
 #include <sstream>
 
 // Color constants
+// TODO: refactor to kobra
 #define MC_RESET	"\033[0m"
 #define MC_RED		"\033[31m"
 #define MC_GREEN	"\033[32m"
@@ -46,7 +47,7 @@ class Logger {
 	static std::ostream &_main_fatal_error() {
 		mtx.lock();
 		if (console) *os << log_fatal_error();
-		*os << "[MERCURY: " << time() << ": FATAL ERROR] ";
+		*os << "[KOBRA: " << time() << ": FATAL ERROR] ";
 		if (console) *os << log_reset();
 		if (!console) os->flush();
 		mtx.unlock();
@@ -61,7 +62,7 @@ class Logger {
 	static std::ostream &_main_ok() {
 		mtx.lock();
 		if (console) *os << log_ok();
-		*os << "[MERCURY: " << time() << "] ";
+		*os << "[KOBRA: " << time() << "] ";
 		if (console) *os << log_reset();
 		if (!console) os->flush();
 		mtx.unlock();
@@ -71,7 +72,7 @@ class Logger {
 	static std::ostream &_main_error() {
 		mtx.lock();
 		if (console) *os << log_error();
-		*os << "[MERCURY: " << time() << "] ";
+		*os << "[KOBRA: " << time() << "] ";
 		if (console) *os << log_reset();
 		if (!console) os->flush();
 		mtx.unlock();
@@ -81,7 +82,7 @@ class Logger {
 	static std::ostream &_main_warn() {
 		mtx.lock();
 		if (console) *os << log_warn();
-		*os << "[MERCURY: " << time() << "] ";
+		*os << "[KOBRA: " << time() << "] ";
 		if (console) *os << log_reset();
 		if (!console) os->flush();
 		mtx.unlock();
@@ -91,7 +92,7 @@ class Logger {
 	static std::ostream &_main_notify() {
 		mtx.lock();
 		if (console) *os << log_notify();
-		*os << "[MERCURY: " << time() << "] ";
+		*os << "[KOBRA: " << time() << "] ";
 		if (console) *os << log_reset();
 		if (!console) os->flush();
 		mtx.unlock();

@@ -3,6 +3,8 @@
 #include <iostream>
 #include <thread>
 
+#define KOBRA_VALIDATION_LAYERS
+
 // Local headers
 #include "include/logger.hpp"
 #include "include/model.hpp"
@@ -25,13 +27,33 @@ public:
 		// Load meshes
 		std::string bunny_obj = "resources/benchmark/bunny_res_1.ply";
 		Model <VERTEX_TYPE_POSITION> model(bunny_obj);
-		raster::Mesh <VERTEX_TYPE_POSITION> mesh(model[0]);
+
+		raster::Mesh <VERTEX_TYPE_POSITION> *mesh = new raster::Mesh <VERTEX_TYPE_POSITION> (window.context, model[0]);
+		mesh->transform() = Transform({0.0f, 1.0f, -4.0f});
 
 		KOBRA_LOG_FILE(notify) << "Loaded all models and meshes\n";
+
+		// Initialize layer
+		Camera camera {
+			Transform { glm::vec3(0.0f, 2.0f, -8.0f) },
+			Tunings { 45.0f, 800, 600 }
+		};
+
+		layer = raster::Layer(window, camera);
+		layer.add(mesh);
 	}
 
 	// Override record method
-	void record(const VkCommandBuffer &cmd, const VkFramebuffer &framebuffer) override {}
+	void record(const VkCommandBuffer &cmd, const VkFramebuffer &framebuffer) override {
+		// Start recording command buffer
+		Vulkan::begin(cmd);
+
+		// Record commands
+		layer.render(cmd, framebuffer);
+
+		// End recording command buffer
+		Vulkan::end(cmd);
+	}
 
 	// Termination method
 	void terminate() override {
@@ -50,29 +72,28 @@ int main()
 	Model <VERTEX_TYPE_POSITION> model(bunny_obj);
 	Logger::ok("Model loaded");
 
-	// Get first mesh as a rasterization target
-	raster::Mesh <VERTEX_TYPE_POSITION> mesh = model[0];
-
 	// Initialize Vulkan
 	Vulkan *vulkan = new Vulkan();
 
 	// Create and launch profiler app
 	Profiler *pf = new Profiler();
-	ProfilerApplication app {vulkan, pf};
-	std::thread thread {
+	// ProfilerApplication app {vulkan, pf};
+	/* std::thread thread {
 		[&]() { app.run(); }
-	};
+	}; */
 
 	// Create and launch raster app
 	RasterApp raster_app {vulkan};
-	std::thread raster_thread {
+	/* std::thread raster_thread {
 		[&]() { raster_app.run(); }
-	};
+	}; */
+
+	raster_app.run();
 
 
 	// Wait for all to finish
-	thread.join();
-	raster_thread.join();
+	// thread.join();
+	// raster_thread.join();
 
 	delete vulkan;
 }

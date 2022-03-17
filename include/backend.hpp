@@ -103,6 +103,9 @@ public:
 		VertexBinding				vertex_binding;
 		std::array <VertexAttribute, N>		vertex_attributes;
 
+		size_t					push_consts;
+		VkPushConstantRange *			push_consts_range;
+
 		VkPrimitiveTopology			topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
 		size_t					width = 0;
@@ -139,7 +142,7 @@ public:
 
 		// Create a graphics pipeline
 		template <size_t N>
-		Pipeline make_pipeline(const PipelineInfo <N> &info) {
+		Pipeline make_pipeline(const PipelineInfo <N> &info) const {
 			// Create pipeline stages
 			VkPipelineShaderStageCreateInfo vertex {
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -255,7 +258,8 @@ public:
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 				.setLayoutCount = static_cast <uint32_t> (info.dsls.size()),
 				.pSetLayouts = info.dsls.data(),
-				.pushConstantRangeCount = 0
+				.pushConstantRangeCount = static_cast <uint32_t> (info.push_consts),
+				.pPushConstantRanges = info.push_consts_range
 			};
 
 			VkPipelineLayout pipeline_layout;
@@ -359,7 +363,7 @@ private:
 	// Queue of destructor tasks
 	std::vector <DeletionTask>	_deletion_tasks;
 
-#ifdef MERCURY_VALIDATION_LAYERS
+#ifdef KOBRA_VALIDATION_LAYERS
 
 	// Enabling validation layers
 	static constexpr bool enable_validation_layers = true;
@@ -677,9 +681,7 @@ private:
 
 		// Check that the file exists
 		if (!file.is_open()) {
-			Logger::error() << __PRETTY_FUNCTION__
-				<< ": Failed to open file: "
-				<< path << std::endl;
+			KOBRA_LOG_FUNC(error) << "Failed to open file: " << path << std::endl;
 			return {};
 		}
 
@@ -802,7 +804,7 @@ private:
 			Logger::error() << "[Vulkan Validation Layer] "
 				<< pCallbackData->pMessage << std::endl;
 
-#ifdef MERCURY_THROW_ERROR
+#ifdef KOBRA_THROW_ERROR
 
 			throw std::runtime_error("[Vulkan Validation Layer] "
 				"An error occured in the validation layer");
@@ -811,7 +813,7 @@ private:
 
 		} else {
 
-#ifndef MERCURY_VALIDATION_ERROR_ONLY
+#ifndef KOBRA_VALIDATION_ERROR_ONLY
 
 			Logger::notify() << "[Vulkan Validation Layer] "
 				<< pCallbackData->pMessage << std::endl;
@@ -1482,7 +1484,7 @@ public:
 			throw(-1);
 		}
 
-#ifdef MERCURY_LOG_ALL
+#ifdef KOBRA_LOG_ALL
 
 		Logger::ok() << "[Vulkan] Descriptor set created (VkDescriptorSet="
 			<< new_descriptor_set << ")\n";

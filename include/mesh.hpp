@@ -20,11 +20,15 @@ protected:
 
 	// List of indices
 	Indices		_indices;
+
+	// Transform
+	Transform	_transform;
 public:
 	// Simple constructor
 	Mesh() {}
-	Mesh(const VertexList <T> &vs, const Indices &is)
-			: _vertices {vs}, _indices {is} {}
+	Mesh(const VertexList <T> &vs, const Indices &is,
+			const Transform &t = Transform())
+			: _vertices(vs), _indices(is), _transform(t) {}
 
 	// Properties
 	size_t vertex_count() const {
@@ -42,6 +46,15 @@ public:
 
 	const Indices &indices() const {
 		return _indices;
+	}
+
+	// Get transform
+	Transform &transform() {
+		return _transform;
+	}
+
+	const Transform &transform() const {
+		return _transform;
 	}
 
 	/* Count primitives
