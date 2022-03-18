@@ -19,7 +19,6 @@ namespace raster {
 //	to be rendered
 class Layer {
 	// Layer's camera
-	// TODO: allow multiple per layer
 	Camera			_camera;
 
 	// List of elements
@@ -77,6 +76,12 @@ public:
 			: _camera(camera), _wctx(wctx) {
 		_initialize_vulkan_structures(load);
 		_initialized = true;
+	}
+
+	// Get camera
+	// TODO: set camera
+	Camera &camera() {
+		return _camera;
 	}
 
 	// Add elements
@@ -145,12 +150,7 @@ public:
 
 			.pipeline_layout = pipelines.vertex_position.layout,
 
-			.view = glm::lookAt(
-				glm::vec3 {0.0f, 0.0f, 0.0f},
-				glm::vec3 {0.0f, 0.0f, -1.0f},
-				glm::vec3 {0.0f, 1.0f, 0.0f}
-			),
-			// _camera.transform.model(),
+			.view = _camera.transform.model(),
 			.proj = glm::perspective(
 				glm::radians(_camera.tunings.fov),
 				_camera.tunings.aspect,

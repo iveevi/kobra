@@ -36,11 +36,11 @@ public:
 		VkDescriptorPool	descriptor_pool = VK_NULL_HANDLE;
 
 		// Event based IO
-		io::MouseEventQueue *	mouse_events;
-		io::KeyboardEventQueue *keyboard_events;
+		io::MouseEventQueue	*mouse_events;
+		io::KeyboardEventQueue	*keyboard_events;
 
 		// Immediate IO (keyboard)
-		io::Input *		input;
+		io::Input		*input;
 
 		// Dimensions
 		size_t			width;
