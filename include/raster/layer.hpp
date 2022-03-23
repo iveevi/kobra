@@ -46,8 +46,8 @@ class Layer {
 
 		// Load necessary shader modules
 		std::vector <VkShaderModule> shaders = _wctx.context.make_shaders({
-			"shaders/bin/raster/vtype_position_vert.spv",	// 0: position only
-			"shaders/bin/raster/color_frag.spv"		// 1: color
+			"shaders/bin/raster/vertex.spv",
+			"shaders/bin/raster/color_frag.spv"
 		});
 
 		// Create pipelines

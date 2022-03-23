@@ -1,9 +1,6 @@
 #version 450
 
-// Input is color, output is color
-layout (location = 0) in vec4 color;
-
-layout (location = 0) out vec4 fragment;
+#include "io_set.frag"
 
 void main()
 {

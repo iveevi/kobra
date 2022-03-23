@@ -50,6 +50,11 @@ public:
 		coordinates::Screen coordinates(float x, float y) {
 			return coordinates::Screen {x, y, width, height};
 		}
+
+		// Cursor mode
+		void cursor_mode(int mode) {
+			glfwSetInputMode(surface.window, GLFW_CURSOR, mode);
+		}
 	};
 protected:
 	// This application's window context

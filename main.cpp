@@ -25,12 +25,17 @@ public:
 		"Rasterization"
 	}) {
 		// Load meshes
-		std::string bunny_obj = "resources/benchmark/bunny_res_1.ply";
-		Model model(bunny_obj);
+		Model model1("resources/benchmark/bunny_res_1.ply");
+		Model model2("resources/benchmark/suzanne.obj");
 
-		raster::Mesh *mesh = new raster::Mesh(window.context, model[0]);
-		mesh->transform() = Transform({0.0f, 0.0f, -4.0f});
-		mesh->transform().scale = glm::vec3(10.0f);
+		raster::Mesh *mesh1 = new raster::Mesh(window.context, model1[0]);
+		raster::Mesh *mesh2 = new raster::Mesh(window.context, model2[0]);
+
+		mesh1->transform() = Transform({0.0f, 0.0f, -4.0f});
+		mesh1->transform().scale = glm::vec3(10.0f);
+
+		mesh2->transform() = Transform({0.0f, 4.0f, -4.0f});
+		mesh2->transform().scale = glm::vec3(1/3.0f);
 
 		KOBRA_LOG_FILE(notify) << "Loaded all models and meshes\n";
 
@@ -41,12 +46,13 @@ public:
 		};
 
 		layer = raster::Layer(window, camera, VK_ATTACHMENT_LOAD_OP_CLEAR);
-		layer.add(mesh);
+		layer.add(mesh1);
+		layer.add(mesh2);
 
 		// Bind camera movement
 		// TODO: would be smoother using input object
 		auto key_movement = [&](void *user, const io::KeyboardEvent &event) {
-			float speed = 0.25f;
+			float speed = 0.025f;
 
 			// TODO: define key constants (keys.hpp)
 			Camera *camera = (Camera *) user;
@@ -114,6 +120,9 @@ public:
 		// Add to event handlers
 		window.keyboard_events->subscribe(key_movement, &layer.camera());
 		window.mouse_events->subscribe(mouse_movement, &layer.camera());
+
+		// Disable cursor
+		window.cursor_mode(GLFW_CURSOR_DISABLED);
 	}
 
 	// Override record method
