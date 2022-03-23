@@ -32,10 +32,7 @@ class Layer {
 	VkRenderPass		_render_pass;
 
 	// All rendering pipelines
-	struct {
-		// VERTEX_TYPE_POSITION
-		Vulkan::Pipeline vertex_position;
-	} pipelines;
+	Vulkan::Pipeline	_pipeline;
 
 	// Initialize Vulkan structures
 	void _initialize_vulkan_structures(const VkAttachmentLoadOp load) {
@@ -54,7 +51,7 @@ class Layer {
 		});
 
 		// Create pipelines
-		pipelines.vertex_position = make_pipeline<VERTEX_TYPE_POSITION> (
+		_pipeline = make_pipeline (
 			_wctx,
 			_render_pass,
 			shaders[0],
@@ -141,14 +138,14 @@ public:
 		// TODO: pipeline struct with all the necessary info
 		vkCmdBindPipeline(cmd_buffer,
 			VK_PIPELINE_BIND_POINT_GRAPHICS,
-			pipelines.vertex_position.pipeline
+			_pipeline.pipeline
 		);
 
 		// Initialize render packet
 		RenderPacket packet {
 			.cmd = cmd_buffer,
 
-			.pipeline_layout = pipelines.vertex_position.layout,
+			.pipeline_layout = _pipeline.layout,
 
 			.view = _camera.transform.model(),
 			.proj = glm::perspective(

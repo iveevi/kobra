@@ -2,8 +2,8 @@
 #define PIPILINE_H_
 
 // Engine headers
+#include "mesh.hpp"
 #include "../app.hpp"
-#include "../vertex.hpp"
 
 namespace kobra {
 
@@ -12,8 +12,7 @@ namespace raster {
 // Creating and managing
 // 	pipelines for each
 // 	vertex type
-template <VertexType T>
-Vulkan::Pipeline make_pipeline(const App::Window &wctx,
+inline Vulkan::Pipeline make_pipeline(const App::Window &wctx,
 		const VkRenderPass render_pass,
 		const VkShaderModule vert_shader,
 		const VkShaderModule frag_shader)
@@ -22,21 +21,21 @@ Vulkan::Pipeline make_pipeline(const App::Window &wctx,
 	VkPushConstantRange pcr {
 		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
 		.offset = 0,
-		.size = sizeof(typename Mesh <T> ::MVP)
+		.size = sizeof(typename Mesh::MVP)
 	};
 
 	// Creation info
-	Vulkan::PipelineInfo <Vertex <T> ::attributes> info {
+	Vulkan::PipelineInfo info {
 		.swapchain = wctx.swapchain,
 		.render_pass = render_pass,
 		
 		.vert = vert_shader,
 		.frag = frag_shader,
 		
-		.dsls = {Vertex <T> ::descriptor_set_layout(wctx.context)},
+		.dsls = {Vertex::descriptor_set_layout(wctx.context)},
 
-		.vertex_binding = Vertex <T> ::vertex_binding(),
-		.vertex_attributes = Vertex <T> ::vertex_attributes(),
+		.vertex_binding = Vertex::vertex_binding(),
+		.vertex_attributes = Vertex::vertex_attributes(),
 
 		.push_consts = 1,
 		.push_consts_range = &pcr,

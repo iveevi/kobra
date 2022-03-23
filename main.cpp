@@ -26,9 +26,9 @@ public:
 	}) {
 		// Load meshes
 		std::string bunny_obj = "resources/benchmark/bunny_res_1.ply";
-		Model <VERTEX_TYPE_POSITION> model(bunny_obj);
+		Model model(bunny_obj);
 
-		raster::Mesh <VERTEX_TYPE_POSITION> *mesh = new raster::Mesh <VERTEX_TYPE_POSITION> (window.context, model[0]);
+		raster::Mesh *mesh = new raster::Mesh(window.context, model[0]);
 		mesh->transform() = Transform({0.0f, 0.0f, -4.0f});
 		mesh->transform().scale = glm::vec3(10.0f);
 
@@ -142,7 +142,7 @@ int main()
 	// Logger::switch_file("kobra.log");
 
 	std::string bunny_obj = "resources/benchmark/bunny_res_1.ply";
-	Model <VERTEX_TYPE_POSITION> model(bunny_obj);
+	Model model(bunny_obj);
 	Logger::ok("Model loaded");
 
 	// Initialize Vulkan

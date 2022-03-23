@@ -10,8 +10,7 @@ namespace kobra {
 namespace raster {
 
 // More aliases
-template <VertexType T>
-using VertexBuffer = BufferManager <Vertex <T>>;
+using VertexBuffer = BufferManager <Vertex>;
 using IndexBuffer = BufferManager <uint32_t>;
 
 // Rasterization abstraction and primitives
@@ -29,9 +28,6 @@ struct RenderPacket {
 struct _element {
 	// Virtual destructor
 	virtual ~_element() = default;
-
-	// Vertex type
-	VertexType type;
 
 	// Virtual methods
 	virtual void render(RenderPacket &) = 0;

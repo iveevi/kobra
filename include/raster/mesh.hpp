@@ -10,15 +10,14 @@ namespace kobra {
 namespace raster {
 
 // Mesh for rasterization
-template <VertexType T>
-class Mesh : public kobra::Mesh <T>, public _element {
+class Mesh : public kobra::Mesh, public _element {
 	// Vertex and index buffers
-	VertexBuffer <T>	_vb;
-	IndexBuffer		_ib;
+	VertexBuffer 	_vb;
+	IndexBuffer	_ib;
 public:
 	// Default constructor
-	Mesh() : kobra::Mesh <T> () {}
-	Mesh (const Vulkan::Context &ctx, const kobra::Mesh <T> &mesh) : kobra::Mesh <T> (mesh) {
+	Mesh() : kobra::Mesh() {}
+	Mesh (const Vulkan::Context &ctx, const kobra::Mesh &mesh) : kobra::Mesh(mesh) {
 		// Allocate vertex and index buffers
 		BFM_Settings vb_settings {
 			.size = this->_vertices.size(),
@@ -33,7 +32,7 @@ public:
 		};
 
 		// TODO: alloc method for BufferManagers
-		_vb = VertexBuffer <T> (ctx, vb_settings);
+		_vb = VertexBuffer(ctx, vb_settings);
 		_ib = IndexBuffer(ctx, ib_settings);
 
 		// Copy data to buffers

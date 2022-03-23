@@ -14,7 +14,11 @@
 #include "primitive.hpp"
 #include "world_update.hpp"
 
+// TODO: move this file to the raytracing folder
+
 namespace kobra {
+
+namespace raytracing {
 
 // Rendering options
 struct Options {
@@ -144,6 +148,8 @@ struct World {
 		return bboxes;
 	}
 };
+
+}
 
 }
 

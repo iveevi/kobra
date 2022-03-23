@@ -6,17 +6,17 @@
 #include "logger.hpp"	// TODO: remove
 #include "transform.hpp"
 #include "vertex.hpp"
-#include "world.hpp"
+#include "world.hpp"	// TODO: remove (and move inside raytracing folder)
 #include "world_update.hpp"
+#include "object.hpp"
 
 namespace kobra {
 
 // Mesh class, just holds a list of vertices and indices
-template <VertexType T = VERTEX_TYPE_POSITION>
-class Mesh {
+class Mesh : virtual public Object {
 protected:
 	// List of vertices
-	VertexList <T>	_vertices;
+	VertexList 	_vertices;
 
 	// List of indices
 	Indices		_indices;
@@ -26,7 +26,7 @@ protected:
 public:
 	// Simple constructor
 	Mesh() {}
-	Mesh(const VertexList <T> &vs, const Indices &is,
+	Mesh(const VertexList &vs, const Indices &is,
 			const Transform &t = Transform())
 			: _vertices(vs), _indices(is), _transform(t) {}
 
@@ -40,21 +40,12 @@ public:
 	}
 
 	// Get data
-	const VertexList <T> &vertices() const {
+	const VertexList &vertices() const {
 		return _vertices;
 	}
 
 	const Indices &indices() const {
 		return _indices;
-	}
-
-	// Get transform
-	Transform &transform() {
-		return _transform;
-	}
-
-	const Transform &transform() const {
-		return _transform;
 	}
 
 	/* Count primitives
@@ -69,22 +60,21 @@ public:
 namespace raytracing {
 
 // Mesh class
-template <VertexType T = VERTEX_TYPE_POSITION>
-class Mesh : public Primitive, public kobra::Mesh <T> {
+class Mesh : public Primitive, public kobra::Mesh {
 public:
 	//
 	Mesh() {}
 
 	// TODO: are these obselete?
-	Mesh(const VertexList <T> &vertices, const Indices &indices,
+	Mesh(const VertexList &vertices, const Indices &indices,
 			const Material &material)
 			: Primitive {OBJECT_TYPE_NONE, Transform(), material},
-			kobra::Mesh <T> {vertices, indices} {}
+			kobra::Mesh {vertices, indices} {}
 
-	Mesh(const VertexList <T> &vertices, const Indices &indices,
+	Mesh(const VertexList &vertices, const Indices &indices,
 			const Transform &trans, const Material &mat)
 			: Primitive {OBJECT_TYPE_NONE, trans, mat},
-			kobra::Mesh <T> {vertices, indices} {}
+			kobra::Mesh {vertices, indices} {}
 
 	// Virtual methods
 	uint count() const override {
@@ -100,7 +90,7 @@ public:
 		file << "\tvertices:";
 		file.write(reinterpret_cast <const char *> (
 			&this->_vertices[0]),
-			sizeof(Vertex <T>) * this->_vertices.size()
+			sizeof(Vertex) * this->_vertices.size()
 		);
 
 		file << "\n";
@@ -129,23 +119,23 @@ public:
 
 		// Get index of material and push
 		uint mati = wu.bf_mats->push_size();
-		material.write_material(wu);
+		_material.write_material(wu);
 
 		// Get index of transform and push
 		uint tati = wu.bf_trans->push_size();
-		wu.bf_trans->push_back(transform.model());
+		wu.bf_trans->push_back(_transform.model());
 
 		// Push all vertices
 		uint offset = wu.bf_verts->push_size();
 		for (const auto &v : this->_vertices)
-			wu.bf_verts->push_back({v.pos, 1.0});
+			wu.bf_verts->push_back({v.position, 1.0});
 
 		// Dummy triangle instance
 		Triangle triangle {
 			glm::vec3 {0.0f, 0.0f, 0.0f},
 			glm::vec3 {0.0f, 0.0f, 0.0f},
 			glm::vec3 {0.0f, 0.0f, 0.0f},
-			material
+			_material
 		};
 
 		// Write indices
@@ -164,18 +154,20 @@ public:
 	// Get bounding boxes
 	void extract_bboxes(std::vector <kobra::BoundingBox> &bboxes, const glm::mat4 &parent) const override {
 		// Get combined transform
-		glm::mat4 combined = parent * transform.model();
+		glm::mat4 combined = parent * _transform.model();
 
 		// Get bounding box for each triangle
 		for (size_t i = 0; i < this->_indices.size(); i += 3) {
 			// Get each vertex
-			const Vertex <T> &v0 = this->_vertices[this->_indices[i + 0]];
-			const Vertex <T> &v1 = this->_vertices[this->_indices[i + 1]];
-			const Vertex <T> &v2 = this->_vertices[this->_indices[i + 2]];
+			const Vertex &v0 = this->_vertices[this->_indices[i + 0]];
+			const Vertex &v1 = this->_vertices[this->_indices[i + 1]];
+			const Vertex &v2 = this->_vertices[this->_indices[i + 2]];
 
 			// Construct triangle
 			Triangle triangle {
-				v0.pos, v1.pos, v2.pos
+				v0.position,
+				v1.position,
+				v2.position
 			};
 
 			// Add bounding box

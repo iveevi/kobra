@@ -89,7 +89,6 @@ public:
 	};
 
 	// Pipeline creation structure
-	template <size_t N>
 	struct PipelineInfo {
 		Swapchain				swapchain;
 
@@ -101,7 +100,7 @@ public:
 		std::vector <VkDescriptorSetLayout>	dsls;
 
 		VertexBinding				vertex_binding;
-		std::array <VertexAttribute, N>		vertex_attributes;
+		std::vector <VertexAttribute>		vertex_attributes;
 
 		size_t					push_consts;
 		VkPushConstantRange *			push_consts_range;
@@ -146,8 +145,7 @@ public:
 		}
 
 		// Create a graphics pipeline
-		template <size_t N>
-		Pipeline make_pipeline(const PipelineInfo <N> &info) const {
+		Pipeline make_pipeline(const PipelineInfo &info) const {
 			// Create pipeline stages
 			VkPipelineShaderStageCreateInfo vertex {
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,

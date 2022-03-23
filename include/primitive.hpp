@@ -8,20 +8,25 @@
 #include "bbox.hpp"
 #include "core.hpp"
 #include "material.hpp"
+#include "object.hpp"
 #include "transform.hpp"
 #include "types.hpp"
 #include "world_update.hpp"
 
-// Primitive structures
-struct Primitive {
-	float		id = OBJECT_TYPE_NONE;
-	Transform	transform;
-	Material	material;
+namespace kobra {
 
+namespace raytracing {
+
+// Primitive structures
+struct Primitive : virtual public Object {
+protected:
+	float		_id = OBJECT_TYPE_NONE;
+	Material	_material;
+public:
 	// Primitive constructors
 	Primitive() {}
 	Primitive(float x, const Transform &t, const Material &m)
-			: id(x), transform(t), material(m) {}
+			: Object(t), _id(x), _material(m) {}
 
 	// Virtual object destructor
 	virtual ~Primitive() {}
@@ -55,7 +60,7 @@ struct Primitive {
 
 		// Push ID and material, then everything else
 		wu.bf_objs->push_back(aligned_vec4 {
-			glm::vec4(id, material_index, transform_index, 0.0)
+			glm::vec4(_id, material_index, transform_index, 0.0)
 		});
 	}
 
@@ -64,11 +69,11 @@ struct Primitive {
 	virtual void write_object(kobra::WorldUpdate &wu) {
 		// Deal with material
 		uint mati = wu.bf_mats->push_size();
-		material.write_material(wu);
+		_material.write_material(wu);
 
 		// Deal with transform
 		uint tati = wu.bf_trans->push_size();
-		wu.bf_trans->push_back(transform.model());
+		wu.bf_trans->push_back(_transform.model());
 
 		write_header(wu, mati, tati);
 		this->write(wu);
@@ -115,7 +120,7 @@ struct Triangle : public Primitive {
 		/* wu.bf_objs->push_back(aligned_vec4(a));
 		wu.bf_objs->push_back(aligned_vec4(b));
 		wu.bf_objs->push_back(aligned_vec4(c)); */
-		
+
 		uint index = wu.bf_verts->push_size();
 		wu.bf_verts->push_back(aligned_vec4(a));
 		wu.bf_verts->push_back(aligned_vec4(b));
@@ -136,20 +141,20 @@ struct Triangle : public Primitive {
 			uint a, uint b, uint c, uint mati, uint tati) const {
 		// Header from parent
 		write_header(wu, mati, tati);
-		
+
 		float *iaf = reinterpret_cast <float *> (&a);
 		float *ibf = reinterpret_cast <float *> (&b);
 		float *icf = reinterpret_cast <float *> (&c);
 
 		wu.bf_objs->push_back(aligned_vec4 {
 			glm::vec4(*iaf, *ibf, *icf, 0.0)
-		});		
+		});
 	}
 
 	void extract_bboxes(std::vector <kobra::BoundingBox> &bboxes, const glm::mat4 &parent) const override {
-		// Get min and max coordinates 
+		// Get min and max coordinates
 		// TODO: account for transform
-		glm::mat4 m = parent * transform.model();
+		glm::mat4 m = parent * _transform.model();
 		glm::vec3 ta = m * glm::vec4(a, 1.0);
 		glm::vec3 tb = m * glm::vec4(b, 1.0);
 		glm::vec3 tc = m * glm::vec4(c, 1.0);
@@ -192,7 +197,7 @@ struct Sphere : public Primitive {
 
 	void extract_bboxes(std::vector <kobra::BoundingBox> &bboxes, const glm::mat4 &parent) const override {
 		// Create bounding box
-		glm::mat4 m = parent * transform.model();
+		glm::mat4 m = parent * _transform.model();
 		glm::vec3 pos = m * glm::vec4(0.0, 0.0, 0.0, 1.0);
 		glm::vec3 min = pos - glm::vec3(radius);
 		glm::vec3 max = pos + glm::vec3(radius);
@@ -202,5 +207,8 @@ struct Sphere : public Primitive {
 	}
 };
 
+}
+
+}
 
 #endif

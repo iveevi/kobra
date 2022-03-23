@@ -18,13 +18,12 @@ namespace kobra {
 
 // Model structure
 // TODO: inherit from object for saving
-template <VertexType T>
 class Model {
 protected:
 	// Filename
 	std::string		_filename;
 	// Meshes
-	std::vector <Mesh <T>>	_meshes;
+	std::vector <Mesh>	_meshes;
 
 	// Assimp helpers
 	void _process_node(aiNode *, const aiScene *);
@@ -38,13 +37,12 @@ public:
 	// Properties
 	size_t mesh_count() const;
 
-	Mesh <T> &operator[](size_t);
-	const Mesh <T> &operator[](size_t) const;
+	Mesh &operator[](size_t);
+	const Mesh &operator[](size_t) const;
 };
 
 // Assimp helpers
-template <VertexType T>
-void Model <T> ::_process_node(aiNode *node, const aiScene *scene)
+void Model::_process_node(aiNode *node, const aiScene *scene)
 {
 	// Process all the node's meshes (if any)
 	for (size_t i = 0; i < node->mNumMeshes; i++) {
@@ -57,24 +55,40 @@ void Model <T> ::_process_node(aiNode *node, const aiScene *scene)
 		_process_node(node->mChildren[i], scene);
 }
 
-template <VertexType T>
-void Model <T> ::_process_mesh(aiMesh *mesh, const aiScene *scene)
+void Model::_process_mesh(aiMesh *mesh, const aiScene *scene)
 {
 	// Mesh data
-	VertexList <T> vertices;
+	VertexList vertices;
 	Indices indices;
 
 	// Process all the mesh's vertices
 	for (size_t i = 0; i < mesh->mNumVertices; i++) {
 		// Create a new vertex
-		Vertex <T> v;
+		Vertex v;
 
-		// Only consider position
-		v.pos = {
+		// Vertex position
+		v.position = {
 			mesh->mVertices[i].x,
 			mesh->mVertices[i].y,
 			mesh->mVertices[i].z
 		};
+
+		// Vertex normal
+		if (mesh->HasNormals()) {
+			v.normal = {
+				mesh->mNormals[i].x,
+				mesh->mNormals[i].y,
+				mesh->mNormals[i].z
+			};
+		}
+
+		// Vertex texture coordinates
+		if (mesh->HasTextureCoords(0)) {
+			v.tex_coords = {
+				mesh->mTextureCoords[0][i].x,
+				mesh->mTextureCoords[0][i].y
+			};
+		}
 
 		vertices.push_back(v);
 	}
@@ -90,18 +104,14 @@ void Model <T> ::_process_mesh(aiMesh *mesh, const aiScene *scene)
 	}
 
 	// TODO: ignoring materials right now
-	_meshes.push_back(Mesh <T> (vertices, indices));
+	_meshes.push_back(Mesh (vertices, indices));
 }
 
 // Constructors
-template <VertexType T>
-Model <T>::Model() {}
+Model::Model() {}
+Model::Model(const char *path) : Model(std::string(path)) {}
 
-template <VertexType T>
-Model <T> ::Model(const char *path) : Model(std::string(path)) {}
-
-template <VertexType T>
-Model <T> ::Model(const std::string &filename) : _filename(filename)
+Model::Model(const std::string &filename) : _filename(filename)
 {
 	// Check if the file exists
 	std::ifstream file(filename);
@@ -132,20 +142,17 @@ Model <T> ::Model(const std::string &filename) : _filename(filename)
 }
 
 // Properties
-template <VertexType T>
-size_t Model <T> ::mesh_count() const
+size_t Model::mesh_count() const
 {
 	return _meshes.size();
 }
 
-template <VertexType T>
-Mesh <T> &Model <T> ::operator[](size_t i)
+Mesh &Model::operator[](size_t i)
 {
 	return _meshes[i];
 }
 
-template <VertexType T>
-const Mesh <T> &Model <T> ::operator[](size_t i) const
+const Mesh &Model::operator[](size_t i) const
 {
 	return _meshes[i];
 }
