@@ -47,7 +47,8 @@ class Layer {
 		// Load necessary shader modules
 		std::vector <VkShaderModule> shaders = _wctx.context.make_shaders({
 			"shaders/bin/raster/vertex.spv",
-			"shaders/bin/raster/color_frag.spv"
+			"shaders/bin/raster/color_frag.spv",
+			"shaders/bin/raster/blinn_phong_frag.spv"
 		});
 
 		// Create pipelines
@@ -55,7 +56,7 @@ class Layer {
 			_wctx,
 			_render_pass,
 			shaders[0],
-			shaders[1]
+			shaders[2]
 		);
 	}
 
@@ -87,6 +88,7 @@ public:
 	}
 
 	void add(_element *ptr) {
+		std::cout << "Adding element" << ptr << std::endl;
 		_elements.push_back(Element(ptr));
 	}
 

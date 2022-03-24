@@ -20,15 +20,12 @@ protected:
 
 	// List of indices
 	Indices		_indices;
-
-	// Transform
-	Transform	_transform;
 public:
 	// Simple constructor
 	Mesh() {}
 	Mesh(const VertexList &vs, const Indices &is,
 			const Transform &t = Transform())
-			: _vertices(vs), _indices(is), _transform(t) {}
+			: Object(t), _vertices(vs), _indices(is) {}
 
 	// Properties
 	size_t vertex_count() const {

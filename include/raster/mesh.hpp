@@ -57,7 +57,7 @@ public:
 	void render(RenderPacket &rp) override {
 		// Get the MVP
 		MVP mvp {
-			this->_transform.model(),
+			_transform.model(),
 			rp.view,
 			rp.proj
 		};

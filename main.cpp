@@ -35,7 +35,7 @@ public:
 		mesh1->transform().scale = glm::vec3(10.0f);
 
 		mesh2->transform() = Transform({0.0f, 4.0f, -4.0f});
-		mesh2->transform().scale = glm::vec3(1/3.0f);
+		// mesh2->transform().scale = glm::vec3(1/10.0f);
 
 		KOBRA_LOG_FILE(notify) << "Loaded all models and meshes\n";
 
@@ -52,10 +52,12 @@ public:
 		// Bind camera movement
 		// TODO: would be smoother using input object
 		auto key_movement = [&](void *user, const io::KeyboardEvent &event) {
-			float speed = 0.025f;
+			float speed = 0.25f;
 
 			// TODO: define key constants (keys.hpp)
 			Camera *camera = (Camera *) user;
+
+			glm::vec3 before = camera->transform.position;
 
 			// TODO: move functions
 			if (event.key == GLFW_KEY_W)
@@ -64,14 +66,19 @@ public:
 				camera->transform.position -= camera->transform.forward * speed;
 
 			if (event.key == GLFW_KEY_A)
-				camera->transform.position += camera->transform.right * speed;
-			else if (event.key == GLFW_KEY_D)
 				camera->transform.position -= camera->transform.right * speed;
+			else if (event.key == GLFW_KEY_D)
+				camera->transform.position += camera->transform.right * speed;
 
 			if (event.key == GLFW_KEY_E)
-				camera->transform.position += camera->transform.up * speed;
-			else if (event.key == GLFW_KEY_Q)
 				camera->transform.position -= camera->transform.up * speed;
+			else if (event.key == GLFW_KEY_Q)
+				camera->transform.position += camera->transform.up * speed;
+
+			glm::vec3 after = camera->transform.position;
+			glm::vec3 delta = after - before;
+
+			std::cout << "Camera moved by " << delta.x << " " << delta.y << " " << delta.z << "\n";
 		};
 
 		auto mouse_movement = [&](void *user, const io::MouseEvent &event) {
@@ -112,6 +119,8 @@ public:
 
 			// Update camera
 			camera->transform.set_euler(pitch, yaw);
+
+			std::cout << "pitch " << pitch << " yaw " << yaw << "\n";
 
 			last_x = event.xpos;
 			last_y = event.ypos;

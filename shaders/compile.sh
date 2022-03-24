@@ -18,3 +18,4 @@ glslc -fshader-stage=fragment gui/bitmap.frag -o bin/gui/bitmap_frag.spv
 # Compile rasteization shaders
 glslc -fshader-stage=vertex raster/vertex.vert -o bin/raster/vertex.spv
 glslc -fshader-stage=fragment raster/color.frag -o bin/raster/color_frag.spv
+glslc -fshader-stage=fragment raster/blinn_phong.frag -o bin/raster/blinn_phong_frag.spv
