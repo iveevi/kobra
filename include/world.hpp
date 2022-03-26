@@ -18,7 +18,7 @@
 
 namespace kobra {
 
-namespace raytracing {
+namespace rt {
 
 // Rendering options
 struct Options {
@@ -54,7 +54,7 @@ struct GPUWorld {
 
 // API friendly world structure
 struct World {
-	using PrimitivePtr = std::shared_ptr <Primitive>;
+	using PrimitivePtr = std::shared_ptr <raytracing::Primitive>;
 	using LightPtr = std::shared_ptr <Light>;
 
 	// Data
@@ -90,7 +90,7 @@ struct World {
 			world.primitives += object->count();
 
 		// Camera data
-		world.position = camera.transform.position();
+		world.position = camera.transform.position;
 		world.forward = camera.transform.forward();
 		world.up = camera.transform.up();
 		world.right = camera.transform.right();

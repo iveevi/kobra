@@ -1,12 +1,12 @@
 #include "kobra.hpp"
 #include "imgui.h"
-#include "include/texture.hpp"
+#include "../include/texture.hpp"
 #include <vulkan/vulkan_core.h>
 
 // Static member variables
 
 // TODO: cache in constructor or something...
-const std::vector <VkDescriptorSetLayoutBinding> MercuryApplication::compute_dsl_bindings = {
+const std::vector <VkDescriptorSetLayoutBinding> RTApp::compute_dsl_bindings = {
 	VkDescriptorSetLayoutBinding {
 		.binding = 0,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -22,7 +22,7 @@ const std::vector <VkDescriptorSetLayoutBinding> MercuryApplication::compute_dsl
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 		.pImmutableSamplers = nullptr
 	},
-	
+
 	VkDescriptorSetLayoutBinding {
 		.binding = 2,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -30,7 +30,7 @@ const std::vector <VkDescriptorSetLayoutBinding> MercuryApplication::compute_dsl
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 		.pImmutableSamplers = nullptr
 	},
-	
+
 	VkDescriptorSetLayoutBinding {
 		.binding = 3,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -105,7 +105,7 @@ const std::vector <VkDescriptorSetLayoutBinding> MercuryApplication::compute_dsl
 	},
 };
 
-const std::vector <VkDescriptorSetLayoutBinding> MercuryApplication::preproc_dsl_bindings = {
+const std::vector <VkDescriptorSetLayoutBinding> RTApp::preproc_dsl_bindings = {
 	VkDescriptorSetLayoutBinding {
 		.binding = 0,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -122,10 +122,10 @@ const std::vector <VkDescriptorSetLayoutBinding> MercuryApplication::preproc_dsl
 		.pImmutableSamplers = nullptr
 	},
 };
-	
+
 // Fill out command buffer
 // TODO: do we need the vk parameter?
-void MercuryApplication::maker(const Vulkan *vk, size_t i)
+void RTApp::maker(const Vulkan *vk, size_t i)
 {
 	// Render pass creation info
 	VkRenderPassBeginInfo render_pass_info {
@@ -281,7 +281,7 @@ void MercuryApplication::maker(const Vulkan *vk, size_t i)
 		colorBlending.blendConstants[1] = 0.0f;
 		colorBlending.blendConstants[2] = 0.0f;
 		colorBlending.blendConstants[3] = 0.0f;
-		
+
 		// Create pipeline
 		VkPipelineLayoutCreateInfo preproc_pli {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -337,7 +337,7 @@ void MercuryApplication::maker(const Vulkan *vk, size_t i)
 			VK_PIPELINE_BIND_POINT_COMPUTE,
 			pipeline
 		);
-		
+
 		vkCmdBindPipeline(
 			command_buffers[i],
 			VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -352,7 +352,7 @@ void MercuryApplication::maker(const Vulkan *vk, size_t i)
 			0, 1, &descriptor_set,
 			0, nullptr
 		);
-		
+
 		vkCmdBindDescriptorSets(
 			command_buffers[i],
 			VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -365,7 +365,7 @@ void MercuryApplication::maker(const Vulkan *vk, size_t i)
 
 	// TODO: use the methods
 	vkCmdEndRenderPass(command_buffers[i]);
-		
+
 	// Dispatch
 	vkCmdDispatch(
 		command_buffers[i],
@@ -379,7 +379,7 @@ void MercuryApplication::maker(const Vulkan *vk, size_t i)
 ////////////////////
 
 // Map all the buffers
-bool MercuryApplication::map_buffers(Vulkan *vk)
+bool RTApp::map_buffers(Vulkan *vk)
 {
 	// Reset pushback indices
 	_bf_objects.reset_push_back();
@@ -387,7 +387,7 @@ bool MercuryApplication::map_buffers(Vulkan *vk)
 	_bf_materials.reset_push_back();
 	_bf_vertices.reset_push_back();
 	_bf_transforms.reset_push_back();
-	
+
 	// Resizing and remaking buffers
 	int resized = 0;
 
@@ -406,7 +406,7 @@ bool MercuryApplication::map_buffers(Vulkan *vk)
 	world.write(wu);
 
 	// Calculate size of world buffer
-	size_t world_size = sizeof(GPUWorld)
+	size_t world_size = sizeof(rt::GPUWorld)
 		+ wu.indices.size() * sizeof(uint);
 
 	// Copy world and indices
@@ -417,16 +417,16 @@ bool MercuryApplication::map_buffers(Vulkan *vk)
 		Logger::notify() << "Resizing world buffer" << std::endl;
 		resized += _bf_world.resize(world_size);
 	}
-	
+
 	_bf_world.write(
 		(const uint8_t *) &gworld,
-		sizeof(GPUWorld)
+		sizeof(rt::GPUWorld)
 	);
 
 	_bf_world.write(
 		(const uint8_t *) wu.indices.data(),
 		4 * wu.indices.size(),
-		sizeof(GPUWorld)
+		sizeof(rt::GPUWorld)
 	);
 
 	resized += _bf_objects.sync_size();
@@ -448,7 +448,7 @@ bool MercuryApplication::map_buffers(Vulkan *vk)
 }
 
 // Allocate buffers
-void MercuryApplication::allocate_buffers()
+void RTApp::allocate_buffers()
 {
 	static const VkBufferUsageFlags buffer_usage =
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT
@@ -511,7 +511,7 @@ void MercuryApplication::allocate_buffers()
 }
 
 // Dump debug data to file
-void MercuryApplication::dump_debug_data(Vulkan *vk)
+void RTApp::dump_debug_data(Vulkan *vk)
 {
 	// Open file
 	std::ofstream file("debug.log");
@@ -539,7 +539,7 @@ void MercuryApplication::dump_debug_data(Vulkan *vk)
 }
 
 // Create ImGui profiler tree
-void MercuryApplication::make_profiler_tree(const kobra::Profiler::Frame &frame, float parent)
+void RTApp::make_profiler_tree(const kobra::Profiler::Frame &frame, float parent)
 {
 	// Show tree
 	if (ImGui::TreeNode(frame.name.c_str())) {
@@ -557,7 +557,7 @@ void MercuryApplication::make_profiler_tree(const kobra::Profiler::Frame &frame,
 }
 
 // Create ImGui render
-void MercuryApplication::make_imgui(size_t image_index)
+void RTApp::make_imgui(size_t image_index)
 {
 	// Fill out imgui command buffer and render pass
 	context.vk->begin_command_buffer(imgui_ctx.command_buffer);
@@ -645,7 +645,7 @@ void MercuryApplication::make_imgui(size_t image_index)
 			std::string button = "Start capturing";
 			if (capturing)
 				button = "Stop capturing";
-			
+
 			if (ImGui::Button(button.c_str())) {
 				if (!capturing) {
 					capturing = true;
@@ -670,12 +670,12 @@ void MercuryApplication::make_imgui(size_t image_index)
 						"Capture (real time): %5.3f s",
 						capture_timer.elapsed_start() / 1000000.0f
 					);
-					
+
 					ImGui::Text(
 						"Capture (video time): %5.3f s",
 						capture.time()
 					);
-					
+
 					capture.write(_bf_pixels);
 				} else {
 					capture.flush();
@@ -683,7 +683,7 @@ void MercuryApplication::make_imgui(size_t image_index)
 			}
 		}
 		ImGui::End();
-		
+
 		/* if (profiler.size() > 0) {
 			auto frame = profiler.pop();
 
@@ -709,7 +709,7 @@ void MercuryApplication::make_imgui(size_t image_index)
 }
 
 // Constructor
-MercuryApplication::MercuryApplication(Vulkan *vk)
+RTApp::RTApp(Vulkan *vk)
 		: kobra::App({
 			.ctx = vk,
 			.width = 800,
@@ -817,7 +817,7 @@ MercuryApplication::MercuryApplication(Vulkan *vk)
 }
 
 // Update the world
-void MercuryApplication::update_world() {
+void RTApp::update_world() {
 	static float time = 0.0f;
 
 	// Update light position
@@ -827,7 +827,7 @@ void MercuryApplication::update_world() {
 		amplitude * cos(time)
 	};
 
-	world.objects[0]->transform.position = position;
+	world.objects[0]->transform().position = position;
 	world.lights[0]->transform.position = position;
 
 	// Map buffers
@@ -850,7 +850,7 @@ void MercuryApplication::update_world() {
 }
 
 // Present the frame
-void MercuryApplication::present()
+void RTApp::present()
 {
 	// Wait for the next image in the swap chain
 	vkWaitForFences(
@@ -971,7 +971,7 @@ void MercuryApplication::present()
 	{
 		// Present the image to the swap chain
 		VkSwapchainKHR swchs[] = {swapchain.swch};
-		
+
 		VkPresentInfoKHR present_info {
 			.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
 			.waitSemaphoreCount = 2,
@@ -981,19 +981,19 @@ void MercuryApplication::present()
 			.pImageIndices = &image_index,
 			.pResults = nullptr
 		};
-		
+
 		result = vkQueuePresentKHR(
 			context.device.present_queue,
 			&present_info
 		);
-	
+
 		/* if (result == VK_ERROR_OUT_OF_DATE_KHR
 				|| result == VK_SUBOPTIMAL_KHR
 				|| framebuffer_resized) {
 			framebuffer_resized = false;
 			_remk_swapchain();
 		} else*/
-		
+
 		// TODO: check resizing (in app)
 		if (result != VK_SUCCESS) {
 			Logger::error("[Vulkan] Failed to present swap chain image!");
@@ -1003,7 +1003,7 @@ void MercuryApplication::present()
 	profiler.end();
 }
 
-void MercuryApplication::frame()
+void RTApp::frame()
 {
 	// Start profiling a new frame
 	profiler.frame("Frame");
@@ -1022,7 +1022,7 @@ void MercuryApplication::frame()
 	profiler.end();
 }
 
-void MercuryApplication::update_command_buffers() {
+void RTApp::update_command_buffers() {
 	// Set command buffers
 	auto ftn = [this](const Vulkan *ctx, size_t i) {
 		// TODO: maker should be a virtual function
@@ -1037,15 +1037,15 @@ void MercuryApplication::update_command_buffers() {
 }
 
 // TODO: make some cleaner method
-void MercuryApplication::update_descriptor_set()
+void RTApp::update_descriptor_set()
 {
-	// TODO: fix up BVH situation	
+	// TODO: fix up BVH situation
 	VkDescriptorBufferInfo bvh_info {
 		.buffer = bvh.buffer.buffer,
 		.offset = 0,
 		.range = bvh.buffer.size
 	};
-	
+
 	VkDescriptorBufferInfo stack_info {
 		.buffer = bvh.stack.buffer,
 		.offset = 0,

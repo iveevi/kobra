@@ -8,7 +8,59 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+namespace kobra {
+
 // Transform class
+struct Transform {
+	glm::vec3 position;
+	glm::vec3 rotation;
+	glm::vec3 scale;
+	
+	// Constructor
+	Transform(const glm::vec3 &p = glm::vec3 {0.0f},
+		const glm::vec3 &r = glm::vec3 {0.0f},
+		const glm::vec3 &s = glm::vec3 {1.0f})
+			: position(p), rotation(r), scale(s) {}
+
+	// Copy constructor
+	Transform(const Transform &t)
+			: position(t.position), rotation(t.rotation),
+			scale(t.scale) {}
+
+	// Calculate the model matrix
+	glm::mat4 matrix() const {
+		glm::mat4 model = glm::mat4(1.0f);
+		model = glm::translate(model, position);
+		model = glm::rotate(model, glm::radians(rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+		model = glm::rotate(model, glm::radians(rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+		model = glm::rotate(model, glm::radians(rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+		model = glm::scale(model, scale);
+		return model;
+	}
+
+	// Move the transform
+	void move(const glm::vec3 &delta) {
+		position += delta;
+	}
+
+	// Get forward, right, up vectors
+	glm::vec3 forward() const {
+		glm::quat q = glm::quat(rotation);
+		return glm::normalize(glm::vec3(q * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
+	}
+
+	glm::vec3 right() const {
+		glm::quat q = glm::quat(rotation);
+		return glm::normalize(glm::vec3(q * glm::vec4(1.0f, 0.0f, 0.0f, 0.0f)));
+	}
+
+	glm::vec3 up() const {
+		glm::quat q = glm::quat(rotation);
+		return glm::normalize(glm::vec3(q * glm::vec4(0.0f, 1.0f, 0.0f, 0.0f)));
+	}
+};
+
+/* Transform class
 class Transform {
 	glm::mat4 model;
 	glm::mat4 inv;
@@ -45,9 +97,12 @@ public:
 
 	// Rotate euler angles
 	void rotate(const glm::vec3 &angles) {
+		glm::vec3 pos = model[3];
+		model = glm::mat4(1.0f);
 		model = glm::rotate(model, angles.x, glm::vec3(1.0f, 0.0f, 0.0f));
 		model = glm::rotate(model, angles.y, glm::vec3(0.0f, 1.0f, 0.0f));
 		model = glm::rotate(model, angles.z, glm::vec3(0.0f, 0.0f, 1.0f));
+		model = glm::translate(model, pos);
 		_calc_inv();
 	}
 
@@ -57,6 +112,14 @@ public:
 		model = glm::translate(model, -p);
 		model = glm::rotate(model, angle, axis);
 		model = glm::translate(model, p);
+		_calc_inv();
+	}
+
+	// Set euler angles
+	void set_angles(const glm::vec3 &angles) {
+		model = glm::rotate(model, angles.x, glm::vec3(1.0f, 0.0f, 0.0f));
+		model = glm::rotate(model, angles.y, glm::vec3(0.0f, 1.0f, 0.0f));
+		model = glm::rotate(model, angles.z, glm::vec3(0.0f, 0.0f, 1.0f));
 		_calc_inv();
 	}
 
@@ -123,6 +186,8 @@ public:
 			glm::vec3(inv[1])
 		);
 	}
-};
+}; */
+
+}
 
 #endif

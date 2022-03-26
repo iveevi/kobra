@@ -118,7 +118,8 @@ struct BVH {
 	BVH() {}
 
 	// Construct BVH from world
-	BVH(Vulkan *vulkan, const VkPhysicalDevice &physical, const Vulkan::Device &dev, const World &world)
+	// TODO: a generic world object
+	BVH(Vulkan *vulkan, const VkPhysicalDevice &physical, const Vulkan::Device &dev, const rt::World &world)
 			: vk(vulkan), phdev(physical), device(dev) {
 		// Get all bounding boxes
 		std::vector <BoundingBox> boxes = world.extract_bboxes();
@@ -128,7 +129,7 @@ struct BVH {
 		process(boxes);
 
 		// TODO: there should only be one root node remaining
-		
+
 		// Dump all nodes to buffer
 		dump_all();
 		size = dump.size() / 3;
@@ -150,7 +151,7 @@ struct BVH {
 	}
 
 	// Update BVH
-	void update(const World &world) {
+	void update(const rt::World &world) {
 		// Free the tree nodes
 		// TODO: later conserve allocation, and
 		// find a better method for dynamic BVH
@@ -163,7 +164,7 @@ struct BVH {
 
 		// Process into BVH nodes
 		process(boxes);
-		
+
 		// Dump all nodes to buffer
 		dump_all();
 		size = dump.size() / 3;
@@ -183,12 +184,12 @@ struct BVH {
 			node->object = nodes.size();
 			nodes.push_back(node);
 		}
-		
+
 		// Partition nodes and single out root node
 		BVHNode *root = partition(nodes);
 		nodes = std::vector <BVHNode *> {root};
 	}
-	
+
 	BVHNode *partition(std::vector <BVHNode *> &nodes) {
 		// Base cases
 		if (nodes.size() == 0)
@@ -203,7 +204,7 @@ struct BVH {
 			node->right = nodes[1];
 			return node;
 		}
-		
+
 		// Get axis with largest extent
 		int axis = 0;
 		float max_extent = 0.0f;
@@ -315,7 +316,7 @@ struct BVH {
 			tmax = glm::max(tmax, max);
 
 			float value = (min[axis] + max[axis]) / 2.0f;
-			
+
 			if (value < split) {
 				// Left
 				prims_left++;

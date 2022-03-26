@@ -149,9 +149,6 @@ public:
 			0.01f, 100.0f
 		);
 
-		// proj[0][0] *= -1;
-		// proj[1][1] *= -1;
-
 		// Initialize render packet
 		RenderPacket packet {
 			.cmd = cmd_buffer,

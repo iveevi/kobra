@@ -10,9 +10,12 @@ class Object {
 protected:
 	Transform _transform;
 public:
+	// Default constructor
+	Object() = default;
+
 	// Constructor
-	Object(const Transform& transform = Transform())
-		: _transform(transform) {}
+	Object(const Transform &transform)
+			: _transform(transform) {}
 
 	// Virtual destructor
 	virtual ~Object() {}

@@ -37,6 +37,11 @@ public:
 	// Save to a file
 	virtual void save(std::ofstream &file) const = 0;
 
+	// Set material
+	void set_material(const Material &m) {
+		_material = m;
+	}
+
 	// Wrappers around virtual functions
 	void save_to_file(std::ofstream &file) const {
 		// TODO: save as binary at some point?
@@ -173,7 +178,7 @@ struct Sphere : public Primitive {
 
 	Sphere() {}
 	Sphere(float r, const Transform &t, const Material &m)
-			: Primitive(OBJECT_TYPE_SPHERE, t, m),
+			: Object(t), Primitive(OBJECT_TYPE_SPHERE, t, m),
 			radius(r) {}
 
 	uint count() const override { return 1; }

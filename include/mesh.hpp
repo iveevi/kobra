@@ -5,6 +5,7 @@
 #include "primitive.hpp"
 #include "logger.hpp"	// TODO: remove
 #include "transform.hpp"
+#include "types.hpp"
 #include "vertex.hpp"
 #include "world.hpp"	// TODO: remove (and move inside raytracing folder)
 #include "world_update.hpp"
@@ -61,6 +62,18 @@ class Mesh : public Primitive, public kobra::Mesh {
 public:
 	//
 	Mesh() {}
+
+	// From mesh object
+	Mesh(const kobra::Mesh &mesh)
+			: Object(mesh.transform()),
+			Primitive {OBJECT_TYPE_NONE, mesh.transform(), Material()},
+			kobra::Mesh(mesh) {}
+
+	// Copy
+	Mesh(const Mesh &mesh)
+			: Object(mesh.transform()),
+			Primitive {OBJECT_TYPE_NONE, mesh.transform(), mesh._material},
+			kobra::Mesh(mesh) {}
 
 	// TODO: are these obselete?
 	Mesh(const VertexList &vertices, const Indices &indices,

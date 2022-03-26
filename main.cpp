@@ -27,67 +27,57 @@ class RasterApp : public BaseApp {
 	glm::vec3 right		{ 1.0f, 0.0f, 0.0f };
 
 	// Create a cube mesh
-	Mesh make_cube(const glm::vec3 &center, float s) {
+	Mesh make_box(const glm::vec3 &center, float x, float y, float z) {
+		// All 24 vertices, with correct normals
 		VertexList vertices {
-			Vertex {
-				.position = center + glm::vec3(-s, -s, -s),
-				.normal = glm::vec3(0.0f, 0.0f, -1.0f),
-				.tex_coords = glm::vec2(0.0f, 0.0f)
-			},
-			
-			Vertex {
-				.position = center + glm::vec3(s, -s, -s),
-				.normal = glm::vec3(0.0f, 0.0f, -1.0f),
-				.tex_coords = glm::vec2(1.0f, 0.0f)
-			},
+			// Front
+			Vertex {{ center.x - x, center.y - y, center.z + z }, { 0.0f, 0.0f, 1.0f }},
+			Vertex {{ center.x + x, center.y - y, center.z + z }, { 0.0f, 0.0f, 1.0f }},
+			Vertex {{ center.x + x, center.y + y, center.z + z }, { 0.0f, 0.0f, 1.0f }},
+			Vertex {{ center.x - x, center.y + y, center.z + z }, { 0.0f, 0.0f, 1.0f }},
 
-			Vertex {
-				.position = center + glm::vec3(s, s, -s),
-				.normal = glm::vec3(0.0f, 0.0f, -1.0f),
-				.tex_coords = glm::vec2(1.0f, 1.0f)
-			},
+			// Back
+			Vertex {{ center.x - x, center.y - y, center.z - z }, { 0.0f, 0.0f, -1.0f }},
+			Vertex {{ center.x + x, center.y - y, center.z - z }, { 0.0f, 0.0f, -1.0f }},
+			Vertex {{ center.x + x, center.y + y, center.z - z }, { 0.0f, 0.0f, -1.0f }},
+			Vertex {{ center.x - x, center.y + y, center.z - z }, { 0.0f, 0.0f, -1.0f }},
 
-			Vertex {
-				.position = center + glm::vec3(-s, s, -s),
-				.normal = glm::vec3(0.0f, 0.0f, -1.0f),
-				.tex_coords = glm::vec2(0.0f, 1.0f)
-			},
+			// Left
+			Vertex {{ center.x - x, center.y - y, center.z + z }, { -1.0f, 0.0f, 0.0f }},
+			Vertex {{ center.x - x, center.y - y, center.z - z }, { -1.0f, 0.0f, 0.0f }},
+			Vertex {{ center.x - x, center.y + y, center.z - z }, { -1.0f, 0.0f, 0.0f }},
+			Vertex {{ center.x - x, center.y + y, center.z + z }, { -1.0f, 0.0f, 0.0f }},
 
-			Vertex {
-				.position = center + glm::vec3(-s, -s, s),
-				.normal = glm::vec3(0.0f, 0.0f, 1.0f),
-				.tex_coords = glm::vec2(0.0f, 0.0f)
-			},
+			// Right
+			Vertex {{ center.x + x, center.y - y, center.z + z }, { 1.0f, 0.0f, 0.0f }},
+			Vertex {{ center.x + x, center.y - y, center.z - z }, { 1.0f, 0.0f, 0.0f }},
+			Vertex {{ center.x + x, center.y + y, center.z - z }, { 1.0f, 0.0f, 0.0f }},
+			Vertex {{ center.x + x, center.y + y, center.z + z }, { 1.0f, 0.0f, 0.0f }},
 
-			Vertex {
-				.position = center + glm::vec3(s, -s, s),
-				.normal = glm::vec3(0.0f, 0.0f, 1.0f),
-				.tex_coords = glm::vec2(1.0f, 0.0f)
-			},
+			// Top
+			Vertex {{ center.x - x, center.y + y, center.z + z }, { 0.0f, 1.0f, 0.0f }},
+			Vertex {{ center.x + x, center.y + y, center.z + z }, { 0.0f, 1.0f, 0.0f }},
+			Vertex {{ center.x + x, center.y + y, center.z - z }, { 0.0f, 1.0f, 0.0f }},
+			Vertex {{ center.x - x, center.y + y, center.z - z }, { 0.0f, 1.0f, 0.0f }},
 
-			Vertex {
-				.position = center + glm::vec3(s, s, s),
-				.normal = glm::vec3(0.0f, 0.0f, 1.0f),
-				.tex_coords = glm::vec2(1.0f, 1.0f)
-			},
-
-			Vertex {
-				.position = center + glm::vec3(-s, s, s),
-				.normal = glm::vec3(0.0f, 0.0f, 1.0f),
-				.tex_coords = glm::vec2(0.0f, 1.0f)
-			},
+			// Bottom
+			Vertex {{ center.x - x, center.y - y, center.z + z }, { 0.0f, -1.0f, 0.0f }},
+			Vertex {{ center.x + x, center.y - y, center.z + z }, { 0.0f, -1.0f, 0.0f }},
+			Vertex {{ center.x + x, center.y - y, center.z - z }, { 0.0f, -1.0f, 0.0f }},
+			Vertex {{ center.x - x, center.y - y, center.z - z }, { 0.0f, -1.0f, 0.0f }}
 		};
 
+		// All 36 indices
 		IndexList indices {
-			0, 2, 1,	2, 0, 3,	// Face 1
-			4, 5, 6,	6, 7, 4,	// Face 2
-			0, 4, 7,	7, 3, 0,	// Face 3
-			1, 5, 4,	4, 0, 1,	// Face 4
-			2, 6, 5,	5, 1, 2,	// Face 5
-			3, 7, 6,	6, 2, 3		// Face 6
+			0, 1, 2,	2, 3, 0,	// Front
+			4, 5, 6,	6, 7, 4,	// Back
+			8, 9, 10,	10, 11, 8,	// Left
+			12, 13, 14,	14, 15, 12,	// Right
+			16, 17, 18,	18, 19, 16,	// Top
+			20, 21, 22,	22, 23, 20	// Bottom
 		};
 
-		return Mesh(vertices, indices);
+		return Mesh { vertices, indices };
 	}
 public:
 	RasterApp(Vulkan *vk) : BaseApp({
@@ -101,16 +91,16 @@ public:
 
 		// Plane mesh
 		Mesh plane(VertexList {
-			Vertex {.position = {-10, -1, -10}, .normal = {0, 1, 0}, .tex_coords = {0, 0}},
-			Vertex {.position = {-10, -1, 10}, .normal = {0, 1, 0}, .tex_coords = {0, 1}},
-			Vertex {.position = {10, -1, 10}, .normal = {0, 1, 0}, .tex_coords = {1, 1}},
-			Vertex {.position = {10, -1, -10}, .normal = {0, 1, 0}, .tex_coords = {1, 0}}
+			Vertex {{-10, -1, -10}, {0, 0.7, 0.3}, {0, 0}},
+			Vertex {{-10, -1, 10}, {0, 0.7, 0.3}, {0, 1}},
+			Vertex {{10, -1, 10}, {0, 0.7, 0.3}, {1, 1}},
+			Vertex {{10, -1, -10}, {0, 0.7, 0.3}, {1, 0}}
 		}, {
-			0, 2, 1,
-			0, 3, 2
+			0, 1, 2,
+			0, 2, 3
 		});
 
-		Mesh cube = make_cube({0, 0, 0}, 1);
+		Mesh cube = make_box({0, 0, 0}, 1, 1.2, 1.2);
 
 		raster::Mesh *mesh1 = new raster::Mesh(window.context, model1[0]);
 		raster::Mesh *mesh2 = new raster::Mesh(window.context, model2[0]);
@@ -124,7 +114,7 @@ public:
 		mesh6->transform().move(glm::vec3(-5, 0, 0));
 
 		mesh1->transform() = Transform({0.0f, 0.0f, -4.0f});
-		mesh1->transform().scale(10);
+		mesh1->transform().scale = glm::vec3 {10};
 
 		mesh2->transform() = Transform({0.0f, 4.0f, -4.0f});
 		mesh7->transform() = Transform({0.0f, 4.0f, 4.0f});
@@ -141,7 +131,7 @@ public:
 		layer = raster::Layer(window, camera, VK_ATTACHMENT_LOAD_OP_CLEAR);
 		// layer.add(mesh1);
 		layer.add(mesh2);
-		layer.add(mesh3);
+		// layer.add(mesh3);
 		layer.add(mesh4);
 		layer.add(mesh5);
 		layer.add(mesh6);
@@ -155,7 +145,7 @@ public:
 			static float px = 0.0f;
 			static float py = 0.0f;
 
-			static float yaw = 0.0f;
+			static float yaw = M_PI/2;
 			static float pitch = 0.0f;
 
 			float dx = event.xpos - px;
@@ -178,28 +168,10 @@ public:
 			if (pitch < -89.0f)
 				pitch = -89.0f;
 
-			forward = glm::vec3(
-				cos(glm::radians(yaw)) * cos(glm::radians(pitch)),
-				sin(glm::radians(pitch)),
-				sin(glm::radians(yaw)) * cos(glm::radians(pitch))
-			);
+			camera->transform.rotation.x = pitch;
+			camera->transform.rotation.y = yaw;
 
-			forward = glm::normalize(forward);
-			right = glm::normalize(glm::cross(forward, up));
-			up = glm::normalize(glm::cross(right, forward));
-
-			glm::mat4 view = glm::lookAt(
-				position,
-				position + forward,
-				up
-			);
-
-			camera->transform.set_matrix(view);
-
-			glm::vec3 pos = camera->transform.position();
-			
-			// std::cout << "\nCamera position: " << pos.x << ", " << pos.y << ", " << pos.z << std::endl;
-			// std::cout << "\treal: " << position.x << ", " << position.y << ", " << position.z << std::endl;
+			// std::cout << "Yaw: " << yaw << " Pitch: " << pitch << std::endl;
 		};
 
 		// Add to event handlers
@@ -224,9 +196,9 @@ public:
 			position -= forward * speed;
 
 		if (input.is_key_down(GLFW_KEY_A))
-			position -= right * speed;
-		else if (input.is_key_down(GLFW_KEY_D))
 			position += right * speed;
+		else if (input.is_key_down(GLFW_KEY_D))
+			position -= right * speed;
 
 		if (input.is_key_down(GLFW_KEY_E))
 			position += up * speed;
@@ -234,7 +206,16 @@ public:
 			position -= up * speed;
 
 		// Keep looking at the center of the scene
-		layer.camera().transform.set_position(position);
+		layer.camera().transform.position = position;
+
+		// Print camera matrix
+		auto mat = layer.camera().transform.matrix();
+		mat = glm::transpose(mat);
+		std::cout << "\nCamera matrix:\n";
+		std::cout << mat[0][0] << ", " << mat[0][1] << ", " << mat[0][2] << ", " << mat[0][3] << std::endl;
+		std::cout << mat[1][0] << ", " << mat[1][1] << ", " << mat[1][2] << ", " << mat[1][3] << std::endl;
+		std::cout << mat[2][0] << ", " << mat[2][1] << ", " << mat[2][2] << ", " << mat[2][3] << std::endl;
+		std::cout << mat[3][0] << ", " << mat[3][1] << ", " << mat[3][2] << ", " << mat[3][3] << std::endl;
 
 		// Record commands
 		layer.render(cmd, framebuffer);

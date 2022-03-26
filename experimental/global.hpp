@@ -9,30 +9,30 @@
 #include <memory>
 
 // Engine headers
-#include "include/app.hpp"
-#include "include/backend.hpp"
-#include "include/buffer_manager.hpp"
-#include "include/bvh.hpp"
-#include "include/camera.hpp"
-#include "include/capture.hpp"
-#include "include/core.hpp"
-#include "include/logger.hpp"
-#include "include/mesh.hpp"
-#include "include/model.hpp"
-#include "include/primitive.hpp"
-#include "include/profiler.hpp"
-#include "include/scene.hpp"
-#include "include/texture.hpp"
-#include "include/timer.hpp"
-#include "include/types.hpp"
-#include "include/world.hpp"
+#include "../include/app.hpp"
+#include "../include/backend.hpp"
+#include "../include/buffer_manager.hpp"
+#include "../include/bvh.hpp"
+#include "../include/camera.hpp"
+#include "../include/capture.hpp"
+#include "../include/core.hpp"
+#include "../include/logger.hpp"
+#include "../include/mesh.hpp"
+#include "../include/model.hpp"
+#include "../include/primitive.hpp"
+#include "../include/profiler.hpp"
+#include "../include/scene.hpp"
+#include "../include/texture.hpp"
+#include "../include/timer.hpp"
+#include "../include/types.hpp"
+#include "../include/world.hpp"
 
-#include "include/gui/gui.hpp"
-#include "include/gui/rect.hpp"
-#include "include/gui/font.hpp"
+#include "../include/gui/gui.hpp"
+#include "../include/gui/rect.hpp"
+#include "../include/gui/font.hpp"
 
 // Global world data
-extern kobra::World world;
+extern kobra::rt::World world;
 
 // GLFW helpers
 void key_callback(GLFWwindow *, int, int, int, int);

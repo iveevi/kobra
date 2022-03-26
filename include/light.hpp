@@ -7,6 +7,8 @@
 #include "types.hpp"
 #include "world_update.hpp"
 
+namespace kobra {
+
 // Light structure
 struct Light {
 	float		id = LIGHT_TYPE_POINT;
@@ -27,7 +29,7 @@ struct Light {
 	// Write full light data
 	void write_light(kobra::WorldUpdate &wu) {
 		// Push ID, then everythig else
-		glm::vec3 pos = transform.position();
+		glm::vec3 pos = transform.position;
 
 		wu.bf_lights->push_back(aligned_vec4 {
 			glm::vec4 {
@@ -49,5 +51,7 @@ struct PointLight : public Light {
 
 	void write(kobra::WorldUpdate &) const override {}
 };
+
+}
 
 #endif

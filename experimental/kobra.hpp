@@ -10,8 +10,8 @@
 
 // Sizes of objects and lights
 // are assumed to be the maximum
-static const size_t MAX_OBJECT_SIZE = sizeof(Triangle);
-static const size_t MAX_LIGHT_SIZE = sizeof(PointLight);
+static const size_t MAX_OBJECT_SIZE = sizeof(kobra::raytracing::Triangle);
+static const size_t MAX_LIGHT_SIZE = sizeof(kobra::PointLight);
 
 using namespace kobra;
 
@@ -35,7 +35,7 @@ inline std::ostream &operator<<(std::ostream &os, const kobra::BoundingBox &b)
 }
 
 // App
-class MercuryApplication : public kobra::App {
+class RTApp : public kobra::App {
 	// TODO: some of these member should be moved back to App
 	VkRenderPass			render_pass;
 	VkCommandPool			command_pool;
@@ -71,8 +71,8 @@ class MercuryApplication : public kobra::App {
 	kobra::BVH bvh;
 
 	// Copy buffer helper
-	GPUWorld gworld;
-	
+	rt::GPUWorld gworld;
+
 	// GPU buffers
 	BufferManager <uint>	_bf_pixels;
 	BufferManager <uint8_t>	_bf_world;
@@ -108,7 +108,7 @@ class MercuryApplication : public kobra::App {
 	void make_imgui(size_t);
 public:
 	// Constructor
-	MercuryApplication(Vulkan *);
+	RTApp(Vulkan *);
 
 	// Get profiler
 	Profiler *get_profiler() { return &profiler; }

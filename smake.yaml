@@ -9,8 +9,8 @@ definitions:
     thirdparty/imgui/imgui_tables.cpp,
     thirdparty/imgui/backends/imgui_impl_glfw.cpp,
     thirdparty/imgui/backends/imgui_impl_vulkan.cpp'
-  - kobra_source: 'main.cpp,
-    source/vulkan.cpp,
+  - kobra_source: 'source/vulkan.cpp,
+    source/model.cpp,
     source/logger.cpp,
     source/capture.cpp,
     source/texture.cpp,
@@ -19,7 +19,7 @@ definitions:
 
 builds:
   - kobra_release:
-    - sources: kobra_source, imgui_source
+    - sources: main.cpp, kobra_source, imgui_source
     - idirs: 'thirdparty,
       thirdparty/freetype/include,
       thirdparty/glm,
@@ -35,14 +35,7 @@ builds:
       avutil,
       freetype'
   - kobra_debug:
-    - sources: 'kobra_source,
-      thirdparty/imgui/imgui.cpp,
-      thirdparty/imgui/imgui_draw.cpp,
-      thirdparty/imgui/imgui_demo.cpp,
-      thirdparty/imgui/imgui_widgets.cpp,
-      thirdparty/imgui/imgui_tables.cpp,
-      thirdparty/imgui/backends/imgui_impl_glfw.cpp,
-      thirdparty/imgui/backends/imgui_impl_vulkan.cpp'
+    - sources: main.cpp, kobra_source, imgui_source
     - idirs: 'thirdparty,
       thirdparty/freetype/include,
       thirdparty/glm,
@@ -57,6 +50,25 @@ builds:
       avutil,
       freetype'
     - flags: '-std=c++17 -g'
+  - experimental_normal:
+    - sources: 'experimental/kobra.cpp,
+      experimental/render.cpp,
+      kobra_source,
+      imgui_source'
+    - idirs: 'thirdparty,
+      thirdparty/freetype/include,
+      thirdparty/glm,
+      thirdparty/imgui,
+      thirdparty/assimp/include'
+    - flags: '-O3 -std=c++17'
+    - libraries: 'glfw,
+      vulkan,
+      assimp,
+      pthread,
+      avcodec,
+      avformat,
+      avutil,
+      freetype'
 
 targets:
   - kobra:
@@ -67,3 +79,8 @@ targets:
     - postbuilds:
       - default: '{}'
       - gdb: 'gdb {}'
+  - experimental:
+    - builds:
+      - default: experimental_normal
+    - postbuilds:
+      - default: '{}'

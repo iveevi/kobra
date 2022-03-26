@@ -17,13 +17,13 @@ namespace kobra {
 //	saving the world
 class Scene {
 	// For now only contains name and world
-	std::string	_name;
+	std::string		_name;
 
-	World		_world;
+	rt::World	_world;
 public:
 	// Constructor
 	Scene();
-	Scene(const std::string &str, const World &w)
+	Scene(const std::string &str, const rt::World &w)
 			: _name(str), _world(w) {}	// TODO: remove
 
 	// Save to file

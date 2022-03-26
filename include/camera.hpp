@@ -8,6 +8,8 @@
 // Engine headers
 #include "transform.hpp"
 
+namespace kobra {
+
 // Camera properties
 class Tunings {
         float _radians(float degrees) {
@@ -42,5 +44,7 @@ struct Camera {
         Camera(const Transform& trans, const Tunings& tns)
                         : transform(trans), tunings(tns) {}
 };
+
+}
 
 #endif

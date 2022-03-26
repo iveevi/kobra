@@ -17,6 +17,19 @@ struct Vertex {
 	glm::vec3 normal;
 	glm::vec2 tex_coords;
 
+	// Constructors
+	Vertex() {}
+
+	Vertex(const glm::vec3 &pos)
+			: position(pos) {}
+
+	Vertex(const glm::vec3 &pos, const glm::vec3 &norm)
+			: position(pos), normal(norm) {}
+
+	Vertex(const glm::vec3 &pos, const glm::vec3 &norm, const glm::vec2 &tex_coords)
+			: position(pos), normal(norm),
+			tex_coords(tex_coords) {}
+
 	// Vertex binding
 	static VertexBinding vertex_binding() {
 		return VertexBinding {
