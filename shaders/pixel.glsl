@@ -503,62 +503,6 @@ vec3 color_at(Ray ray)
 			return color_calc_flat(hit);
 		}
 
-		/* Calculate lighting normally
-		vec3 color = color_calc(hit, ray);
-
-		// Reflections
-		int max_refls = 2;
-		float refl_coef = 1.0;
-
-		// Early exit if no reflections
-		if (max_refls == 0)
-			return color;
-
-		// Loop through reflections
-		float index_refraction = 1.0f;	// Assume vacuum
-
-		do {
-			// Reflection ray
-			vec3 refl_dir = reflect(ray.direction, hit.normal);
-			Ray refl_ray = Ray(hit.point + hit.normal * bias, refl_dir);
-
-			// Refraction ray
-			vec3 refr_color = vec3(0.0);
-			if (hit.mat.ior.x != 0.0) {
-				float eta = index_refraction / hit.mat.ior.x;
-				vec3 refr_dir = refract(ray.direction, hit.normal, eta);
-				Ray refr_ray = Ray(hit.point - hit.normal * bias, refr_dir);
-
-				// Calculate refraction
-				Hit refr_hit = closest_object(refr_ray);
-				refr_color = color_calc(refr_hit, refr_ray);
-				return refr_color;
-
-				// Update refraction index
-				index_refraction = hit.mat.ior.x;
-			}
-
-			// Calculate reflection
-			Hit refl_hit = closest_object(refl_ray);
-
-			// Add contribution regardless of whether
-			// the reflection hit an object (background counts)
-			refl_coef *= hit.mat.reflectance;
-			
-			vec3 crefl = color_calc(refl_hit, refl_ray);
-			
-			color = mix(color, crefl, refl_coef);
-			hit = refl_hit;
-
-			// Decrement reflection count
-			max_refls--;
-		} while (max_refls > 0 && hit.object >= 0
-				&& hit.mat.reflectance > 0.0); */
-		
-		// TODO: different method, check shading type at the start
-
-		// TODO: optimize
-
 		// Apply 1/2/3 bounces
 		Ray r1 = ray;
 		Branch b1 = null_branch(),
@@ -570,66 +514,17 @@ vec3 color_at(Ray ray)
 		
 		Hit h2 = closest_object(b1.refl);
 		Hit h3 = closest_object(b1.refr);
-		
-		/* b2 = branch(h2, b1.refl, h2.mat.ior.x);
-		b3 = branch(h3, b1.refr, h3.mat.ior.x);
-
-		Hit h4 = closest_object(b2.refl);
-		Hit h5 = closest_object(b2.refr);
-		Hit h6 = closest_object(b3.refl);
-		Hit h7 = closest_object(b3.refr); */
 
 		// Get individual colors
 		vec3 c1 = diffuse(h1, r1);
 		vec3 c2 = diffuse(h2, b1.refl);
 		vec3 c3 = diffuse(h3, b1.refr);
-		
-		/* vec3 c4 = color_calc(h4, b2.refl);
-		vec3 c5 = color_calc(h5, b2.refr);
-		vec3 c6 = color_calc(h6, b3.refl);
-		vec3 c7 = color_calc(h7, b3.refr); */
-		
-		// Color mixing
-		/* vec3 m67 = mix(c6, c7, b3.prefr);
-		vec3 m3 = mix(c3, m67, b1.prefr);
-		
-		vec3 m45 = mix(c4, c5, b2.prefr);
-		vec3 m2 = mix(c2, m45, b1.prefr); */
-
-		/* vec3 m23 = mix(c2, c3, b1.prefr);
-		vec3 m1 = mix(c1, m23, b1.prefr);
-
-		return m1; */
 
 		return clamp(c1 + b1.erefl * c2 + b1.erefr * c3, 0, 1);
 	}
 
 	return hit.mat.albedo;
 }
-
-#define MAX_SAMPLES 16
-
-// Sample offsets
-// 	Every subarray of a power of 2
-//	should be a valid sampling space
-const vec2 offsets[MAX_SAMPLES] = {
-	vec2(-0.94201624,	-0.39906216),
-	vec2(0.94558609,	-0.76890725),
-	vec2(-0.094184101,	-0.92938870),
-	vec2(0.34495938,	0.29387760),
-	vec2(-0.51947840,	0.84840893),
-	vec2(0.15452093,	0.60745321),
-	vec2(-0.86442297,	-0.085755840),
-	vec2(0.63357930,	-0.62802040),
-	vec2(0.72695800,	0.43725902),
-	vec2(0.79011270,	0.10122100),
-	vec2(-0.96886787,	-0.11038005),
-	vec2(-0.17360089,	-0.93959504),
-	vec2(0.68785068,	-0.72534355),
-	vec2(0.98994950,	0.14948041),
-	vec2(-0.031639270,	0.99946570),
-	vec2(-0.79587721,	0.60407257)
-};
 
 // TODO: pass as world parameter
 #define SAMPLES 1
@@ -667,7 +562,7 @@ void main()
 		
 	// Sample ray
 	// TODO: use z index for sample offset index
-	vec2 point = vec2(x0 + 0.5, y0 + 0.5) + offsets[0];
+	vec2 point = vec2(x0 + 0.5, y0 + 0.5);
 
 	vec2 uv = point / dimensions;
 	Ray ray = make_ray(

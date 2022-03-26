@@ -18,14 +18,8 @@ void main()
 	vec3 diffuse = diffuse_color * light_color * max(dot(n, light_dir_normal), 0.0);
 	vec3 specular = vec3(0.0, 0.0, 0.0);
 
-	vec3 c = ambient + diffuse + specular;
+	vec3 c = ambient + diffuse + specular; */
 
 	// fragment = vec4(c, 1.0) * color;
-	fragment = vec4(normal, 1.0); */
-
-	vec3 light_pos = vec3(0.0, 0.0, 0.0);
-	vec3 frag_pos = position;
-
-	vec3 intensity = vec3(0.1 + 2.0 / length(light_pos - frag_pos));
-	fragment = vec4(intensity, 1.0);
+	fragment = vec4(normalize(normal * 0.5f) + 0.5f, 1.0); 
 }
