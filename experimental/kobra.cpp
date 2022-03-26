@@ -827,8 +827,8 @@ void RTApp::update_world() {
 		amplitude * cos(time)
 	};
 
-	world.objects[0]->transform().position = position;
-	world.lights[0]->transform.position = position;
+	/* world.objects[0]->transform().position = position;
+	world.lights[0]->transform.position = position; */
 
 	// Map buffers
 	if (map_buffers(context.vk)) {
@@ -847,6 +847,28 @@ void RTApp::update_world() {
 
 	// Update time
 	time += frame_time;
+	
+	glm::vec3 forward = world.camera.transform.forward();
+	glm::vec3 right = world.camera.transform.right();
+	glm::vec3 up = world.camera.transform.up();
+
+        // WASDEQ movement
+        float speed = 0.5f;
+
+	if (input.is_key_down(GLFW_KEY_W))
+		world.camera.transform.position += forward * speed;
+	else if (input.is_key_down(GLFW_KEY_S))
+		world.camera.transform.position -= forward * speed;
+
+	if (input.is_key_down(GLFW_KEY_A))
+		world.camera.transform.position -= right * speed;
+	else if (input.is_key_down(GLFW_KEY_D))
+		world.camera.transform.position += right * speed;
+
+	if (input.is_key_down(GLFW_KEY_E))
+		world.camera.transform.position += up * speed;
+	else if (input.is_key_down(GLFW_KEY_Q))
+		world.camera.transform.position -= up * speed;
 }
 
 // Present the frame

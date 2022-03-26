@@ -27,7 +27,7 @@ layout (set = 0, binding = 1, std430) buffer World
 	uint height;
 
 	uint options;
-	int discretize;	
+	int discretize;
 
 	vec4 camera;
 	vec4 cforward;
@@ -214,7 +214,7 @@ Intersection intersect(Ray ray, uint index)
 		return intersect_triangle(ray, index);
 	if (id == OBJECT_TYPE_SPHERE)
 		return intersect_sphere(ray, index);
-	
+
 	return Intersection(-1.0, vec3(0.0), mat_default());
 }
 
@@ -259,7 +259,7 @@ int min_index = -1;
 Hit closest_object(Ray ray)
 {
 	min_index = -1;
-	
+
 	// Starting time
 	Intersection mini = Intersection(
 		1.0/0.0, vec3(0.0),
@@ -356,7 +356,7 @@ vec3 color_calc(Hit hit, Ray ray)
 	// If no hit, just return background color
 	if (hit.object < 0)
 		return hit.mat.albedo;
-	
+
 	// Check for light type again
 	if (hit.mat.shading == SHADING_TYPE_LIGHT)
 		return hit.mat.albedo;
@@ -416,7 +416,7 @@ vec3 color_calc_flat(Hit hit)
 	// Light position (fixed for now)
 	vec3 light_position = lights.data[0].yzw;
 	vec3 light_direction = normalize(light_position - hit.point);
-	
+
 	// Shadow calculation
 	vec3 shadow_origin = hit.point + hit.normal * bias;
 
@@ -430,7 +430,7 @@ vec3 color_calc_flat(Hit hit)
 	float shadow = 0.0;
 	if (shadow_hit.object >= 0 && shadow_hit.mat.shading != SHADING_TYPE_LIGHT)
 		shadow = 1.0;
-	
+
 	// Calculate factor
 	float factor = clamp(1.0 - 0.9 * shadow, 0.0, 1.0);
 
@@ -441,7 +441,7 @@ vec3 color_calc_flat(Hit hit)
 struct Branch {
 	Ray	refl;
 	float	erefl;
-	
+
 	Ray	refr;
 	float	erefr;
 
@@ -464,7 +464,7 @@ Branch branch(Hit hit, Ray ray, float prefr)
 	// If the ray is null
 	if (ray.direction == vec3(0.0))
 		return null_branch();
-	
+
 	// Intersection bias
 	float bias = 0.1;
 
@@ -508,10 +508,10 @@ vec3 color_at(Ray ray)
 		Branch b1 = null_branch(),
 			b2 = null_branch(),
 			b3 = null_branch();
-		
+
 		Hit h1 = hit;
 		b1 = branch(h1, r1, h1.mat.ior.x);
-		
+
 		Hit h2 = closest_object(b1.refl);
 		Hit h3 = closest_object(b1.refr);
 
@@ -526,8 +526,22 @@ vec3 color_at(Ray ray)
 	return hit.mat.albedo;
 }
 
-// TODO: pass as world parameter
-#define SAMPLES 1
+// TODO: pass samples as world parameter
+
+// Generate sampling noise
+float rand(vec2 co)
+{
+	return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+vec2 pnoise = vec2(1.0, 0.0);
+vec2 unit_noise()
+{
+	float f1 = rand(pnoise);
+	float f2 = rand(pnoise + f1);
+	pnoise = normalize(vec2(f1, f2));
+	return pnoise;
+}
 
 #define COLOR_WHEEL_SIZE 8
 
@@ -557,24 +571,32 @@ void main()
 	uint xsize = gl_NumWorkGroups.x;
 
 	vec2 dimensions = vec2(world.width, world.height);
-			
+
 	uint index = y0 * world.width + x0;
-		
+
 	// Sample ray
 	// TODO: use z index for sample offset index
+	vec3 sum = vec3(0.0);
 	vec2 point = vec2(x0 + 0.5, y0 + 0.5);
 
-	vec2 uv = point / dimensions;
-	Ray ray = make_ray(
-		uv,
-		world.camera.xyz,
-		world.cforward.xyz, world.cup.xyz, world.cright.xyz,
-		world.tunings.y,
-		world.tunings.z
-	);
+	float n = 1.0;
+	for (int i = 0; i < n; i++) {
+		vec2 uv = (point + unit_noise()/2) / dimensions;
+		Ray ray = make_ray(
+			uv,
+			world.camera.xyz,
+			world.cforward.xyz, world.cup.xyz, world.cright.xyz,
+			world.tunings.y,
+			world.tunings.z
+		);
 
-	// Get color
-	vec3 color = color_at(ray);
+		// Get color
+		vec3 color = color_at(ray);
+
+		sum += color;
+	}
+
+	vec3 color = sum/n;
 
 	// Descretize color if needed
 	if (world.discretize > 0)
@@ -582,6 +604,14 @@ void main()
 
 	// TODO: constants for mask
 	if ((world.options & 0x1) == 0x1) {
+		Ray ray = make_ray(
+			vec2(x0 + 0.5, y0 + 0.5) / dimensions,
+			world.camera.xyz,
+			world.cforward.xyz, world.cup.xyz, world.cright.xyz,
+			world.tunings.y,
+			world.tunings.z
+		);
+
 		// Iterate through BVHs
 		int node = 0;
 		while (node != -1) {

@@ -2,7 +2,9 @@
 
 Kobra is a 3D game engine with the purpose of providing a handful of styles of rednering and tools to ease the developement of game and interactive 3D software.
 
-![](capture.png)
+![](media/capture_1.png)
+
+![](media/capture_2.png)
 
 # Goals
 

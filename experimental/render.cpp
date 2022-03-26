@@ -11,28 +11,6 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
         if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
                 glfwSetWindowShouldClose(window, GL_TRUE);
 
-	glm::vec3 forward = world.camera.transform.forward();
-	glm::vec3 right = world.camera.transform.right();
-	glm::vec3 up = world.camera.transform.up();
-
-        // WASDEQ movement
-        float speed = 0.5f;
-
-	if (key == GLFW_KEY_W && action == GLFW_PRESS)
-		world.camera.transform.move(forward * speed);
-	else if (key == GLFW_KEY_S && action == GLFW_PRESS)
-		world.camera.transform.move(-forward * speed);
-
-	if (key == GLFW_KEY_A && action == GLFW_PRESS)
-		world.camera.transform.move(-right * speed);
-	else if (key == GLFW_KEY_D && action == GLFW_PRESS)
-		world.camera.transform.move(right * speed);
-
-	if (key == GLFW_KEY_Q && action == GLFW_PRESS)
-		world.camera.transform.move(-up * speed);
-	else if (key == GLFW_KEY_E && action == GLFW_PRESS)
-		world.camera.transform.move(up * speed);
-
 	// Tab to toggle cursor visibility
 	static bool cursor_visible = false;
 	if (key == GLFW_KEY_TAB && action == GLFW_PRESS) {
@@ -121,7 +99,8 @@ World world {
 	// Camera
 	Camera {
 		Transform {
-			glm::vec3(0.0f, 2.0f, 8.0f)
+			glm::vec3(-1.46986, 8.05425, 10.311),
+			glm::vec3(-0.158, 0.139, 0)
 		},
 
 		Tunings {
@@ -134,14 +113,14 @@ World world {
 	std::vector <World::PrimitivePtr> {
 		World::PrimitivePtr(new Sphere(0.25f, glm::vec3 {0, 0, 0}, materials[6])),
 
-		World::PrimitivePtr(new Sphere(1.0f, glm::vec3 {3, 3, 0},
+		World::PrimitivePtr(new Sphere(1.0f, glm::vec3 {0, 3, 4},
 			{
 				.albedo = glm::vec3 {1.0f},
 				.refractance = 1.5f
 			}
 		)),
 
-		World::PrimitivePtr(new Sphere(1.0f, glm::vec3 {-3.0f, 1.3f, 1.0f},
+		World::PrimitivePtr(new Sphere(1.0f, glm::vec3 {-3.0f, 6, 1.0f},
 			{
 				.albedo = glm::vec3 {1.0f},
 				.reflectance = 1.0f
@@ -152,7 +131,7 @@ World world {
 	// Lights
 	std::vector <World::LightPtr> {
 		// TODO: objects with emmision
-		World::LightPtr(new PointLight(glm::vec3 {0, 0, 0}, 0.0f))
+		World::LightPtr(new PointLight(glm::vec3 {0, 10, -10}, 0.0f))
 	}
 };
 
@@ -160,26 +139,59 @@ using RTMesh = kobra::raytracing::Mesh;
 
 int main()
 {
-	kobra::Model model("resources/benchmark/bunny_res_1.ply");
+	kobra::Model model1("/home/venki/downloads/quixel/column/ud4pbimfa_LOD0.fbx");
+	kobra::Model model2("/home/venki/downloads/quixel/statue/vd4ibgcva_LOD0.fbx");
+	kobra::Model model3("/home/venki/downloads/quixel/rock/vivveardw_LOD0.fbx");
 
-	auto m1 = new RTMesh(model[0]);
-	m1->set_material(materials[1]);
-	m1->transform().scale = glm::vec3(10.0f);
+	Material mat1 = materials[1];
+	Material mat2 = materials[1];
+	Material mat3 {
+		.albedo = glm::vec3 {0.8, 0.5, 0.5},
+		.reflectance = 0.0f,
+		.refractance = 0.0f
+	};
 
-	auto m2 = new RTMesh(*m1);
-	auto m3 = new RTMesh(*m1);
+	auto m1 = new RTMesh(model1[0]);
+	auto m2 = new RTMesh(model2[0]);
+	auto m3 = new RTMesh(model3[0]);
 
-	m2->transform().position = glm::vec3(-3.0f, 1.0f, -3.0f);
-	m3->transform().position = glm::vec3(3.0f, 1.0f, 3.0f);
+	m1->transform().scale = glm::vec3(0.08f);
+	m2->transform().scale = glm::vec3(0.03f);
+	m3->transform().scale = glm::vec3(0.03f);
+
+	m1->set_material(mat1);
+	m2->set_material(mat2);
+	m3->set_material(mat3);
+
+	m1->transform().position = glm::vec3(0.0f, 1.5f, 0.0f);
+	m1->transform().rotation = glm::vec3(0.0f, 0.0f, -10);
+
+	m2->transform().position = glm::vec3(-3.0f, 3.0f, -3.0f);
+	m2->transform().rotation = glm::vec3(0.0f, 0.0f, 10);
+
+	auto m4 = new RTMesh(*m3);
+	auto m5 = new RTMesh(*m3);
+
+	m4->transform().scale = glm::vec3(0.10f);
+	m5->transform().scale = glm::vec3(0.05f);
+
+	m4->transform().rotation = glm::vec3(13, 45, 0.0);
+	m5->transform().rotation = glm::vec3(0, 0, 0);
+
+	m3->transform().position = glm::vec3(-6.0f, 1.0f, -3.0f);
+	m4->transform().position = glm::vec3(-3.0f, -5.0f, -3.0f);
+	m5->transform().position = glm::vec3(0.0f, 1.0f, -3.0f);
 
 	world.objects.push_back(std::shared_ptr <RTMesh> (m1));
 	world.objects.push_back(std::shared_ptr <RTMesh> (m2));
 	world.objects.push_back(std::shared_ptr <RTMesh> (m3));
+	world.objects.push_back(std::shared_ptr <RTMesh> (m4));
+	world.objects.push_back(std::shared_ptr <RTMesh> (m5));
 
 	Logger::ok() << "[main] Loaded model with "
-		<< model.mesh_count() << " meshe(s), "
-		<< model[0].vertex_count() << " vertices, "
-		<< model[0].triangle_count() << " triangles" << std::endl;
+		<< model1.mesh_count() << " meshe(s), "
+		<< model1[0].vertex_count() << " vertices, "
+		<< model1[0].triangle_count() << " triangles" << std::endl;
 
 	// Plane mesh
 	float width = 10.0f;
@@ -204,10 +216,10 @@ int main()
 		}
 	};
 
-	// Add plane to world
+	/* Add plane to world
 	world.objects.push_back(std::shared_ptr <RTMesh> (
 		new RTMesh(plane_mesh)
-	));
+	)); */
 
 	Logger::notify("Transforms (model matrices) of all objects:");
 	for (auto &object : world.objects) {
