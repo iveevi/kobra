@@ -20,6 +20,75 @@ using namespace kobra;
 // Rasterization app
 class RasterApp : public BaseApp {
 	raster::Layer layer;
+
+	glm::vec3 position	{ 0.0f, 0.0f, -4.0f };
+	glm::vec3 forward	{ 0.0f, 0.0f, 1.0f };
+	glm::vec3 up		{ 0.0f, 1.0f, 0.0f };
+	glm::vec3 right		{ 1.0f, 0.0f, 0.0f };
+
+	// Create a cube mesh
+	Mesh make_cube(const glm::vec3 &center, float s) {
+		VertexList vertices {
+			Vertex {
+				.position = center + glm::vec3(-s, -s, -s),
+				.normal = glm::vec3(0.0f, 0.0f, -1.0f),
+				.tex_coords = glm::vec2(0.0f, 0.0f)
+			},
+			
+			Vertex {
+				.position = center + glm::vec3(s, -s, -s),
+				.normal = glm::vec3(0.0f, 0.0f, -1.0f),
+				.tex_coords = glm::vec2(1.0f, 0.0f)
+			},
+
+			Vertex {
+				.position = center + glm::vec3(s, s, -s),
+				.normal = glm::vec3(0.0f, 0.0f, -1.0f),
+				.tex_coords = glm::vec2(1.0f, 1.0f)
+			},
+
+			Vertex {
+				.position = center + glm::vec3(-s, s, -s),
+				.normal = glm::vec3(0.0f, 0.0f, -1.0f),
+				.tex_coords = glm::vec2(0.0f, 1.0f)
+			},
+
+			Vertex {
+				.position = center + glm::vec3(-s, -s, s),
+				.normal = glm::vec3(0.0f, 0.0f, 1.0f),
+				.tex_coords = glm::vec2(0.0f, 0.0f)
+			},
+
+			Vertex {
+				.position = center + glm::vec3(s, -s, s),
+				.normal = glm::vec3(0.0f, 0.0f, 1.0f),
+				.tex_coords = glm::vec2(1.0f, 0.0f)
+			},
+
+			Vertex {
+				.position = center + glm::vec3(s, s, s),
+				.normal = glm::vec3(0.0f, 0.0f, 1.0f),
+				.tex_coords = glm::vec2(1.0f, 1.0f)
+			},
+
+			Vertex {
+				.position = center + glm::vec3(-s, s, s),
+				.normal = glm::vec3(0.0f, 0.0f, 1.0f),
+				.tex_coords = glm::vec2(0.0f, 1.0f)
+			},
+		};
+
+		IndexList indices {
+			0, 2, 1,	2, 0, 3,	// Face 1
+			4, 5, 6,	6, 7, 4,	// Face 2
+			0, 4, 7,	7, 3, 0,	// Face 3
+			1, 5, 4,	4, 0, 1,	// Face 4
+			2, 6, 5,	5, 1, 2,	// Face 5
+			3, 7, 6,	6, 2, 3		// Face 6
+		};
+
+		return Mesh(vertices, indices);
+	}
 public:
 	RasterApp(Vulkan *vk) : BaseApp({
 		vk,
@@ -37,41 +106,11 @@ public:
 			Vertex {.position = {10, -1, 10}, .normal = {0, 1, 0}, .tex_coords = {1, 1}},
 			Vertex {.position = {10, -1, -10}, .normal = {0, 1, 0}, .tex_coords = {1, 0}}
 		}, {
-			0, 1, 2,
-			0, 2, 3
-		});
-
-		// Cube mesh (1x1x1)
-		Mesh cube(VertexList {
-			Vertex {.position = {-0.5, -0.5, -0.5}, .normal = {1, 0, 0}, .tex_coords = {0, 0}},
-			Vertex {.position = {-0.5, 0.5, -0.5}, .normal = {1, 0, 0}, .tex_coords = {0, 1}},
-			Vertex {.position = {0.5, 0.5, -0.5}, .normal = {1, 0, 0}, .tex_coords = {1, 1}},
-			Vertex {.position = {0.5, -0.5, -0.5}, .normal = {1, 0, 0}, .tex_coords = {1, 0}},
-			
-			Vertex {.position = {-0.5, -0.5, 0.5}, .normal = {1, 0, 0}, .tex_coords = {0, 0}},
-			Vertex {.position = {-0.5, 0.5, 0.5}, .normal = {1, 0, 0}, .tex_coords = {0, 1}},
-			Vertex {.position = {0.5, 0.5, 0.5}, .normal = {1, 0, 0}, .tex_coords = {1, 1}},
-			Vertex {.position = {0.5, -0.5, 0.5}, .normal = {1, 0, 0}, .tex_coords = {1, 0}},
-		}, {
-			// Account for culling
 			0, 2, 1,
-			0, 3, 2,
-
-			4, 6, 5,
-			4, 7, 6,
-
-			0, 5, 4,
-			0, 1, 5,
-
-			1, 6, 5,
-			1, 2, 6,
-
-			2, 6, 7,
-			2, 7, 3,
-
-			3, 4, 7,
-			3, 0, 4
+			0, 3, 2
 		});
+
+		Mesh cube = make_cube({0, 0, 0}, 1);
 
 		raster::Mesh *mesh1 = new raster::Mesh(window.context, model1[0]);
 		raster::Mesh *mesh2 = new raster::Mesh(window.context, model2[0]);
@@ -95,7 +134,7 @@ public:
 
 		// Initialize layer
 		Camera camera {
-			Transform { glm::vec3(0.0f, 0.0f, -1.0f) },
+			Transform { position },
 			Tunings { 45.0f, 800, 600 }
 		};
 
@@ -108,13 +147,16 @@ public:
 		layer.add(mesh6);
 		layer.add(mesh7);
 
-		auto mouse_movement = [](void *user, const io::MouseEvent &event) {
-			static const float sensitivity = 0.001f;
+		auto mouse_movement = [&](void *user, const io::MouseEvent &event) {
+			static const float sensitivity = 0.01f;
 
 			static bool first_movement = true;
 
 			static float px = 0.0f;
 			static float py = 0.0f;
+
+			static float yaw = 0.0f;
+			static float pitch = 0.0f;
 
 			float dx = event.xpos - px;
 			float dy = event.ypos - py;
@@ -127,9 +169,37 @@ public:
 			}
 
 			Camera *camera = (Camera *) user;
+
+			yaw += dx * sensitivity;
+			pitch += dy * sensitivity;
+
+			if (pitch > 89.0f)
+				pitch = 89.0f;
+			if (pitch < -89.0f)
+				pitch = -89.0f;
+
+			forward = glm::vec3(
+				cos(glm::radians(yaw)) * cos(glm::radians(pitch)),
+				sin(glm::radians(pitch)),
+				sin(glm::radians(yaw)) * cos(glm::radians(pitch))
+			);
+
+			forward = glm::normalize(forward);
+			right = glm::normalize(glm::cross(forward, up));
+			up = glm::normalize(glm::cross(right, forward));
+
+			glm::mat4 view = glm::lookAt(
+				position,
+				position + forward,
+				up
+			);
+
+			camera->transform.set_matrix(view);
+
+			glm::vec3 pos = camera->transform.position();
 			
-			camera->transform.rotate(glm::vec3(0.0f, -dx * sensitivity, 0.0f));
-			camera->transform.rotate(glm::vec3(dy * sensitivity, 0.0f, 0.0f));
+			// std::cout << "\nCamera position: " << pos.x << ", " << pos.y << ", " << pos.z << std::endl;
+			// std::cout << "\treal: " << position.x << ", " << position.y << ", " << position.z << std::endl;
 		};
 
 		// Add to event handlers
@@ -146,28 +216,25 @@ public:
 		// Start recording command buffer
 		Vulkan::begin(cmd);
 
-		// Camera movement
-		glm::vec3 forward = layer.camera().transform.forward();
-		glm::vec3 right = layer.camera().transform.right();
-		glm::vec3 up = layer.camera().transform.up();
-
 		// WASDEQ movement
 		float speed = 0.01f;
 		if (input.is_key_down(GLFW_KEY_W))
-			layer.camera().transform.move(forward * speed);
+			position += forward * speed;
 		else if (input.is_key_down(GLFW_KEY_S))
-			layer.camera().transform.move(-forward * speed);
+			position -= forward * speed;
 
 		if (input.is_key_down(GLFW_KEY_A))
-			layer.camera().transform.move(-right * speed);
+			position -= right * speed;
 		else if (input.is_key_down(GLFW_KEY_D))
-			layer.camera().transform.move(right * speed);
+			position += right * speed;
 
 		if (input.is_key_down(GLFW_KEY_E))
-			layer.camera().transform.move(up * speed);
+			position += up * speed;
 		else if (input.is_key_down(GLFW_KEY_Q))
-			layer.camera().transform.move(-up * speed);
+			position -= up * speed;
 
+		// Keep looking at the center of the scene
+		layer.camera().transform.set_position(position);
 
 		// Record commands
 		layer.render(cmd, framebuffer);

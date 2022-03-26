@@ -4,7 +4,7 @@
 
 void main()
 {
-	vec3 light_pos = vec3(0.0, 0.0, 1.0);
+	/* vec3 light_pos = vec3(0.0, 0.0, 1.0);
 	vec3 light_dir = normalize(vec3(0.0, 0.0, 1.0));
 
 	vec3 n = normalize(normal);
@@ -21,5 +21,11 @@ void main()
 	vec3 c = ambient + diffuse + specular;
 
 	// fragment = vec4(c, 1.0) * color;
-	fragment = vec4(normal, 1.0);
+	fragment = vec4(normal, 1.0); */
+
+	vec3 light_pos = vec3(0.0, 0.0, 0.0);
+	vec3 frag_pos = position;
+
+	vec3 intensity = vec3(0.1 + 2.0 / length(light_pos - frag_pos));
+	fragment = vec4(intensity, 1.0);
 }

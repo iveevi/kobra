@@ -71,10 +71,10 @@ public:
 		_calc_inv();
 	}
 
-	// Turn to face
-	/* void lookat(const glm::vec3 &eye, const glm::vec3 &target, const glm::vec3 &up = {0.0f, 1.0f, 0.0f}) {
-		model = glm::lookAt(eye, target, up);
-	} */
+	// Look at
+	void look_at(const glm::vec3 &target, const glm::vec3 &up = {0.0f, 1.0f, 0.0f}) {
+		model = glm::lookAt(glm::vec3(model[3]), target, up);
+	} 
 
 	// Get the model matrix
 	const glm::mat4 &matrix() const {
