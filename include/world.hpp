@@ -90,10 +90,10 @@ struct World {
 			world.primitives += object->count();
 
 		// Camera data
-		world.position = camera.transform.position;
-		world.forward = camera.transform.forward;
-		world.up = camera.transform.up;
-		world.right = camera.transform.right;
+		world.position = camera.transform.position();
+		world.forward = camera.transform.forward();
+		world.up = camera.transform.up();
+		world.right = camera.transform.right();
 
 		/* world.fov = camera.tunings.fov;
 		world.scale = camera.tunings.scale;

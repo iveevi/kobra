@@ -73,7 +73,7 @@ public:
 
 		// Deal with transform
 		uint tati = wu.bf_trans->push_size();
-		wu.bf_trans->push_back(_transform.model());
+		wu.bf_trans->push_back(_transform.matrix());
 
 		write_header(wu, mati, tati);
 		this->write(wu);
@@ -154,7 +154,7 @@ struct Triangle : public Primitive {
 	void extract_bboxes(std::vector <kobra::BoundingBox> &bboxes, const glm::mat4 &parent) const override {
 		// Get min and max coordinates
 		// TODO: account for transform
-		glm::mat4 m = parent * _transform.model();
+		glm::mat4 m = parent * _transform.matrix();
 		glm::vec3 ta = m * glm::vec4(a, 1.0);
 		glm::vec3 tb = m * glm::vec4(b, 1.0);
 		glm::vec3 tc = m * glm::vec4(c, 1.0);
@@ -197,7 +197,7 @@ struct Sphere : public Primitive {
 
 	void extract_bboxes(std::vector <kobra::BoundingBox> &bboxes, const glm::mat4 &parent) const override {
 		// Create bounding box
-		glm::mat4 m = parent * _transform.model();
+		glm::mat4 m = parent * _transform.matrix();
 		glm::vec3 pos = m * glm::vec4(0.0, 0.0, 0.0, 1.0);
 		glm::vec3 min = pos - glm::vec3(radius);
 		glm::vec3 max = pos + glm::vec3(radius);

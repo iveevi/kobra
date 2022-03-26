@@ -120,7 +120,7 @@ public:
 
 		// Get index of transform and push
 		uint tati = wu.bf_trans->push_size();
-		wu.bf_trans->push_back(_transform.model());
+		wu.bf_trans->push_back(_transform.matrix());
 
 		// Push all vertices
 		uint offset = wu.bf_verts->push_size();
@@ -151,7 +151,8 @@ public:
 	// Get bounding boxes
 	void extract_bboxes(std::vector <kobra::BoundingBox> &bboxes, const glm::mat4 &parent) const override {
 		// Get combined transform
-		glm::mat4 combined = parent * _transform.model();
+		// TODO: apply method between transforms
+		glm::mat4 combined = parent * _transform.matrix();
 
 		// Get bounding box for each triangle
 		for (size_t i = 0; i < this->_indices.size(); i += 3) {

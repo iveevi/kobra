@@ -9,75 +9,119 @@
 #include <glm/gtc/quaternion.hpp>
 
 // Transform class
-struct Transform {
-        // Basic properties
-        glm::vec3 position;
-        glm::quat rotation;
-        glm::vec3 scale;
+class Transform {
+	glm::mat4 model;
+	glm::mat4 inv;
 
-        // Directions
-        glm::vec3 forward;
-        glm::vec3 up;
-        glm::vec3 right;
+	void _calc_inv() {
+		inv = glm::inverse(model);
+	}
+public:
+	// Default constructor
+	Transform() : model(glm::mat4(1.0f)), inv(glm::mat4(1.0f)) {}
 
-        // Constructors
-        Transform() : Transform({0.0, 0.0, 0.0}) {}
-        Transform(const glm::vec3 &pos) : position {pos},
-                rotation {1.0, 0.0, 0.0, 0.0},
-                scale {1.0, 1.0, 1.0},
-                forward {0.0, 0.0, 1.0},
-                up {0.0, 1.0, 0.0},
-                right {1.0, 0.0, 0.0} {}
-	
-	// Full constructor
-	Transform(const glm::vec3 &pos, const glm::quat &rot, const glm::vec3 s,
-			const glm::vec3 &f, const glm::vec3 &u, const glm::vec3 &r)
-			: position {pos}, rotation {rot}, scale {s},
-			forward(f), up(u), right(r) {}
-
-	void recalculate() {
-		// Cardinal Directions
-		// TODO: static
-		glm::vec4 f = {0.0, 0.0, 1.0, 0.0};
-		glm::vec4 u = {0.0, 1.0, 0.0, 0.0};
-		glm::vec4 r = {1.0, 0.0, 0.0, 0.0};
-
-		forward = glm::normalize(glm::vec3(rotation * f));
-		up = glm::normalize(glm::vec3(rotation * u));
-		right = glm::normalize(glm::vec3(rotation * r));
+	// Constructor
+	Transform(const glm::mat4 &m) : model {m} {
+		_calc_inv();
 	}
 
-	// Get as mat4
-	// TODO: cache
-	glm::mat4 model() const {
-		glm::mat4 model {1.0};
-		model = glm::translate(model, position);
-		model = glm::scale(model, scale);
-		model = glm::mat4_cast(rotation) * model;
+	Transform(const glm::vec3 &p) : model {
+			glm::translate(glm::mat4(1.0f), p)
+		} {
+		_calc_inv();
+	}
+
+	// Move
+	void move(const glm::vec3 &p) {
+		model = glm::translate(model, p);
+		_calc_inv();
+	}
+
+	// Rotate
+	void rotate(const glm::vec3 &axis, float angle) {
+		model = glm::rotate(model, angle, axis);
+		_calc_inv();
+	}
+
+	// Rotate euler angles
+	void rotate(const glm::vec3 &angles) {
+		model = glm::rotate(model, angles.x, glm::vec3(1.0f, 0.0f, 0.0f));
+		model = glm::rotate(model, angles.y, glm::vec3(0.0f, 1.0f, 0.0f));
+		model = glm::rotate(model, angles.z, glm::vec3(0.0f, 0.0f, 1.0f));
+		_calc_inv();
+	}
+
+	// Rotate in place
+	void rotate_in_place(const glm::vec3 &axis, float angle) {
+		glm::vec3 p = glm::vec3(model[3]);
+		model = glm::translate(model, -p);
+		model = glm::rotate(model, angle, axis);
+		model = glm::translate(model, p);
+		_calc_inv();
+	}
+
+	// Scale
+	void scale(const glm::vec3 &s) {
+		model = glm::scale(model, s);
+		_calc_inv();
+	}
+
+	void scale(float s) {
+		model = glm::scale(model, glm::vec3(s));
+		_calc_inv();
+	}
+
+	// Turn to face
+	/* void lookat(const glm::vec3 &eye, const glm::vec3 &target, const glm::vec3 &up = {0.0f, 1.0f, 0.0f}) {
+		model = glm::lookAt(eye, target, up);
+	} */
+
+	// Get the model matrix
+	const glm::mat4 &matrix() const {
 		return model;
 	}
 
-	// Apply transformation to vec3
-	glm::vec3 apply(const glm::vec3 &v) const {
-		return glm::vec3(model() * glm::vec4(v, 1.0));
+	// Set the model matrix
+	void set_matrix(const glm::mat4 &m) {
+		model = m;
+		_calc_inv();
 	}
 
-	// Set pitch
-	void set_pitch(float pitch) {
-		rotation = glm::angleAxis(pitch, right);
-		recalculate();
+	// Get position
+	glm::vec3 position() const {
+		return glm::vec3(model[3]);
 	}
 
-	// Set yaw
-	void set_yaw(float yaw) {
-		rotation = glm::angleAxis(yaw, up);
-		recalculate();
+	// Get rotation
+	glm::quat rotation() const {
+		return glm::quat_cast(model);
 	}
 
-	// Set euler angles
-	void set_euler(float pitch, float yaw, float roll = 0.0f) {
-		rotation = glm::quat(glm::vec3(pitch, yaw, roll));
-		recalculate();
+	// Set position
+	void set_position(const glm::vec3 &p) {
+		model[3][0] = p.x;
+		model[3][1] = p.y;
+		model[3][2] = p.z;
+		_calc_inv();
+	}
+
+	// Forward, right, up
+	glm::vec3 forward() const {
+		return glm::normalize(
+			glm::vec3(inv[2])
+		);
+	}
+
+	glm::vec3 right() const {
+		return glm::normalize(
+			glm::vec3(inv[0])
+		);
+	}
+
+	glm::vec3 up() const {
+		return glm::normalize(
+			glm::vec3(inv[1])
+		);
 	}
 };
 

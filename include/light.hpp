@@ -27,11 +27,13 @@ struct Light {
 	// Write full light data
 	void write_light(kobra::WorldUpdate &wu) {
 		// Push ID, then everythig else
+		glm::vec3 pos = transform.position();
+
 		wu.bf_lights->push_back(aligned_vec4 {
 			glm::vec4 {
-				id, transform.position.x,
-				transform.position.y,
-				transform.position.z
+				id, pos.x,
+				pos.y,
+				pos.z
 			}
 		});
 

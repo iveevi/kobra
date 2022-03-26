@@ -57,7 +57,7 @@ public:
 	void render(RenderPacket &rp) override {
 		// Get the MVP
 		MVP mvp {
-			_transform.model(),
+			_transform.matrix(),
 			rp.view,
 			rp.proj
 		};

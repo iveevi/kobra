@@ -44,9 +44,9 @@ inline Vulkan::Pipeline make_pipeline(const App::Window &wctx,
 
 		.viewport {
 			.width = (int) wctx.width,
-			.height = - (int) wctx.height,
+			.height = (int) wctx.height,
 			.x = 0,
-			.y = (int) wctx.height
+			.y = 0
 		}
 	};
 

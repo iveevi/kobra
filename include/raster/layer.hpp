@@ -88,7 +88,6 @@ public:
 	}
 
 	void add(_element *ptr) {
-		std::cout << "Adding element" << ptr << std::endl;
 		_elements.push_back(Element(ptr));
 	}
 
@@ -143,18 +142,24 @@ public:
 			_pipeline.pipeline
 		);
 
+		// TODO: camera matrix
+		auto proj = glm::perspective(
+			glm::radians(_camera.tunings.fov),
+			_camera.tunings.aspect,
+			0.01f, 100.0f
+		);
+
+		proj[0][0] *= -1;
+		proj[1][1] *= -1;
+
 		// Initialize render packet
 		RenderPacket packet {
 			.cmd = cmd_buffer,
 
 			.pipeline_layout = _pipeline.layout,
 
-			.view = _camera.transform.model(),
-			.proj = glm::perspective(
-				glm::radians(_camera.tunings.fov),
-				_camera.tunings.aspect,
-				0.01f, 100.0f
-			)
+			.view = _camera.transform.matrix(),
+			.proj = proj
 		};
 
 		// Render all elements

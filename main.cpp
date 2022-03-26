@@ -13,6 +13,8 @@
 #include "include/raster/layer.hpp"
 #include "profiler.hpp"
 
+#include <glm/gtx/rotate_vector.hpp>
+
 using namespace kobra;
 
 // Rasterization app
@@ -28,13 +30,65 @@ public:
 		Model model1("resources/benchmark/bunny_res_1.ply");
 		Model model2("resources/benchmark/suzanne.obj");
 
+		// Plane mesh
+		Mesh plane(VertexList {
+			Vertex {.position = {-10, -1, -10}, .normal = {0, 1, 0}, .tex_coords = {0, 0}},
+			Vertex {.position = {-10, -1, 10}, .normal = {0, 1, 0}, .tex_coords = {0, 1}},
+			Vertex {.position = {10, -1, 10}, .normal = {0, 1, 0}, .tex_coords = {1, 1}},
+			Vertex {.position = {10, -1, -10}, .normal = {0, 1, 0}, .tex_coords = {1, 0}}
+		}, {
+			0, 1, 2,
+			0, 2, 3
+		});
+
+		// Cube mesh (1x1x1)
+		Mesh cube(VertexList {
+			Vertex {.position = {-0.5, -0.5, -0.5}, .normal = {1, 0, 0}, .tex_coords = {0, 0}},
+			Vertex {.position = {-0.5, 0.5, -0.5}, .normal = {1, 0, 0}, .tex_coords = {0, 1}},
+			Vertex {.position = {0.5, 0.5, -0.5}, .normal = {1, 0, 0}, .tex_coords = {1, 1}},
+			Vertex {.position = {0.5, -0.5, -0.5}, .normal = {1, 0, 0}, .tex_coords = {1, 0}},
+			
+			Vertex {.position = {-0.5, -0.5, 0.5}, .normal = {1, 0, 0}, .tex_coords = {0, 0}},
+			Vertex {.position = {-0.5, 0.5, 0.5}, .normal = {1, 0, 0}, .tex_coords = {0, 1}},
+			Vertex {.position = {0.5, 0.5, 0.5}, .normal = {1, 0, 0}, .tex_coords = {1, 1}},
+			Vertex {.position = {0.5, -0.5, 0.5}, .normal = {1, 0, 0}, .tex_coords = {1, 0}},
+		}, {
+			// Account for culling
+			0, 2, 1,
+			0, 3, 2,
+
+			4, 6, 5,
+			4, 7, 6,
+
+			0, 5, 4,
+			0, 1, 5,
+
+			1, 6, 5,
+			1, 2, 6,
+
+			2, 6, 7,
+			2, 7, 3,
+
+			3, 4, 7,
+			3, 0, 4
+		});
+
 		raster::Mesh *mesh1 = new raster::Mesh(window.context, model1[0]);
 		raster::Mesh *mesh2 = new raster::Mesh(window.context, model2[0]);
+		raster::Mesh *mesh3 = new raster::Mesh(window.context, plane);
+		raster::Mesh *mesh4 = new raster::Mesh(window.context, cube);
+		raster::Mesh *mesh5 = new raster::Mesh(window.context, cube);
+		raster::Mesh *mesh6 = new raster::Mesh(window.context, cube);
+		raster::Mesh *mesh7 = new raster::Mesh(window.context, model2[0]);
+
+		mesh5->transform().move(glm::vec3(0, 0, -5));
+		mesh6->transform().move(glm::vec3(-5, 0, 0));
 
 		mesh1->transform() = Transform({0.0f, 0.0f, -4.0f});
-		mesh1->transform().scale = glm::vec3(10.0f);
+		mesh1->transform().scale(10);
 
 		mesh2->transform() = Transform({0.0f, 4.0f, -4.0f});
+		mesh7->transform() = Transform({0.0f, 4.0f, 4.0f});
 		// mesh2->transform().scale = glm::vec3(1/10.0f);
 
 		KOBRA_LOG_FILE(notify) << "Loaded all models and meshes\n";
@@ -46,88 +100,39 @@ public:
 		};
 
 		layer = raster::Layer(window, camera, VK_ATTACHMENT_LOAD_OP_CLEAR);
-		layer.add(mesh1);
+		// layer.add(mesh1);
 		layer.add(mesh2);
+		layer.add(mesh3);
+		layer.add(mesh4);
+		layer.add(mesh5);
+		layer.add(mesh6);
+		layer.add(mesh7);
 
-		// Bind camera movement
-		// TODO: would be smoother using input object
-		auto key_movement = [&](void *user, const io::KeyboardEvent &event) {
-			float speed = 0.25f;
-
-			// TODO: define key constants (keys.hpp)
-			Camera *camera = (Camera *) user;
-
-			glm::vec3 before = camera->transform.position;
-
-			// TODO: move functions
-			if (event.key == GLFW_KEY_W)
-				camera->transform.position += camera->transform.forward * speed;
-			else if (event.key == GLFW_KEY_S)
-				camera->transform.position -= camera->transform.forward * speed;
-
-			if (event.key == GLFW_KEY_A)
-				camera->transform.position -= camera->transform.right * speed;
-			else if (event.key == GLFW_KEY_D)
-				camera->transform.position += camera->transform.right * speed;
-
-			if (event.key == GLFW_KEY_E)
-				camera->transform.position -= camera->transform.up * speed;
-			else if (event.key == GLFW_KEY_Q)
-				camera->transform.position += camera->transform.up * speed;
-
-			glm::vec3 after = camera->transform.position;
-			glm::vec3 delta = after - before;
-
-			std::cout << "Camera moved by " << delta.x << " " << delta.y << " " << delta.z << "\n";
-		};
-
-		auto mouse_movement = [&](void *user, const io::MouseEvent &event) {
+		auto mouse_movement = [](void *user, const io::MouseEvent &event) {
 			static const float sensitivity = 0.001f;
-			static bool first_mouse = true;
-			static float last_x = window.width / 2.0f;
-			static float last_y = window.height / 2.0f;
-			
-			Camera *camera = (Camera *) user;
-	
-			// if (!mouse_tracking)
-			//	return;
 
-			if (first_mouse) {
-				first_mouse = false;
-				last_x = event.xpos;
-				last_y = event.ypos;
+			static bool first_movement = true;
+
+			static float px = 0.0f;
+			static float py = 0.0f;
+
+			float dx = event.xpos - px;
+			float dy = event.ypos - py;
+
+			px = event.xpos;
+			py = event.ypos;
+			if (first_movement) {
+				first_movement = false;
 				return;
 			}
 
-			// Store pitch and yaw
-			static float pitch = 0.0f;
-			static float yaw = 0.0f;
-
-			float xoffset = event.xpos - last_x;
-			float yoffset = event.ypos - last_y;
-
-			xoffset *= sensitivity;
-			yoffset *= sensitivity;
-
-			yaw += xoffset;
-			pitch += yoffset;
-
-			if (pitch > 89.0f)
-				pitch = 89.0f;
-			else if (pitch < -89.0f)
-				pitch = -89.0f;
-
-			// Update camera
-			camera->transform.set_euler(pitch, yaw);
-
-			std::cout << "pitch " << pitch << " yaw " << yaw << "\n";
-
-			last_x = event.xpos;
-			last_y = event.ypos;
+			Camera *camera = (Camera *) user;
+			
+			camera->transform.rotate(glm::vec3(0.0f, -dx * sensitivity, 0.0f));
+			camera->transform.rotate(glm::vec3(dy * sensitivity, 0.0f, 0.0f));
 		};
 
 		// Add to event handlers
-		window.keyboard_events->subscribe(key_movement, &layer.camera());
 		window.mouse_events->subscribe(mouse_movement, &layer.camera());
 
 		// Disable cursor
@@ -136,14 +141,42 @@ public:
 
 	// Override record method
 	void record(const VkCommandBuffer &cmd, const VkFramebuffer &framebuffer) override {
+		static float time = 0.0f;
+
 		// Start recording command buffer
 		Vulkan::begin(cmd);
+
+		// Camera movement
+		glm::vec3 forward = layer.camera().transform.forward();
+		glm::vec3 right = layer.camera().transform.right();
+		glm::vec3 up = layer.camera().transform.up();
+
+		// WASDEQ movement
+		float speed = 0.01f;
+		if (input.is_key_down(GLFW_KEY_W))
+			layer.camera().transform.move(forward * speed);
+		else if (input.is_key_down(GLFW_KEY_S))
+			layer.camera().transform.move(-forward * speed);
+
+		if (input.is_key_down(GLFW_KEY_A))
+			layer.camera().transform.move(-right * speed);
+		else if (input.is_key_down(GLFW_KEY_D))
+			layer.camera().transform.move(right * speed);
+
+		if (input.is_key_down(GLFW_KEY_E))
+			layer.camera().transform.move(up * speed);
+		else if (input.is_key_down(GLFW_KEY_Q))
+			layer.camera().transform.move(-up * speed);
+
 
 		// Record commands
 		layer.render(cmd, framebuffer);
 
 		// End recording command buffer
 		Vulkan::end(cmd);
+
+		// Progress time
+		time += frame_time;
 	}
 
 	// Termination method
