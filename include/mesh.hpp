@@ -16,6 +16,10 @@ namespace kobra {
 // Mesh class, just holds a list of vertices and indices
 class Mesh : virtual public Object {
 protected:
+	// Potential source
+	std::string	_source;
+	int		_source_index = -1;
+
 	// List of vertices
 	VertexList 	_vertices;
 
@@ -24,6 +28,12 @@ protected:
 public:
 	// Simple constructor
 	Mesh() {}
+	Mesh(const Mesh &mesh, const Transform &transform) :
+			Object(transform), _source(mesh._source),
+			_source_index(mesh._source_index),
+			_vertices(mesh._vertices),
+			_indices(mesh._indices) {}
+
 	Mesh(const VertexList &vs, const Indices &is,
 			const Transform &t = Transform())
 			: Object(t), _vertices(vs), _indices(is) {}
@@ -46,16 +56,14 @@ public:
 		return _indices;
 	}
 
-	/* Count primitives
-	uint count() const override {
-		return triangle_count();
-	} */
-
-	// TODO: override save method
-
+	// Virtual methods
+	void save(std::ofstream &) const override;
 
 	// Mesh factories
 	static Mesh make_box(const glm::vec3 &, const glm::vec3 &);
+
+	// Friends
+	friend class Model;
 };
 
 // Mesh for raytracing

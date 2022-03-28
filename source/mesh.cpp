@@ -1,6 +1,46 @@
 #include "../include/mesh.hpp"
+#include "../include/model.hpp"
 
 namespace kobra {
+
+//////////////////
+// Mesh methods //
+//////////////////
+
+void Mesh::save(std::ofstream &file) const
+{
+	file << "<MESH>" << std::endl;
+
+	// If the mesh was created from a file
+	if (_source.size() > 0) {
+		file << "source=" << _source << std::endl;
+		file << "index=" << _source_index << std::endl;
+		return;
+	}
+
+	// Otherwise write all vertices and indices
+	file << "source=0" << std::endl;
+
+	for (unsigned int i = 0; i < _vertices.size(); i++) {
+		glm::vec3 pos = _vertices[i].position;
+		glm::vec3 norm = _vertices[i].normal;
+		glm::vec2 tex = _vertices[i].tex_coords;
+
+		file << "v " << pos.x << " " << pos.y << " " << pos.z << " "
+			<< norm.x << " " << norm.y << " " << norm.z << " "
+			<< tex.x << " " << tex.y << std::endl;
+	}
+
+	for (unsigned int i = 0; i < _indices.size(); i += 3) {
+		file << "f " << _indices[i] + 1 << " "
+			<< _indices[i + 1] + 1 << " "
+			<< _indices[i + 2] + 1 << std::endl;
+	}
+}
+
+////////////////////
+// Mesh factories //
+////////////////////
 
 Mesh Mesh::make_box(const glm::vec3 &center, const glm::vec3 &dim)
 {

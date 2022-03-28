@@ -29,13 +29,16 @@ protected:
 	void _process_node(aiNode *, const aiScene *);
 	void _process_mesh(aiMesh *, const aiScene *);
 public:
+	// Default constructor
+	Model() = default;
+
 	// Constructors
-	Model();
 	Model(const char *s);
 	Model(const std::string &);
 
 	// Properties
 	size_t mesh_count() const;
+	const std::string &filename() const;
 
 	Mesh &operator[](size_t);
 	const Mesh &operator[](size_t) const;

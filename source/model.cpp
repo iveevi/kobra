@@ -2,7 +2,10 @@
 
 namespace kobra {
 
-// Assimp helpers
+////////////////////
+// Assimp helpers //
+////////////////////
+
 void Model::_process_node(aiNode *node, const aiScene *scene)
 {
 	// Process all the node's meshes (if any)
@@ -65,11 +68,17 @@ void Model::_process_mesh(aiMesh *mesh, const aiScene *scene)
 	}
 
 	// TODO: ignoring materials right now
-	_meshes.push_back(Mesh (vertices, indices));
+	Mesh kmesh(vertices, indices);
+	kmesh._source = _filename;
+	kmesh._source_index = _meshes.size();
+
+	_meshes.push_back(kmesh);
 }
 
-// Constructors
-Model::Model() {}
+//////////////////
+// Constructors //
+//////////////////
+
 Model::Model(const char *path) : Model(std::string(path)) {}
 
 Model::Model(const std::string &filename) : _filename(filename)
@@ -102,10 +111,18 @@ Model::Model(const std::string &filename) : _filename(filename)
 	_process_node(scene->mRootNode, scene);
 }
 
-// Properties
+////////////////
+// Properties //
+////////////////
+
 size_t Model::mesh_count() const
 {
 	return _meshes.size();
+}
+
+const std::string &Model::filename() const
+{
+	return _filename;
 }
 
 Mesh &Model::operator[](size_t i)

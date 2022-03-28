@@ -9,12 +9,13 @@ definitions:
     thirdparty/imgui/imgui_tables.cpp,
     thirdparty/imgui/backends/imgui_impl_glfw.cpp,
     thirdparty/imgui/backends/imgui_impl_vulkan.cpp'
-  - kobra_source: 'source/vulkan.cpp,
-    source/model.cpp,
-    source/mesh.cpp,
+  - kobra_source: 'source/capture.cpp,
     source/logger.cpp,
-    source/capture.cpp,
+    source/mesh.cpp,
+    source/model.cpp,
+    source/scene.cpp,
     source/texture.cpp,
+    source/vulkan.cpp,
     source/gui/text.cpp,
     source/io/event.cpp'
 

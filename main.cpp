@@ -10,18 +10,54 @@
 // Local headers
 #include "include/logger.hpp"
 #include "include/model.hpp"
-#include "include/vertex.hpp"
-#include "include/raster/mesh.hpp"
 #include "include/raster/layer.hpp"
+#include "include/raster/mesh.hpp"
+#include "include/scene.hpp"
+#include "include/vertex.hpp"
 #include "profiler.hpp"
-
-#include <glm/gtx/rotate_vector.hpp>
 
 using namespace kobra;
 
 // Rasterization app
 class RasterApp : public BaseApp {
 	raster::Layer layer;
+
+	static void mouse_movement(void *user, const io::MouseEvent &event) {
+		static const float sensitivity = 0.001f;
+
+		static bool first_movement = true;
+
+		static float px = 0.0f;
+		static float py = 0.0f;
+
+		static float yaw = 0.0f;
+		static float pitch = 0.0f;
+
+		float dx = event.xpos - px;
+		float dy = event.ypos - py;
+
+		px = event.xpos;
+		py = event.ypos;
+		if (first_movement) {
+			first_movement = false;
+			return;
+		}
+
+		Camera *camera = (Camera *) user;
+
+		yaw -= dx * sensitivity;
+		pitch -= dy * sensitivity;
+
+		if (pitch > 89.0f)
+			pitch = 89.0f;
+		if (pitch < -89.0f)
+			pitch = -89.0f;
+
+		camera->transform.rotation.x = pitch;
+		camera->transform.rotation.y = yaw;
+	}
+
+	Scene scene;
 public:
 	RasterApp(Vulkan *vk) : BaseApp({
 		vk,
@@ -72,65 +108,38 @@ public:
 		};
 
 		layer = raster::Layer(window, camera, VK_ATTACHMENT_LOAD_OP_CLEAR);
-		// layer.add(mesh1);
+		layer.add(mesh1);
 		layer.add(mesh2);
-		// layer.add(mesh3);
+		layer.add(mesh3);
 		layer.add(mesh4);
 		layer.add(mesh5);
 		layer.add(mesh6);
 		layer.add(mesh7);
 
-		auto mouse_movement = [&](void *user, const io::MouseEvent &event) {
-			static const float sensitivity = 0.001f;
+		scene = Scene({
+			mesh1,
+			mesh2,
+			mesh3,
+			mesh4,
+			mesh5,
+			mesh6,
+			mesh7
+		});
 
-			static bool first_movement = true;
+		scene.save("scene.kobra");
 
-			static float px = 0.0f;
-			static float py = 0.0f;
-
-			static float yaw = 0.0f;
-			static float pitch = 0.0f;
-
-			float dx = event.xpos - px;
-			float dy = event.ypos - py;
-
-			px = event.xpos;
-			py = event.ypos;
-			if (first_movement) {
-				first_movement = false;
-				return;
-			}
-
-			Camera *camera = (Camera *) user;
-
-			yaw -= dx * sensitivity;
-			pitch -= dy * sensitivity;
-
-			if (pitch > 89.0f)
-				pitch = 89.0f;
-			if (pitch < -89.0f)
-				pitch = -89.0f;
-
-			camera->transform.rotation.x = pitch;
-			camera->transform.rotation.y = yaw;
-		};
-
-		// Add to event handlers
+		// Input callbacks
 		window.mouse_events->subscribe(mouse_movement, &layer.camera());
-
-		// Disable cursor
 		window.cursor_mode(GLFW_CURSOR_DISABLED);
 	}
 
 	// Override record method
 	void record(const VkCommandBuffer &cmd, const VkFramebuffer &framebuffer) override {
-		static float time = 0.0f;
-
 		// Start recording command buffer
 		Vulkan::begin(cmd);
 
 		// WASDEQ movement
-		float speed = 0.025f;
+		float speed = 20.0f * frame_time;
 
 		glm::vec3 forward = layer.camera().transform.forward();
 		glm::vec3 right = layer.camera().transform.right();
@@ -156,9 +165,6 @@ public:
 
 		// End recording command buffer
 		Vulkan::end(cmd);
-
-		// Progress time
-		time += frame_time;
 	}
 
 	// Termination method
@@ -171,35 +177,9 @@ public:
 
 int main()
 {
-	// Redirect logger to file
-	// Logger::switch_file("kobra.log");
-
-	std::string bunny_obj = "resources/benchmark/bunny_res_1.ply";
-	Model model(bunny_obj);
-	Logger::ok("Model loaded");
-
-	// Initialize Vulkan
 	Vulkan *vulkan = new Vulkan();
-
-	// Create and launch profiler app
 	Profiler *pf = new Profiler();
-	// ProfilerApplication app {vulkan, pf};
-	/* std::thread thread {
-		[&]() { app.run(); }
-	}; */
-
-	// Create and launch raster app
 	RasterApp raster_app {vulkan};
-	/* std::thread raster_thread {
-		[&]() { raster_app.run(); }
-	}; */
-
 	raster_app.run();
-
-
-	// Wait for all to finish
-	// thread.join();
-	// raster_thread.join();
-
 	delete vulkan;
 }

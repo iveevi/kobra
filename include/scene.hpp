@@ -4,51 +4,30 @@
 // Standard headers
 #include <fstream>
 #include <string>
+#include <vector>
 
 // Engine headers
 #include "logger.hpp"
-#include "world.hpp"
+#include "object.hpp"
 
 namespace kobra {
 
-// Scene
-//	will eventually take care of
-//	more than just loading and
-//	saving the world
+// Scene stores objects
 class Scene {
-	// For now only contains name and world
-	std::string		_name;
-
-	rt::World	_world;
+	std::vector <ObjectPtr> _objects;
 public:
-	// Constructor
-	Scene();
-	Scene(const std::string &str, const rt::World &w)
-			: _name(str), _world(w) {}	// TODO: remove
+	// Default constructor
+	Scene() = default;
 
-	// Save to file
-	void save(const std::string &filename) const {
-		// Open the file
-		std::ofstream file(filename);
+	// Constructor from file
+	Scene(const std::string &);
 
-		// Check if the file is open
-		if (!file.is_open()) {
-			Logger::error() << "Failed to open file: "
-				<< filename << "\n";
-			return;
-		}
+	// Constructor from list of objects
+	Scene(const std::vector <Object *> &);
+	Scene(const std::vector <ObjectPtr> &);
 
-		// Write name as header
-		file << "===[SCENE: " << _name << "]===\n";
-
-		// Iterate through each object
-		for (const auto &prim : _world.objects)
-			prim->save_to_file(file);
-
-		// Log
-		Logger::ok() << "Successfully saved scene \"" << _name
-			<< "\" to file: " << filename << "\n";
-	}
+	// Save objects to file
+	void save(const std::string &) const;
 };
 
 }
