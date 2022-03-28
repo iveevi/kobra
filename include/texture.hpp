@@ -185,6 +185,7 @@ struct TexturePacket {
 };
 
 // Create Vulkan image
+// TODO: turn into a constructor
 inline TexturePacket make_image(const Vulkan::Context &ctx,
 		const Texture &texture,
 		const VkFormat &fmt,
@@ -321,7 +322,8 @@ inline VkSampler make_sampler(const Vulkan::Context &ctx,
 // Create image view
 inline VkImageView make_image_view(const Vulkan::Context &ctx,
 		const TexturePacket &packet,
-		const VkImageViewType &view_type)
+		const VkImageViewType &view_type,
+		const VkImageAspectFlags &aspect_flags)
 {
 	VkImageViewCreateInfo view_info {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -335,7 +337,7 @@ inline VkImageView make_image_view(const Vulkan::Context &ctx,
 			.a = VK_COMPONENT_SWIZZLE_IDENTITY
 		},
 		.subresourceRange = {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.aspectMask = aspect_flags,
 			.baseMipLevel = 0,
 			.levelCount = 1,
 			.baseArrayLayer = 0,
@@ -398,11 +400,13 @@ struct Sampler {
 
 	// Constructors
 	Sampler() = default;
-	Sampler(const Vulkan::Context &ctx, const TexturePacket &packet) {
+	Sampler(const Vulkan::Context &ctx, const TexturePacket &packet,
+			const VkImageAspectFlags &aspect_flags = VK_IMAGE_ASPECT_COLOR_BIT) {
 		view = make_image_view(
 			ctx,
 			packet,
-			VK_IMAGE_VIEW_TYPE_2D
+			VK_IMAGE_VIEW_TYPE_2D,
+			aspect_flags
 		);
 
 		sampler = make_sampler(ctx,

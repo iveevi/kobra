@@ -38,10 +38,12 @@ class Layer {
 	void _initialize_vulkan_structures(const VkAttachmentLoadOp load) {
 		// Create render pass
 		_render_pass = _wctx.context.vk->make_render_pass(
+			_wctx.context.phdev,
 			_wctx.context.device,
 			_wctx.swapchain,
 			load,
-			VK_ATTACHMENT_STORE_OP_STORE
+			VK_ATTACHMENT_STORE_OP_STORE,
+			true
 		);
 
 		// Load necessary shader modules
@@ -114,8 +116,11 @@ public:
 				" been yet been initialized\n";
 		}
 
-		// Start render pass
-		VkClearValue clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
+		// Start render pass (clear both color and depth)
+		VkClearValue clear_colors[] = {
+			{.color = {0.0f, 0.0f, 0.0f, 1.0f}},
+			{.depthStencil = {1.0f, 0}}
+		};
 
 		VkRenderPassBeginInfo render_pass_info {
 			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -125,8 +130,8 @@ public:
 				.offset = {0, 0},
 				.extent = _wctx.swapchain.extent
 			},
-			.clearValueCount = 1,
-			.pClearValues = &clear_color
+			.clearValueCount = 2,
+			.pClearValues = clear_colors
 		};
 
 		vkCmdBeginRenderPass(cmd_buffer,

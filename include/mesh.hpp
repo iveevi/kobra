@@ -52,6 +52,10 @@ public:
 	} */
 
 	// TODO: override save method
+
+
+	// Mesh factories
+	static Mesh make_box(const glm::vec3 &, const glm::vec3 &);
 };
 
 // Mesh for raytracing

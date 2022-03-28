@@ -4,6 +4,8 @@
 #include <thread>
 
 #define KOBRA_VALIDATION_LAYERS
+#define KOBRA_ERROR_ONLY
+#define KOBRA_THROW_ERROR
 
 // Local headers
 #include "include/logger.hpp"
@@ -25,66 +27,12 @@ class RasterApp : public BaseApp {
 	glm::vec3 forward	{ 0.0f, 0.0f, 1.0f };
 	glm::vec3 up		{ 0.0f, 1.0f, 0.0f };
 	glm::vec3 right		{ 1.0f, 0.0f, 0.0f };
-
-	// Create a cube mesh
-	Mesh make_box(const glm::vec3 &center, float x, float y, float z) {
-		// All 24 vertices, with correct normals
-		VertexList vertices {
-			// Front
-			Vertex {{ center.x - x, center.y - y, center.z + z }, { 0.0f, 0.0f, 1.0f }},
-			Vertex {{ center.x + x, center.y - y, center.z + z }, { 0.0f, 0.0f, 1.0f }},
-			Vertex {{ center.x + x, center.y + y, center.z + z }, { 0.0f, 0.0f, 1.0f }},
-			Vertex {{ center.x - x, center.y + y, center.z + z }, { 0.0f, 0.0f, 1.0f }},
-
-			// Back
-			Vertex {{ center.x - x, center.y - y, center.z - z }, { 0.0f, 0.0f, -1.0f }},
-			Vertex {{ center.x + x, center.y - y, center.z - z }, { 0.0f, 0.0f, -1.0f }},
-			Vertex {{ center.x + x, center.y + y, center.z - z }, { 0.0f, 0.0f, -1.0f }},
-			Vertex {{ center.x - x, center.y + y, center.z - z }, { 0.0f, 0.0f, -1.0f }},
-
-			// Left
-			Vertex {{ center.x - x, center.y - y, center.z + z }, { -1.0f, 0.0f, 0.0f }},
-			Vertex {{ center.x - x, center.y - y, center.z - z }, { -1.0f, 0.0f, 0.0f }},
-			Vertex {{ center.x - x, center.y + y, center.z - z }, { -1.0f, 0.0f, 0.0f }},
-			Vertex {{ center.x - x, center.y + y, center.z + z }, { -1.0f, 0.0f, 0.0f }},
-
-			// Right
-			Vertex {{ center.x + x, center.y - y, center.z + z }, { 1.0f, 0.0f, 0.0f }},
-			Vertex {{ center.x + x, center.y - y, center.z - z }, { 1.0f, 0.0f, 0.0f }},
-			Vertex {{ center.x + x, center.y + y, center.z - z }, { 1.0f, 0.0f, 0.0f }},
-			Vertex {{ center.x + x, center.y + y, center.z + z }, { 1.0f, 0.0f, 0.0f }},
-
-			// Top
-			Vertex {{ center.x - x, center.y + y, center.z + z }, { 0.0f, 1.0f, 0.0f }},
-			Vertex {{ center.x + x, center.y + y, center.z + z }, { 0.0f, 1.0f, 0.0f }},
-			Vertex {{ center.x + x, center.y + y, center.z - z }, { 0.0f, 1.0f, 0.0f }},
-			Vertex {{ center.x - x, center.y + y, center.z - z }, { 0.0f, 1.0f, 0.0f }},
-
-			// Bottom
-			Vertex {{ center.x - x, center.y - y, center.z + z }, { 0.0f, -1.0f, 0.0f }},
-			Vertex {{ center.x + x, center.y - y, center.z + z }, { 0.0f, -1.0f, 0.0f }},
-			Vertex {{ center.x + x, center.y - y, center.z - z }, { 0.0f, -1.0f, 0.0f }},
-			Vertex {{ center.x - x, center.y - y, center.z - z }, { 0.0f, -1.0f, 0.0f }}
-		};
-
-		// All 36 indices
-		IndexList indices {
-			0, 1, 2,	2, 3, 0,	// Front
-			4, 5, 6,	6, 7, 4,	// Back
-			8, 9, 10,	10, 11, 8,	// Left
-			12, 13, 14,	14, 15, 12,	// Right
-			16, 17, 18,	18, 19, 16,	// Top
-			20, 21, 22,	22, 23, 20	// Bottom
-		};
-
-		return Mesh { vertices, indices };
-	}
 public:
 	RasterApp(Vulkan *vk) : BaseApp({
 		vk,
 		800, 800, 2,
 		"Rasterization"
-	}) {
+	}, true) {
 		// Load meshes
 		Model model1("resources/benchmark/bunny_res_1.ply");
 		Model model2("resources/benchmark/suzanne.obj");
@@ -100,7 +48,7 @@ public:
 			0, 2, 3
 		});
 
-		Mesh cube = make_box({0, 0, 0}, 1, 1.2, 1.2);
+		Mesh cube = Mesh::make_box({0, 0, 0}, {1, 1.2, 1.2});
 
 		raster::Mesh *mesh1 = new raster::Mesh(window.context, model1[0]);
 		raster::Mesh *mesh2 = new raster::Mesh(window.context, model2[0]);
@@ -125,7 +73,7 @@ public:
 		// Initialize layer
 		Camera camera {
 			Transform { position },
-			Tunings { 45.0f, 800, 600 }
+			Tunings { 45.0f, 800, 800 }
 		};
 
 		layer = raster::Layer(window, camera, VK_ATTACHMENT_LOAD_OP_CLEAR);
@@ -211,11 +159,12 @@ public:
 		// Print camera matrix
 		auto mat = layer.camera().transform.matrix();
 		mat = glm::transpose(mat);
-		std::cout << "\nCamera matrix:\n";
+		
+		/* std::cout << "\nCamera matrix:\n";
 		std::cout << mat[0][0] << ", " << mat[0][1] << ", " << mat[0][2] << ", " << mat[0][3] << std::endl;
 		std::cout << mat[1][0] << ", " << mat[1][1] << ", " << mat[1][2] << ", " << mat[1][3] << std::endl;
 		std::cout << mat[2][0] << ", " << mat[2][1] << ", " << mat[2][2] << ", " << mat[2][3] << std::endl;
-		std::cout << mat[3][0] << ", " << mat[3][1] << ", " << mat[3][2] << ", " << mat[3][3] << std::endl;
+		std::cout << mat[3][0] << ", " << mat[3][1] << ", " << mat[3][2] << ", " << mat[3][3] << std::endl; */
 
 		// Record commands
 		layer.render(cmd, framebuffer);

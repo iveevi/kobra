@@ -47,6 +47,7 @@ class Layer {
 	void _init_vulkan_structures(VkAttachmentLoadOp load) {
 		// Create render pass
 		_render_pass = _wctx.context.vk->make_render_pass(
+			_wctx.context.phdev,
 			_wctx.context.device,
 			_wctx.swapchain,
 			load,

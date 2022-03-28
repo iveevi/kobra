@@ -23,7 +23,7 @@ void main()
 	// Transform vertex position by model, view and projection matrices
 	gl_Position = mvp * vec4(position, 1.0);
 	gl_Position.y = -gl_Position.y;
-	gl_Position.z = (gl_Position.z + gl_Position.w) / 2.0;
+	// gl_Position.z = (gl_Position.z + gl_Position.w) / 2.0;
 
 	// Output necessary info
 	color		= vec4(1.0, 0.0, 0.0, 1.0);

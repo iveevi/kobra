@@ -11,6 +11,7 @@ definitions:
     thirdparty/imgui/backends/imgui_impl_vulkan.cpp'
   - kobra_source: 'source/vulkan.cpp,
     source/model.cpp,
+    source/mesh.cpp,
     source/logger.cpp,
     source/capture.cpp,
     source/texture.cpp,

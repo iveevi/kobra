@@ -5,6 +5,7 @@
 #include <iostream>
 
 // GLM headers
+#define GLM_PERSPECTIVE_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 

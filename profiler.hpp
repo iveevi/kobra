@@ -44,6 +44,7 @@ public:
 	}), profiler(p) {
 		// Create render pass
 		render_pass = context.vk->make_render_pass(
+			context.phdev,
 			context.device,
 			swapchain,
 			VK_ATTACHMENT_LOAD_OP_CLEAR,

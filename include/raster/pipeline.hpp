@@ -4,6 +4,9 @@
 // Engine headers
 #include "mesh.hpp"
 #include "../app.hpp"
+#include "../texture.hpp"
+
+// TODO: move the contents in this file to layer class
 
 namespace kobra {
 
@@ -39,6 +42,8 @@ inline Vulkan::Pipeline make_pipeline(const App::Window &wctx,
 
 		.push_consts = 1,
 		.push_consts_range = &pcr,
+
+		.depth_test = true,
 
 		.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
 

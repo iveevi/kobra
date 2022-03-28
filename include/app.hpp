@@ -3,8 +3,9 @@
 
 // Engine headers
 #include "backend.hpp"
-#include "timer.hpp"
 #include "coords.hpp"
+#include "texture.hpp"
+#include "timer.hpp"
 #include "io/event.hpp"
 #include "io/input.hpp"
 
@@ -170,18 +171,50 @@ class BaseApp : public App {
 
 	std::vector <VkSemaphore>	smph_image_available;
 	std::vector <VkSemaphore>	smph_render_finished;
+
+	// Depth resources
+	VkImage 			depth_image;
+	VkDeviceMemory			depth_image_memory;
+	VkImageView			depth_image_view;
 public:
-	BaseApp(const Info &info) : App(info) {
+	BaseApp(const Info &info, bool depth_testing = false) : App(info) {
 		// Create render pass
+		// TODO: context method
 		render_pass = context.vk->make_render_pass(
+			context.phdev,
 			context.device,
 			swapchain,
 			VK_ATTACHMENT_LOAD_OP_CLEAR,
-			VK_ATTACHMENT_STORE_OP_STORE
+			VK_ATTACHMENT_STORE_OP_STORE,
+			depth_testing
 		);
 
+		std::vector <VkImageView> extras;
+		if (depth_testing) {
+			// Create depth image
+			VkFormat depth_format = context.find_depth_format();
+			context.vk->make_image(context.phdev, context.vk_device(),
+				width, height, depth_format,
+				VK_IMAGE_TILING_OPTIMAL,
+				VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				depth_image, depth_image_memory
+			);
+
+			// Create depth image view
+			depth_image_view = context.vk->make_image_view(
+				context.vk_device(),
+				depth_image, depth_format,
+				VK_IMAGE_ASPECT_DEPTH_BIT
+			);
+
+			extras.push_back(depth_image_view);
+		}
+
 		// Create framebuffers
-		context.vk->make_framebuffers(context.device, swapchain, render_pass);
+		context.vk->make_framebuffers(context.device,
+			swapchain, render_pass, extras
+		);
 
 		// Create command pool
 		// TODO: context method

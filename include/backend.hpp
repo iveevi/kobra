@@ -105,6 +105,8 @@ public:
 		size_t					push_consts;
 		VkPushConstantRange *			push_consts_range;
 
+		bool					depth_test;
+
 		VkPrimitiveTopology			topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
 		struct {
@@ -143,6 +145,14 @@ public:
 				modules.push_back(make_shader(path));
 			return modules;
 		}
+
+		// Get supported formats
+		VkFormat find_supported_format(const std::vector <VkFormat> &,
+				const VkImageTiling &,
+				const VkFormatFeatureFlags &) const;
+
+		// Get supported depth format
+		VkFormat find_depth_format() const;
 
 		// Create a graphics pipeline
 		Pipeline make_pipeline(const PipelineInfo &info) const {
@@ -296,6 +306,23 @@ public:
 				.basePipelineHandle = VK_NULL_HANDLE,
 				.basePipelineIndex = -1
 			};
+
+			// Depth stencil if requested
+			VkPipelineDepthStencilStateCreateInfo depth_stencil {
+				.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+				.depthTestEnable = VK_TRUE,
+				.depthWriteEnable = VK_TRUE,
+				.depthCompareOp = VK_COMPARE_OP_LESS,
+				.depthBoundsTestEnable = VK_FALSE,
+				.stencilTestEnable = VK_FALSE,
+				.front = {},
+				.back = {},
+				.minDepthBounds = 0.0f,
+				.maxDepthBounds = 1.0f
+			};
+
+			if (info.depth_test)
+				pipeline_info.pDepthStencilState = &depth_stencil;
 
 			VkPipeline pipeline;
 			result = vkCreateGraphicsPipelines(
@@ -674,6 +701,15 @@ private:
 		return extensions;
 	}
 
+	// Get supported formats
+	VkFormat _find_supported_format(const VkPhysicalDevice &,
+			const std::vector <VkFormat> &,
+			const VkImageTiling &,
+			const VkFormatFeatureFlags &) const;
+
+	// Get supported depth format
+	VkFormat _find_depth_format(const VkPhysicalDevice &) const;
+
 	////////////////////
 	// Shader modules //
 	////////////////////
@@ -900,7 +936,7 @@ public:
 
 		// Create render pass
 		context.render_pass = make_render_pass(
-			device, swapchain,
+			phdev, device, swapchain,
 			VK_ATTACHMENT_LOAD_OP_LOAD,
 			VK_ATTACHMENT_STORE_OP_STORE
 		);
@@ -1017,7 +1053,69 @@ public:
 	}
 
 	// TODO: pop deletion tasks
+	
+	// Create an image
+	void make_image(const VkPhysicalDevice &phdev, const VkDevice &device,
+			uint32_t width, uint32_t height,
+			VkFormat format, VkImageTiling tiling,
+			VkImageUsageFlags usage, VkMemoryPropertyFlags properties,
+			VkImage &image, VkDeviceMemory &imageMemory) {
+		VkImageCreateInfo imageInfo{};
+		imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		imageInfo.imageType = VK_IMAGE_TYPE_2D;
+		imageInfo.extent.width = width;
+		imageInfo.extent.height = height;
+		imageInfo.extent.depth = 1;
+		imageInfo.mipLevels = 1;
+		imageInfo.arrayLayers = 1;
+		imageInfo.format = format;
+		imageInfo.tiling = tiling;
+		imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		imageInfo.usage = usage;
+		imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+		imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
+		if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create image!");
+		}
+
+		VkMemoryRequirements memRequirements;
+		vkGetImageMemoryRequirements(device, image, &memRequirements);
+
+		VkMemoryAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		allocInfo.allocationSize = memRequirements.size;
+		allocInfo.memoryTypeIndex = find_memory_type(phdev, memRequirements.memoryTypeBits, properties);
+
+		if (vkAllocateMemory(device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
+			throw std::runtime_error("failed to allocate image memory!");
+		}
+
+		vkBindImageMemory(device, image, imageMemory, 0);
+	}
+
+	// Create an image view
+	VkImageView make_image_view(const VkDevice &device,
+			VkImage image, VkFormat format,
+			VkImageAspectFlags aspectFlags) {
+		VkImageViewCreateInfo viewInfo{};
+		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		viewInfo.image = image;
+		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		viewInfo.format = format;
+		viewInfo.subresourceRange.aspectMask = aspectFlags;
+		viewInfo.subresourceRange.baseMipLevel = 0;
+		viewInfo.subresourceRange.levelCount = 1;
+		viewInfo.subresourceRange.baseArrayLayer = 0;
+		viewInfo.subresourceRange.layerCount = 1;
+
+		VkImageView imageView;
+		if (vkCreateImageView(device, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create texture image view!");
+		}
+
+		return imageView;
+	}
 
 	// Single use command buffers
 	static VkCommandBuffer begin_single_time_commands(const Context &ctx, const VkCommandPool &pool)
@@ -1260,10 +1358,12 @@ public:
 	}
 
 	// Create a render pass
-	VkRenderPass make_render_pass(const Device &device,
+	VkRenderPass make_render_pass(const VkPhysicalDevice &phdev,
+		const Device &device,
 		const Swapchain &swch,
 		VkAttachmentLoadOp,
 		VkAttachmentStoreOp,
+		bool = false,
 		VkImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
 		VkImageLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) const;
 
@@ -1381,7 +1481,8 @@ public:
 
 	// Create a swapchain and related functions
 	Swapchain make_swapchain(const VkPhysicalDevice &, const Device &device, const Surface &);
-	void make_framebuffers(const Device &, Swapchain &, VkRenderPass) const;
+	void make_framebuffers(const Device &, Swapchain &, VkRenderPass,
+			const std::vector <VkImageView> & = {}) const;
 
 	// Create a descriptor pool
 	// TODO: pass sizes (and a default) in a struct

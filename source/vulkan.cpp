@@ -1,4 +1,5 @@
 #include "../include/backend.hpp"
+#include <vulkan/vulkan_core.h>
 
 // Static member variables
 const std::vector <const char *> Vulkan::device_extensions = {
@@ -9,9 +10,61 @@ const std::vector <const char *> Vulkan::validation_layers = {
 	"VK_LAYER_KHRONOS_validation"
 };
 
-////////////////////
-// Public methods //
-////////////////////
+/////////////////////
+// Context methods //
+/////////////////////
+
+VkFormat Vulkan::Context::find_supported_format(const std::vector <VkFormat> &candidates,
+		const VkImageTiling &tiling,
+		const VkFormatFeatureFlags &features) const
+{
+	return vk->_find_supported_format(phdev,
+		candidates, tiling, features
+	);
+}
+
+VkFormat Vulkan::Context::find_depth_format() const
+{
+	return vk->_find_depth_format(phdev);
+}
+
+////////////////////////////
+// Private Vulkan methods //
+////////////////////////////
+
+VkFormat Vulkan::_find_supported_format(const VkPhysicalDevice &phdev,
+		const std::vector <VkFormat> &candidates,
+		const VkImageTiling &tiling,
+		const VkFormatFeatureFlags &features) const
+{
+	for (VkFormat format : candidates) {
+		VkFormatProperties props;
+		vkGetPhysicalDeviceFormatProperties(phdev, format, &props);
+
+		if (tiling == VK_IMAGE_TILING_LINEAR
+				&& (props.linearTilingFeatures & features) == features)
+			return format;
+		else if (tiling == VK_IMAGE_TILING_OPTIMAL
+				&& (props.optimalTilingFeatures & features) == features)
+			return format;
+	}
+
+	KOBRA_LOG_FUNC(error) << "Failed to find supported format!\n";
+	throw int(-1);
+}
+
+VkFormat Vulkan::_find_depth_format(const VkPhysicalDevice &phdev) const
+{
+	return _find_supported_format(phdev,
+		{VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT},
+		VK_IMAGE_TILING_OPTIMAL,
+		VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
+	);
+}
+
+///////////////////////////
+// Public Vulkan methods //
+///////////////////////////
 
 // TODO: move imgui init stuff here
 
@@ -126,6 +179,7 @@ void Vulkan::_make_image_views(const Device &device, Swapchain &swch) const
 	// Fill with new image views
 	for (size_t i = 0; i < swch.images.size(); i++) {
 		// Creation info
+		// TODO: make a method for this
 		VkImageViewCreateInfo create_info {
 			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
 			.image = swch.images[i],
@@ -160,7 +214,8 @@ void Vulkan::_make_image_views(const Device &device, Swapchain &swch) const
 }
 
 // Create framebuffers
-void Vulkan::make_framebuffers(const Device &device, Swapchain &swch, VkRenderPass rpass) const
+void Vulkan::make_framebuffers(const Device &device, Swapchain &swch, VkRenderPass rpass,
+		const std::vector <VkImageView> &extras) const
 {
 	// Resize first
 	swch.framebuffers.resize(swch.image_views.size());
@@ -168,16 +223,19 @@ void Vulkan::make_framebuffers(const Device &device, Swapchain &swch, VkRenderPa
 	// Fill with new framebuffers
 	for (size_t i = 0; i < swch.image_views.size(); i++) {
 		// Arrange attachments
-		VkImageView attachments[] = {
+		std::vector <VkImageView> attachments = {
 			swch.image_views[i]
 		};
+
+		// Add extras
+		attachments.insert(attachments.end(), extras.begin(), extras.end());
 
 		// Create framebuffer
 		VkFramebufferCreateInfo framebuffer_info {
 			.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
 			.renderPass = rpass,
-			.attachmentCount = 1,
-			.pAttachments = attachments,
+			.attachmentCount = static_cast <uint32_t> (attachments.size()),
+			.pAttachments = attachments.data(),
 			.width = swch.extent.width,
 			.height = swch.extent.height,
 			.layers = 1
@@ -193,6 +251,11 @@ void Vulkan::make_framebuffers(const Device &device, Swapchain &swch, VkRenderPa
 			Logger::error("[Vulkan] Failed to create framebuffer!");
 			throw(-1);
 		}
+
+		// Log creation
+		KOBRA_LOG_FUNC(ok) << "[Vulkan] Framebuffer created (VkFramebuffer="
+			<< swch.framebuffers[i] << ", #attachments="
+			<< (extras.size() + 1) << ")\n";
 	}
 }
 
@@ -300,10 +363,13 @@ Vulkan::Swapchain Vulkan::make_swapchain(
 /////////////////////////
 
 // Create render pass
-VkRenderPass Vulkan::make_render_pass(const Device &device,
+// TODO: struct to pass into this function
+VkRenderPass Vulkan::make_render_pass(const VkPhysicalDevice &phdev,
+		const Device &device,
 		const Swapchain &swch,
 		VkAttachmentLoadOp load_op,
 		VkAttachmentStoreOp store_op,
+		bool depth_attachment,
 		VkImageLayout initial_layout,
 		VkImageLayout final_layout) const
 {
@@ -332,8 +398,34 @@ VkRenderPass Vulkan::make_render_pass(const Device &device,
 	VkSubpassDescription subpass {
 		.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
 		.colorAttachmentCount = 1,
-		.pColorAttachments = &color_attachment_ref
+		.pColorAttachments = &color_attachment_ref,
+		.pDepthStencilAttachment = VK_NULL_HANDLE
 	};
+
+	// List of attachments
+	std::vector <VkAttachmentDescription> attachments {color_attachment};
+
+	// Depth attachment description if requested
+	VkAttachmentReference depth_attachment_ref {
+		.attachment = 1,
+		.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+	};
+
+	if (depth_attachment) {
+		VkAttachmentDescription depth_attachment {
+			.format = _find_depth_format(phdev),
+			.samples = VK_SAMPLE_COUNT_1_BIT,
+			.loadOp = load_op,
+			.storeOp = store_op,
+			.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+			.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+			.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+			.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+		};
+
+		attachments.push_back(depth_attachment);
+		subpass.pDepthStencilAttachment = &depth_attachment_ref;
+	}
 
 	VkSubpassDependency dependency {
 		.srcSubpass = VK_SUBPASS_EXTERNAL,
@@ -345,11 +437,21 @@ VkRenderPass Vulkan::make_render_pass(const Device &device,
 			| VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
 	};
 
+	// Modify dependency if depth attachment
+	if (depth_attachment) {
+		dependency.srcStageMask |= VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
+			| VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+		dependency.dstStageMask |= VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
+			| VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+		dependency.dstAccessMask |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
+			| VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+	}
+
 	// Create render pass
 	VkRenderPassCreateInfo render_pass_info {
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-		.attachmentCount = 1,
-		.pAttachments = &color_attachment,
+		.attachmentCount = static_cast <uint32_t> (attachments.size()),
+		.pAttachments = attachments.data(),
 		.subpassCount = 1,
 		.pSubpasses = &subpass,
 		.dependencyCount = 1,
@@ -362,13 +464,14 @@ VkRenderPass Vulkan::make_render_pass(const Device &device,
 	);
 
 	if (result != VK_SUCCESS) {
-		Logger::error("[Vulkan] Failed to create render pass!");
-		throw(-1);
+		KOBRA_LOG_FUNC(ok) << "Failed to create render pass!\n";
+		throw int(-1);
 	}
 
 	// Log creation
-	Logger::ok() << "[Vulkan] Render pass created (VkRenderPass="
-		<< new_render_pass << ")\n";
+	KOBRA_LOG_FUNC(ok) << "Render pass created (VkRenderPass="
+		<< new_render_pass << ", #attachments="
+		<< attachments.size() << ")\n";
 
 	return new_render_pass;
 }
