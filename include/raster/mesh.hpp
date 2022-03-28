@@ -49,7 +49,8 @@ public:
 	// MVP structure
 	struct MVP {
 		glm::mat4 model;
-		glm::mat4 mvp;
+		glm::mat4 view;
+		glm::mat4 projection;
 	};
 
 	// Render
@@ -57,7 +58,8 @@ public:
 		// Get the MVP
 		MVP mvp {
 			_transform.matrix(),
-			rp.proj * rp.view * _transform.matrix()
+			rp.view,
+			rp.proj
 		};
 
 		// Bind vertex buffer

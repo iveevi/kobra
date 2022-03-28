@@ -22,11 +22,6 @@ using namespace kobra;
 // Rasterization app
 class RasterApp : public BaseApp {
 	raster::Layer layer;
-
-	glm::vec3 position	{ 0.0f, 0.0f, -4.0f };
-	glm::vec3 forward	{ 0.0f, 0.0f, 1.0f };
-	glm::vec3 up		{ 0.0f, 1.0f, 0.0f };
-	glm::vec3 right		{ 1.0f, 0.0f, 0.0f };
 public:
 	RasterApp(Vulkan *vk) : BaseApp({
 		vk,
@@ -72,7 +67,7 @@ public:
 
 		// Initialize layer
 		Camera camera {
-			Transform { position },
+			Transform { {0, 0, 4} },
 			Tunings { 45.0f, 800, 800 }
 		};
 
@@ -86,14 +81,14 @@ public:
 		layer.add(mesh7);
 
 		auto mouse_movement = [&](void *user, const io::MouseEvent &event) {
-			static const float sensitivity = 0.01f;
+			static const float sensitivity = 0.001f;
 
 			static bool first_movement = true;
 
 			static float px = 0.0f;
 			static float py = 0.0f;
 
-			static float yaw = M_PI/2;
+			static float yaw = 0.0f;
 			static float pitch = 0.0f;
 
 			float dx = event.xpos - px;
@@ -108,8 +103,8 @@ public:
 
 			Camera *camera = (Camera *) user;
 
-			yaw += dx * sensitivity;
-			pitch += dy * sensitivity;
+			yaw -= dx * sensitivity;
+			pitch -= dy * sensitivity;
 
 			if (pitch > 89.0f)
 				pitch = 89.0f;
@@ -118,8 +113,6 @@ public:
 
 			camera->transform.rotation.x = pitch;
 			camera->transform.rotation.y = yaw;
-
-			// std::cout << "Yaw: " << yaw << " Pitch: " << pitch << std::endl;
 		};
 
 		// Add to event handlers
@@ -137,34 +130,26 @@ public:
 		Vulkan::begin(cmd);
 
 		// WASDEQ movement
-		float speed = 0.01f;
+		float speed = 0.025f;
+
+		glm::vec3 forward = layer.camera().transform.forward();
+		glm::vec3 right = layer.camera().transform.right();
+		glm::vec3 up = layer.camera().transform.up();
+
 		if (input.is_key_down(GLFW_KEY_W))
-			position += forward * speed;
+			layer.camera().transform.move(forward * speed);
 		else if (input.is_key_down(GLFW_KEY_S))
-			position -= forward * speed;
+			layer.camera().transform.move(-forward * speed);
 
 		if (input.is_key_down(GLFW_KEY_A))
-			position += right * speed;
+			layer.camera().transform.move(-right * speed);
 		else if (input.is_key_down(GLFW_KEY_D))
-			position -= right * speed;
+			layer.camera().transform.move(right * speed);
 
 		if (input.is_key_down(GLFW_KEY_E))
-			position += up * speed;
+			layer.camera().transform.move(up * speed);
 		else if (input.is_key_down(GLFW_KEY_Q))
-			position -= up * speed;
-
-		// Keep looking at the center of the scene
-		layer.camera().transform.position = position;
-
-		// Print camera matrix
-		auto mat = layer.camera().transform.matrix();
-		mat = glm::transpose(mat);
-		
-		/* std::cout << "\nCamera matrix:\n";
-		std::cout << mat[0][0] << ", " << mat[0][1] << ", " << mat[0][2] << ", " << mat[0][3] << std::endl;
-		std::cout << mat[1][0] << ", " << mat[1][1] << ", " << mat[1][2] << ", " << mat[1][3] << std::endl;
-		std::cout << mat[2][0] << ", " << mat[2][1] << ", " << mat[2][2] << ", " << mat[2][3] << std::endl;
-		std::cout << mat[3][0] << ", " << mat[3][1] << ", " << mat[3][2] << ", " << mat[3][3] << std::endl; */
+			layer.camera().transform.move(-up * speed);
 
 		// Record commands
 		layer.render(cmd, framebuffer);

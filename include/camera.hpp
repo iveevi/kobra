@@ -32,6 +32,7 @@ public:
 };
 
 // Camera class
+// TODO: should be object type
 struct Camera {
         // Camera properties
         Tunings tunings;
@@ -43,6 +44,25 @@ struct Camera {
         Camera() {}
         Camera(const Transform& trans, const Tunings& tns)
                         : transform(trans), tunings(tns) {}
+
+	// Get view matrix
+	glm::mat4 view() const {
+		return glm::lookAt(
+			transform.position,
+			transform.position + transform.forward(),
+			transform.up()
+		);
+	};
+
+	// Get projection matrix
+	glm::mat4 perspective() const {
+		return glm::perspective(
+			glm::radians(tunings.fov),
+			tunings.aspect,
+			0.01f, 100.0f
+		);
+
+	}
 };
 
 }
