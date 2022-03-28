@@ -2,12 +2,12 @@
 
 // TODO: rename file
 
-#include "../include/types.hpp"
+#include "../../include/types.hpp"
 
-#include "ray.glsl"
-#include "intersect.glsl"
-#include "color.glsl"
-#include "bbox.glsl"
+#include "common/ray.glsl"
+#include "common/intersect.glsl"
+#include "common/color.glsl"
+#include "common/bbox.glsl"
 
 // TODO: replace version with command line argument
 
@@ -118,7 +118,7 @@ layout (set = 0, binding = 9, std430) buffer Transforms
 } transforms;
 
 // Texture module
-#include "textures.glsl"
+#include "common/textures.glsl"
 
 // Closest object information
 // TODO: this should be obslete
@@ -488,7 +488,7 @@ Branch branch(Hit hit, Ray ray, float prefr)
 	);
 }
 
-#include "transport.glsl"
+#include "common/transport.glsl"
 
 vec3 color_at(Ray ray)
 {
