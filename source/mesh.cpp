@@ -36,6 +36,9 @@ void Mesh::save(std::ofstream &file) const
 			<< _indices[i + 1] + 1 << " "
 			<< _indices[i + 2] + 1 << std::endl;
 	}
+
+	// Save material
+	_material.save(file);
 }
 
 ////////////////////

@@ -14,6 +14,10 @@ namespace kobra {
 
 // Scene stores objects
 class Scene {
+public:
+	// Iterators
+	using iterator = std::vector <ObjectPtr> ::const_iterator;
+private:
 	std::vector <ObjectPtr> _objects;
 public:
 	// Default constructor
@@ -25,6 +29,10 @@ public:
 	// Constructor from list of objects
 	Scene(const std::vector <Object *> &);
 	Scene(const std::vector <ObjectPtr> &);
+
+	// Iterators
+	iterator begin() const;
+	iterator end() const;
 
 	// Save objects to file
 	void save(const std::string &) const;

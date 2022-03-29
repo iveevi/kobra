@@ -202,6 +202,15 @@ Scene::Scene(const std::vector <ObjectPtr> &objs)
 // Methods //
 /////////////
 
+Scene::iterator Scene::begin() const
+{
+	return _objects.begin();
+}
+
+Scene::iterator Scene::end() const
+{
+	return _objects.end();
+}
 
 void Scene::save(const std::string &filename) const
 {

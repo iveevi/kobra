@@ -9,6 +9,7 @@
 #include "core.hpp"
 #include "material.hpp"
 #include "object.hpp"
+#include "renderable.hpp"
 #include "transform.hpp"
 #include "types.hpp"
 #include "world_update.hpp"
@@ -18,15 +19,20 @@ namespace kobra {
 namespace raytracing {
 
 // Primitive structures
-struct Primitive : virtual public Object {
+struct Primitive : virtual public Object, virtual public Renderable {
+public:
+	static constexpr char object_type[] = "RT Primitive";
 protected:
 	float		_id = OBJECT_TYPE_NONE;
-	Material	_material;
 public:
-	// Primitive constructors
-	Primitive() {}
+	// Default constructor
+	Primitive() = default;
+
+	// Constructor
 	Primitive(float x, const Transform &t, const Material &m)
-			: Object(t), _id(x), _material(m) {}
+			: Object(object_type, t),
+			Renderable(m),
+			_id(x) {}
 
 	// Virtual object destructor
 	virtual ~Primitive() {}
@@ -174,11 +180,15 @@ struct Triangle : public Primitive {
 
 // Sphere primitive
 struct Sphere : public Primitive {
+	static constexpr char object_type[] = "RT Sphere";
+
+	// Members
 	float		radius;
 
 	Sphere() {}
 	Sphere(float r, const Transform &t, const Material &m)
-			: Object(t), Primitive(OBJECT_TYPE_SPHERE, t, m),
+			: Object(object_type, t),
+			Primitive(OBJECT_TYPE_SPHERE, t, m),
 			radius(r) {}
 
 	uint count() const override { return 1; }

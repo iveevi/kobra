@@ -14,18 +14,23 @@ namespace kobra {
 class Object {
 protected:
 	// TODO: name?
-	// TODO: type of object?
-	Transform _transform;
+	std::string	_type;
+	Transform	_transform;
 public:
 	// Default constructor
 	Object() = default;
 
 	// Constructor
-	Object(const Transform &transform)
-			: _transform(transform) {}
+	Object(const std::string &type, const Transform &transform)
+			: _type(type), _transform(transform) {}
 
 	// Virtual destructor
 	virtual ~Object() {}
+
+	// Get type
+	const std::string &type() const {
+		return _type;
+	}
 
 	// Get transform
 	Transform &transform() {

@@ -10,11 +10,14 @@
 #include "world.hpp"	// TODO: remove (and move inside raytracing folder)
 #include "world_update.hpp"
 #include "object.hpp"
+#include "renderable.hpp"
 
 namespace kobra {
 
 // Mesh class, just holds a list of vertices and indices
-class Mesh : virtual public Object {
+class Mesh : virtual public Object, virtual public Renderable {
+public:
+	static constexpr char object_type[] = "Mesh";
 protected:
 	// Potential source
 	std::string	_source;
@@ -29,14 +32,16 @@ public:
 	// Simple constructor
 	Mesh() {}
 	Mesh(const Mesh &mesh, const Transform &transform) :
-			Object(transform), _source(mesh._source),
+			Object(object_type, transform),
+			_source(mesh._source),
 			_source_index(mesh._source_index),
 			_vertices(mesh._vertices),
 			_indices(mesh._indices) {}
 
 	Mesh(const VertexList &vs, const Indices &is,
 			const Transform &t = Transform())
-			: Object(t), _vertices(vs), _indices(is) {}
+			: Object(object_type, t),
+			_vertices(vs), _indices(is) {}
 
 	// Properties
 	size_t vertex_count() const {
@@ -56,6 +61,11 @@ public:
 		return _indices;
 	}
 
+	// Set material
+	void set_material(const Material &material) {
+		this->_material = material;
+	}
+
 	// Virtual methods
 	void save(std::ofstream &) const override;
 
@@ -72,22 +82,24 @@ namespace raytracing {
 // Mesh class
 class Mesh : public Primitive, public kobra::Mesh {
 public:
+	static constexpr char object_type[] = "RT Mesh";
+public:
 	//
 	Mesh() {}
 
 	// From mesh object
 	Mesh(const kobra::Mesh &mesh)
-			: Object(mesh.transform()),
+			: Object(object_type, mesh.transform()),
 			Primitive {OBJECT_TYPE_NONE, mesh.transform(), Material()},
 			kobra::Mesh(mesh) {}
 
 	// Copy
 	Mesh(const Mesh &mesh)
-			: Object(mesh.transform()),
+			: Object(object_type, mesh.transform()),
 			Primitive {OBJECT_TYPE_NONE, mesh.transform(), mesh._material},
 			kobra::Mesh(mesh) {}
 
-	// TODO: are these obselete?
+	/* TODO: are these obselete?
 	Mesh(const VertexList &vertices, const Indices &indices,
 			const Material &material)
 			: Primitive {OBJECT_TYPE_NONE, Transform(), material},
@@ -96,7 +108,7 @@ public:
 	Mesh(const VertexList &vertices, const Indices &indices,
 			const Transform &trans, const Material &mat)
 			: Primitive {OBJECT_TYPE_NONE, trans, mat},
-			kobra::Mesh {vertices, indices} {}
+			kobra::Mesh {vertices, indices} {} */
 
 	// Virtual methods
 	uint count() const override {

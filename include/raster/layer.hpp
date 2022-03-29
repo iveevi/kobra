@@ -5,10 +5,11 @@
 #include <vector>
 
 // Engine headers
+#include "../app.hpp"
+#include "../camera.hpp"
+#include "../scene.hpp"
 #include "pipeline.hpp"
 #include "raster.hpp"
-#include "../camera.hpp"
-#include "../app.hpp"
 
 namespace kobra {
 
@@ -79,7 +80,6 @@ public:
 	}
 
 	// Get camera
-	// TODO: set camera
 	Camera &camera() {
 		return _camera;
 	}
@@ -105,6 +105,23 @@ public:
 	void add(const std::vector <_element *> &elements) {
 		for (auto &e : elements)
 			_elements.push_back(Element(e));
+	}
+
+	// Import scene objects
+	void add(const Scene &scene) {
+		for (const ObjectPtr &obj : scene) {
+			// TODO: latre also add cameras
+			if (obj->type() == raster::Mesh::object_type) {
+				raster::Mesh *mesh = dynamic_cast
+					<raster::Mesh *> (obj.get());
+				_elements.push_back(Element(mesh));
+			} else if (obj->type() == kobra::Mesh::object_type) {
+				kobra::Mesh *mesh = dynamic_cast
+					<kobra::Mesh *> (obj.get());
+				raster::Mesh *raster_mesh = new raster::Mesh(_wctx.context, *mesh);
+				_elements.push_back(Element(raster_mesh));
+			}
+		}
 	}
 
 	// Render

@@ -11,13 +11,20 @@ namespace raster {
 
 // Mesh for rasterization
 class Mesh : public kobra::Mesh, public _element {
+public:
+	static constexpr char object_type[] = "Raster Mesh";
+private:
 	// Vertex and index buffers
 	VertexBuffer 	_vb;
 	IndexBuffer	_ib;
 public:
 	// Default constructor
-	Mesh() : kobra::Mesh() {}
-	Mesh (const Vulkan::Context &ctx, const kobra::Mesh &mesh) : kobra::Mesh(mesh) {
+	Mesh() = default;
+
+	// Constructor
+	Mesh (const Vulkan::Context &ctx, const kobra::Mesh &mesh)
+			: Object(object_type, mesh.transform()),
+			kobra::Mesh(mesh) {
 		// Allocate vertex and index buffers
 		BFM_Settings vb_settings {
 			.size = this->_vertices.size(),
@@ -51,6 +58,8 @@ public:
 		glm::mat4 model;
 		glm::mat4 view;
 		glm::mat4 projection;
+
+		Material material;
 	};
 
 	// Render
@@ -59,7 +68,8 @@ public:
 		MVP mvp {
 			_transform.matrix(),
 			rp.view,
-			rp.proj
+			rp.proj,
+			_material
 		};
 
 		// Bind vertex buffer

@@ -97,24 +97,6 @@ public:
 
 		mesh2->transform() = Transform({0.0f, 4.0f, -4.0f});
 		mesh7->transform() = Transform({0.0f, 4.0f, 4.0f});
-		// mesh2->transform().scale = glm::vec3(1/10.0f);
-
-		KOBRA_LOG_FILE(notify) << "Loaded all models and meshes\n";
-
-		// Initialize layer
-		Camera camera {
-			Transform { {0, 0, 4} },
-			Tunings { 45.0f, 800, 800 }
-		};
-
-		layer = raster::Layer(window, camera, VK_ATTACHMENT_LOAD_OP_CLEAR);
-		layer.add(mesh1);
-		layer.add(mesh2);
-		layer.add(mesh3);
-		layer.add(mesh4);
-		layer.add(mesh5);
-		layer.add(mesh6);
-		layer.add(mesh7);
 
 		scene = Scene({
 			mesh1,
@@ -127,6 +109,17 @@ public:
 		});
 
 		scene.save("scene.kobra");
+
+		KOBRA_LOG_FILE(notify) << "Scene loaded\n";
+
+		// Initialize layer
+		Camera camera {
+			Transform { {0, 0, 4} },
+			Tunings { 45.0f, 800, 800 }
+		};
+
+		layer = raster::Layer(window, camera, VK_ATTACHMENT_LOAD_OP_CLEAR);
+		layer.add(scene);
 
 		// Input callbacks
 		window.mouse_events->subscribe(mouse_movement, &layer.camera());
@@ -175,11 +168,81 @@ public:
 	}
 };
 
+// GUI interface
+class GUI : public BaseApp {
+	gui::Layer gui_layer;
+	gui::Text *button_text;
+public:
+	GUI(Vulkan *vk) : BaseApp({
+		vk,
+		800, 800, 2,
+		"GUI"
+	}) {
+		// TODO: saving gui elements as well
+		gui_layer = gui::Layer(window);
+		gui_layer.load_font("default", "resources/fonts/noto_sans.ttf");
+
+		gui::Button *button = new gui::Button(window,
+			{
+				window.coordinates(0, 0),
+				window.coordinates(100, 100),
+				GLFW_MOUSE_BUTTON_LEFT,
+				{0.8, 1.0, 0.8},
+				{0.6, 1.0, 0.6},
+				{0.4, 1.0, 0.4}
+			}
+		);
+
+		button_text = gui_layer.text_render("default")->text(
+			"My window",
+			window.coordinates(300, 50),
+			{1, 1, 1, 1}
+		);
+
+		gui_layer.add(button);
+		gui_layer.add(button_text);
+	}
+
+	// Override record method
+	void record(const VkCommandBuffer &cmd, const VkFramebuffer &framebuffer) override {
+		// Start recording command buffer
+		Vulkan::begin(cmd);
+
+		// Record commands
+		gui_layer.render(cmd, framebuffer);
+
+		// End recording command buffer
+		Vulkan::end(cmd);
+	}
+
+	// Termination method
+	void terminate() override {
+		// Check input
+		if (window.input->is_key_down(GLFW_KEY_ESCAPE))
+			glfwSetWindowShouldClose(surface.window, true);
+	}
+};
+
 int main()
 {
 	Vulkan *vulkan = new Vulkan();
-	Profiler *pf = new Profiler();
 	RasterApp raster_app {vulkan};
-	raster_app.run();
+	GUI gui {vulkan};
+
+	std::thread t1 {
+		[&raster_app]() {
+			raster_app.run();
+		}
+	};
+
+	std::thread t2 {
+		[&gui]() {
+			gui.run();
+		}
+	};
+
+	t1.join();
+	t2.join();
+
 	delete vulkan;
 }
