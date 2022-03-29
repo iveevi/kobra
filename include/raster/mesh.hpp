@@ -1,5 +1,5 @@
-#ifndef RASTER_MESH_H_
-#define RASTER_MESH_H_
+#ifndef KOBRA_RASTER_MESH_H_
+#define KOBRA_RASTER_MESH_H_
 
 // Engine headers
 #include "../mesh.hpp"

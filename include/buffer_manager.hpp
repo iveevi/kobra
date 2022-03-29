@@ -223,16 +223,11 @@ public:
 		return resize(cpu_buffer.size());
 	}
 
-	/* Generating bindings
-	VkDescriptorSetLayoutBinding make_dsl_binding(uint32_t binding, VkShaderStageFlags stage) const {
-		return VkDescriptorSetLayoutBinding {
-			.binding = binding,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.descriptorCount = 1,
-			.stageFlags = stage,
-			.pImmutableSamplers = nullptr
-		};
-	} */
+	// Sync and upload
+	void sync_upload() {
+		sync_size();
+		upload();
+	}
 
 	// Update descriptor set
 	void bind(VkDescriptorSet descriptor_set, uint32_t binding) const {

@@ -82,8 +82,8 @@ namespace raytracing {
 // Mesh class
 class Mesh : public Primitive, public kobra::Mesh {
 public:
-	static constexpr char object_type[] = "RT Mesh";
-public:
+	static constexpr char object_type[] = "Raytracing Mesh";
+	
 	//
 	Mesh() {}
 
