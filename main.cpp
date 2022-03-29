@@ -227,7 +227,7 @@ int main()
 {
 	Vulkan *vulkan = new Vulkan();
 	RasterApp raster_app {vulkan};
-	GUI gui {vulkan};
+	// GUI gui {vulkan};
 
 	std::thread t1 {
 		[&raster_app]() {
@@ -235,14 +235,14 @@ int main()
 		}
 	};
 
-	std::thread t2 {
+	/* std::thread t2 {
 		[&gui]() {
 			gui.run();
 		}
-	};
+	}; */
 
 	t1.join();
-	t2.join();
+	// t2.join();
 
 	delete vulkan;
 }

@@ -15,6 +15,9 @@ void Mesh::save(std::ofstream &file) const
 	if (_source.size() > 0) {
 		file << "source=" << _source << std::endl;
 		file << "index=" << _source_index << std::endl;
+
+		// Save material
+		_material.save(file);
 		return;
 	}
 

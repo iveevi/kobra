@@ -1,8 +1,8 @@
 #version 450
 
-#include "io_set.frag"
+#include "io_set.glsl"
 
 void main()
 {
-	fragment = color;
+	fragment = vec4(material.albedo, 1.0);
 }

@@ -1,19 +1,11 @@
 #version 450
 
+#include "material.glsl"
+
 // Typical vertex shader
 layout (location = 0) in vec3 position;
 layout (location = 1) in vec3 normal;
 layout (location = 2) in vec2 tex_coord;
-
-// Material structure
-// TODO: header
-struct Material {
-	// Material properties
-	vec3 albedo;
-	float reflectance;
-	float refractance;
-	float extinction;
-};
 
 // MVP matrix as push constant
 layout (push_constant) uniform PushConstants
@@ -28,11 +20,10 @@ layout (push_constant) uniform PushConstants
 };
 
 // Out color
-layout (location = 0) out vec4 color;
-layout (location = 1) out vec3 position_out;
-layout (location = 2) out vec3 normal_out;
-layout (location = 3) out vec2 tex_coord_out;
-layout (location = 4) out Material material_out;
+layout (location = 0) out vec3		out_position;
+layout (location = 1) out vec3		out_normal;
+layout (location = 2) out vec2		out_tex_coord;
+layout (location = 3) out Material	out_material;
 
 void main()
 {
@@ -42,9 +33,8 @@ void main()
 	gl_Position.z = (gl_Position.z + gl_Position.w) / 2.0;
 
 	// Output necessary info
-	color		= vec4(1.0, 0.0, 0.0, 1.0);
-	position_out	= (model * vec4(position, 1.0)).xyz;
-	normal_out	= normal;
-	tex_coord_out	= tex_coord;
-	material_out	= material;
+	out_position	= (model * vec4(position, 1.0)).xyz;
+	out_normal	= normal;
+	out_tex_coord	= tex_coord;
+	out_material	= material;
 }

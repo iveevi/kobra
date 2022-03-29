@@ -48,9 +48,12 @@ class Layer {
 		);
 
 		// Load necessary shader modules
+		// TODO: create a map of names to shaders (for fragment, since
+		// vertex is the same)
 		std::vector <VkShaderModule> shaders = _wctx.context.make_shaders({
 			"shaders/bin/raster/vertex.spv",
 			"shaders/bin/raster/color_frag.spv",
+			"shaders/bin/raster/normal_frag.spv",
 			"shaders/bin/raster/blinn_phong_frag.spv"
 		});
 
@@ -59,7 +62,7 @@ class Layer {
 			_wctx,
 			_render_pass,
 			shaders[0],
-			shaders[2]
+			shaders[3]
 		);
 	}
 

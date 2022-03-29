@@ -14,7 +14,7 @@ namespace kobra {
 // Material
 struct Material {
 	// Shading type
-	glm::vec3 albedo;
+	glm::vec3 albedo	= glm::vec3 {1.0, 0.0, 1.0};
 
 	float reflectance	= 0.0f;
 	float refractance	= 0.0f;
