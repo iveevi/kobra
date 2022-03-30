@@ -47,8 +47,8 @@ public:
 
 	// Buffer structure
 	struct Buffer {
-		VkBuffer	buffer;
-		VkDeviceMemory	memory;
+		VkBuffer	buffer = VK_NULL_HANDLE;
+		VkDeviceMemory	memory = VK_NULL_HANDLE;
 		VkDeviceSize	size;
 		VkDeviceSize	offset;
 		void *		mapped;

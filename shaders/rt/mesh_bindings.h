@@ -1,4 +1,9 @@
+#ifndef KOBRA_RT_MESH_BINDINGS_H_
+#define KOBRA_RT_MESH_BINDINGS_H_
+
 const int MESH_BINDING_PIXELS = 0;
 const int MESH_BINDING_VIEWPORT = 1;
 const int MESH_BINDING_VERTICES = 2;
 const int MESH_BINDING_TRIANGLES = 3;
+
+#endif

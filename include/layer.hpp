@@ -25,15 +25,15 @@ public:
 			: _elements (elements) {}
 
 	// Adding elements
-	void add(const ptr &element) {
+	virtual void add(const ptr &element) {
 		_elements.push_back (element);
 	}
 
-	void add(T *element) {
+	virtual void add(T *element) {
 		_elements.push_back(ptr(element));
 	}
 
-	void add(const std::vector <ptr> &elements) {
+	virtual void add(const std::vector <ptr> &elements) {
 		_elements.insert(
 			_elements.end(),
 			elements.begin(),
@@ -41,7 +41,7 @@ public:
 		);
 	}
 
-	void add(const std::vector <T *> &elements) {
+	virtual void add(const std::vector <T *> &elements) {
 		for (auto element : elements)
 			_elements.push_back(ptr(element));
 	}

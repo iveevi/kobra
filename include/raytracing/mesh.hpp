@@ -2,6 +2,7 @@
 #define KOBRA_RT_MESH_H_
 
 // Engine headers
+#include "../../shaders/rt/mesh_bindings.h"
 #include "../app.hpp"
 #include "../buffer_manager.hpp"
 #include "../mesh.hpp"
@@ -16,6 +17,9 @@ namespace rt {
 class Mesh : virtual public kobra::Mesh, virtual public _element {
 	Buffer4f	_bf_vertices;
 	Buffer4f	_bf_triangles;
+
+	// Descriptor set
+	VkDescriptorSet	_ds_mesh = VK_NULL_HANDLE;
 public:
 	static constexpr char object_type[] = "RT Mesh";
 
@@ -34,18 +38,18 @@ public:
 		// Allocate the buffers
 		BFM_Settings vertices_settings {
 			.size = vertices,
-			.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+			.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 			.usage_type = BFM_WRITE_ONLY
 		};
 
 		BFM_Settings triangles_settings {
 			.size = triangles,
-			.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+			.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 			.usage_type = BFM_WRITE_ONLY
 		};
 
 		_bf_vertices = Buffer4f(wctx.context, vertices_settings);
-		_bf_vertices = Buffer4f(wctx.context, triangles_settings);
+		_bf_triangles = Buffer4f(wctx.context, triangles_settings);
 
 		// Iterate over the mesh and copy the data
 		for (size_t i = 0; i < vertices; i++) {
@@ -83,14 +87,32 @@ public:
 		
 		// Flush the buffers
 		_bf_vertices.sync_upload();
-		// _bf_triangles.sync_upload();
+		_bf_triangles.sync_upload();
 
 		KOBRA_LOG_FILE(warn) << "Uploaded mesh to GPU\n";
 	}
 
+	// Latch onto layer
+	void latch_layer(const VkDescriptorSet &dset) override {
+		_ds_mesh = dset;
+
+		// Bind the buffers
+		_bf_vertices.bind(_ds_mesh, MESH_BINDING_VERTICES);
+		_bf_triangles.bind(_ds_mesh, MESH_BINDING_TRIANGLES);
+	}
+
 	// Virtual methods
-	void render() override {
-		KOBRA_LOG_FILE(warn) << "Mesh::render() not implemented\n";
+	void render(const RenderPacket &rp) override {
+		std::cout << "Rendering RT mesh\n";
+		// TODO: warn on null _ds_mesh
+
+		// Bind the desciptor set
+		vkCmdBindDescriptorSets(rp.cmd,
+			VK_PIPELINE_BIND_POINT_GRAPHICS,
+			rp.playout,
+			0, 1, &_ds_mesh,
+			0, nullptr
+		);
 	}
 };
 

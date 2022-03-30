@@ -24,7 +24,23 @@ const Layer::DSLBindings Layer::_mesh_compute_bindings {
 		.descriptorCount = 1,
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 		.pImmutableSamplers = nullptr
-	}
+	},
+
+	DSLBinding {
+		.binding = MESH_BINDING_VERTICES,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.pImmutableSamplers = nullptr
+	},
+
+	DSLBinding {
+		.binding = MESH_BINDING_TRIANGLES,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.pImmutableSamplers = nullptr
+	},
 };
 
 const Layer::DSLBindings Layer::_postproc_bindings = {

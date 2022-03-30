@@ -36,6 +36,16 @@ private:
 	size_t		push_index;
 
 	BFM_Settings	settings;
+
+	// Warn null buffer
+	void _warn_null_buffer() const {
+		if (gpu_buffer.buffer == VK_NULL_HANDLE) {
+			KOBRA_LOG_FUNC(warn) << "Buffer not allocated"
+				<< " did you forget to initialize"
+				<< " the BufferManager?\n";
+		}
+
+	}
 public:
 	// Constructors
 	BufferManager() {}
@@ -80,6 +90,7 @@ public:
 
 	// Get data
 	const T *data() const {
+		_warn_null_buffer();
 		if (settings.usage_type == BFM_READ_ONLY) {
 			void *data = context.vk->get_buffer_data(
 				context.device,
@@ -108,6 +119,7 @@ public:
 
 	// Write to buffer (must have write property)
 	size_t write(const T *data, size_t size, size_t offset = 0) {
+		_warn_null_buffer();
 		if (settings.usage_type == BFM_WRITE_ONLY) {
 			// Warn on overflow
 			if (offset + size > settings.size) {
@@ -177,6 +189,7 @@ public:
 
 	// Flush cpu buffer to gpu (must have write property)
 	void upload() {
+		_warn_null_buffer();
 		if (settings.usage_type == BFM_WRITE_ONLY) {
 			context.vk->map_buffer(
 				context.device,
@@ -191,6 +204,8 @@ public:
 
 	// Resize buffer
 	bool resize(size_t size) {
+		_warn_null_buffer();
+
 		// Check if resize is needed
 		if (size == settings.size)
 			return false;

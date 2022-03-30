@@ -8,11 +8,21 @@ layout (set = 0, binding = MESH_BINDING_PIXELS, std430) buffer Pixels
 	uint pixels[];
 } frame;
 
-layout (set = 0, binding = MESH_BINDING_VIEWPORT, std430) buffer Vertices
+layout (set = 0, binding = MESH_BINDING_VIEWPORT, std430) buffer Viewport
 {
 	uint width;
 	uint height;
 } viewport;
+
+layout (set = 0, binding = MESH_BINDING_VERTICES, std430) buffer Vertices
+{
+	vec4 data[];
+} vertices;
+
+layout (set = 0, binding = MESH_BINDING_TRIANGLES, std430) buffer Triangles
+{
+	vec4 data[];
+} triangles;
 
 // Import other headers
 #include "common/color.glsl"
@@ -30,7 +40,6 @@ void main()
 	uint index = y0 * viewport.width + x0;
 
 	// Light transport
-	vec3 color = vec3(1.0, 0.0, 1.0);
-
+	vec3 color = vertices.data[0].xyz + triangles.data[0].xyz;
 	frame.pixels[index] = cast_color(color);
 }
