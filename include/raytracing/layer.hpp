@@ -38,8 +38,12 @@ class Layer : public kobra::Layer <rt::_element> {
 	// Descriptor set bindings
 	static const DSLBindings _mesh_compute_bindings;
 
+	VkDescriptorSetLayout	_mesh_dsl;
+
 	// Initialize pipelines
 	void _init_pipelines() {
+		// First, create the DSL
+
 		// Mesh pipeline
 
 		// TODO: context method to create layout

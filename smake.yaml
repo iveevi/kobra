@@ -17,7 +17,8 @@ definitions:
     source/texture.cpp,
     source/vulkan.cpp,
     source/gui/text.cpp,
-    source/io/event.cpp'
+    source/io/event.cpp,
+    source/raytracing/layer.cpp'
 
 builds:
   - kobra_release:
