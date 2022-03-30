@@ -29,6 +29,8 @@ public:
 		size_t vertices = mesh.vertex_count();
 		size_t triangles = mesh.triangle_count();
 
+		std::cout << "Mesh: " << vertices << " vertices, " << triangles << " triangles" << std::endl;
+
 		// Allocate the buffers
 		BFM_Settings vertices_settings {
 			.size = vertices,
@@ -75,10 +77,13 @@ public:
 
 		KOBRA_LOG_FILE(notify) << "Created mesh with " << vertices
 			<< " vertices and " << triangles << " triangles\n";
+
+		std::cout << "Size of triangles: " << _bf_triangles.size()
+			<< ", push_size = " << _bf_triangles.push_size() << "\n";
 		
 		// Flush the buffers
 		_bf_vertices.sync_upload();
-		_bf_triangles.sync_upload();
+		// _bf_triangles.sync_upload();
 
 		KOBRA_LOG_FILE(warn) << "Uploaded mesh to GPU\n";
 	}

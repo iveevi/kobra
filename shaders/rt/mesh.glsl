@@ -23,9 +23,9 @@ void main()
 	uint y0 = gl_WorkGroupID.y;
 	uint x0 = gl_WorkGroupID.x;
 
-	/* Return if out of bounds
-	if (y0 >= world.height || x0 >= world.width)
-		return; */
+	// Return if out of bounds
+	if (y0 >= viewport.height || x0 >= viewport.width)
+		return;
 	
 	uint index = y0 * viewport.width + x0;
 

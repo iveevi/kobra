@@ -30,7 +30,7 @@ public:
 		"RTApp"
 	}) {
 		// Add RT elements
-		rt_layer = rt::Layer();
+		rt_layer = rt::Layer(window);
 		
 		Camera camera {
 			Transform { {0, 0, 4} },
@@ -43,8 +43,10 @@ public:
 
 		rt::Mesh *mesh = new rt::Mesh(window, model[0]);
 
+		rt_layer.add(mesh);
+
 		// Add GUI elements
-		gui_layer = gui::Layer(window, VK_ATTACHMENT_LOAD_OP_CLEAR);
+		gui_layer = gui::Layer(window, VK_ATTACHMENT_LOAD_OP_LOAD);
 		gui_layer.load_font("default", "resources/fonts/noto_sans.ttf");
 		
 		text_frame_rate = gui_layer.text_render("default")->text(
@@ -62,6 +64,9 @@ public:
 
 		// Start recording command buffer
 		Vulkan::begin(cmd);
+
+		// Render RT layer
+		rt_layer.render(cmd, framebuffer);
 
 		// Overlay statistics
 		// TODO: should be made a standalone layer

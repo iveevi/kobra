@@ -47,6 +47,8 @@ public:
 	}
 
 	// TODO: variadic overload (implement collect method in common)
+	
+	// TODO: virtual render method
 };
 
 }

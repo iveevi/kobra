@@ -184,6 +184,8 @@ public:
 				cpu_buffer.data(),
 				sizeof(T) * settings.size
 			);
+		} else {
+			KOBRA_LOG_FUNC(warn) << "Calling upload on read-only buffer\n";
 		}
 	}
 
