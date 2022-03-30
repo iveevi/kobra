@@ -67,13 +67,20 @@ const Layer::DSLBindings Layer::_postproc_bindings = {
 
 void Layer::_init_mesh_compute_pipeline()
 {
+	// Push constants
+	VkPushConstantRange push_constants = {
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.offset = 0,
+		.size = sizeof(PushConstants)
+	};
+
 	// TODO: context method to create layout
 	VkPipelineLayoutCreateInfo mesh_ppl_ci = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 		.setLayoutCount = 1,
 		.pSetLayouts = &_mesh_dsl,
-		.pushConstantRangeCount = 0,
-		.pPushConstantRanges = nullptr
+		.pushConstantRangeCount = 1,
+		.pPushConstantRanges = &push_constants
 	};
 
 	VkPipelineLayout mesh_ppl;

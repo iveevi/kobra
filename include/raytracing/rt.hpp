@@ -11,11 +11,21 @@ namespace kobra {
 
 namespace rt {
 
+// Push constant structure
+struct PushConstants {
+	alignas(16) uint triangles;
+
+	aligned_vec4 camera_position;
+	aligned_vec4 camera_forward;
+	aligned_vec4 camera_up;
+	aligned_vec4 camera_right;
+
+	aligned_vec4 camera_tunings;
+};
+
 // Render packet
 struct RenderPacket {
-	VkCommandBuffer		cmd;
-	VkPipelineLayout	playout;
-	VkDescriptorSet		dset;
+	PushConstants *pc;
 };
 
 // Element type
@@ -25,6 +35,9 @@ struct _element {
 
 	// Latch to layer (to get descriptor set)
 	virtual void latch_layer(const VkDescriptorSet &) = 0;
+
+	// Get descriptor set
+	virtual const VkDescriptorSet &dset() const = 0;
 
 	// Render
 	virtual void render(const RenderPacket &) = 0;

@@ -38,6 +38,7 @@ public:
 		};
 
 		rt_layer.add_camera(camera);
+		rt_layer.activate_camera(0);
 
 		Model model("resources/benchmark/suzanne.obj");
 

@@ -78,11 +78,11 @@ class Layer : public kobra::Layer <rt::_element> {
 		);
 
 		// Then, create the descriptor sets
-		/* _mesh_ds = _context.vk->make_descriptor_set(
+		_mesh_ds = _context.vk->make_descriptor_set(
 			_context.device,
-			descriptor_pool,
+			_descriptor_pool,
 			_mesh_dsl
-		); */
+		);
 
 		_postproc_ds = _context.vk->make_descriptor_set(
 			_context.device,
@@ -150,8 +150,8 @@ public:
 			<< _pipelines.mesh.layout << "\n";
 
 		// Bind to descriptor sets
-		// _pixels.bind(_mesh_ds, MESH_BINDING_PIXELS);
-		// _viewport.bind(_mesh_ds, MESH_BINDING_VIEWPORT);
+		_pixels.bind(_mesh_ds, MESH_BINDING_PIXELS);
+		_viewport.bind(_mesh_ds, MESH_BINDING_VIEWPORT);
 
 		_pixels.bind(_postproc_ds, MESH_BINDING_PIXELS);
 		_viewport.bind(_postproc_ds, MESH_BINDING_VIEWPORT);
@@ -238,22 +238,43 @@ public:
 			_pipelines.mesh.pipeline
 		);
 
+		// Prepare push constants
+		PushConstants pc {
+			.camera_position = _active_camera->transform.position,
+			.camera_forward = _active_camera->transform.forward(),
+			.camera_up = _active_camera->transform.up(),
+			.camera_right = _active_camera->transform.right(),
+
+			.camera_tunings = glm::vec4 {
+				active_camera()->tunings.scale,
+				active_camera()->tunings.aspect,
+				0, 0
+			}
+		};
+
 		// Prepare the render packet
 		auto rp = RenderPacket {
-			.cmd = cmd,
-			.playout = _pipelines.mesh.layout,
-			.dset = _mesh_ds,
+			.pc = &pc
 		};
 
 		// Render each element
 		for (auto &element : _elements) {
 			element->render(rp);
 
-			/* vkCmdBindDescriptorSets(cmd,
+			// Bind descriptor set
+			vkCmdBindDescriptorSets(cmd,
 				VK_PIPELINE_BIND_POINT_COMPUTE,
 				_pipelines.mesh.layout,
-				0, 1, &_mesh_ds, 0, nullptr
-			); */
+				0, 1, &element->dset(),
+				0, nullptr
+			);
+
+			// Push constants
+			vkCmdPushConstants(cmd,
+				_pipelines.mesh.layout,
+				VK_SHADER_STAGE_COMPUTE_BIT,
+				0, sizeof(PushConstants), &pc
+			);
 
 			// Dispatch the compute shader
 			vkCmdDispatch(cmd,

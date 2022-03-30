@@ -101,18 +101,14 @@ public:
 		_bf_triangles.bind(_ds_mesh, MESH_BINDING_TRIANGLES);
 	}
 
+	// Get the descriptor set
+	const VkDescriptorSet &dset() const override {
+		return _ds_mesh;
+	}
+
 	// Virtual methods
 	void render(const RenderPacket &rp) override {
-		std::cout << "Rendering RT mesh\n";
-		// TODO: warn on null _ds_mesh
-
-		// Bind the desciptor set
-		vkCmdBindDescriptorSets(rp.cmd,
-			VK_PIPELINE_BIND_POINT_GRAPHICS,
-			rp.playout,
-			0, 1, &_ds_mesh,
-			0, nullptr
-		);
+		rp.pc->triangles = triangle_count();
 	}
 };
 
