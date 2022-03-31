@@ -174,7 +174,7 @@ struct Triangle : public Primitive {
 		glm::vec3 max = glm::max(ta, glm::max(tb, tc));
 
 		// Push bounding box
-		bboxes.push_back(kobra::BoundingBox(min, max));
+		bboxes.push_back(BoundingBox {min, max});
 	}
 };
 
@@ -218,7 +218,7 @@ struct Sphere : public Primitive {
 		glm::vec3 max = pos + glm::vec3(radius);
 
 		// Push bounding box
-		bboxes.push_back(kobra::BoundingBox(min, max));
+		bboxes.push_back(BoundingBox {min, max});
 	}
 };
 

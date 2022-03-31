@@ -19,6 +19,8 @@ using namespace kobra;
 class RTApp :  public BaseApp {
 	rt::Layer	rt_layer;
 
+	Camera 		*active_camera;
+
 	// GUI elements
 	gui::Layer	gui_layer;
 
@@ -31,25 +33,35 @@ public:
 	}) {
 		// Add RT elements
 		rt_layer = rt::Layer(window);
-		
+
 		Camera camera {
-			Transform { {0, 0, 4} },
+			Transform { {0, 0, 10} },
 			Tunings { 45.0f, 800, 800 }
 		};
 
 		rt_layer.add_camera(camera);
-		rt_layer.activate_camera(0);
+		active_camera = rt_layer.activate_camera(0);
 
 		Model model("resources/benchmark/suzanne.obj");
 
-		rt::Mesh *mesh = new rt::Mesh(model[0]);
+		rt::Mesh *mesh0 = new rt::Mesh(model[0]);
+		rt::Mesh *mesh1 = new rt::Mesh(model[0]);
 
-		rt_layer.add(mesh);
+		mesh0->transform().move({0.25, 0.6, -1});
+
+		Material mat {
+			.albedo = {0.5, 0.8, 0.5}
+		};
+
+		mesh0->set_material(mat);
+
+		rt_layer.add(mesh0);
+		rt_layer.add(mesh1);
 
 		// Add GUI elements
 		gui_layer = gui::Layer(window, VK_ATTACHMENT_LOAD_OP_LOAD);
 		gui_layer.load_font("default", "resources/fonts/noto_sans.ttf");
-		
+
 		text_frame_rate = gui_layer.text_render("default")->text(
 			"fps",
 			window.coordinates(0, 0),
@@ -62,9 +74,25 @@ public:
 	// Override record method
 	void record(const VkCommandBuffer &cmd, const VkFramebuffer &framebuffer) override {
 		static char buffer[1024];
+		static float time = 0.0f;
 
 		// Start recording command buffer
 		Vulkan::begin(cmd);
+
+		// New camera position
+		glm::vec3 pos {
+			0,
+			sin(time),
+			10
+		};
+
+		// Rotation toward center
+		glm::mat4 lt = glm::lookAt(pos, {0, 0, 0}, {0, 1, 0});
+		glm::quat qt = glm::quat_cast(lt);
+		glm::vec3 euler = glm::eulerAngles(qt);
+
+		active_camera->transform.position = pos;
+		active_camera->transform.rotation = euler;
 
 		// Render RT layer
 		rt_layer.render(cmd, framebuffer);
@@ -82,6 +110,9 @@ public:
 
 		// End recording command buffer
 		Vulkan::end(cmd);
+
+		// Update time
+		time += frame_time;
 	}
 
 	// Termination method

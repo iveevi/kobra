@@ -18,7 +18,7 @@ struct BVHNode {
 	BoundingBox	bbox;
 
 	// Index of the object in the world
-	uint		object = 0;
+	int		object = -1;
 	BVHNode *	left = nullptr;
 	BVHNode *	right = nullptr;
 
@@ -80,6 +80,8 @@ struct BVHNode {
 			*reinterpret_cast <float *> (&hit),
 			*reinterpret_cast <float *> (&miss)
 		};
+
+		std::cout << "header.object = " << header.data.y << std::endl;
 
 		// Write the node
 		buffer->push_back(header);
@@ -253,7 +255,7 @@ public:
 			max = glm::max(max, nodes[i]->bbox.max);
 		}
 
-		return BoundingBox(min, max);
+		return BoundingBox {min, max};
 	}
 
 	float cost_split(const std::vector <BVHNode *> &nodes, float split, int axis) {
@@ -300,9 +302,9 @@ public:
 			return std::numeric_limits <float> ::max();
 
 		// Compute cost
-		float sa_left = BoundingBox(min_left, max_left).surface_area();
-		float sa_right = BoundingBox(min_right, max_right).surface_area();
-		float sa_total = BoundingBox(tmin, tmax).surface_area();
+		float sa_left = BoundingBox {min_left, max_left}.surface_area();
+		float sa_right = BoundingBox {min_right, max_right}.surface_area();
+		float sa_total = BoundingBox {tmin, tmax}.surface_area();
 
 		return 1 + (prims_left * sa_left + prims_right * sa_right) / sa_total;
 	}

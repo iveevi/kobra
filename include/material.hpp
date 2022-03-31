@@ -5,6 +5,7 @@
 #include <fstream>
 
 // Engine headers
+#include "buffer_manager.hpp"
 #include "core.hpp"
 #include "types.hpp"
 #include "world_update.hpp"
@@ -21,9 +22,17 @@ struct Material {
 	float extinction	= 0.0f;
 
 	// Write to buffer
+	// TODO: delete this
 	void write_material(kobra::WorldUpdate &wu) const {
 		wu.bf_mats->push_back(aligned_vec4(albedo, SHADING_TYPE_BLINN_PHONG));
 		wu.bf_mats->push_back(aligned_vec4(
+			{0, reflectance, refractance, extinction}
+		));
+	}
+
+	void write_material(Buffer4f *bf_mats) const {
+		bf_mats->push_back(aligned_vec4(albedo, SHADING_TYPE_BLINN_PHONG));
+		bf_mats->push_back(aligned_vec4(
 			{0, reflectance, refractance, extinction}
 		));
 	}

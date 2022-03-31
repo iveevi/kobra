@@ -8,13 +8,13 @@ namespace kobra {
 
 // Axis Aligned Bounding Box
 struct BoundingBox {
-	glm::vec3 min;
-	glm::vec3 max;
+	glm::vec3	min;
+	glm::vec3	max;
 
-	// Constructor
+	/* Constructor
 	BoundingBox() {}
 	BoundingBox(const glm::vec3 &a, const glm::vec3 &b)
-			: min(a), max(b) {}
+			: min(a), max(b) {} */
 	
 	// Get surface area of box
 	float surface_area() const {

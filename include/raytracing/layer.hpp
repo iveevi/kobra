@@ -102,6 +102,9 @@ class Layer : public kobra::Layer <rt::_element> {
 	BufferManager <uint>	_viewport;
 	Buffer4f		_vertices;
 	Buffer4f		_triangles;
+	Buffer4f		_materials;
+
+	Buffer4m		_transforms;
 
 	// BVH
 	BVH			_bvh;
@@ -120,10 +123,12 @@ class Layer : public kobra::Layer <rt::_element> {
 			float ia = triangle.data.x;
 			float ib = triangle.data.y;
 			float ic = triangle.data.z;
+			float id = triangle.data.w;
 
 			uint a = *(reinterpret_cast <uint *> (&ia));
 			uint b = *(reinterpret_cast <uint *> (&ib));
 			uint c = *(reinterpret_cast <uint *> (&ic));
+			uint d = *(reinterpret_cast <uint *> (&id));
 
 			glm::vec4 va = vertices[a].data;
 			glm::vec4 vb = vertices[b].data;
@@ -132,7 +137,7 @@ class Layer : public kobra::Layer <rt::_element> {
 			glm::vec4 min = glm::min(va, glm::min(vb, vc));
 			glm::vec4 max = glm::max(va, glm::max(vb, vc));
 
-			bboxes.push_back(BoundingBox(min, max));
+			bboxes.push_back(BoundingBox {min, max});
 		}
 
 		return bboxes;
@@ -176,13 +181,7 @@ public:
 			.usage_type = BFM_WRITE_ONLY
 		};
 
-		BFM_Settings vertices_settings {
-			.size = 1024,
-			.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-			.usage_type = BFM_WRITE_ONLY
-		};
-
-		BFM_Settings triangles_settings {
+		BFM_Settings write_only_settings {
 			.size = 1024,
 			.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 			.usage_type = BFM_WRITE_ONLY
@@ -190,8 +189,11 @@ public:
 
 		_pixels = BufferManager <uint> (_context, pixel_settings);
 		_viewport = BufferManager <uint> (_context, viewport_settings);
-		_vertices = Buffer4f(_context, vertices_settings);
-		_triangles = Buffer4f(_context, triangles_settings);
+
+		_vertices = Buffer4f(_context, write_only_settings);
+		_triangles = Buffer4f(_context, write_only_settings);
+		_materials = Buffer4f(_context, write_only_settings);
+		_transforms = Buffer4m(_context, write_only_settings);
 
 		// Fill out the viewport
 		_viewport.push_back(_extent.width);
@@ -213,21 +215,26 @@ public:
 	// Adding elements
 	// TODO: element actions from base class?
 	void add_do(const ptr &e) override {
-		std::cout << "Add action for mesh\n";
 		LatchingPacket lp {
 			.vertices = &_vertices,
-			.triangles = &_triangles
+			.triangles = &_triangles,
+			.materials = &_materials,
+			.transforms = &_transforms
 		};
 
-		e->latch(lp);
+		e->latch(lp, _elements.size());
 
 		// Flush the vertices and triangles
 		_vertices.sync_upload();
 		_triangles.sync_upload();
+		_materials.sync_upload();
+		_transforms.sync_upload();
 
 		// Rebind to descriptor sets
 		_vertices.bind(_mesh_ds, MESH_BINDING_VERTICES);
 		_triangles.bind(_mesh_ds, MESH_BINDING_TRIANGLES);
+		_materials.bind(_mesh_ds, MESH_BINDING_MATERIALS);
+		_transforms.bind(_mesh_ds, MESH_BINDING_TRANSFORMS);
 
 		// Update the BVH
 		_bvh = BVH(_context, _get_bboxes());

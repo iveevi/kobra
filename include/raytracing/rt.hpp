@@ -28,6 +28,8 @@ struct PushConstants {
 struct LatchingPacket {
 	Buffer4f *vertices;
 	Buffer4f *triangles;
+	Buffer4f *materials;
+	Buffer4m *transforms;
 };
 
 // Element type
@@ -36,7 +38,7 @@ struct _element {
 	virtual ~_element() = default;
 
 	// Latch to layer
-	virtual void latch(const LatchingPacket &packet) = 0;
+	virtual void latch(const LatchingPacket &packet, size_t) = 0;
 };
 
 // Memory safe

@@ -43,7 +43,23 @@ const Layer::DSLBindings Layer::_mesh_compute_bindings {
 	},
 
 	DSLBinding {
+		.binding = MESH_BINDING_TRANSFORMS,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.pImmutableSamplers = nullptr
+	},
+
+	DSLBinding {
 		.binding = MESH_BINDING_BVH,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.pImmutableSamplers = nullptr
+	},
+
+	DSLBinding {
+		.binding = MESH_BINDING_MATERIALS,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 		.descriptorCount = 1,
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,

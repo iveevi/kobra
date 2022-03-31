@@ -3,6 +3,7 @@
 // Import bindings
 #include "mesh_bindings.h"
 
+// TODO: all these buffer bindings should be in a single file
 layout (set = 0, binding = MESH_BINDING_PIXELS, std430) buffer Pixels
 {
 	uint pixels[];
@@ -25,12 +26,27 @@ layout (set = 0, binding = MESH_BINDING_TRIANGLES, std430) buffer Triangles
 	vec4 data[];
 } triangles;
 
+// Mesh transforms
+// TODO: is this even needed? its too slow to compute every frame
+layout (set = 0, binding = MESH_BINDING_TRANSFORMS, std430) buffer Transforms
+{
+	mat4 data[];
+} transforms;
+
+// Acceleration structure
 layout (set = 0, binding = MESH_BINDING_BVH, std430) buffer BVH
 {
 	vec4 data[];
 } bvh;
 
+// Materials
+layout (set = 0, binding = MESH_BINDING_MATERIALS, std430) buffer Materials
+{
+	vec4 data[];
+} materials;
+
 // Push constants
+// TODO: # of samples should be a push constant
 layout (push_constant) uniform PushConstants
 {
 	uint	triangles;
@@ -40,7 +56,7 @@ layout (push_constant) uniform PushConstants
 	vec3 camera_forward;
 	vec3 camera_up;
 	vec3 camera_right;
-	
+
 	// scale, aspect
 	vec4 properties;
 } pc;
@@ -60,22 +76,23 @@ struct Triangle {
 // Material structure
 struct Material {
 	vec3 albedo;
-	float shading;
-
-	float specular;
-	float reflectance;
-	
-	// Index of refraction as a complex number
-	vec2 ior;
 };
 
 // Default "constructor"
 Material mat_default()
 {
 	return Material(
-		vec3(0.5f, 0.5f, 0.5f), 0.0f,
-		0.0f, 0.0f, vec2(0.0f, 0.0f)
+		vec3(0.5f, 0.5f, 0.5f)
 	);
+}
+
+// Convert raw material at index
+Material mat_at(uint index)
+{
+	vec4 raw0 = materials.data[2 * index];
+	vec4 raw1 = materials.data[2 * index + 1];
+
+	return Material(raw0.xyz);
 }
 
 // TODO: intersection header
@@ -135,19 +152,30 @@ Intersection ray_intersect(Ray ray, uint index)
 	float ia = triangles.data[index].x;
 	float ib = triangles.data[index].y;
 	float ic = triangles.data[index].z;
+	float id = triangles.data[index].w;
 
 	uint a = floatBitsToUint(ia);
 	uint b = floatBitsToUint(ib);
 	uint c = floatBitsToUint(ic);
+	uint d = floatBitsToUint(id);
 
 	vec3 v1 = vertices.data[a].xyz;
 	vec3 v2 = vertices.data[b].xyz;
 	vec3 v3 = vertices.data[c].xyz;
-	
+
 	Triangle triangle = Triangle(v1, v2, v3);
 
+	// Get intersection
+	Intersection it = intersect_shape(ray, triangle);
+
+	// If intersection is valid, compute material
+	if (it.time > 0.0) {
+		// Get material index at the second element
+		it.mat = mat_at(d);
+	}
+
 	// Intersect ray with sphere
-	return intersect_shape(ray, triangle);
+	return it;
 }
 
 // TODO: bvh header
@@ -180,16 +208,24 @@ BoundingBox bbox(int node)
 {
 	vec3 min = bvh.data[node + 1].xyz;
 	vec3 max = bvh.data[node + 2].xyz;
-
 	return BoundingBox(min, max);
 }
+// Closest object information
+struct Hit {
+	int	object;
+	float	time;
+	vec3	point;
+	vec3	normal;
+
+	Material mat;
+};
 
 // Get closest object
-float closest_object(Ray ray)
+Hit closest_object(Ray ray)
 {
 	int min_index = -1;
 
-	// Starting time
+	// Starting intersection
 	Intersection mini = Intersection(
 		1.0/0.0, vec3(0.0),
 		mat_default()
@@ -197,16 +233,10 @@ float closest_object(Ray ray)
 
 	// Traverse BVH as a threaded binary tree
 	int node = 0;
-	int count = 0;
 	while (node != -1) {
-		count++;
 		if (leaf(node)) {
-			// return 1.0;
 			// Get object index
-			// int iobj = floatBitsToInt(bvh.data[node].y);
 			int index = object(node);
-
-			// uint index = world.indices[iobj];
 
 			// Get object
 			Intersection it = ray_intersect(ray, index);
@@ -220,7 +250,6 @@ float closest_object(Ray ray)
 			// Go to next node (ame as miss)
 			node = miss(node);
 		} else {
-			// return 1.0;
 			// Get bounding box
 			BoundingBox box = bbox(node);
 
@@ -239,11 +268,43 @@ float closest_object(Ray ray)
 		}
 	}
 
-	if (min_index == -1)
-		return -1.0;
+	// Color of closest object
+	vec3 color = vec3(0.0);	// TODO: sample from either texture or gradient
+	if (min_index < 0)
+		mini.mat.albedo = color;
 
-	return mini.time;
+	vec3 point = ray.origin + ray.direction * mini.time;
+
+	return Hit(
+		min_index,
+		mini.time,
+		point,
+		mini.normal,
+		mini.mat
+	);
 }
+
+// TODO: light transport header
+vec3 light = vec3(0.0, 5.0, 3.0);
+
+vec3 color_at(Ray ray)
+{
+	// Bias for intersection
+	float bias = 0.1;
+
+	Hit hit = closest_object(ray);
+	
+	if (hit.object != -1) {
+		// Calcula basic diffuse lighting
+		vec3 light_dir = normalize(light - hit.point);
+		float diffuse = max(dot(hit.normal, light_dir), 0.0);
+		return hit.mat.albedo * diffuse;
+	}
+
+	return hit.mat.albedo;
+}
+
+// TODO: color wheel (if needed) goes in a header
 
 void main()
 {
@@ -269,14 +330,11 @@ void main()
 		pc.properties.y
 	);
 
-	float t = closest_object(ray);
+	// Hit h = closest_object(ray);
 
 	// Light transport
-	// vec3 color = vertices.data[0].xyz + triangles.data[pc.triangles - 1].xyz;
-	vec3 color = vec3(0.0);
-	if (t > 0.0)
-		color = vec3(1, 0, 1);
-	
+	vec3 color = color_at(ray);
+
 	// Get index
 	uint index = y0 * viewport.width + x0;
 	frame.pixels[index] = cast_color(color);

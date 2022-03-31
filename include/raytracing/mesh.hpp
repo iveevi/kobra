@@ -29,34 +29,55 @@ public:
 	}
 
 	// Latch to layer
-	void latch(const LatchingPacket &lp) override {
-		// Iterate over the mesh and copy the data
+	void latch(const LatchingPacket &lp, size_t id) override {
+		// Print transform position
+		glm::vec3 pos = transform().position;
+		std::cout << "MESH LATCH: " << pos.x << ", " << pos.y << ", " << pos.z
+			<< std::endl;
+		std::cout << "\tid = " << id << std::endl;
+		
+		// Offset for triangle indices
+		uint offset = lp.vertices->push_size();
+
+		// Vertices
+		// TODO: figure out how to use transform matrices in the shader
+		// to apply in both bounding box and vertices
 		for (size_t i = 0; i < vertex_count(); i++) {
 			// TODO: later also push texture coordinates
 
 			// No need to push normals, they are computed
 			//	in the shader
 			glm::vec3 position = _vertices[i].position;
+			position = _transform.apply(position);
 			lp.vertices->push_back(position);
 		}
 
+		// Triangles
+		uint obj_id = id - 1;
 		for (size_t i = 0; i < triangle_count(); i++) {
-			uint ia = _indices[3 * i];
-			uint ib = _indices[3 * i + 1];
-			uint ic = _indices[3 * i + 2];
+			uint ia = _indices[3 * i] + offset;
+			uint ib = _indices[3 * i + 1] + offset;
+			uint ic = _indices[3 * i + 2] + offset;
 
 			// The shader will assume that all elements
 			// 	are triangles, no need for header info:
 			// 	also, material and transform
 			// 	will be a push constant...
-			glm::vec3 tri {
+			glm::vec4 tri {
 				*(reinterpret_cast <float *> (&ia)),
 				*(reinterpret_cast <float *> (&ib)),
-				*(reinterpret_cast <float *> (&ic))
+				*(reinterpret_cast <float *> (&ic)),
+				*(reinterpret_cast <float *> (&obj_id))
 			};
 
 			lp.triangles->push_back(tri);
 		}
+
+		// Write the material
+		_material.write_material(lp.materials);
+
+		// Write the transform
+		lp.transforms->push_back(transform().matrix());
 	}
 };
 
