@@ -8,5 +8,6 @@ const int MESH_BINDING_TRIANGLES	= 3;
 const int MESH_BINDING_TRANSFORMS	= 4;
 const int MESH_BINDING_BVH		= 5;
 const int MESH_BINDING_MATERIALS	= 6;
+const int MESH_BINDING_TEXTURES		= 7;
 
 #endif

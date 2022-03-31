@@ -216,7 +216,7 @@ class Font {
 			raster::Sampler sampler(ctx, tp);
 
 			VkDescriptorSet ds = Glyph::make_bitmap_ds(ctx, dpool);
-			sampler.bind(ctx, ds, 0);
+			sampler.bind(ds, 0);
 
 			_glyph_ds[' '] = ds;
 			_metrics[' '] = FT_Glyph_Metrics {
@@ -287,7 +287,7 @@ class Font {
 
 			VkDescriptorSet ds = Glyph::make_bitmap_ds(ctx, dpool);
 			raster::Sampler sampler = raster::Sampler(ctx, tp);
-			sampler.bind(ctx, ds, 0);
+			sampler.bind(ds, 0);
 
 			_glyph_ds[c] = ds;
 		}

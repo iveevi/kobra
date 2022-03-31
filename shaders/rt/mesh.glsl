@@ -45,6 +45,9 @@ layout (set = 0, binding = MESH_BINDING_MATERIALS, std430) buffer Materials
 	vec4 data[];
 } materials;
 
+// Textures
+layout (set = 0, binding = MESH_BINDING_TEXTURES) uniform sampler2D s2_normals;
+
 // Push constants
 // TODO: # of samples should be a push constant
 layout (push_constant) uniform PushConstants
@@ -104,6 +107,9 @@ struct Intersection {
 	Material mat;
 };
 
+float b1;
+float b2;
+
 float _intersect_t(Triangle t, Ray r)
 {
 	vec3 e1 = t.v2 - t.v1;
@@ -114,11 +120,11 @@ float _intersect_t(Triangle t, Ray r)
 		return -1.0;
 	vec3 s = r.origin - t.v1;
 	float inv_divisor = 1.0 / divisor;
-	float b1 = dot(s, s1) * inv_divisor;
+	b1 = dot(s, s1) * inv_divisor;
 	if (b1 < 0.0 || b1 > 1.0)
 		return -1.0;
 	vec3 s2 = cross(s, e1);
-	float b2 = dot(r.direction, s2) * inv_divisor;
+	b2 = dot(r.direction, s2) * inv_divisor;
 	if (b2 < 0.0 || b1 + b2 > 1.0)
 		return -1.0;
 	float time = dot(e2, s2) * inv_divisor;
@@ -159,9 +165,10 @@ Intersection ray_intersect(Ray ray, uint index)
 	uint c = floatBitsToUint(ic);
 	uint d = floatBitsToUint(id);
 
-	vec3 v1 = vertices.data[a].xyz;
-	vec3 v2 = vertices.data[b].xyz;
-	vec3 v3 = vertices.data[c].xyz;
+	// TODO: macro for fixed width vertices
+	vec3 v1 = vertices.data[2 * a].xyz;
+	vec3 v2 = vertices.data[2 * b].xyz;
+	vec3 v3 = vertices.data[2 * c].xyz;
 
 	Triangle triangle = Triangle(v1, v2, v3);
 
@@ -172,6 +179,20 @@ Intersection ray_intersect(Ray ray, uint index)
 	if (it.time > 0.0) {
 		// Get material index at the second element
 		it.mat = mat_at(d);
+
+		// Get texture coordinates
+		vec2 t1 = vertices.data[2 * a + 1].xy;
+		vec2 t2 = vertices.data[2 * b + 1].xy;
+		vec2 t3 = vertices.data[2 * c + 1].xy;
+
+		// Interpolate texture coordinates
+		vec2 tex_coord = t1 * (1 - b1 - b2) + t2 * b1 + t3 * b2;
+		tex_coord = clamp(tex_coord, vec2(0.0), vec2(1.0));
+
+		// Get texture
+		tex_coord.y = 1.0 - tex_coord.y;
+		vec3 tex = texture(s2_normals, tex_coord).xyz;
+		it.normal = tex;
 	}
 
 	// Intersect ray with sphere

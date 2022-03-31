@@ -30,12 +30,6 @@ public:
 
 	// Latch to layer
 	void latch(const LatchingPacket &lp, size_t id) override {
-		// Print transform position
-		glm::vec3 pos = transform().position;
-		std::cout << "MESH LATCH: " << pos.x << ", " << pos.y << ", " << pos.z
-			<< std::endl;
-		std::cout << "\tid = " << id << std::endl;
-		
 		// Offset for triangle indices
 		uint offset = lp.vertices->push_size();
 
@@ -48,8 +42,12 @@ public:
 			// No need to push normals, they are computed
 			//	in the shader
 			glm::vec3 position = _vertices[i].position;
+			glm::vec2 uv = _vertices[i].tex_coords;
+
 			position = _transform.apply(position);
+
 			lp.vertices->push_back(position);
+			lp.vertices->push_back(glm::vec4 {uv, 0.0f, 0.0f});
 		}
 
 		// Triangles

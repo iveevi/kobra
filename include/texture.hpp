@@ -22,12 +22,23 @@ struct Texture {
 	uint channels;
 
 	bytes data;
+
+	/* Flip Y axis
+	void flip_y() {
+		for (uint i = 0; i < height / 2; i++) {
+			for (uint j = 0; j < width * channels; j++) {
+				std::swap(data[i * width * channels + j],
+					data[(height - i - 1) * width * channels + j]);
+			}
+		}
+	} */
 };
 
 // Load texture as byte array
-Texture load_image_texture(const std::string &);
+Texture load_image_texture(const std::string &, int = -1);
 
 // Textures for rasterization
+// TODO: unlock from this namespace
 namespace raster {
 
 // Image packet
@@ -394,38 +405,42 @@ inline TexturePacket make_texture(const Vulkan::Context &ctx,
 
 // Sampler structure
 // TODO: remove from TexturePacket
-struct Sampler {
-	VkImageView	view;
-	VkSampler	sampler;
-
-	// Constructors
+class Sampler {
+	Vulkan::Context _ctx;
+	VkImageView	_view;
+	VkSampler	_sampler;
+public:
+	// Default constructor
 	Sampler() = default;
+
+	// Constructor
 	Sampler(const Vulkan::Context &ctx, const TexturePacket &packet,
-			const VkImageAspectFlags &aspect_flags = VK_IMAGE_ASPECT_COLOR_BIT) {
-		view = make_image_view(
+			const VkImageAspectFlags &aspect_flags = VK_IMAGE_ASPECT_COLOR_BIT)
+			: _ctx(ctx) {
+		_view = make_image_view(
 			ctx,
 			packet,
 			VK_IMAGE_VIEW_TYPE_2D,
 			aspect_flags
 		);
 
-		sampler = make_sampler(ctx,
+		_sampler = make_sampler(_ctx,
 			VK_FILTER_LINEAR,
 			VK_SAMPLER_ADDRESS_MODE_REPEAT
 		);
 	}
 
 	// Bind sampler to pipeline
-	void bind(const Vulkan::Context &ctx, VkDescriptorSet ds, uint32_t binding) {
+	void bind(const VkDescriptorSet &dset, uint32_t binding) {
 		VkDescriptorImageInfo image_info {
-			.sampler = sampler,
-			.imageView = view,
+			.sampler = _sampler,
+			.imageView = _view,
 			.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 		};
 
 		VkWriteDescriptorSet descriptor_write {
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = ds,
+			.dstSet = dset,
 			.dstBinding = binding,
 			.dstArrayElement = 0,
 			.descriptorCount = 1,
@@ -433,13 +448,14 @@ struct Sampler {
 			.pImageInfo = &image_info
 		};
 
-		vkUpdateDescriptorSets(ctx.vk_device(), 1, &descriptor_write, 0, nullptr);
+		vkUpdateDescriptorSets(_ctx.vk_device(), 1, &descriptor_write, 0, nullptr);
 	}
 };
 
 }
 
 // Textures for ray tracing
+// TODO: is this branch even necessary
 namespace raytracing {
 
 // Convert bytes to aligned_vec4 array

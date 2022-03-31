@@ -58,6 +58,7 @@ const Layer::DSLBindings Layer::_mesh_compute_bindings {
 		.pImmutableSamplers = nullptr
 	},
 
+	// Materials buffer
 	DSLBinding {
 		.binding = MESH_BINDING_MATERIALS,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -65,6 +66,15 @@ const Layer::DSLBindings Layer::_mesh_compute_bindings {
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 		.pImmutableSamplers = nullptr
 	},
+
+	// Texture sampler
+	DSLBinding {
+		.binding = MESH_BINDING_TEXTURES,
+		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.pImmutableSamplers = nullptr
+	}
 };
 
 const Layer::DSLBindings Layer::_postproc_bindings = {

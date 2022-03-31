@@ -81,8 +81,6 @@ struct BVHNode {
 			*reinterpret_cast <float *> (&miss)
 		};
 
-		std::cout << "header.object = " << header.data.y << std::endl;
-
 		// Write the node
 		buffer->push_back(header);
 		buffer->push_back(bbox.min);

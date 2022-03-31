@@ -3,7 +3,7 @@
 
 namespace kobra {
 
-Texture load_image_texture(const std::string &filename)
+Texture load_image_texture(const std::string &filename, int chan)
 {
 	// Check if file exists
 	// TODO: function in common.hpp
@@ -22,9 +22,25 @@ Texture load_image_texture(const std::string &filename)
 		return {};
 	}
 
-	// Create texture
-	bytes out(width * height * channels);
-	memcpy(out.data(), image, out.size());
+	// Resize to number of channels if requested
+	bytes out;
+	if (chan > 0 && chan != channels) {
+		out = bytes(width * height * chan);
+
+		for (int i = 0; i < width * height; i++) {
+			for (int j = 0; j < chan; j++) {
+				// If more channels than requested, set zero
+				if (j < channels)
+					out[i * chan + j] = image[i * channels + j];
+				else
+					out[i * chan + j] = 0;
+			}
+		}
+	} else {
+		// Create texture
+		out = bytes(width * height * channels);
+		memcpy(out.data(), image, out.size());
+	}
 
 	// Free image
 	stbi_image_free(image);

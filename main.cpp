@@ -25,6 +25,42 @@ class RTApp :  public BaseApp {
 	gui::Layer	gui_layer;
 
 	gui::Text	*text_frame_rate;
+
+	// Mouve camera
+	static void mouse_movement(void *user, const io::MouseEvent &event) {
+		static const float sensitivity = 0.001f;
+
+		static bool first_movement = true;
+
+		static float px = 0.0f;
+		static float py = 0.0f;
+
+		static float yaw = 0.0f;
+		static float pitch = 0.0f;
+
+		float dx = event.xpos - px;
+		float dy = event.ypos - py;
+
+		px = event.xpos;
+		py = event.ypos;
+		if (first_movement) {
+			first_movement = false;
+			return;
+		}
+
+		Camera *camera = (Camera *) user;
+
+		yaw -= dx * sensitivity;
+		pitch -= dy * sensitivity;
+
+		if (pitch > 89.0f)
+			pitch = 89.0f;
+		if (pitch < -89.0f)
+			pitch = -89.0f;
+
+		camera->transform.rotation.x = pitch;
+		camera->transform.rotation.y = yaw;
+	}
 public:
 	RTApp(Vulkan *vk) : BaseApp({
 		vk,
@@ -42,11 +78,12 @@ public:
 		rt_layer.add_camera(camera);
 		active_camera = rt_layer.activate_camera(0);
 
-		Model model("resources/benchmark/suzanne.obj");
+		Model model("/home/venki/downloads/quixel/Nature_Rock_vizvcbn_2K_3d_ms/vizvcbn_LOD5.fbx");
 
 		rt::Mesh *mesh0 = new rt::Mesh(model[0]);
-		rt::Mesh *mesh1 = new rt::Mesh(model[0]);
+		// rt::Mesh *mesh1 = new rt::Mesh(model[0]);
 
+		mesh0->transform().scale = glm::vec3 {0.1f};
 		mesh0->transform().move({0.25, 0.6, -1});
 
 		Material mat {
@@ -56,7 +93,7 @@ public:
 		mesh0->set_material(mat);
 
 		rt_layer.add(mesh0);
-		rt_layer.add(mesh1);
+		// rt_layer.add(mesh1);
 
 		// Add GUI elements
 		gui_layer = gui::Layer(window, VK_ATTACHMENT_LOAD_OP_LOAD);
@@ -69,6 +106,10 @@ public:
 		);
 
 		gui_layer.add(text_frame_rate);
+
+		// Add event listeners
+		window.mouse_events->subscribe(mouse_movement, active_camera);
+		window.cursor_mode(GLFW_CURSOR_DISABLED);
 	}
 
 	// Override record method
@@ -79,20 +120,27 @@ public:
 		// Start recording command buffer
 		Vulkan::begin(cmd);
 
-		// New camera position
-		glm::vec3 pos {
-			0,
-			sin(time),
-			10
-		};
+		// WASDEQ movement
+		float speed = 20.0f * frame_time;
 
-		// Rotation toward center
-		glm::mat4 lt = glm::lookAt(pos, {0, 0, 0}, {0, 1, 0});
-		glm::quat qt = glm::quat_cast(lt);
-		glm::vec3 euler = glm::eulerAngles(qt);
+		glm::vec3 forward = active_camera->transform.forward();
+		glm::vec3 right = active_camera->transform.right();
+		glm::vec3 up = active_camera->transform.up();
 
-		active_camera->transform.position = pos;
-		active_camera->transform.rotation = euler;
+		if (input.is_key_down(GLFW_KEY_W))
+			active_camera->transform.move(forward * speed);
+		else if (input.is_key_down(GLFW_KEY_S))
+			active_camera->transform.move(-forward * speed);
+
+		if (input.is_key_down(GLFW_KEY_A))
+			active_camera->transform.move(-right * speed);
+		else if (input.is_key_down(GLFW_KEY_D))
+			active_camera->transform.move(right * speed);
+
+		if (input.is_key_down(GLFW_KEY_E))
+			active_camera->transform.move(up * speed);
+		else if (input.is_key_down(GLFW_KEY_Q))
+			active_camera->transform.move(-up * speed);
 
 		// Render RT layer
 		rt_layer.render(cmd, framebuffer);

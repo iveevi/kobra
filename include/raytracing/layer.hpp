@@ -106,6 +106,9 @@ class Layer : public kobra::Layer <rt::_element> {
 
 	Buffer4m		_transforms;
 
+	// Normal samplers
+	raster::Sampler		_normal_sampler;
+
 	// BVH
 	BVH			_bvh;
 
@@ -130,9 +133,9 @@ class Layer : public kobra::Layer <rt::_element> {
 			uint c = *(reinterpret_cast <uint *> (&ic));
 			uint d = *(reinterpret_cast <uint *> (&id));
 
-			glm::vec4 va = vertices[a].data;
-			glm::vec4 vb = vertices[b].data;
-			glm::vec4 vc = vertices[c].data;
+			glm::vec4 va = vertices[2 * a].data;
+			glm::vec4 vb = vertices[2 * b].data;
+			glm::vec4 vc = vertices[2 * c].data;
 
 			glm::vec4 min = glm::min(va, glm::min(vb, vc));
 			glm::vec4 max = glm::max(va, glm::max(vb, vc));
@@ -210,6 +213,39 @@ public:
 
 		_pixels.bind(_postproc_ds, MESH_BINDING_PIXELS);
 		_viewport.bind(_postproc_ds, MESH_BINDING_VIEWPORT);
+
+		// Texture
+		// TODO: should be a static method
+		Texture tex = load_image_texture(
+			"/home/venki/downloads/quixel/Nature_Rock_vizvcbn_2K_3d_ms/"
+				"vizvcbn_2K_Normal_LOD5.jpg",
+			4
+		);
+
+		// tex.flip_y();
+
+		KOBRA_LOG_FILE(warn) << "tex channels = " << tex.channels << "\n";
+
+		raster::TexturePacket tp = raster::make_texture(
+			_context, wctx.command_pool,
+			tex,
+			VK_FORMAT_R8G8B8A8_UNORM, // TODO: should match the # of channels in texture
+			VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+		);
+
+		tp.transition_manual(_context, wctx.command_pool,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_TRANSFER_BIT
+		);
+
+		_normal_sampler = raster::Sampler(_context, tp);
+		_normal_sampler.bind(_mesh_ds, MESH_BINDING_TEXTURES);
+
+		KOBRA_LOG_FILE(notify) << "Loaded texture: " << tex.width << "x"
+			<< tex.height << " --> #bytes = " << tex.data.size() << "\n";
 	}
 
 	// Adding elements
