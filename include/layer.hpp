@@ -24,13 +24,19 @@ public:
 	Layer (const std::vector <ptr> &elements)
 			: _elements (elements) {}
 
+	// Add action
+	virtual void add_do(const ptr &element) {}
+
 	// Adding elements
 	virtual void add(const ptr &element) {
-		_elements.push_back (element);
+		_elements.push_back(element);
+		add_do(element);
 	}
 
 	virtual void add(T *element) {
-		_elements.push_back(ptr(element));
+		ptr p(element);
+		_elements.push_back(p);
+		add_do(p);
 	}
 
 	virtual void add(const std::vector <ptr> &elements) {
@@ -39,11 +45,17 @@ public:
 			elements.begin(),
 			elements.end()
 		);
+
+		for (const auto &element : elements)
+			add_do(element);
 	}
 
 	virtual void add(const std::vector <T *> &elements) {
-		for (auto element : elements)
-			_elements.push_back(ptr(element));
+		for (auto element : elements) {
+			ptr p(element);
+			_elements.push_back(p);
+			add_do(p);
+		}
 	}
 
 	// TODO: variadic overload (implement collect method in common)

@@ -7,6 +7,7 @@
 // Engine headers
 #include "backend.hpp"
 #include "bbox.hpp"
+#include "buffer_manager.hpp"
 #include "core.hpp"
 #include "world.hpp"
 
@@ -15,6 +16,7 @@ namespace kobra {
 // C++ representation of a BVH node
 struct BVHNode {
 	BoundingBox	bbox;
+
 	// Index of the object in the world
 	uint		object = 0;
 	BVHNode *	left = nullptr;
@@ -48,9 +50,7 @@ struct BVHNode {
 	// Recursively write the BVH to a buffer
 	//	miss is the index of tree node
 	//	that should be visited next (essential for traversal)
-	void write(Buffer &buffer, int miss = -1) {
-		// TODO: implement
-
+	void write(Buffer4f *buffer, int miss = -1) {
 		// Is the node a leaf?
 		float leaf = (left == nullptr && right == nullptr) ? 0x1 : 0x0;
 
@@ -82,9 +82,9 @@ struct BVHNode {
 		};
 
 		// Write the node
-		buffer.push_back(header);
-		buffer.push_back(bbox.min);
-		buffer.push_back(bbox.max);
+		buffer->push_back(header);
+		buffer->push_back(bbox.min);
+		buffer->push_back(bbox.max);
 
 		// Write the children
 		if (left)
@@ -96,19 +96,11 @@ struct BVHNode {
 
 // Aggreagate structure for BVH
 struct BVH {
-	// Vuklan context (TODO: struct)
-	Vulkan *		vk = nullptr;
-	VkPhysicalDevice	phdev = VK_NULL_HANDLE;
-	Vulkan::Device		device;
-
 	// Root nodes
 	std::vector <BVHNode *>	nodes;
 
-	// Vulkan buffer
-	Vulkan::Buffer		buffer;
-	// TODO: remove stack, will have no need for it
-	Vulkan::Buffer		stack; // Traversal stack
-	Buffer			dump;
+	// Actual buffers
+	Buffer4f nodes;
 
 	// Extra information
 	size_t			size = 0;
@@ -117,16 +109,22 @@ struct BVH {
 	// Default
 	BVH() {}
 
-	// Construct BVH from world
-	// TODO: a generic world object
-	BVH(Vulkan *vulkan, const VkPhysicalDevice &physical, const Vulkan::Device &dev, const rt::World &world)
-			: vk(vulkan), phdev(physical), device(dev) {
+	// Construct BVH from bounding boxes
+	BVH(const Vulkan::Context &ctx, const std::vector <BoundingBox> &bboxes) {
+		// Allocate buffer
+		BFM_Settings nodes_settings {
+			.size = 1024,
+			.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+			.usage_type = BFM_WRITE_ONLY
+		};
+
+		nodes = Buffer4(ctx, nodes_settings);
+
 		// Get all bounding boxes
-		std::vector <BoundingBox> boxes = world.extract_bboxes();
-		primitives = boxes.size();
+		primitives = bboxes.size();
 
 		// Process into BVH nodes
-		process(boxes);
+		process(bboxes);
 
 		// TODO: there should only be one root node remaining
 
@@ -134,17 +132,10 @@ struct BVH {
 		dump_all();
 		size = dump.size() / 3;
 
-		// Allocate buffer
-		vk->make_buffer(phdev, device, buffer, dump.size() * sizeof(aligned_vec4),
-				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-
 		// Traversal stack needs at most the # of nodes
 		// Quantize to 100 bytes
 		size_t size = nodes.size() * sizeof(int32_t);
 		size = (size + 99) / 100 * 100;
-
-		// Allocate stack
-		vk->make_buffer(phdev, device, stack, size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 
 		// Map buffer
 		map_buffer();

@@ -42,7 +42,7 @@ public:
 
 		Model model("resources/benchmark/suzanne.obj");
 
-		rt::Mesh *mesh = new rt::Mesh(window, model[0]);
+		rt::Mesh *mesh = new rt::Mesh(model[0]);
 
 		rt_layer.add(mesh);
 

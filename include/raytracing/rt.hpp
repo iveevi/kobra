@@ -6,6 +6,7 @@
 
 // Engine headers
 #include "../backend.hpp"
+#include "../buffer_manager.hpp"
 
 namespace kobra {
 
@@ -23,9 +24,10 @@ struct PushConstants {
 	aligned_vec4 camera_tunings;
 };
 
-// Render packet
-struct RenderPacket {
-	PushConstants *pc;
+// Latching packet
+struct LatchingPacket {
+	Buffer4f *vertices;
+	Buffer4f *triangles;
 };
 
 // Element type
@@ -33,14 +35,8 @@ struct _element {
 	// Destructor
 	virtual ~_element() = default;
 
-	// Latch to layer (to get descriptor set)
-	virtual void latch_layer(const VkDescriptorSet &) = 0;
-
-	// Get descriptor set
-	virtual const VkDescriptorSet &dset() const = 0;
-
-	// Render
-	virtual void render(const RenderPacket &) = 0;
+	// Latch to layer
+	virtual void latch(const LatchingPacket &packet) = 0;
 };
 
 // Memory safe

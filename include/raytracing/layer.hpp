@@ -98,6 +98,8 @@ class Layer : public kobra::Layer <rt::_element> {
 	// Data
 	BufferManager <uint>	_pixels;
 	BufferManager <uint>	_viewport;
+	Buffer4f		_vertices;
+	Buffer4f		_triangles;
 public:
 	// Default constructor
 	Layer() = default;
@@ -137,8 +139,22 @@ public:
 			.usage_type = BFM_WRITE_ONLY
 		};
 
+		BFM_Settings vertices_settings {
+			.size = 1024,
+			.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+			.usage_type = BFM_WRITE_ONLY
+		};
+
+		BFM_Settings triangles_settings {
+			.size = 1024,
+			.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+			.usage_type = BFM_WRITE_ONLY
+		};
+
 		_pixels = BufferManager <uint> (_context, pixel_settings);
 		_viewport = BufferManager <uint> (_context, viewport_settings);
+		_vertices = Buffer4f(_context, vertices_settings);
+		_triangles = Buffer4f(_context, triangles_settings);
 
 		// Fill out the viewport
 		_viewport.push_back(_extent.width);
@@ -159,32 +175,22 @@ public:
 
 	// Adding elements
 	// TODO: element actions from base class?
-	void add(const ptr &element) override {
-		_elements.push_back(element);
-		element->latch_layer(mesh_dset());
-	}
+	void add_do(const ptr &e) override {
+		std::cout << "Add action for mesh\n";
+		LatchingPacket lp {
+			.vertices = &_vertices,
+			.triangles = &_triangles
+		};
 
-	void add(_element *element) override {
-		_elements.push_back(ptr(element));
-		element->latch_layer(mesh_dset());
-	}
+		e->latch(lp);
 
-	void add(const std::vector <ptr> &elements) override {
-		_elements.insert(
-			_elements.end(),
-			elements.begin(),
-			elements.end()
-		);
+		// Flush the vertices and triangles
+		_vertices.sync_upload();
+		_triangles.sync_upload();
 
-		for (const auto &element : elements)
-			element->latch_layer(mesh_dset());
-	}
-
-	void add(const std::vector <_element *> &elements) override {
-		for (auto element : elements) {
-			_elements.push_back(ptr(element));
-			element->latch_layer(mesh_dset());
-		}
+		// Rebind to descriptor sets
+		_vertices.bind(_mesh_ds, MESH_BINDING_VERTICES);
+		_triangles.bind(_mesh_ds, MESH_BINDING_TRIANGLES);
 	}
 
 	// Number of cameras
@@ -214,24 +220,12 @@ public:
 		return _active_camera;
 	}
 
-	// Get a mesh descriptor set
-	VkDescriptorSet mesh_dset() {
-		VkDescriptorSet dset =_context.vk->make_descriptor_set(
-			_context.device,
-			_descriptor_pool,
-			_mesh_dsl
-		);
-
-		// Bind to descriptor set
-		_pixels.bind(dset, MESH_BINDING_PIXELS);
-		_viewport.bind(dset, MESH_BINDING_VIEWPORT);
-
-		return dset;
-	}
-
 	// Render
 	void render(const VkCommandBuffer &cmd, const VkFramebuffer &framebuffer) {
-		// Bind mesh compute pipeline
+		///////////////////////////
+		// Mesh compute pipeline //
+		///////////////////////////
+
 		// TODO: context method
 		vkCmdBindPipeline(cmd,
 			VK_PIPELINE_BIND_POINT_COMPUTE,
@@ -240,6 +234,8 @@ public:
 
 		// Prepare push constants
 		PushConstants pc {
+			.triangles = (uint) _triangles.push_size(),
+
 			.camera_position = _active_camera->transform.position,
 			.camera_forward = _active_camera->transform.forward(),
 			.camera_up = _active_camera->transform.up(),
@@ -252,39 +248,32 @@ public:
 			}
 		};
 
-		// Prepare the render packet
-		auto rp = RenderPacket {
-			.pc = &pc
-		};
+		// Bind descriptor set
+		vkCmdBindDescriptorSets(cmd,
+			VK_PIPELINE_BIND_POINT_COMPUTE,
+			_pipelines.mesh.layout,
+			0, 1, &_mesh_ds,
+			0, nullptr
+		);
 
-		// Render each element
-		for (auto &element : _elements) {
-			element->render(rp);
+		// Push constants
+		vkCmdPushConstants(cmd,
+			_pipelines.mesh.layout,
+			VK_SHADER_STAGE_COMPUTE_BIT,
+			0, sizeof(PushConstants), &pc
+		);
 
-			// Bind descriptor set
-			vkCmdBindDescriptorSets(cmd,
-				VK_PIPELINE_BIND_POINT_COMPUTE,
-				_pipelines.mesh.layout,
-				0, 1, &element->dset(),
-				0, nullptr
-			);
+		// Dispatch the compute shader
+		vkCmdDispatch(cmd,
+			_extent.width,
+			_extent.height,
+			1
+		);
 
-			// Push constants
-			vkCmdPushConstants(cmd,
-				_pipelines.mesh.layout,
-				VK_SHADER_STAGE_COMPUTE_BIT,
-				0, sizeof(PushConstants), &pc
-			);
+		//////////////////////////////
+		// Post-processing pipeline //
+		//////////////////////////////
 
-			// Dispatch the compute shader
-			vkCmdDispatch(cmd,
-				_extent.width,
-				_extent.height,
-				1
-			);
-		}
-
-		// Bind post-processing pipeline
 		vkCmdBindPipeline(cmd,
 			VK_PIPELINE_BIND_POINT_GRAPHICS,
 			_pipelines.postproc.pipeline
