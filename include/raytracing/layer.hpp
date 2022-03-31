@@ -8,6 +8,8 @@
 #include "../../shaders/rt/mesh_bindings.h"
 #include "../app.hpp"
 #include "../backend.hpp"
+#include "../bbox.hpp"
+#include "../bvh.hpp"
 #include "../camera.hpp"
 #include "../layer.hpp"
 #include "../logger.hpp"
@@ -100,6 +102,41 @@ class Layer : public kobra::Layer <rt::_element> {
 	BufferManager <uint>	_viewport;
 	Buffer4f		_vertices;
 	Buffer4f		_triangles;
+
+	// BVH
+	BVH			_bvh;
+
+	// Get list of bboxes for each triangle
+	std::vector <BoundingBox> _get_bboxes() const {
+		std::vector <BoundingBox> bboxes;
+		bboxes.reserve(_triangles.size());
+
+		const auto &vertices = _vertices.vector();
+		const auto &triangles = _triangles.vector();
+
+		for (size_t i = 0; i < _triangles.push_size(); i++) {
+			const auto &triangle = triangles[i];
+
+			float ia = triangle.data.x;
+			float ib = triangle.data.y;
+			float ic = triangle.data.z;
+
+			uint a = *(reinterpret_cast <uint *> (&ia));
+			uint b = *(reinterpret_cast <uint *> (&ib));
+			uint c = *(reinterpret_cast <uint *> (&ic));
+
+			glm::vec4 va = vertices[a].data;
+			glm::vec4 vb = vertices[b].data;
+			glm::vec4 vc = vertices[c].data;
+
+			glm::vec4 min = glm::min(va, glm::min(vb, vc));
+			glm::vec4 max = glm::max(va, glm::max(vb, vc));
+
+			bboxes.push_back(BoundingBox(min, max));
+		}
+
+		return bboxes;
+	}
 public:
 	// Default constructor
 	Layer() = default;
@@ -191,6 +228,12 @@ public:
 		// Rebind to descriptor sets
 		_vertices.bind(_mesh_ds, MESH_BINDING_VERTICES);
 		_triangles.bind(_mesh_ds, MESH_BINDING_TRIANGLES);
+
+		// Update the BVH
+		_bvh = BVH(_context, _get_bboxes());
+
+		// Rebind to descriptor sets
+		_bvh.bind(_mesh_ds, MESH_BINDING_BVH);
 	}
 
 	// Number of cameras

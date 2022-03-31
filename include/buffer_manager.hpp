@@ -8,7 +8,6 @@
 
 namespace kobra {
 
-// TODO: alloc subnamespace?
 // Usage types for buffer manager
 enum BFM_Usage {
 	BFM_WRITE_ONLY,

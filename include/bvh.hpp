@@ -55,7 +55,7 @@ struct BVHNode {
 		float leaf = (left == nullptr && right == nullptr) ? 0x1 : 0x0;
 
 		// Current size and after
-		int size = buffer.size();
+		int size = buffer->push_size();
 		int after = size + 3;
 
 		// Index of left and right children
@@ -95,19 +95,15 @@ struct BVHNode {
 };
 
 // Aggreagate structure for BVH
-struct BVH {
+class BVH {
 	// Root nodes
-	std::vector <BVHNode *>	nodes;
+	std::vector <BVHNode *>	_nodes;
 
 	// Actual buffers
-	Buffer4f nodes;
-
-	// Extra information
-	size_t			size = 0;
-	size_t			primitives = 0;
-
-	// Default
-	BVH() {}
+	Buffer4f		_bf_nodes;
+public:
+	// Default constructor
+	BVH() = default;
 
 	// Construct BVH from bounding boxes
 	BVH(const Vulkan::Context &ctx, const std::vector <BoundingBox> &bboxes) {
@@ -118,67 +114,43 @@ struct BVH {
 			.usage_type = BFM_WRITE_ONLY
 		};
 
-		nodes = Buffer4(ctx, nodes_settings);
-
-		// Get all bounding boxes
-		primitives = bboxes.size();
+		_bf_nodes = Buffer4f(ctx, nodes_settings);
 
 		// Process into BVH nodes
 		process(bboxes);
 
 		// TODO: there should only be one root node remaining
 
-		// Dump all nodes to buffer
-		dump_all();
-		size = dump.size() / 3;
-
-		// Traversal stack needs at most the # of nodes
-		// Quantize to 100 bytes
-		size_t size = nodes.size() * sizeof(int32_t);
-		size = (size + 99) / 100 * 100;
-
-		// Map buffer
-		map_buffer();
+		// Write nodes to buffer
+		write();
 	}
 
 	// Update BVH
-	void update(const rt::World &world) {
+	void update(const std::vector <BoundingBox> &bboxes) {
 		// Free the tree nodes
-		// TODO: later conserve allocation, and
-		// find a better method for dynamic BVH
-		if (nodes.size() && nodes[0])
-			delete nodes[0];
-
-		// Get all bounding boxes
-		std::vector <BoundingBox> boxes = world.extract_bboxes();
-		primitives = boxes.size();
+		if (_nodes.size() && _nodes[0])
+			delete _nodes[0];
 
 		// Process into BVH nodes
-		process(boxes);
+		process(bboxes);
 
-		// Dump all nodes to buffer
-		dump_all();
-		size = dump.size() / 3;
-
-		// TODO: reallocate if needed
-
-		// Map buffer
-		map_buffer();
+		// Write nodes to buffer
+		write();
 	}
 
 	// Process bounding boxes into BVH nodes
 	void process(const std::vector <BoundingBox> &boxes) {
 		// Convert each bounding box into a BVH node
-		nodes.clear();
+		_nodes.clear();
 		for (const BoundingBox &box : boxes) {
 			BVHNode *node = new BVHNode(box);
-			node->object = nodes.size();
-			nodes.push_back(node);
+			node->object = _nodes.size();
+			_nodes.push_back(node);
 		}
 
 		// Partition nodes and single out root node
-		BVHNode *root = partition(nodes);
-		nodes = std::vector <BVHNode *> {root};
+		BVHNode *root = partition(_nodes);
+		_nodes = std::vector <BVHNode *> {root};
 	}
 
 	BVHNode *partition(std::vector <BVHNode *> &nodes) {
@@ -336,25 +308,17 @@ struct BVH {
 	}
 
 	// Dump all nodes to buffer
-	void dump_all() {
-		// Clear dump
-		dump.clear();
-
+	void write() {
 		// Dump all nodes to buffer
-		for (BVHNode *node : nodes)
-			node->write(dump);
+		_bf_nodes.reset_push_back();
+		for (BVHNode *node : _nodes)
+			node->write(&_bf_nodes);
+		_bf_nodes.sync_upload();
 	}
 
-	// Map buffer
-	void map_buffer() {
-		// Map buffer
-		vk->map_buffer(device,
-			&buffer,
-			dump.data(),
-			dump.size() * sizeof(aligned_vec4)
-		);
-
-		// Stack has no need to be mapped
+	// Bind buffer to descriptor set
+	void bind(const VkDescriptorSet &dset, size_t index) {
+		_bf_nodes.bind(dset, index);
 	}
 };
 

@@ -5,5 +5,6 @@ const int MESH_BINDING_PIXELS = 0;
 const int MESH_BINDING_VIEWPORT = 1;
 const int MESH_BINDING_VERTICES = 2;
 const int MESH_BINDING_TRIANGLES = 3;
+const int MESH_BINDING_BVH = 4;
 
 #endif

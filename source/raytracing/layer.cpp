@@ -41,6 +41,14 @@ const Layer::DSLBindings Layer::_mesh_compute_bindings {
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 		.pImmutableSamplers = nullptr
 	},
+
+	DSLBinding {
+		.binding = MESH_BINDING_BVH,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.pImmutableSamplers = nullptr
+	},
 };
 
 const Layer::DSLBindings Layer::_postproc_bindings = {
@@ -145,7 +153,7 @@ void Layer::_init_postproc_pipeline(const Vulkan::Swapchain &swapchain)
 		"shaders/bin/generic/postproc_vert.spv",
 		"shaders/bin/generic/postproc_frag.spv"
 	});
-	
+
 	// Pipeline stages
 	VkPipelineShaderStageCreateInfo vertex {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -212,24 +220,24 @@ void Layer::_init_postproc_pipeline(const Vulkan::Swapchain &swapchain)
 		.depthClampEnable = VK_FALSE,
 		.rasterizerDiscardEnable = VK_FALSE,
 		.polygonMode = VK_POLYGON_MODE_FILL,
-		.lineWidth = 1.0f,
 		.cullMode = VK_CULL_MODE_NONE,
 		.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
 		.depthBiasEnable = VK_FALSE,
 		.depthBiasConstantFactor = 0.0f,
 		.depthBiasClamp = 0.0f,
-		.depthBiasSlopeFactor = 0.0f
+		.depthBiasSlopeFactor = 0.0f,
+		.lineWidth = 1.0f,
 	};
 
 	// Multisampling
 	VkPipelineMultisampleStateCreateInfo multisampling {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-		.sampleShadingEnable = VK_FALSE,
 		.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+		.sampleShadingEnable = VK_FALSE,
 		.minSampleShading = 1.0f,
 		.pSampleMask = nullptr,
 		.alphaToCoverageEnable = VK_FALSE,
-		.alphaToOneEnable = VK_FALSE
+		.alphaToOneEnable = VK_FALSE,
 	};
 
 	// Depth stencil

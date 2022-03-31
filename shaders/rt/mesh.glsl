@@ -25,6 +25,11 @@ layout (set = 0, binding = MESH_BINDING_TRIANGLES, std430) buffer Triangles
 	vec4 data[];
 } triangles;
 
+layout (set = 0, binding = MESH_BINDING_BVH, std430) buffer BVH
+{
+	vec4 data[];
+} bvh;
+
 // Push constants
 layout (push_constant) uniform PushConstants
 {
@@ -43,9 +48,88 @@ layout (push_constant) uniform PushConstants
 // Import other headers
 #include "common/color.glsl"
 #include "common/ray.glsl"
-#include "common/intersect.glsl"
+#include "common/bbox.glsl"
 
+// Triangle primitive
+struct Triangle {
+	vec3 v1;
+	vec3 v2;
+	vec3 v3;
+};
+
+// Material structure
+struct Material {
+	vec3 albedo;
+	float shading;
+
+	float specular;
+	float reflectance;
+	
+	// Index of refraction as a complex number
+	vec2 ior;
+};
+
+// Default "constructor"
+Material mat_default()
+{
+	return Material(
+		vec3(0.5f, 0.5f, 0.5f), 0.0f,
+		0.0f, 0.0f, vec2(0.0f, 0.0f)
+	);
+}
+
+// TODO: intersection header
 // Intersection
+struct Intersection {
+	float	time;
+	vec3	normal;
+
+	Material mat;
+};
+
+float _intersect_t(Triangle t, Ray r)
+{
+	vec3 e1 = t.v2 - t.v1;
+	vec3 e2 = t.v3 - t.v1;
+	vec3 s1 = cross(r.direction, e2);
+	float divisor = dot(s1, e1);
+	if (divisor == 0.0)
+		return -1.0;
+	vec3 s = r.origin - t.v1;
+	float inv_divisor = 1.0 / divisor;
+	float b1 = dot(s, s1) * inv_divisor;
+	if (b1 < 0.0 || b1 > 1.0)
+		return -1.0;
+	vec3 s2 = cross(s, e1);
+	float b2 = dot(r.direction, s2) * inv_divisor;
+	if (b2 < 0.0 || b1 + b2 > 1.0)
+		return -1.0;
+	float time = dot(e2, s2) * inv_divisor;
+	return time;
+}
+
+Intersection intersect_shape(Ray r, Triangle t)
+{
+	// Get intersection time
+	float time = _intersect_t(t, r);
+	vec3 n = vec3(0.0);
+
+	if (time < 0.0)
+		return Intersection(-1.0, n, mat_default());
+
+	// Calculate the normal
+	vec3 e1 = t.v2 - t.v1;
+	vec3 e2 = t.v3 - t.v1;
+	n = cross(e1, e2);
+	n = normalize(n);
+
+	// Negate normal if in the same direction as the ray
+	if (dot(n, r.direction) > 0.0)
+		n = -n;
+
+	return Intersection(time, n, mat_default());
+}
+
 Intersection ray_intersect(Ray ray, uint index)
 {
 	float ia = triangles.data[index].x;
@@ -66,6 +150,40 @@ Intersection ray_intersect(Ray ray, uint index)
 	return intersect_shape(ray, triangle);
 }
 
+// TODO: bvh header
+// Get left and right child of the node
+int hit(int node)
+{
+	vec4 prop = bvh.data[node];
+	return floatBitsToInt(prop.z);
+}
+
+int miss(int node)
+{
+	vec4 prop = bvh.data[node];
+	return floatBitsToInt(prop.w);
+}
+
+int object(int node)
+{
+	vec4 prop = bvh.data[node];
+	return floatBitsToInt(prop.y);
+}
+
+bool leaf(int node)
+{
+	vec4 prop = bvh.data[node];
+	return prop.x == 0x1;
+}
+
+BoundingBox bbox(int node)
+{
+	vec3 min = bvh.data[node + 1].xyz;
+	vec3 max = bvh.data[node + 2].xyz;
+
+	return BoundingBox(min, max);
+}
+
 // Get closest object
 float closest_object(Ray ray)
 {
@@ -77,18 +195,47 @@ float closest_object(Ray ray)
 		mat_default()
 	);
 
-	// If the ray is null
-	if (ray.direction == vec3(0.0))
-		return -1.0;
+	// Traverse BVH as a threaded binary tree
+	int node = 0;
+	int count = 0;
+	while (node != -1) {
+		count++;
+		if (leaf(node)) {
+			// return 1.0;
+			// Get object index
+			// int iobj = floatBitsToInt(bvh.data[node].y);
+			int index = object(node);
 
-	for (int i = 0; i < pc.triangles; i++) {
-		// Get object
-		Intersection it = ray_intersect(ray, i);
+			// uint index = world.indices[iobj];
 
-		// If intersection is valid, update minimum
-		if (it.time > 0.0 && it.time < mini.time) {
-			min_index = i;
-			mini = it;
+			// Get object
+			Intersection it = ray_intersect(ray, index);
+
+			// If intersection is valid, update minimum
+			if (it.time > 0.0 && it.time < mini.time) {
+				min_index = index;
+				mini = it;
+			}
+
+			// Go to next node (ame as miss)
+			node = miss(node);
+		} else {
+			// return 1.0;
+			// Get bounding box
+			BoundingBox box = bbox(node);
+
+			// Check if ray intersects (or is inside)
+			// the bounding box
+			float t = intersect_box(ray, box);
+			bool inside = in_box(ray.origin, box);
+
+			if (t > 0.0 || inside) {
+				// Traverse left child
+				node = hit(node);
+			} else {
+				// Traverse right child
+				node = miss(node);
+			}
 		}
 	}
 
@@ -128,7 +275,7 @@ void main()
 	// vec3 color = vertices.data[0].xyz + triangles.data[pc.triangles - 1].xyz;
 	vec3 color = vec3(0.0);
 	if (t > 0.0)
-		color = vec3(1.0);
+		color = vec3(1, 0, 1);
 	
 	// Get index
 	uint index = y0 * viewport.width + x0;
