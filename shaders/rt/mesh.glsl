@@ -192,7 +192,12 @@ Intersection ray_intersect(Ray ray, uint index)
 		// Get texture
 		tex_coord.y = 1.0 - tex_coord.y;
 		vec3 tex = texture(s2_normals, tex_coord).xyz;
-		it.normal = tex;
+
+		// Correct the normal direction
+		if (dot(it.normal, tex) < 0.0)
+			tex = -tex;
+
+		it.normal = normalize(tex);
 	}
 
 	// Intersect ray with sphere
@@ -316,10 +321,29 @@ vec3 color_at(Ray ray)
 	Hit hit = closest_object(ray);
 	
 	if (hit.object != -1) {
+		// Light intensity
+		float d = distance(light, hit.point);
+		float intensity = clamp(100.0 / (d * d), 0.0, 1.0);
+
 		// Calcula basic diffuse lighting
 		vec3 light_dir = normalize(light - hit.point);
 		float diffuse = max(dot(hit.normal, light_dir), 0.0);
-		return hit.mat.albedo * diffuse;
+
+		// Shadow coefficients
+		float shadow = 0.0;
+
+		Ray shadow_ray = Ray(
+			hit.point + hit.normal * bias,
+			light_dir
+		);
+
+		Hit shadow_hit = closest_object(shadow_ray);
+		if (shadow_hit.object != -1)
+			shadow = 1.0;
+
+		// Final color
+		return hit.mat.albedo * intensity
+			* diffuse * (1.0 - 0.9 * shadow);
 	}
 
 	return hit.mat.albedo;

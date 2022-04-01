@@ -31,7 +31,7 @@ public:
 	// Latch to layer
 	void latch(const LatchingPacket &lp, size_t id) override {
 		// Offset for triangle indices
-		uint offset = lp.vertices->push_size();
+		uint offset = lp.vertices->push_size()/2;
 
 		// Vertices
 		// TODO: figure out how to use transform matrices in the shader

@@ -25,6 +25,7 @@ class RTApp :  public BaseApp {
 	gui::Layer	gui_layer;
 
 	gui::Text	*text_frame_rate;
+	gui::Text	*layer_info;
 
 	// Mouve camera
 	static void mouse_movement(void *user, const io::MouseEvent &event) {
@@ -78,22 +79,24 @@ public:
 		rt_layer.add_camera(camera);
 		active_camera = rt_layer.activate_camera(0);
 
-		Model model("/home/venki/downloads/quixel/Nature_Rock_vizvcbn_2K_3d_ms/vizvcbn_LOD5.fbx");
+		Model model("/home/venki/downloads/quixel/Nature_Rock_vizvcbn_2K_3d_ms/vizvcbn_LOD0.fbx");
 
 		rt::Mesh *mesh0 = new rt::Mesh(model[0]);
-		// rt::Mesh *mesh1 = new rt::Mesh(model[0]);
+		rt::Mesh *mesh1 = new rt::Mesh(model[0]);
 
 		mesh0->transform().scale = glm::vec3 {0.1f};
-		mesh0->transform().move({0.25, 0.6, -1});
+		mesh0->transform().move({0.25, -0.6, -2});
 
 		Material mat {
 			.albedo = {0.5, 0.8, 0.5}
 		};
+		
+		mesh1->transform().scale = glm::vec3 {0.1f};
 
 		mesh0->set_material(mat);
 
 		rt_layer.add(mesh0);
-		// rt_layer.add(mesh1);
+		rt_layer.add(mesh1);
 
 		// Add GUI elements
 		gui_layer = gui::Layer(window, VK_ATTACHMENT_LOAD_OP_LOAD);
@@ -105,7 +108,14 @@ public:
 			{1, 1, 1, 1}
 		);
 
+		layer_info = gui_layer.text_render("default")->text(
+			"",
+			window.coordinates(0, 50),
+			{1, 1, 1, 1}
+		);
+
 		gui_layer.add(text_frame_rate);
+		gui_layer.add(layer_info);
 
 		// Add event listeners
 		window.mouse_events->subscribe(mouse_movement, active_camera);
@@ -113,6 +123,7 @@ public:
 	}
 
 	// Override record method
+	// TODO: preview raytraced scene with a very low resolution
 	void record(const VkCommandBuffer &cmd, const VkFramebuffer &framebuffer) override {
 		static char buffer[1024];
 		static float time = 0.0f;
@@ -153,6 +164,10 @@ public:
 		);
 
 		text_frame_rate->str = buffer;
+
+		// RT layer statistics
+		// TODO: why can i set str to an integer
+		layer_info->str = std::to_string(rt_layer.triangle_count()) + " triangles";
 
 		gui_layer.render(cmd, framebuffer);
 

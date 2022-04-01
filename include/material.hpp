@@ -14,6 +14,8 @@ namespace kobra {
 
 // Material
 struct Material {
+	// TODO: possible some samplers as well
+
 	// Shading type
 	glm::vec3 albedo	= glm::vec3 {1.0, 0.0, 1.0};
 

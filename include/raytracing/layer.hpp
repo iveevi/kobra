@@ -218,7 +218,7 @@ public:
 		// TODO: should be a static method
 		Texture tex = load_image_texture(
 			"/home/venki/downloads/quixel/Nature_Rock_vizvcbn_2K_3d_ms/"
-				"vizvcbn_2K_Normal_LOD5.jpg",
+				"vizvcbn_2K_Normal_LOD0.jpg",
 			4
 		);
 
@@ -251,6 +251,7 @@ public:
 	// Adding elements
 	// TODO: element actions from base class?
 	void add_do(const ptr &e) override {
+		std::cout << "ADDED ELEMENT\n";
 		LatchingPacket lp {
 			.vertices = &_vertices,
 			.triangles = &_triangles,
@@ -277,6 +278,11 @@ public:
 
 		// Rebind to descriptor sets
 		_bvh.bind(_mesh_ds, MESH_BINDING_BVH);
+	}
+
+	// Number of triangles
+	size_t triangle_count() const {
+		return _triangles.push_size();
 	}
 
 	// Number of cameras
