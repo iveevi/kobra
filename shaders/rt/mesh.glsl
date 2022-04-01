@@ -46,7 +46,8 @@ layout (set = 0, binding = MESH_BINDING_MATERIALS, std430) buffer Materials
 } materials;
 
 // Textures
-layout (set = 0, binding = MESH_BINDING_TEXTURES) uniform sampler2D s2_normals;
+layout (set = 0, binding = MESH_BINDING_ALBEDO) uniform sampler2D s2_albedo;
+layout (set = 0, binding = MESH_BINDING_NORMAL_MAPS) uniform sampler2D s2_normals;
 
 // Push constants
 // TODO: # of samples should be a push constant
@@ -55,19 +56,20 @@ layout (push_constant) uniform PushConstants
 	uint	triangles;
 
 	// Camera
-	vec3 camera_position;
-	vec3 camera_forward;
-	vec3 camera_up;
-	vec3 camera_right;
+	vec3	camera_position;
+	vec3	camera_forward;
+	vec3	camera_up;
+	vec3	camera_right;
 
 	// scale, aspect
-	vec4 properties;
+	vec4	properties;
 } pc;
 
 // Import other headers
 #include "common/color.glsl"
 #include "common/ray.glsl"
 #include "common/bbox.glsl"
+#include "../../include/types.hpp"
 
 // Triangle primitive
 struct Triangle {
@@ -76,16 +78,32 @@ struct Triangle {
 	vec3 v3;
 };
 
+// Transformation from sRGB to linear
+mat3 sRGB_to_linear = mat3(
+	3.2406, -0.9689, 0.0557,
+	-1.5372, 1.8758, -0.2040,
+	-0.4986, 0.0415, 1.0570
+);
+
+mat3 linear_to_sRGB = mat3(
+	0.4124, 0.3576, 0.1805,
+	0.2126, 0.7152, 0.0722,
+	0.0193, 0.1192, 0.9505
+);
+
 // Material structure
 struct Material {
 	vec3 albedo;
+	float shading;
+	float ior;
 };
 
 // Default "constructor"
 Material mat_default()
 {
 	return Material(
-		vec3(0.5f, 0.5f, 0.5f)
+		vec3(0.5f, 0.5f, 0.5f),
+		-1.0f, 1.0f
 	);
 }
 
@@ -95,7 +113,11 @@ Material mat_at(uint index)
 	vec4 raw0 = materials.data[2 * index];
 	vec4 raw1 = materials.data[2 * index + 1];
 
-	return Material(raw0.xyz);
+	return Material(
+		vec3(raw0.x, raw0.y, raw0.z),
+		raw0.w,
+		raw1.x
+	);
 }
 
 // TODO: intersection header
@@ -197,7 +219,10 @@ Intersection ray_intersect(Ray ray, uint index)
 		if (dot(it.normal, tex) < 0.0)
 			tex = -tex;
 
-		it.normal = normalize(tex);
+		// it.normal = normalize(tex);
+
+		if (d == 1)
+			it.mat.albedo = texture(s2_albedo, tex_coord).xyz;
 	}
 
 	// Intersect ray with sphere
@@ -309,41 +334,58 @@ Hit closest_object(Ray ray)
 		mini.mat
 	);
 }
+	
+// Bias for intersection
+float RT_BIAS = 0.1;
 
 // TODO: light transport header
-vec3 light = vec3(0.0, 5.0, 3.0);
+vec3 light = vec3(0.0, 4.5, 3.0);
+
+vec3 light_contr(Hit hit, Ray ray)
+{
+	// Light intensity
+	float d = distance(light, hit.point);
+	float intensity = clamp(100.0 / (d), 0.0, 1.0);
+
+	// Calcula basic diffuse lighting
+	vec3 light_dir = normalize(light - hit.point);
+	float diffuse = max(dot(hit.normal, light_dir), 0.0);
+
+	// Shadow coefficients
+	float shadow = 0.0;
+
+	Ray shadow_ray = Ray(
+		hit.point + hit.normal * RT_BIAS,
+		light_dir
+	);
+
+	Hit shadow_hit = closest_object(shadow_ray);
+	
+	if (shadow_hit.object != -1 && shadow_hit.mat.shading != SHADING_TYPE_EMMISIVE)
+		shadow = 1.0;
+
+	// Final color
+	return hit.mat.albedo * intensity
+		* diffuse * (1.0 - shadow);
+}
+
+vec3 single_color_at(Ray ray)
+{
+	// Get closest object
+	Hit hit = closest_object(ray);
+	if (hit.object != -1)
+		return light_contr(hit, ray);
+
+	return hit.mat.albedo;
+}
 
 vec3 color_at(Ray ray)
 {
-	// Bias for intersection
-	float bias = 0.1;
-
+	// Get closest object
 	Hit hit = closest_object(ray);
-	
-	if (hit.object != -1) {
-		// Light intensity
-		float d = distance(light, hit.point);
-		float intensity = clamp(100.0 / (d * d), 0.0, 1.0);
-
-		// Calcula basic diffuse lighting
-		vec3 light_dir = normalize(light - hit.point);
-		float diffuse = max(dot(hit.normal, light_dir), 0.0);
-
-		// Shadow coefficients
-		float shadow = 0.0;
-
-		Ray shadow_ray = Ray(
-			hit.point + hit.normal * bias,
-			light_dir
-		);
-
-		Hit shadow_hit = closest_object(shadow_ray);
-		if (shadow_hit.object != -1)
-			shadow = 1.0;
-
-		// Final color
-		return hit.mat.albedo * intensity
-			* diffuse * (1.0 - 0.9 * shadow);
+	if (hit.object != -1 && hit.mat.shading != SHADING_TYPE_EMMISIVE) {
+		vec3 color = light_contr(hit, ray);
+		return color;
 	}
 
 	return hit.mat.albedo;
@@ -379,6 +421,9 @@ void main()
 
 	// Light transport
 	vec3 color = color_at(ray);
+
+	float gamma = 2.2;
+	// color = pow(color, vec3(1/gamma));
 
 	// Get index
 	uint index = y0 * viewport.width + x0;

@@ -22,16 +22,6 @@ struct Texture {
 	uint channels;
 
 	bytes data;
-
-	/* Flip Y axis
-	void flip_y() {
-		for (uint i = 0; i < height / 2; i++) {
-			for (uint j = 0; j < width * channels; j++) {
-				std::swap(data[i * width * channels + j],
-					data[(height - i - 1) * width * channels + j]);
-			}
-		}
-	} */
 };
 
 // Load texture as byte array
@@ -39,7 +29,6 @@ Texture load_image_texture(const std::string &, int = -1);
 
 // Textures for rasterization
 // TODO: unlock from this namespace
-namespace raster {
 
 // Image packet
 struct TexturePacket {
@@ -451,8 +440,6 @@ public:
 		vkUpdateDescriptorSets(_ctx.vk_device(), 1, &descriptor_write, 0, nullptr);
 	}
 };
-
-}
 
 // Textures for ray tracing
 // TODO: is this branch even necessary

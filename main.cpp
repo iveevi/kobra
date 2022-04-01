@@ -72,31 +72,71 @@ public:
 		rt_layer = rt::Layer(window);
 
 		Camera camera {
-			Transform { {0, 0, 10} },
+			Transform { {0, 2, 15} },
 			Tunings { 45.0f, 800, 800 }
 		};
 
 		rt_layer.add_camera(camera);
 		active_camera = rt_layer.activate_camera(0);
 
-		Model model("/home/venki/downloads/quixel/Nature_Rock_vizvcbn_2K_3d_ms/vizvcbn_LOD0.fbx");
+		Model model("resources/benchmark/suzanne.obj");
 
-		rt::Mesh *mesh0 = new rt::Mesh(model[0]);
+		Mesh box = Mesh::make_box({0.25, 2.0, 2.0}, {1, 1, 1});
+		box.transform().rotation = {10, 30, 40};
+
+		rt::Mesh *mesh0 = new rt::Mesh(box);
 		rt::Mesh *mesh1 = new rt::Mesh(model[0]);
 
-		mesh0->transform().scale = glm::vec3 {0.1f};
+		// Box entire scene
+		rt::Mesh *wall1 = new rt::Mesh(Mesh::make_box({0, -2, 0}, {5, 0.1, 5}));
+		rt::Mesh *wall2 = new rt::Mesh(Mesh::make_box({0, 8, 0}, {5, 0.1, 5}));
+		rt::Mesh *wall3 = new rt::Mesh(Mesh::make_box({-5, 3, 0}, {0.1, 5, 5}));
+		rt::Mesh *wall4 = new rt::Mesh(Mesh::make_box({5, 3, 0}, {0.1, 5, 5}));
+		rt::Mesh *wall5 = new rt::Mesh(Mesh::make_box({0, 3, -5}, {5, 5, 0.1}));
+
+		// Box at light source
+		rt::Mesh *light = new rt::Mesh(Mesh::make_box({0, 4.5, 3}, {0.1, 0.1, 0.1}));
+		light->set_material(Material {
+			.albedo = {1, 1, 1},
+			.shading_type = SHADING_TYPE_EMMISIVE
+		});
+
+		// mesh0->transform().scale = glm::vec3 {0.1f};
 		mesh0->transform().move({0.25, -0.6, -2});
 
 		Material mat {
-			.albedo = {0.5, 0.8, 0.5}
+			.albedo = {0.5, 0.8, 0.5},
+			.ior = 1.76
 		};
 		
-		mesh1->transform().scale = glm::vec3 {0.1f};
+		// mesh1->transform().scale = glm::vec3 {0.1f};
 
 		mesh0->set_material(mat);
+		mat.ior = 1.0;
 
 		rt_layer.add(mesh0);
-		rt_layer.add(mesh1);
+		// rt_layer.add(mesh1);
+
+		// Set wall materials
+		mat.albedo = {0.7, 0.7, 0.7};
+		wall1->set_material(mat);
+		wall2->set_material(mat);
+		wall5->set_material(mat);
+		
+		mat.albedo = {1.0, 0.5, 0.5};
+		wall3->set_material(mat);
+
+		mat.albedo = {0.5, 0.5, 1.0};
+		wall4->set_material(mat);
+
+		// Walls
+		rt_layer.add(wall1);
+		rt_layer.add(wall2);
+		rt_layer.add(wall3);
+		rt_layer.add(wall4);
+		rt_layer.add(wall5);
+
+		rt_layer.add(light);
 
 		// Add GUI elements
 		gui_layer = gui::Layer(window, VK_ATTACHMENT_LOAD_OP_LOAD);

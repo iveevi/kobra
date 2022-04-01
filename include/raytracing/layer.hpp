@@ -107,7 +107,8 @@ class Layer : public kobra::Layer <rt::_element> {
 	Buffer4m		_transforms;
 
 	// Normal samplers
-	raster::Sampler		_normal_sampler;
+	Sampler			_albedo_sampler;
+	Sampler			_normal_sampler;
 
 	// BVH
 	BVH			_bvh;
@@ -214,21 +215,19 @@ public:
 		_pixels.bind(_postproc_ds, MESH_BINDING_PIXELS);
 		_viewport.bind(_postproc_ds, MESH_BINDING_VIEWPORT);
 
-		// Texture
+		// Textures
 		// TODO: should be a static method
-		Texture tex = load_image_texture(
-			"/home/venki/downloads/quixel/Nature_Rock_vizvcbn_2K_3d_ms/"
-				"vizvcbn_2K_Normal_LOD0.jpg",
+		Texture tex1 = load_image_texture(
+			"/home/venki/downloads/quixel/Nature_Rock/"
+				"vizvcbn_4K_Normal_LOD0.jpg",
 			4
 		);
 
-		// tex.flip_y();
+		KOBRA_LOG_FILE(warn) << "tex channels = " << tex1.channels << "\n";
 
-		KOBRA_LOG_FILE(warn) << "tex channels = " << tex.channels << "\n";
-
-		raster::TexturePacket tp = raster::make_texture(
+		TexturePacket tp = make_texture(
 			_context, wctx.command_pool,
-			tex,
+			tex1,
 			VK_FORMAT_R8G8B8A8_UNORM, // TODO: should match the # of channels in texture
 			VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
 			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
@@ -241,11 +240,33 @@ public:
 			VK_PIPELINE_STAGE_TRANSFER_BIT
 		);
 
-		_normal_sampler = raster::Sampler(_context, tp);
-		_normal_sampler.bind(_mesh_ds, MESH_BINDING_TEXTURES);
+		_normal_sampler = Sampler(_context, tp);
+		_normal_sampler.bind(_mesh_ds, MESH_BINDING_NORMAL_MAPS);
 
-		KOBRA_LOG_FILE(notify) << "Loaded texture: " << tex.width << "x"
-			<< tex.height << " --> #bytes = " << tex.data.size() << "\n";
+		KOBRA_LOG_FILE(notify) << "Loaded texture: " << tex1.width << "x"
+			<< tex1.height << " --> #bytes = " << tex1.data.size() << "\n";
+
+		// Albedo
+		// Texture tex2 = load_image_texture("resources/wood_floor_albedo.jpg", 4);
+		Texture tex2 = load_image_texture("/home/venki/downloads/quixel/Wood_Floor_8K/udeledcv_8K_Albedo.jpg", 4);
+
+		TexturePacket tp2 = make_texture(
+			_context, wctx.command_pool,
+			tex2,
+			VK_FORMAT_R8G8B8A8_UNORM, // TODO: should match the # of channels in texture
+			VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+		);
+
+		tp2.transition_manual(_context, wctx.command_pool,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_TRANSFER_BIT
+		);
+
+		_albedo_sampler = Sampler(_context, tp2);
+		_albedo_sampler.bind(_mesh_ds, MESH_BINDING_ALBEDO);
 	}
 
 	// Adding elements

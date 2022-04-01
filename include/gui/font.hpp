@@ -155,13 +155,13 @@ public:
 class Font {
 	// Font bitmaps
 	// TODO: remove, replaced by descritpor sets
-	std::unordered_map <char, raster::TexturePacket>	_bitmaps;
+	std::unordered_map <char, TexturePacket>	_bitmaps;
 
 	// Descriptor set for each glyph texture
-	std::unordered_map <char, VkDescriptorSet>		_glyph_ds;
+	std::unordered_map <char, VkDescriptorSet>	_glyph_ds;
 
 	// Font metrics
-	std::unordered_map <char, FT_Glyph_Metrics>		_metrics;
+	std::unordered_map <char, FT_Glyph_Metrics>	_metrics;
 
 	// Check FreeType error
 	void check_error(FT_Error error) const {
@@ -194,7 +194,7 @@ class Font {
 
 		// Add space character
 		{
-			raster::TexturePacket tp = raster::make_texture(
+			TexturePacket tp = make_texture(
 				ctx,
 				cpool,
 				Texture {
@@ -213,7 +213,7 @@ class Font {
 				VK_PIPELINE_STAGE_TRANSFER_BIT
 			);
 
-			raster::Sampler sampler(ctx, tp);
+			Sampler sampler(ctx, tp);
 
 			VkDescriptorSet ds = Glyph::make_bitmap_ds(ctx, dpool);
 			sampler.bind(ds, 0);
@@ -240,14 +240,12 @@ class Font {
 				.channels = 1
 			};
 
-			// Logger::warn() << "Glyph: " << width << " x " << height << std::endl;
 			if (width * height == 0)
 				continue;
 
 			// Load texture
 			tex.data = bytes(width * height);
 			memcpy(tex.data.data(), face->glyph->bitmap.buffer, width * height);
-			// Logger::warn() << "data size = " << tex.data.size() << std::endl;
 
 			int nulls = 0;
 			for (auto &b : tex.data) {
@@ -255,18 +253,14 @@ class Font {
 					nulls++;
 			}
 
-			// Logger::warn() << "tex.data Nulls: " << nulls << std::endl;
-
 			nulls = 0;
 			for (int i = 0; i < tex.data.size(); i++) {
 				if (face->glyph->bitmap.buffer[i] == 0)
 					nulls++;
 			}
 
-			// Logger::warn() << "face->glyph->bitmap.buffer Nulls: " << nulls << std::endl;
-
 			// Create texture
-			raster::TexturePacket tp = raster::make_texture(
+			TexturePacket tp = make_texture(
 				ctx, cpool, tex,
 				VK_FORMAT_R8_UNORM,
 				VK_IMAGE_USAGE_TRANSFER_DST_BIT
@@ -286,7 +280,7 @@ class Font {
 			_metrics[c] = face->glyph->metrics;
 
 			VkDescriptorSet ds = Glyph::make_bitmap_ds(ctx, dpool);
-			raster::Sampler sampler = raster::Sampler(ctx, tp);
+			Sampler sampler(ctx, tp);
 			sampler.bind(ds, 0);
 
 			_glyph_ds[c] = ds;
@@ -306,7 +300,7 @@ public:
 	}
 
 	// Retrieve glyph bitmap
-	const raster::TexturePacket &bitmap(char c) const {
+	const TexturePacket &bitmap(char c) const {
 		auto it = _bitmaps.find(c);
 		if (it == _bitmaps.end()) {
 			Logger::error() << "Glyph not found: " << c << std::endl;

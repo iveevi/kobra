@@ -105,7 +105,7 @@ static ObjectPtr load_mesh(std::ifstream &fin, const Transform &t)
 {
 	// Get source
 	std::string line;
-	
+
 	std::string source;
 	std::getline(fin, line);
 
@@ -197,7 +197,7 @@ Scene::Scene(const std::vector <Object *> &objs)
 
 Scene::Scene(const std::vector <ObjectPtr> &objs)
 		: _objects(objs) {}
-	
+
 /////////////
 // Methods //
 /////////////

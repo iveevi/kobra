@@ -67,14 +67,22 @@ const Layer::DSLBindings Layer::_mesh_compute_bindings {
 		.pImmutableSamplers = nullptr
 	},
 
-	// Texture sampler
+	// Texture samplers
 	DSLBinding {
-		.binding = MESH_BINDING_TEXTURES,
+		.binding = MESH_BINDING_ALBEDO,
 		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 		.descriptorCount = 1,
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 		.pImmutableSamplers = nullptr
-	}
+	},
+
+	DSLBinding {
+		.binding = MESH_BINDING_NORMAL_MAPS,
+		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.pImmutableSamplers = nullptr
+	},
 };
 
 const Layer::DSLBindings Layer::_postproc_bindings = {
