@@ -67,6 +67,24 @@ const Layer::DSLBindings Layer::_mesh_compute_bindings {
 		.pImmutableSamplers = nullptr
 	},
 
+	// Lights buffer
+	DSLBinding {
+		.binding = MESH_BINDING_LIGHTS,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.pImmutableSamplers = nullptr
+	},
+
+	// Light indices
+	DSLBinding {
+		.binding = MESH_BINDING_LIGHT_INDICES,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.pImmutableSamplers = nullptr
+	},
+
 	// Texture samplers
 	DSLBinding {
 		.binding = MESH_BINDING_ALBEDO,

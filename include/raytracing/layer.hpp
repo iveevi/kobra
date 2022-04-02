@@ -103,6 +103,8 @@ class Layer : public kobra::Layer <rt::_element> {
 	Buffer4f		_vertices;
 	Buffer4f		_triangles;
 	Buffer4f		_materials;
+	Buffer4f		_lights;		// TODO: make as a 4u buffer, less casting overall in the shader
+	BufferManager <uint>	_light_indices;
 
 	Buffer4m		_transforms;
 
@@ -197,6 +199,8 @@ public:
 		_vertices = Buffer4f(_context, write_only_settings);
 		_triangles = Buffer4f(_context, write_only_settings);
 		_materials = Buffer4f(_context, write_only_settings);
+		_lights = Buffer4f(_context, write_only_settings);
+		_light_indices = BufferManager <uint> (_context, write_only_settings);
 		_transforms = Buffer4m(_context, write_only_settings);
 
 		// Fill out the viewport
@@ -218,8 +222,8 @@ public:
 		// Textures
 		// TODO: should be a static method
 		Texture tex1 = load_image_texture(
-			"/home/venki/downloads/quixel/Nature_Rock/"
-				"vizvcbn_4K_Normal_LOD0.jpg",
+			"/home/venki/downloads/quixel/Nature_Rock_vizvcbn_2K_3d_ms/"
+				"vizvcbn_2K_Normal_LOD0.jpg",
 			4
 		);
 
@@ -228,7 +232,7 @@ public:
 		TexturePacket tp = make_texture(
 			_context, wctx.command_pool,
 			tex1,
-			VK_FORMAT_R8G8B8A8_UNORM, // TODO: should match the # of channels in texture
+			VK_FORMAT_R8G8B8A8_SRGB, // TODO: should match the # of channels in texture
 			VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
 			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 		);
@@ -248,7 +252,7 @@ public:
 
 		// Albedo
 		// Texture tex2 = load_image_texture("resources/wood_floor_albedo.jpg", 4);
-		Texture tex2 = load_image_texture("/home/venki/downloads/quixel/Wood_Floor_8K/udeledcv_8K_Albedo.jpg", 4);
+		Texture tex2 = load_image_texture("resources/wood_floor_albedo.jpg", 4);
 
 		TexturePacket tp2 = make_texture(
 			_context, wctx.command_pool,
@@ -277,7 +281,9 @@ public:
 			.vertices = &_vertices,
 			.triangles = &_triangles,
 			.materials = &_materials,
-			.transforms = &_transforms
+			.transforms = &_transforms,
+			.lights = &_lights,
+			.light_indices = &_light_indices
 		};
 
 		e->latch(lp, _elements.size());
@@ -287,12 +293,16 @@ public:
 		_triangles.sync_upload();
 		_materials.sync_upload();
 		_transforms.sync_upload();
+		_lights.sync_upload();
+		_light_indices.sync_upload();
 
 		// Rebind to descriptor sets
 		_vertices.bind(_mesh_ds, MESH_BINDING_VERTICES);
 		_triangles.bind(_mesh_ds, MESH_BINDING_TRIANGLES);
 		_materials.bind(_mesh_ds, MESH_BINDING_MATERIALS);
 		_transforms.bind(_mesh_ds, MESH_BINDING_TRANSFORMS);
+		_lights.bind(_mesh_ds, MESH_BINDING_LIGHTS);
+		_light_indices.bind(_mesh_ds, MESH_BINDING_LIGHT_INDICES);
 
 		// Update the BVH
 		_bvh = BVH(_context, _get_bboxes());
@@ -348,6 +358,9 @@ public:
 		// Prepare push constants
 		PushConstants pc {
 			.triangles = (uint) _triangles.push_size(),
+			.lights = (uint) _light_indices.push_size(),
+			.samples_per_pixel = 1,
+			.samples_per_light = 1,
 
 			.camera_position = _active_camera->transform.position,
 			.camera_forward = _active_camera->transform.forward(),

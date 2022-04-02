@@ -76,6 +76,43 @@ public:
 
 		// Write the transform
 		lp.transforms->push_back(transform().matrix());
+
+		// If the material is emmisive, write as a light
+		if (_material.shading_type == SHADING_TYPE_EMMISIVE) {
+			std::cout << "Mesh: is emmisive" << std::endl;
+
+			for (size_t i = 0; i < triangle_count(); i++) {
+				// Write light index
+				uint index = lp.lights->push_size();
+				lp.light_indices->push_back(index);
+
+				uint ia = _indices[3 * i] + offset;
+				uint ib = _indices[3 * i + 1] + offset;
+				uint ic = _indices[3 * i + 2] + offset;
+
+				float type = LIGHT_TYPE_AREA;
+				
+				// Header
+				glm::vec4 header {
+					type,
+					0, 0, 0	// TODO: add intensity and other parameters
+				};
+
+				// The shader will assume that all elements
+				// 	are triangles, no need for header info:
+				// 	also, material and transform
+				// 	will be a push constant...
+				glm::vec4 tri {
+					*(reinterpret_cast <float *> (&ia)),
+					*(reinterpret_cast <float *> (&ib)),
+					*(reinterpret_cast <float *> (&ic)),
+					0
+				};
+
+				lp.lights->push_back(header);
+				lp.lights->push_back(tri);
+			}
+		}
 	}
 };
 

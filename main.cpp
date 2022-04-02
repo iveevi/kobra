@@ -72,7 +72,7 @@ public:
 		rt_layer = rt::Layer(window);
 
 		Camera camera {
-			Transform { {0, 2, 15} },
+			Transform { {0, 2, 15}, {0, 0, 0} },
 			Tunings { 45.0f, 800, 800 }
 		};
 
@@ -81,7 +81,7 @@ public:
 
 		Model model("resources/benchmark/suzanne.obj");
 
-		Mesh box = Mesh::make_box({0.25, 2.0, 2.0}, {1, 1, 1});
+		Mesh box = Mesh::make_box({-1, 2.0, 3.0}, {1, 1, 1});
 		box.transform().rotation = {10, 30, 40};
 
 		rt::Mesh *mesh0 = new rt::Mesh(box);
@@ -94,9 +94,33 @@ public:
 		rt::Mesh *wall4 = new rt::Mesh(Mesh::make_box({5, 3, 0}, {0.1, 5, 5}));
 		rt::Mesh *wall5 = new rt::Mesh(Mesh::make_box({0, 3, -5}, {5, 5, 0.1}));
 
-		// Box at light source
-		rt::Mesh *light = new rt::Mesh(Mesh::make_box({0, 4.5, 3}, {0.1, 0.1, 0.1}));
-		light->set_material(Material {
+		// Square light source
+		glm::vec3 center {0, 7.5, 3.0};
+		Mesh light_mesh(
+			VertexList {
+				Vertex { {center.x - 0.5, center.y, center.z + 0.5}, {0, 0, 0} },
+				Vertex { {center.x + 0.5, center.y, center.z + 0.5}, {0, 0, 0} },
+				Vertex { {center.x + 0.5, center.y, center.z - 0.5}, {0, 0, 0} },
+				Vertex { {center.x - 0.5, center.y, center.z - 0.5}, {0, 0, 0} },
+			},
+
+			IndexList {
+				0, 1, 2,
+				0, 2, 3
+			}
+		);
+
+		rt::Mesh *light1 = new rt::Mesh(light_mesh);
+		rt::Mesh *light2 = new rt::Mesh(light_mesh);
+
+		light2->transform().position = {0, 10, 0.0};
+
+		light1->set_material(Material {
+			.albedo = {1, 1, 1},
+			.shading_type = SHADING_TYPE_EMMISIVE
+		});
+		
+		light2->set_material(Material {
 			.albedo = {1, 1, 1},
 			.shading_type = SHADING_TYPE_EMMISIVE
 		});
@@ -136,7 +160,8 @@ public:
 		rt_layer.add(wall4);
 		rt_layer.add(wall5);
 
-		rt_layer.add(light);
+		rt_layer.add(light1);
+		// rt_layer.add(light2);
 
 		// Add GUI elements
 		gui_layer = gui::Layer(window, VK_ATTACHMENT_LOAD_OP_LOAD);

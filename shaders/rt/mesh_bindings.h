@@ -10,9 +10,13 @@ const int MESH_BINDING_TRANSFORMS	= 4;
 const int MESH_BINDING_BVH		= 5;
 const int MESH_BINDING_MATERIALS	= 6;
 
+// Buffers for lights
+const int MESH_BINDING_LIGHTS		= 7;
+const int MESH_BINDING_LIGHT_INDICES	= 8;
+
 // Samplers
-const int MESH_BINDING_ALBEDO		= 7;
-const int MESH_BINDING_NORMAL_MAPS	= 8;
+const int MESH_BINDING_ALBEDO		= 9;
+const int MESH_BINDING_NORMAL_MAPS	= 10;
 
 // TODO: mesh roughness/bump map
 

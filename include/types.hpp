@@ -23,5 +23,6 @@ const float OBJECT_TYPE_SPHERE		= 0x00000002;
 const float LIGHT_TYPE_NONE		= 0x00000000;
 const float LIGHT_TYPE_POINT		= 0x00000001;
 const float LIGHT_TYPE_DIRECTIONAL	= 0x00000002;
+const float LIGHT_TYPE_AREA		= 0x00000003;
 
 #endif

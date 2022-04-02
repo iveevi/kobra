@@ -14,7 +14,11 @@ namespace rt {
 
 // Push constant structure
 struct PushConstants {
-	alignas(16) uint triangles;
+	alignas(16)
+	uint triangles;
+	uint lights;
+	uint samples_per_pixel;
+	uint samples_per_light;
 
 	aligned_vec4 camera_position;
 	aligned_vec4 camera_forward;
@@ -26,10 +30,12 @@ struct PushConstants {
 
 // Latching packet
 struct LatchingPacket {
-	Buffer4f *vertices;
-	Buffer4f *triangles;
-	Buffer4f *materials;
-	Buffer4m *transforms;
+	Buffer4f		*vertices;
+	Buffer4f		*triangles;
+	Buffer4f		*materials;
+	Buffer4m		*transforms;
+	Buffer4f		*lights;
+	BufferManager <uint>	*light_indices;
 };
 
 // Element type

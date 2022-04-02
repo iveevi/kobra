@@ -45,6 +45,18 @@ layout (set = 0, binding = MESH_BINDING_MATERIALS, std430) buffer Materials
 	vec4 data[];
 } materials;
 
+// Lights
+layout (set = 0, binding = MESH_BINDING_LIGHTS, std430) buffer Lights
+{
+	vec4 data[];
+} lights;
+
+// Light indices
+layout (set = 0, binding = MESH_BINDING_LIGHT_INDICES, std430) buffer LightIndices
+{
+	uint data[];
+} light_indices;
+
 // Textures
 layout (set = 0, binding = MESH_BINDING_ALBEDO) uniform sampler2D s2_albedo;
 layout (set = 0, binding = MESH_BINDING_NORMAL_MAPS) uniform sampler2D s2_normals;
@@ -53,7 +65,11 @@ layout (set = 0, binding = MESH_BINDING_NORMAL_MAPS) uniform sampler2D s2_normal
 // TODO: # of samples should be a push constant
 layout (push_constant) uniform PushConstants
 {
+	// Size variables
 	uint	triangles;
+	uint	lights;
+	uint	samples_per_pixel;
+	uint	samples_per_light;
 
 	// Camera
 	vec3	camera_position;
@@ -77,19 +93,6 @@ struct Triangle {
 	vec3 v2;
 	vec3 v3;
 };
-
-// Transformation from sRGB to linear
-mat3 sRGB_to_linear = mat3(
-	3.2406, -0.9689, 0.0557,
-	-1.5372, 1.8758, -0.2040,
-	-0.4986, 0.0415, 1.0570
-);
-
-mat3 linear_to_sRGB = mat3(
-	0.4124, 0.3576, 0.1805,
-	0.2126, 0.7152, 0.0722,
-	0.0193, 0.1192, 0.9505
-);
 
 // Material structure
 struct Material {
@@ -219,8 +222,6 @@ Intersection ray_intersect(Ray ray, uint index)
 		if (dot(it.normal, tex) < 0.0)
 			tex = -tex;
 
-		// it.normal = normalize(tex);
-
 		if (d == 1)
 			it.mat.albedo = texture(s2_albedo, tex_coord).xyz;
 	}
@@ -338,35 +339,117 @@ Hit closest_object(Ray ray)
 // Bias for intersection
 float RT_BIAS = 0.1;
 
-// TODO: light transport header
-vec3 light = vec3(0.0, 4.5, 3.0);
+// Golden random function
+float PHI = 1.61803398874989484820459;  // Φ = Golden Ratio 
+
+float ray_seed = 1.0;
+
+float gold_noise(in vec2 xy, in float seed)
+{
+	return fract(sin(dot(xy, vec2(12.9898, 78.233))) * seed);
+}
+
+// Sample random point in triangle
+float u = 0.0;
+float v = 0.0;
+
+vec3 sample_triangle(vec3 v1, vec3 v2, vec3 v3, float strata, float i)
+{
+	// Ignore random-ness if only 1 sample
+	if (pc.samples_per_light == 1)
+		return (v1 + v2 + v3) / 3.0;
+
+	// Get random point in triangle
+	u = gold_noise(vec2(v1), ray_seed);
+	v = gold_noise(vec2(v2), ray_seed);
+
+	// In the interval corresponding to the strata and index
+	float inv = 1.0 / strata;
+	float x = floor(i/strata);
+	float y = i - x * strata;
+
+	u = u * inv + x * inv;
+	v = v * inv + y * inv;
+
+	// Edge vectors
+	vec3 e1 = v2 - v1;
+	vec3 e2 = v3 - v1;
+
+	vec3 p = v1 + u * e1 + v * e2;
+
+	// Update seed
+	ray_seed = fract((ray_seed + 1.0) * PHI);
+
+	return p;
+}
+
+vec3 single_area_light_contr(Hit hit, Ray ray, vec3 v1, vec3 v2, vec3 v3)
+{
+	vec3 color = vec3(0.0);
+	for (int i = 0; i < pc.samples_per_light; i++) {
+		// Sample point from triangle
+		vec3 light_position = sample_triangle(
+			v1, v2, v3,
+			sqrt(pc.samples_per_light), i
+		);
+
+#if 1
+		// Light intensity
+		float d = distance(light_position, hit.point);
+		float intensity = 1.0/d;
+
+		// Lambertian
+		vec3 light_direction = normalize(light_position - hit.point);
+		float diffuse = max(dot(light_direction, hit.normal), 0.0);
+
+		// Shadow
+		Ray shadow_ray = Ray(
+			hit.point + hit.normal * 0.001,
+			light_direction
+		);
+
+		Hit shadow_hit = closest_object(shadow_ray);
+		if (shadow_hit.mat.shading == SHADING_TYPE_EMMISIVE || shadow_hit.time > d) {
+			// Add light
+			color += hit.mat.albedo * intensity * diffuse;
+		}
+#else
+		color = vec3(u, 0, v);
+#endif
+	}
+
+	return color/float(pc.samples_per_light);
+}
 
 vec3 light_contr(Hit hit, Ray ray)
 {
-	// Light intensity
-	float d = distance(light, hit.point);
-	float intensity = clamp(100.0 / (d), 0.0, 1.0);
+	vec3 contr = vec3(0.0);
 
-	// Calcula basic diffuse lighting
-	vec3 light_dir = normalize(light - hit.point);
-	float diffuse = max(dot(hit.normal, light_dir), 0.0);
+	// Iterate over all lights
+	for (int i = 0; i < pc.lights; i++) {
+		// Unique (but same) seed for each light
+		ray_seed = fract(sin(i * 4325874.3423) * 4398.4324);
+		// ray_seed = 0.0;
 
-	// Shadow coefficients
-	float shadow = 0.0;
+		// TODO: samlpe method for each light
+		uint light_index = floatBitsToUint(light_indices.data[i]);
 
-	Ray shadow_ray = Ray(
-		hit.point + hit.normal * RT_BIAS,
-		light_dir
-	);
+		float a = lights.data[light_index + 1].x;
+		float b = lights.data[light_index + 1].y;
+		float c = lights.data[light_index + 1].z;
 
-	Hit shadow_hit = closest_object(shadow_ray);
+		uint ia = floatBitsToUint(a);
+		uint ib = floatBitsToUint(b);
+		uint ic = floatBitsToUint(c);
+
+		vec3 v1 = vertices.data[2 * ia].xyz;
+		vec3 v2 = vertices.data[2 * ib].xyz;
+		vec3 v3 = vertices.data[2 * ic].xyz;
 	
-	if (shadow_hit.object != -1 && shadow_hit.mat.shading != SHADING_TYPE_EMMISIVE)
-		shadow = 1.0;
+		contr += single_area_light_contr(hit, ray, v1, v2, v3);
+	}
 
-	// Final color
-	return hit.mat.albedo * intensity
-		* diffuse * (1.0 - shadow);
+	return contr/float(pc.lights);
 }
 
 vec3 single_color_at(Ray ray)
@@ -402,30 +485,58 @@ void main()
 	// Return if out of bounds
 	if (y0 >= viewport.height || x0 >= viewport.width)
 		return;
-
-	// Create the ray
-	vec2 pixel = vec2(x0 + 0.5, y0 + 0.5);
-	vec2 dimensions = vec2(viewport.width, viewport.height);
-	vec2 uv = pixel / dimensions;
-
-	Ray ray = make_ray(uv,
-		pc.camera_position,
-		pc.camera_forward,
-		pc.camera_up,
-		pc.camera_right,
-		pc.properties.x,
-		pc.properties.y
-	);
-
-	// Hit h = closest_object(ray);
-
-	// Light transport
-	vec3 color = color_at(ray);
-
-	float gamma = 2.2;
-	// color = pow(color, vec3(1/gamma));
-
+	
 	// Get index
 	uint index = y0 * viewport.width + x0;
+
+	// Set seed
+	float rx = fract(sin(x0 * 1234.56789 + y0) * PHI);
+	float ry = fract(sin(y0 * 9876.54321 + x0));
+	ray_seed = rx + ry;
+	
+	vec3 color = vec3(0.0);
+
+#if 1
+
+	for (int i = 0; i < pc.samples_per_pixel; i++) {
+		// Random offset
+		float x = gold_noise(vec2(x0, y0), ray_seed);
+		ray_seed = fract(ray_seed - 10 * sin(ray_seed));
+		float y = gold_noise(vec2(x0, y0), ray_seed);
+		ray_seed = fract(ray_seed - 10 * sin(ray_seed));
+
+		vec2 offset = vec2(0.5) - vec2(x, y);
+
+		// Create the ray
+		vec2 pixel = vec2(x0, y0) + vec2(0.5, 0.5);
+		vec2 dimensions = vec2(viewport.width, viewport.height);
+		vec2 uv = pixel / dimensions;
+
+		Ray ray = make_ray(uv,
+			pc.camera_position,
+			pc.camera_forward,
+			pc.camera_up,
+			pc.camera_right,
+			pc.properties.x,
+			pc.properties.y
+		);
+
+		// Light transport
+		color += color_at(ray);
+	}
+	
+	color /= float(pc.samples_per_pixel);
+
+#else
+
+	rx = fract(sin(x0 * 1234.56789 + y0) * PHI);
+	ry = fract(sin(y0 * 9876.54321 + x0));
+	color = vec3(rx, 0, ry);
+
+#endif
+
+	float gamma = 2.2;
+	color = pow(color, vec3(1/gamma));
+
 	frame.pixels[index] = cast_color(color);
 }
