@@ -13,6 +13,7 @@
 #include "include/model.hpp"
 #include "include/raytracing/layer.hpp"
 #include "include/raytracing/mesh.hpp"
+#include "include/types.hpp"
 
 using namespace kobra;
 
@@ -81,8 +82,8 @@ public:
 
 		Model model("resources/benchmark/suzanne.obj");
 
-		Mesh box = Mesh::make_box({-1, 2.0, 3.0}, {1, 1, 1});
-		box.transform().rotation = {10, 30, 40};
+		Mesh box = Mesh::make_box({-1, 3, 3.0}, {0.01, 5, 1});
+		box.transform().rotation = {0, 30, 0};
 
 		rt::Mesh *mesh0 = new rt::Mesh(box);
 		rt::Mesh *mesh1 = new rt::Mesh(model[0]);
@@ -119,7 +120,7 @@ public:
 			.albedo = {1, 1, 1},
 			.shading_type = SHADING_TYPE_EMMISIVE
 		});
-		
+
 		light2->set_material(Material {
 			.albedo = {1, 1, 1},
 			.shading_type = SHADING_TYPE_EMMISIVE
@@ -129,10 +130,11 @@ public:
 		mesh0->transform().move({0.25, -0.6, -2});
 
 		Material mat {
-			.albedo = {0.5, 0.8, 0.5},
-			.ior = 1.76
+			.albedo = {0.3, 0.3, 0.9},
+			.shading_type = SHADING_TYPE_REFLECTION,
+			.ior = 1.3
 		};
-		
+
 		// mesh1->transform().scale = glm::vec3 {0.1f};
 
 		mesh0->set_material(mat);
@@ -143,10 +145,18 @@ public:
 
 		// Set wall materials
 		mat.albedo = {0.7, 0.7, 0.7};
+		
+		// mat.shading_type = SHADING_TYPE_REFLECTION;
+		mat.shading_type = SHADING_TYPE_DIFFUSE;
+		
 		wall1->set_material(mat);
 		wall2->set_material(mat);
+		
+		mat.shading_type = SHADING_TYPE_REFLECTION;
 		wall5->set_material(mat);
 		
+		mat.shading_type = SHADING_TYPE_DIFFUSE;
+
 		mat.albedo = {1.0, 0.5, 0.5};
 		wall3->set_material(mat);
 

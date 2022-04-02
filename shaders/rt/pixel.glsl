@@ -373,7 +373,7 @@ vec3 color_calc(Hit hit, Ray ray)
 
 	Ray shadow_ray = Ray(
 		shadow_origin,
-		light_direction
+		light_direction, 1.0
 	);
 
 	Hit shadow_hit = closest_object(shadow_ray);
@@ -422,7 +422,7 @@ vec3 color_calc_flat(Hit hit)
 
 	Ray shadow_ray = Ray(
 		shadow_origin,
-		light_direction
+		light_direction, 1.0
 	);
 
 	Hit shadow_hit = closest_object(shadow_ray);
@@ -451,9 +451,9 @@ struct Branch {
 Branch null_branch()
 {
 	return Branch(
-		Ray(vec3(0.0), vec3(0.0)),
+		Ray(vec3(0.0), vec3(0.0), 1.0),
 		0.0,
-		Ray(vec3(0.0), vec3(0.0)),
+		Ray(vec3(0.0), vec3(0.0), 1.0),
 		0.0,
 		0.0
 	);
@@ -480,9 +480,9 @@ Branch branch(Hit hit, Ray ray, float prefr)
 	// Return reflection structure
 	// TODO: fresnel calculation for energy
 	return Branch(
-		Ray(refl_origin, refl_direction),
+		Ray(refl_origin, refl_direction, 1.0),
 		hit.mat.ior.x,
-		Ray(refr_origin, refr_direction),
+		Ray(refr_origin, refr_direction, 1.0),
 		1 - hit.mat.ior.x,
 		hit.mat.ior.x
 	);

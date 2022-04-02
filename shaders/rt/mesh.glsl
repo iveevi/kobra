@@ -81,9 +81,34 @@ layout (push_constant) uniform PushConstants
 	vec4	properties;
 } pc;
 
+// Ray structure
+struct Ray {
+	vec3 origin;
+	vec3 direction;
+
+	float ior;
+	float contr;
+};
+
+// Create a ray from the camera
+Ray make_ray(vec2 uv, vec3 camera_position,
+		vec3 cforward, vec3 cup, vec3 cright,
+		float scale, float aspect)
+{
+	float cx = (2.0 * uv.x - 1.0) * scale * aspect;
+	float cy = (1.0 - 2.0 * uv.y) * scale;
+
+	vec3 right = vec3(1.0, 0.0, 0.0);
+	vec3 up = vec3(0.0, 1.0, 0.0);
+	vec3 forward = vec3(0.0, 0.0, 1.0);
+
+	vec3 direction = cx * cright + cy * cup + cforward;
+
+	return Ray(camera_position, normalize(direction), 1.0, 1.0);
+}
+
 // Import other headers
 #include "common/color.glsl"
-#include "common/ray.glsl"
 #include "common/bbox.glsl"
 #include "../../include/types.hpp"
 
@@ -335,12 +360,12 @@ Hit closest_object(Ray ray)
 		mini.mat
 	);
 }
-	
+
 // Bias for intersection
 float RT_BIAS = 0.1;
 
 // Golden random function
-float PHI = 1.61803398874989484820459;  // Φ = Golden Ratio 
+float PHI = 1.61803398874989484820459;  // Φ = Golden Ratio
 
 float ray_seed = 1.0;
 
@@ -383,6 +408,100 @@ vec3 sample_triangle(vec3 v1, vec3 v2, vec3 v3, float strata, float i)
 	return p;
 }
 
+#define MAX_DEPTH 10
+
+vec2 point_light_contr(Hit hit, vec3 pos)
+{
+	// Light intensity
+	float d = distance(pos, hit.point);
+	float intensity = 5.0/d;
+
+	// Lambertian
+	vec3 light_direction = normalize(pos - hit.point);
+	float diffuse = max(dot(light_direction, hit.normal), 0.0);
+
+	return vec2(intensity * diffuse, d);
+}
+
+vec3 point_light_full(Hit hit, Ray ray, vec3 pos)
+{
+	// Sum of colors
+	vec3 color = vec3(0.0);
+
+	// Create shadow ray
+	Ray shadow_ray = Ray(
+		hit.point + hit.normal * 0.001,
+		normalize(pos - hit.point),
+		1.0, 1.0
+	);
+
+	// Array of rays
+	Ray rays[MAX_DEPTH];
+	rays[0] = shadow_ray;
+
+	int index = 0;
+	int depth = 1;
+
+	// Light contribution
+	vec2 light_contr = point_light_contr(hit, pos);
+
+	// Oldest hit
+	Hit old_hit = hit;
+
+	// Loop until no more light
+	while (index < MAX_DEPTH && index < depth) {
+		// Get ray and hit
+		Ray r = rays[index];
+		Hit h = closest_object(r);
+
+		if (h.object == -1) {
+			// No hit, full contribution
+			color += r.contr * light_contr.x * hit.mat.albedo;
+		} else if (h.mat.shading == SHADING_TYPE_EMMISIVE
+				|| h.time > light_contr.y) {
+			// Hit object counts as light
+			color += r.contr * light_contr.x * hit.mat.albedo;
+		} else if (h.mat.shading == SHADING_TYPE_REFLECTION) {
+			// TODO: is reflectivity even needed here?
+			// Reflection doesnt preserve much light
+			float contr = 0.85;
+
+			// Possibly a little bit of light from reflection
+			Ray nray = Ray(
+				h.point + h.normal * 0.001,
+				reflect(r.direction, h.normal),
+				1.0, contr * r.contr
+			);
+
+			old_hit = h;
+			rays[depth] = nray;
+			depth++;
+		} else if (h.mat.shading == SHADING_TYPE_REFRACTION) {
+			// Refraction preserves more light
+			float contr = 0.95;
+
+			// Possibly a little bit of light from refraction
+			// TODO: preserve color of the object (tint)
+			// TODO: use the correct ior?
+			Ray nray = Ray(
+				h.point - h.normal * 0.001,
+				refract(r.direction, h.normal, 1.0),
+				h.mat.ior, contr * r.contr
+			);
+
+			old_hit = h;
+			rays[depth] = nray;
+			depth++;
+
+			// return vec3(h.mat.ior - 1);
+		}
+
+		index++;
+	}
+
+	return color;
+}
+
 vec3 single_area_light_contr(Hit hit, Ray ray, vec3 v1, vec3 v2, vec3 v3)
 {
 	vec3 color = vec3(0.0);
@@ -393,32 +512,34 @@ vec3 single_area_light_contr(Hit hit, Ray ray, vec3 v1, vec3 v2, vec3 v3)
 			sqrt(pc.samples_per_light), i
 		);
 
-#if 1
-		// Light intensity
-		float d = distance(light_position, hit.point);
-		float intensity = 1.0/d;
-
-		// Lambertian
-		vec3 light_direction = normalize(light_position - hit.point);
-		float diffuse = max(dot(light_direction, hit.normal), 0.0);
-
-		// Shadow
-		Ray shadow_ray = Ray(
-			hit.point + hit.normal * 0.001,
-			light_direction
-		);
-
-		Hit shadow_hit = closest_object(shadow_ray);
-		if (shadow_hit.mat.shading == SHADING_TYPE_EMMISIVE || shadow_hit.time > d) {
-			// Add light
-			color += hit.mat.albedo * intensity * diffuse;
-		}
-#else
-		color = vec3(u, 0, v);
-#endif
+		color += point_light_full(hit, ray, light_position);
 	}
 
 	return color/float(pc.samples_per_light);
+}
+
+vec3 single_area_light_contr(Hit hit, Ray ray, int i)
+{
+	// Unique (but same) seed for each light
+	ray_seed = fract(sin(i * 4325874.3423) * 4398.4324);
+	// ray_seed = 0.0;
+
+	// TODO: samlpe method for each light
+	uint light_index = floatBitsToUint(light_indices.data[i]);
+
+	float a = lights.data[light_index + 1].x;
+	float b = lights.data[light_index + 1].y;
+	float c = lights.data[light_index + 1].z;
+
+	uint ia = floatBitsToUint(a);
+	uint ib = floatBitsToUint(b);
+	uint ic = floatBitsToUint(c);
+
+	vec3 v1 = vertices.data[2 * ia].xyz;
+	vec3 v2 = vertices.data[2 * ib].xyz;
+	vec3 v3 = vertices.data[2 * ic].xyz;
+
+	return single_area_light_contr(hit, ray, v1, v2, v3);
 }
 
 vec3 light_contr(Hit hit, Ray ray)
@@ -426,52 +547,78 @@ vec3 light_contr(Hit hit, Ray ray)
 	vec3 contr = vec3(0.0);
 
 	// Iterate over all lights
-	for (int i = 0; i < pc.lights; i++) {
-		// Unique (but same) seed for each light
-		ray_seed = fract(sin(i * 4325874.3423) * 4398.4324);
-		// ray_seed = 0.0;
-
-		// TODO: samlpe method for each light
-		uint light_index = floatBitsToUint(light_indices.data[i]);
-
-		float a = lights.data[light_index + 1].x;
-		float b = lights.data[light_index + 1].y;
-		float c = lights.data[light_index + 1].z;
-
-		uint ia = floatBitsToUint(a);
-		uint ib = floatBitsToUint(b);
-		uint ic = floatBitsToUint(c);
-
-		vec3 v1 = vertices.data[2 * ia].xyz;
-		vec3 v2 = vertices.data[2 * ib].xyz;
-		vec3 v3 = vertices.data[2 * ic].xyz;
-	
-		contr += single_area_light_contr(hit, ray, v1, v2, v3);
-	}
+	for (int i = 0; i < pc.lights; i++)
+		contr += single_area_light_contr(hit, ray, i);
 
 	return contr/float(pc.lights);
 }
 
-vec3 single_color_at(Ray ray)
-{
-	// Get closest object
-	Hit hit = closest_object(ray);
-	if (hit.object != -1)
-		return light_contr(hit, ray);
-
-	return hit.mat.albedo;
-}
-
 vec3 color_at(Ray ray)
 {
-	// Get closest object
-	Hit hit = closest_object(ray);
-	if (hit.object != -1 && hit.mat.shading != SHADING_TYPE_EMMISIVE) {
-		vec3 color = light_contr(hit, ray);
-		return color;
+	// Array of rays
+	Ray rays[MAX_DEPTH];
+	rays[0] = ray;
+
+	int index = 0;
+	int depth = 1;
+
+	// Total color
+	vec3 color = vec3(0.0);
+
+	// Iterate over all rays
+	while (index < MAX_DEPTH && index < depth) {
+		Ray r = rays[index];
+		Hit hit = closest_object(r);
+
+		if (hit.object == -1) {
+			// No hit
+			color += hit.mat.albedo;
+		} else if (hit.mat.shading == SHADING_TYPE_EMMISIVE) {
+			// Emissive
+			color += hit.mat.albedo;
+		} else {
+			// Hit
+			color += r.contr * light_contr(hit, r);
+
+			// Reflection
+			if (hit.mat.shading == SHADING_TYPE_REFLECTION
+					&& depth < MAX_DEPTH) {
+				// Reflection ray
+				vec3 r_dir = reflect(r.direction, hit.normal);
+				Ray r_ray = Ray(
+					hit.point + hit.normal * 0.001,
+					r_dir, 1.0, 0.8 * r.contr
+				);
+
+				rays[depth] = r_ray;
+				depth++;
+			}
+
+			// Refraction
+			if (hit.mat.shading == SHADING_TYPE_REFRACTION
+					&& depth < MAX_DEPTH) {
+				// Refraction ray
+				vec3 r_dir = refract(
+					r.direction,
+					hit.normal,
+					r.ior/hit.mat.ior
+				);
+
+				Ray r_ray = Ray(
+					hit.point - hit.normal * 0.001,
+					r_dir, 1.0, 0.8 * r.contr
+				);
+
+				rays[depth] = r_ray;
+				depth++;
+			}
+		}
+
+		index++;
 	}
 
-	return hit.mat.albedo;
+	// return vec3(sin(0.1 * index));
+	return clamp(color, 0.0, 1.0);
 }
 
 // TODO: color wheel (if needed) goes in a header
@@ -485,7 +632,7 @@ void main()
 	// Return if out of bounds
 	if (y0 >= viewport.height || x0 >= viewport.width)
 		return;
-	
+
 	// Get index
 	uint index = y0 * viewport.width + x0;
 
@@ -493,7 +640,7 @@ void main()
 	float rx = fract(sin(x0 * 1234.56789 + y0) * PHI);
 	float ry = fract(sin(y0 * 9876.54321 + x0));
 	ray_seed = rx + ry;
-	
+
 	vec3 color = vec3(0.0);
 
 #if 1
@@ -524,7 +671,7 @@ void main()
 		// Light transport
 		color += color_at(ray);
 	}
-	
+
 	color /= float(pc.samples_per_pixel);
 
 #else

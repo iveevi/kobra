@@ -21,7 +21,7 @@ vec3 diffuse(Hit hit, Ray ray)
 
 	Ray shadow_ray = Ray(
 		shadow_origin,
-		light_direction
+		light_direction, 1.0
 	);
 
 	Hit shadow_hit = closest_object(shadow_ray);

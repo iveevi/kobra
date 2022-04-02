@@ -2,6 +2,7 @@
 struct Ray {
 	vec3 origin;
 	vec3 direction;
+	float ior;
 };
 
 // Create a ray from the camera
@@ -18,5 +19,5 @@ Ray make_ray(vec2 uv, vec3 camera_position,
 
 	vec3 direction = cx * cright + cy * cup + cforward;
 
-	return Ray(camera_position, normalize(direction));
+	return Ray(camera_position, normalize(direction), 1.0);
 }

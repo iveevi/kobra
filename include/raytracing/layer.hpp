@@ -221,11 +221,16 @@ public:
 
 		// Textures
 		// TODO: should be a static method
-		Texture tex1 = load_image_texture(
+		/* Texture tex1 = load_image_texture(
 			"/home/venki/downloads/quixel/Nature_Rock_vizvcbn_2K_3d_ms/"
 				"vizvcbn_2K_Normal_LOD0.jpg",
 			4
-		);
+		); */
+		Texture tex1 {
+			.width = 1024,
+			.height = 1024,
+			.channels = 4,
+		};
 
 		KOBRA_LOG_FILE(warn) << "tex channels = " << tex1.channels << "\n";
 
@@ -360,7 +365,7 @@ public:
 			.triangles = (uint) _triangles.push_size(),
 			.lights = (uint) _light_indices.push_size(),
 			.samples_per_pixel = 1,
-			.samples_per_light = 1,
+			.samples_per_light = 16,
 
 			.camera_position = _active_camera->transform.position,
 			.camera_forward = _active_camera->transform.forward(),

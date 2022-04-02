@@ -13,6 +13,12 @@ const float SHADING_TYPE_SIMPLE		= 0x00000004;
 // Emmisive objects
 const float SHADING_TYPE_EMMISIVE	= 0x00000005;
 
+// Raytracing shading types
+const float SHADING_TYPE_DIFFUSE	= 1 << 4;
+const float SHADING_TYPE_SPECULAR	= 1 << 5;
+const float SHADING_TYPE_REFLECTION	= 1 << 6;
+const float SHADING_TYPE_REFRACTION	= 1 << 7;
+
 // All possible types of objects
 // TODO: refactor to primitive types
 const float OBJECT_TYPE_NONE		= 0x00000000;
