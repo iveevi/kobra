@@ -15,6 +15,11 @@ namespace rt {
 // Push constant structure
 struct PushConstants {
 	alignas(16)
+	uint width;
+	uint height;
+	uint xoffset;
+	uint yoffset;
+
 	uint triangles;
 	uint lights;
 	uint samples_per_pixel;
@@ -26,6 +31,11 @@ struct PushConstants {
 	aligned_vec4 camera_right;
 
 	aligned_vec4 camera_tunings;
+};
+
+struct PC_Viewport {
+	uint width;
+	uint height;
 };
 
 // Latching packet

@@ -61,11 +61,6 @@ public:
 		return _indices;
 	}
 
-	// Set material
-	void set_material(const Material &material) {
-		this->_material = material;
-	}
-
 	// Virtual methods
 	void save(std::ofstream &) const override;
 

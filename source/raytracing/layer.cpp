@@ -19,14 +19,6 @@ const Layer::DSLBindings Layer::_mesh_compute_bindings {
 	},
 
 	DSLBinding {
-		.binding = MESH_BINDING_VIEWPORT,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-		.pImmutableSamplers = nullptr
-	},
-
-	DSLBinding {
 		.binding = MESH_BINDING_VERTICES,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 		.descriptorCount = 1,
@@ -333,12 +325,18 @@ void Layer::_init_postproc_pipeline(const Vulkan::Swapchain &swapchain)
 	};
 
 	// Pipeline layout
+	VkPushConstantRange push_constant_range {
+		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+		.offset = 0,
+		.size = sizeof(PC_Viewport)
+	};
+
 	VkPipelineLayoutCreateInfo pipeline_layout_info {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 		.setLayoutCount = 1,
 		.pSetLayouts = &_postproc_dsl,
-		.pushConstantRangeCount = 0,
-		.pPushConstantRanges = nullptr
+		.pushConstantRangeCount = 1,
+		.pPushConstantRanges = &push_constant_range
 	};
 
 	VkResult result;

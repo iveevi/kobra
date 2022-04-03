@@ -30,6 +30,10 @@ public:
 	const Material &material() const {
 		return _material;
 	}
+
+	void set_material(const Material &material) {
+		_material = material;
+	}
 };
 
 }

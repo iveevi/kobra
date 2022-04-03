@@ -99,7 +99,6 @@ class Layer : public kobra::Layer <rt::_element> {
 
 	// Data
 	BufferManager <uint>	_pixels;
-	BufferManager <uint>	_viewport;
 	Buffer4f		_vertices;
 	Buffer4f		_triangles;
 	Buffer4f		_materials;
@@ -114,6 +113,13 @@ class Layer : public kobra::Layer <rt::_element> {
 
 	// BVH
 	BVH			_bvh;
+
+	// Batching variables
+	int			_xbatch = 0;
+	int			_ybatch = 0;
+
+	int			_xbatch_size = 50;
+	int			_ybatch_size = 50;
 
 	// Get list of bboxes for each triangle
 	std::vector <BoundingBox> _get_bboxes() const {
@@ -136,14 +142,25 @@ class Layer : public kobra::Layer <rt::_element> {
 			uint c = *(reinterpret_cast <uint *> (&ic));
 			uint d = *(reinterpret_cast <uint *> (&id));
 
-			glm::vec4 va = vertices[2 * a].data;
-			glm::vec4 vb = vertices[2 * b].data;
-			glm::vec4 vc = vertices[2 * c].data;
+			// If a == b == c, its a sphere
+			if (a == b && b == c) {
+				glm::vec4 center = vertices[2 * a].data;
+				float radius = center.w;
 
-			glm::vec4 min = glm::min(va, glm::min(vb, vc));
-			glm::vec4 max = glm::max(va, glm::max(vb, vc));
+				glm::vec4 min = center - glm::vec4(radius);
+				glm::vec4 max = center + glm::vec4(radius);
 
-			bboxes.push_back(BoundingBox {min, max});
+				bboxes.push_back(BoundingBox {min, max});
+			} else {
+				glm::vec4 va = vertices[2 * a].data;
+				glm::vec4 vb = vertices[2 * b].data;
+				glm::vec4 vc = vertices[2 * c].data;
+
+				glm::vec4 min = glm::min(va, glm::min(vb, vc));
+				glm::vec4 max = glm::max(va, glm::max(vb, vc));
+
+				bboxes.push_back(BoundingBox {min, max});
+			}
 		}
 
 		return bboxes;
@@ -194,7 +211,6 @@ public:
 		};
 
 		_pixels = BufferManager <uint> (_context, pixel_settings);
-		_viewport = BufferManager <uint> (_context, viewport_settings);
 
 		_vertices = Buffer4f(_context, write_only_settings);
 		_triangles = Buffer4f(_context, write_only_settings);
@@ -203,21 +219,12 @@ public:
 		_light_indices = BufferManager <uint> (_context, write_only_settings);
 		_transforms = Buffer4m(_context, write_only_settings);
 
-		// Fill out the viewport
-		_viewport.push_back(_extent.width);
-		_viewport.push_back(_extent.height);
-		_viewport.sync_size();
-		_viewport.upload();
-
 		KOBRA_LOG_FUNC(notify) << "Initialized rt::Layer, mesh.plaout = "
 			<< _pipelines.mesh.layout << "\n";
 
 		// Bind to descriptor sets
 		_pixels.bind(_mesh_ds, MESH_BINDING_PIXELS);
-		_viewport.bind(_mesh_ds, MESH_BINDING_VIEWPORT);
-
 		_pixels.bind(_postproc_ds, MESH_BINDING_PIXELS);
-		_viewport.bind(_postproc_ds, MESH_BINDING_VIEWPORT);
 
 		// Textures
 		// TODO: should be a static method
@@ -362,10 +369,18 @@ public:
 
 		// Prepare push constants
 		PushConstants pc {
+			.width = _extent.width,
+			.height = _extent.height,
+
+			.xoffset = uint(_xbatch * _xbatch_size),
+			.yoffset = uint(_ybatch * _ybatch_size),
+
 			.triangles = (uint) _triangles.push_size(),
 			.lights = (uint) _light_indices.push_size(),
-			.samples_per_pixel = 1,
-			.samples_per_light = 16,
+
+			// TODO: still unable to do large number of samples
+			.samples_per_pixel = 25,
+			.samples_per_light = 64,
 
 			.camera_position = _active_camera->transform.position,
 			.camera_forward = _active_camera->transform.forward(),
@@ -396,10 +411,22 @@ public:
 
 		// Dispatch the compute shader
 		vkCmdDispatch(cmd,
-			_extent.width,
-			_extent.height,
+			_xbatch_size,
+			_ybatch_size,
 			1
 		);
+
+		// Update batch offsets
+		_xbatch += 1;
+		if (_xbatch * _xbatch_size >= _extent.width) {
+			_xbatch = 0;
+			_ybatch += 1;
+		}
+
+		if (_ybatch * _ybatch_size >= _extent.height) {
+			_ybatch = 0;
+			_xbatch = 0;
+		}
 
 		//////////////////////////////
 		// Post-processing pipeline //
@@ -416,6 +443,18 @@ public:
 			_pipelines.postproc.layout,
 			0, 1, &_postproc_ds,
 			0, nullptr
+		);
+
+		// Push constants
+		PC_Viewport pc_vp {
+			.width = _extent.width,
+			.height = _extent.height
+		};
+
+		vkCmdPushConstants(cmd,
+			_pipelines.postproc.layout,
+			VK_SHADER_STAGE_FRAGMENT_BIT,
+			0, sizeof(PC_Viewport), &pc_vp
 		);
 
 		// Begin render pass

@@ -8,10 +8,11 @@ layout (set = 0, binding = MESH_BINDING_PIXELS, std430) buffer Pixels
 	uint pixels[];
 } frame;
 
-layout (set = 0, binding = MESH_BINDING_VIEWPORT, std430) buffer Vertices
+layout (push_constant) uniform PushConstants
 {
-	uint width;
-	uint height;
+	// Viewport
+	uint	width;
+	uint	height;
 } viewport;
 
 // Output color
