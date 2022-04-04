@@ -81,7 +81,7 @@ const Layer::DSLBindings Layer::_mesh_compute_bindings {
 	DSLBinding {
 		.binding = MESH_BINDING_ALBEDO,
 		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-		.descriptorCount = 1,
+		.descriptorCount = MAX_TEXTURES,
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 		.pImmutableSamplers = nullptr
 	},

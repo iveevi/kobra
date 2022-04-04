@@ -12,6 +12,9 @@ namespace kobra {
 
 namespace rt {
 
+// Aliases
+using ImageDescriptors = std::vector <VkDescriptorImageInfo>;
+
 // Push constant structure
 struct PushConstants {
 	alignas(16)
@@ -40,12 +43,16 @@ struct PC_Viewport {
 
 // Latching packet
 struct LatchingPacket {
+	// Buffers
 	Buffer4f		*vertices;
 	Buffer4f		*triangles;
 	Buffer4f		*materials;
 	Buffer4m		*transforms;
 	Buffer4f		*lights;
 	BufferManager <uint>	*light_indices;
+
+	// Samplers
+	ImageDescriptors	&albedo_samplers;
 };
 
 // Element type

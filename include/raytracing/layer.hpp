@@ -3,6 +3,7 @@
 
 // Standard headers
 #include <vector>
+#include <vulkan/vulkan_core.h>
 
 // Engine headers
 #include "../../shaders/rt/mesh_bindings.h"
@@ -107,9 +108,39 @@ class Layer : public kobra::Layer <rt::_element> {
 
 	Buffer4m		_transforms;
 
+
+	//////////////
+	// Samplers //
+	//////////////
+	
+	// Empty sampler
+	Sampler			_empty_sampler;
+
+	// Vector of image descriptors
+	ImageDescriptors	_albedo_image_descriptors;
+
 	// Normal samplers
 	Sampler			_albedo_sampler;
 	Sampler			_normal_sampler;
+
+	// Update descriptor set for albedo
+	void _update_samplers(const ImageDescriptors &ids, uint binding) {
+		// Update descriptor set
+		VkWriteDescriptorSet descriptor_write {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = _mesh_ds,
+			.dstBinding = binding,
+			.dstArrayElement = 0,
+			.descriptorCount = (uint) ids.size(),
+			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.pImageInfo = ids.data()
+		};
+
+		vkUpdateDescriptorSets(_context.vk_device(),
+			1, &descriptor_write,
+			0, nullptr
+		);
+	}
 
 	// BVH
 	BVH			_bvh;
@@ -227,12 +258,6 @@ public:
 		_pixels.bind(_postproc_ds, MESH_BINDING_PIXELS);
 
 		// Textures
-		// TODO: should be a static method
-		/* Texture tex1 = load_image_texture(
-			"/home/venki/downloads/quixel/Nature_Rock_vizvcbn_2K_3d_ms/"
-				"vizvcbn_2K_Normal_LOD0.jpg",
-			4
-		); */
 		Texture tex1 {
 			.width = 1024,
 			.height = 1024,
@@ -259,11 +284,10 @@ public:
 		_normal_sampler = Sampler(_context, tp);
 		_normal_sampler.bind(_mesh_ds, MESH_BINDING_NORMAL_MAPS);
 
-		KOBRA_LOG_FILE(notify) << "Loaded texture: " << tex1.width << "x"
-			<< tex1.height << " --> #bytes = " << tex1.data.size() << "\n";
+		// Create a blank sampler
+		_empty_sampler = Sampler::blank_sampler(_context, wctx.command_pool);
 
 		// Albedo
-		// Texture tex2 = load_image_texture("resources/wood_floor_albedo.jpg", 4);
 		Texture tex2 = load_image_texture("resources/wood_floor_albedo.jpg", 4);
 
 		TexturePacket tp2 = make_texture(
@@ -283,6 +307,12 @@ public:
 
 		_albedo_sampler = Sampler(_context, tp2);
 		_albedo_sampler.bind(_mesh_ds, MESH_BINDING_ALBEDO);
+
+		while (_albedo_image_descriptors.size() < MAX_TEXTURES)
+			_albedo_image_descriptors.push_back(_empty_sampler.get_image_info());
+
+		_albedo_image_descriptors[0] = _albedo_sampler.get_image_info();
+		_update_samplers(_albedo_image_descriptors, MESH_BINDING_ALBEDO);
 	}
 
 	// Adding elements
@@ -295,7 +325,9 @@ public:
 			.materials = &_materials,
 			.transforms = &_transforms,
 			.lights = &_lights,
-			.light_indices = &_light_indices
+			.light_indices = &_light_indices,
+
+			.albedo_samplers = _albedo_image_descriptors,
 		};
 
 		e->latch(lp, _elements.size());
@@ -315,6 +347,9 @@ public:
 		_transforms.bind(_mesh_ds, MESH_BINDING_TRANSFORMS);
 		_lights.bind(_mesh_ds, MESH_BINDING_LIGHTS);
 		_light_indices.bind(_mesh_ds, MESH_BINDING_LIGHT_INDICES);
+
+		// Update sampler descriptors
+		_update_samplers(_albedo_image_descriptors, MESH_BINDING_ALBEDO);
 
 		// Update the BVH
 		_bvh = BVH(_context, _get_bboxes());
@@ -379,8 +414,8 @@ public:
 			.lights = (uint) _light_indices.push_size(),
 
 			// TODO: still unable to do large number of samples
-			.samples_per_pixel = 25,
-			.samples_per_light = 64,
+			.samples_per_pixel = 1,
+			.samples_per_light = 1,
 
 			.camera_position = _active_camera->transform.position,
 			.camera_forward = _active_camera->transform.forward(),

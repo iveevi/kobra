@@ -6,6 +6,7 @@
 
 // STB image loader
 #include <stb/stb_image.h>
+#include <vulkan/vulkan_core.h>
 
 // Engine headers
 #include "buffer_manager.hpp"
@@ -419,7 +420,44 @@ public:
 		);
 	}
 
-	// Bind sampler to pipeline
+	// Constructor
+	Sampler(const Vulkan::Context &ctx, const VkCommandPool &command_pool, const std::string &path, uint32_t channels = 4)
+			: _ctx(ctx) {
+		// Load texture at path
+		// TODO: auto choose # of channels, instead of passing it here
+		Texture texture = load_image_texture(path, channels);
+
+		// Create texture
+		TexturePacket packet = make_texture(_ctx, command_pool,
+			texture,
+			VK_FORMAT_R8G8B8A8_UNORM,
+			VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+		);
+		
+		packet.transition_manual(_ctx, command_pool,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_TRANSFER_BIT
+		);
+
+		// Create image view
+		_view = make_image_view(
+			_ctx,
+			packet,
+			VK_IMAGE_VIEW_TYPE_2D,
+			VK_IMAGE_ASPECT_COLOR_BIT
+		);
+
+		// Create sampler
+		_sampler = make_sampler(_ctx,
+			VK_FILTER_LINEAR,
+			VK_SAMPLER_ADDRESS_MODE_REPEAT
+		);
+	}
+
+	// Bind sampler to descriptor set
 	void bind(const VkDescriptorSet &dset, uint32_t binding) {
 		VkDescriptorImageInfo image_info {
 			.sampler = _sampler,
@@ -438,6 +476,43 @@ public:
 		};
 
 		vkUpdateDescriptorSets(_ctx.vk_device(), 1, &descriptor_write, 0, nullptr);
+	}
+
+	// Get image info
+	inline VkDescriptorImageInfo get_image_info() const {
+		VkDescriptorImageInfo image_info {
+			.sampler = _sampler,
+			.imageView = _view,
+			.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+		};
+
+		return image_info;
+	}
+
+	// Create a blank sampler
+	static Sampler blank_sampler(const Vulkan::Context &ctx, const VkCommandPool &command_pool) {
+		Texture blank {
+			.width = 1,
+			.height = 1,
+			.channels = 4,
+		};
+
+		TexturePacket blank_tp = make_texture(
+			ctx, command_pool,
+			blank,
+			VK_FORMAT_R8G8B8A8_SRGB, // TODO: should match the # of channels in texture
+			VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+		);
+
+		blank_tp.transition_manual(ctx, command_pool,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_TRANSFER_BIT
+		);
+
+		return Sampler(ctx, blank_tp);
 	}
 };
 

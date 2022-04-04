@@ -51,8 +51,11 @@ layout (set = 0, binding = MESH_BINDING_LIGHT_INDICES, std430) buffer LightIndic
 } light_indices;
 
 // Textures
-layout (set = 0, binding = MESH_BINDING_ALBEDO) uniform sampler2D s2_albedo;
-layout (set = 0, binding = MESH_BINDING_NORMAL_MAPS) uniform sampler2D s2_normals;
+layout (set = 0, binding = MESH_BINDING_ALBEDO)
+uniform sampler2D s2_albedo[MAX_TEXTURES];
+
+layout (set = 0, binding = MESH_BINDING_NORMAL_MAPS)
+uniform sampler2D s2_normals;
 
 // Push constants
 // TODO: # of samples should be a push constant
@@ -141,13 +144,20 @@ Material mat_default()
 }
 
 // Convert raw material at index
-Material mat_at(uint index)
+// TODO: should also contain normal vectors
+Material mat_at(uint index, vec2 uv)
 {
 	vec4 raw0 = materials.data[2 * index];
 	vec4 raw1 = materials.data[2 * index + 1];
 
+	vec3 color = vec3(raw0.xyz);
+	if (raw1.y < 0.5) {
+		// Sample from texture
+		color = texture(s2_albedo[index], uv).rgb;
+	}
+
 	return Material(
-		vec3(raw0.x, raw0.y, raw0.z),
+		color,
 		raw0.w,
 		raw1.x
 	);
@@ -241,6 +251,8 @@ Intersection intersect_shape(Ray r, Sphere s)
 	return Intersection(t, n, mat_default());
 }
 
+float PI = 3.1415926535897932384626433832795;
+
 Intersection ray_sphere_intersect(Ray ray, uint a, uint d)
 {
 	vec3 c = vertices.data[2 * a].xyz;
@@ -253,10 +265,17 @@ Intersection ray_sphere_intersect(Ray ray, uint a, uint d)
 
 	// If intersection is valid, compute material
 	if (it.time > 0.0) {
-		// TODO: perform uv mapping
+		// TODO: function to do mat_at with texture coordinates
+		// Get uv coordinates
+		vec2 uv = vec2(0.0);
+		uv.x = atan(ray.direction.x, ray.direction.z) / (2.0 * PI) + 0.5;
+		uv.y = asin(ray.direction.y) / PI + 0.5;
 
+		// Get the color
+		it.mat.albedo = texture(s2_albedo[0], uv).rgb;
+		
 		// Get material index at the second element
-		it.mat = mat_at(d);
+		it.mat = mat_at(d, uv);
 	}
 
 	return it;
@@ -290,9 +309,6 @@ Intersection ray_intersect(Ray ray, uint index)
 
 	// If intersection is valid, compute material
 	if (it.time > 0.0) {
-		// Get material index at the second element
-		it.mat = mat_at(d);
-
 		// Get texture coordinates
 		vec2 t1 = vertices.data[2 * a + 1].xy;
 		vec2 t2 = vertices.data[2 * b + 1].xy;
@@ -302,16 +318,17 @@ Intersection ray_intersect(Ray ray, uint index)
 		vec2 tex_coord = t1 * (1 - b1 - b2) + t2 * b1 + t3 * b2;
 		tex_coord = clamp(tex_coord, vec2(0.0), vec2(1.0));
 
-		// Get texture
+		/* Get texture
 		tex_coord.y = 1.0 - tex_coord.y;
 		vec3 tex = texture(s2_normals, tex_coord).xyz;
 
 		// Correct the normal direction
 		if (dot(it.normal, tex) < 0.0)
-			tex = -tex;
+			tex = -tex; */
+		
+		// Get material index at the second element
+		it.mat = mat_at(d, tex_coord);
 
-		if (d == 2)
-			it.mat.albedo = texture(s2_albedo, tex_coord).xyz;
 	}
 
 	return it;

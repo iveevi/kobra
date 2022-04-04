@@ -74,6 +74,12 @@ public:
 		// Write the material
 		_material.write_material(lp.materials);
 
+		// TODO: method for this?
+		if (_material.albedo_sampler) {
+			KOBRA_LOG_FILE(warn) << "Mesh has albedo texture, obj_id = " << obj_id << std::endl;
+			lp.albedo_samplers[obj_id] = _material.albedo_sampler->get_image_info();
+		}
+
 		// Write the transform
 		lp.transforms->push_back(transform().matrix());
 

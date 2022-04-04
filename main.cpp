@@ -138,19 +138,31 @@ public:
 			.ior = 1.3
 		};
 
+		mat.set_albedo(context,
+			window.command_pool,
+			"resources/wood_floor_albedo.jpg"
+		);
+
 		// mesh1->transform().scale = glm::vec3 {0.1f};
 
 		mesh0->set_material(mat);
 		mat.ior = 1.0;
 
-		mat.shading_type = SHADING_TYPE_REFLECTION;
+		mat.shading_type = SHADING_TYPE_DIFFUSE;
 		sphere1->set_material(mat);
 
 		// Set wall materials
 		mat.albedo = {0.7, 0.7, 0.7};
 		mat.shading_type = SHADING_TYPE_DIFFUSE;
 
+		mat.set_albedo(context,
+			window.command_pool,
+			"resources/wood_floor_albedo.jpg"
+		);
+		
 		wall1->set_material(mat);
+		mat.albedo_sampler = nullptr;
+
 		wall2->set_material(mat);
 		wall5->set_material(mat);
 
