@@ -14,6 +14,7 @@
 #include "include/raytracing/layer.hpp"
 #include "include/raytracing/mesh.hpp"
 #include "include/raytracing/sphere.hpp"
+#include "include/scene.hpp"
 #include "include/types.hpp"
 
 using namespace kobra;
@@ -157,7 +158,7 @@ public:
 
 		mat.set_albedo(context,
 			window.command_pool,
-			"resources/wood_floor_albedo.jpg"
+			"resources/sky.jpg"
 		);
 		
 		wall1->set_material(mat);
@@ -184,9 +185,21 @@ public:
 		rt_layer.add(wall3);
 		rt_layer.add(wall4);
 		rt_layer.add(wall5);
-
 		rt_layer.add(light1);
-		// rt_layer.add(light2);
+
+		Scene scene({
+			mesh0, sphere1,
+			wall1, mesh1,
+			wall2, wall3, wall4, wall5,
+			light1
+		});
+
+		scene.save("scene.kobra");
+
+		Scene alt_scene("scene.kobra");
+		alt_scene.save("scene2.kobra");
+
+		// throw int(0);
 
 		// Add GUI elements
 		gui_layer = gui::Layer(window, VK_ATTACHMENT_LOAD_OP_LOAD);

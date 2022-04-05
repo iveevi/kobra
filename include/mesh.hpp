@@ -29,8 +29,10 @@ protected:
 	// List of indices
 	Indices		_indices;
 public:
+	// Default constructor
+	Mesh() = default;
+
 	// Simple constructor
-	Mesh() {}
 	Mesh(const Mesh &mesh, const Transform &transform) :
 			Object(object_type, transform),
 			_source(mesh._source),

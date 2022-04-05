@@ -51,11 +51,11 @@ layout (set = 0, binding = MESH_BINDING_LIGHT_INDICES, std430) buffer LightIndic
 } light_indices;
 
 // Textures
-layout (set = 0, binding = MESH_BINDING_ALBEDO)
+layout (set = 0, binding = MESH_BINDING_ALBEDOS)
 uniform sampler2D s2_albedo[MAX_TEXTURES];
 
 layout (set = 0, binding = MESH_BINDING_NORMAL_MAPS)
-uniform sampler2D s2_normals;
+uniform sampler2D s2_normals[MAX_TEXTURES];
 
 // Push constants
 // TODO: # of samples should be a push constant

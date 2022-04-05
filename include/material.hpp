@@ -15,13 +15,14 @@ namespace kobra {
 
 // Material
 struct Material {
-	// TODO: possible some samplers as well
-
 	// Shading type
 	glm::vec3	albedo = glm::vec3 {1.0, 0.0, 1.0};
 
 	float		shading_type = SHADING_TYPE_SIMPLE;
 	float		ior = 1.0;
+
+	// Sources
+	std::string	albedo_source;
 
 	// Texture
 	// TODO: this should be privagte
@@ -29,6 +30,7 @@ struct Material {
 
 	// Setters
 	void set_albedo(const Vulkan::Context &ctx, const VkCommandPool &command_pool, const std::string &path) {
+		albedo_source = path;
 		albedo_sampler = new Sampler(ctx, command_pool, path);
 	}
 
@@ -50,9 +52,15 @@ struct Material {
 
 	// Save material to file
 	void save(std::ofstream &file) const {
+		char buf[1024];
+		sprintf(buf, "%d", *((int *) &shading_type));
+
 		file << "[MATERIAL]\n";
 		file << "albedo=" << albedo.x << " " << albedo.y << " " << albedo.z << std::endl;
+		file << "shading_type=" << buf << std::endl;
 		file << "ior=" << ior << std::endl;
+
+		file << "albedo_source=" << (albedo_sampler ? albedo_source : "0") << std::endl;
 	}
 };
 

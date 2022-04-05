@@ -2,8 +2,7 @@
 #define KOBRA_RT_SPHERE_H_
 
 // Engine headers
-#include "../renderable.hpp"
-#include "../object.hpp"
+#include "../sphere.hpp"
 #include "rt.hpp"
 
 namespace kobra {
@@ -11,18 +10,21 @@ namespace kobra {
 namespace rt {
 
 // TODO: inherit from a general sphere class (which is an object)
-class Sphere : virtual public Object,
-		virtual public Renderable,
-		virtual public _element {
-	glm::vec3	_center;
-	float		_radius;
+class Sphere : virtual public kobra::Sphere, virtual public _element {
 public:
+	static constexpr char object_type[] = "RT Sphere";
+
 	// Default constructor
 	Sphere() = default;
 
 	// Constructor
-	Sphere(const glm::vec3& center, float radius) :
-			_center(center), _radius(radius) {}
+	Sphere(const glm::vec3& center, float radius)
+			: Object(object_type, Transform {center}),
+			kobra::Sphere(center, radius) {}
+
+	Sphere(const kobra::Sphere &sphere)
+			: Object(object_type, sphere.transform()),
+			kobra::Sphere(sphere) {}
 
 	// Latching to layer
 	void latch(const LatchingPacket &lp, size_t id) override {
@@ -56,10 +58,6 @@ public:
 		lp.transforms->push_back(transform().matrix());
 
 		// TODO: currently, sphere cannot be emmisive
-	}
-
-	void save(std::ofstream &file) const override {
-		KOBRA_LOG_FUNC(warn) << "Sphere::save() not implemented\n";
 	}
 };
 

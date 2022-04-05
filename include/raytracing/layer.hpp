@@ -112,16 +112,13 @@ class Layer : public kobra::Layer <rt::_element> {
 	//////////////
 	// Samplers //
 	//////////////
-	
+
 	// Empty sampler
 	Sampler			_empty_sampler;
 
 	// Vector of image descriptors
 	ImageDescriptors	_albedo_image_descriptors;
-
-	// Normal samplers
-	Sampler			_albedo_sampler;
-	Sampler			_normal_sampler;
+	ImageDescriptors	_normal_image_descriptors;
 
 	// Update descriptor set for albedo
 	void _update_samplers(const ImageDescriptors &ids, uint binding) {
@@ -250,69 +247,28 @@ public:
 		_light_indices = BufferManager <uint> (_context, write_only_settings);
 		_transforms = Buffer4m(_context, write_only_settings);
 
-		KOBRA_LOG_FUNC(notify) << "Initialized rt::Layer, mesh.plaout = "
-			<< _pipelines.mesh.layout << "\n";
-
 		// Bind to descriptor sets
 		_pixels.bind(_mesh_ds, MESH_BINDING_PIXELS);
 		_pixels.bind(_postproc_ds, MESH_BINDING_PIXELS);
 
-		// Textures
-		Texture tex1 {
-			.width = 1024,
-			.height = 1024,
-			.channels = 4,
-		};
+		/////////////////////////////////////////////
+		// Fill sampler arrays with blank samplers //
+		/////////////////////////////////////////////
 
-		KOBRA_LOG_FILE(warn) << "tex channels = " << tex1.channels << "\n";
-
-		TexturePacket tp = make_texture(
-			_context, wctx.command_pool,
-			tex1,
-			VK_FORMAT_R8G8B8A8_SRGB, // TODO: should match the # of channels in texture
-			VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-		);
-
-		tp.transition_manual(_context, wctx.command_pool,
-			VK_IMAGE_LAYOUT_UNDEFINED,
-			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-			VK_PIPELINE_STAGE_TRANSFER_BIT,
-			VK_PIPELINE_STAGE_TRANSFER_BIT
-		);
-
-		_normal_sampler = Sampler(_context, tp);
-		_normal_sampler.bind(_mesh_ds, MESH_BINDING_NORMAL_MAPS);
-
-		// Create a blank sampler
+		// Empty sampler
 		_empty_sampler = Sampler::blank_sampler(_context, wctx.command_pool);
 
-		// Albedo
-		Texture tex2 = load_image_texture("resources/wood_floor_albedo.jpg", 4);
-
-		TexturePacket tp2 = make_texture(
-			_context, wctx.command_pool,
-			tex2,
-			VK_FORMAT_R8G8B8A8_UNORM, // TODO: should match the # of channels in texture
-			VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-		);
-
-		tp2.transition_manual(_context, wctx.command_pool,
-			VK_IMAGE_LAYOUT_UNDEFINED,
-			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-			VK_PIPELINE_STAGE_TRANSFER_BIT,
-			VK_PIPELINE_STAGE_TRANSFER_BIT
-		);
-
-		_albedo_sampler = Sampler(_context, tp2);
-		_albedo_sampler.bind(_mesh_ds, MESH_BINDING_ALBEDO);
-
+		// Albedos
 		while (_albedo_image_descriptors.size() < MAX_TEXTURES)
 			_albedo_image_descriptors.push_back(_empty_sampler.get_image_info());
 
-		_albedo_image_descriptors[0] = _albedo_sampler.get_image_info();
-		_update_samplers(_albedo_image_descriptors, MESH_BINDING_ALBEDO);
+		_update_samplers(_albedo_image_descriptors, MESH_BINDING_ALBEDOS);
+
+		// Normals
+		while (_normal_image_descriptors.size() < MAX_TEXTURES)
+			_normal_image_descriptors.push_back(_empty_sampler.get_image_info());
+
+		_update_samplers(_normal_image_descriptors, MESH_BINDING_NORMAL_MAPS);
 	}
 
 	// Adding elements
@@ -349,7 +305,8 @@ public:
 		_light_indices.bind(_mesh_ds, MESH_BINDING_LIGHT_INDICES);
 
 		// Update sampler descriptors
-		_update_samplers(_albedo_image_descriptors, MESH_BINDING_ALBEDO);
+		_update_samplers(_albedo_image_descriptors, MESH_BINDING_ALBEDOS);
+		_update_samplers(_normal_image_descriptors, MESH_BINDING_NORMAL_MAPS);
 
 		// Update the BVH
 		_bvh = BVH(_context, _get_bboxes());

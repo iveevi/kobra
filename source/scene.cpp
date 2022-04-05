@@ -101,6 +101,7 @@ static ObjectPtr load_raw_mesh(std::ifstream &fin, const Transform &t)
 	return ObjectPtr(mesh);
 }
 
+// TODO: should be virtual methods
 static ObjectPtr load_mesh(std::ifstream &fin, const Transform &t)
 {
 	// Get source
@@ -146,7 +147,7 @@ static ObjectPtr load_object(std::ifstream &fin)
 		return load_mesh(fin, t.value());
 
 	// Else
-	KOBRA_LOG_FUNC(error) << "Unknown object type: \"" << header << "\"";
+	KOBRA_LOG_FUNC(error) << "Unknown object type: \"" << header << "\"\n";
 	return nullptr;
 }
 
