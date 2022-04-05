@@ -117,7 +117,10 @@ public:
 		_bf_nodes = Buffer4f(ctx, nodes_settings);
 
 		// Process into BVH nodes
-		process(bboxes);
+		if (bboxes.empty())
+			_nodes.push_back(new BVHNode(BoundingBox()));
+		else
+			process(bboxes);
 
 		// TODO: there should only be one root node remaining
 

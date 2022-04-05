@@ -23,6 +23,7 @@ public:
 	// constructor from mesh
 	Mesh(const kobra::Mesh &mesh)
 			: Object(object_type, mesh.transform()),
+			Renderable(mesh.material()),
 			kobra::Mesh(mesh) {
 		std::cout << "Mesh: " << vertex_count() << " vertices, "
 			<< triangle_count() << " triangles" << std::endl;
@@ -72,13 +73,13 @@ public:
 		}
 
 		// Write the material
+		std::cout << "LATCHING RT MESH: material albedo source: "
+			<< _material.albedo_source << std::endl;
 		_material.write_material(lp.materials);
 
 		// TODO: method for this?
-		if (_material.albedo_sampler) {
-			KOBRA_LOG_FILE(warn) << "Mesh has albedo texture, obj_id = " << obj_id << std::endl;
+		if (_material.albedo_sampler)
 			lp.albedo_samplers[obj_id] = _material.albedo_sampler->get_image_info();
-		}
 
 		// Write the transform
 		lp.transforms->push_back(transform().matrix());

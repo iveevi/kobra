@@ -2,7 +2,9 @@
 #define MATERIAL_H_
 
 // Standard headers
+#include <cstdio>
 #include <fstream>
+#include <optional>
 
 // Engine headers
 #include "buffer_manager.hpp"
@@ -61,6 +63,49 @@ struct Material {
 		file << "ior=" << ior << std::endl;
 
 		file << "albedo_source=" << (albedo_sampler ? albedo_source : "0") << std::endl;
+	}
+
+	// Read material from file
+	static std::optional <Material> from_file(const Vulkan::Context &ctx,
+			const VkCommandPool &command_pool,
+			std::ifstream &file) {
+		std::string line;
+
+		// Read albedo
+		glm::vec3 albedo;
+		std::getline(file, line);
+		std::sscanf(line.c_str(), "albedo=%f %f %f", &albedo.x, &albedo.y, &albedo.z);
+
+		// Read shading type
+		float shading_type;
+		int tmp;
+		std::getline(file, line);
+		std::sscanf(line.c_str(), "shading_type=%d", &tmp);
+		shading_type = *((float *) &tmp);
+
+		// Read ior
+		float ior;
+		std::getline(file, line);
+		std::sscanf(line.c_str(), "ior=%f", &ior);
+
+		// Read albedo source
+		char buf[1024];
+		std::string albedo_source;
+		std::getline(file, line);
+		std::sscanf(line.c_str(), "albedo_source=%s", buf);
+		albedo_source = buf;
+
+		// Construct and return material
+		Material mat;
+		mat.albedo = albedo;
+		mat.shading_type = shading_type;
+		mat.ior = ior;
+
+		if (albedo_source != "0")
+			mat.set_albedo(ctx, command_pool, albedo_source);
+
+		// Return material
+		return mat;
 	}
 };
 

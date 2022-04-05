@@ -5,6 +5,9 @@
 #include <memory>
 #include <vector>
 
+// Engine headers
+#include "scene.hpp"
+
 namespace kobra {
 
 // Generic layer class
@@ -58,8 +61,11 @@ public:
 		}
 	}
 
+	// Adding scenes
+	virtual void add_scene(const Scene &scene) = 0;
+
 	// TODO: variadic overload (implement collect method in common)
-	
+
 	// TODO: virtual render method
 };
 

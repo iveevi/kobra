@@ -14,6 +14,8 @@
 #include "../camera.hpp"
 #include "../layer.hpp"
 #include "../logger.hpp"
+#include "../mesh.hpp"
+#include "../sphere.hpp"
 #include "rt.hpp"
 
 namespace kobra {
@@ -247,6 +249,18 @@ public:
 		_light_indices = BufferManager <uint> (_context, write_only_settings);
 		_transforms = Buffer4m(_context, write_only_settings);
 
+		// Initial (blank) binding
+		_vertices.bind(_mesh_ds, MESH_BINDING_VERTICES);
+		_triangles.bind(_mesh_ds, MESH_BINDING_TRIANGLES);
+		_materials.bind(_mesh_ds, MESH_BINDING_MATERIALS);
+		_transforms.bind(_mesh_ds, MESH_BINDING_TRANSFORMS);
+		_lights.bind(_mesh_ds, MESH_BINDING_LIGHTS);
+		_light_indices.bind(_mesh_ds, MESH_BINDING_LIGHT_INDICES);
+		
+		// Rebind to descriptor sets
+		_bvh = BVH(_context, _get_bboxes());
+		_bvh.bind(_mesh_ds, MESH_BINDING_BVH);
+
 		// Bind to descriptor sets
 		_pixels.bind(_mesh_ds, MESH_BINDING_PIXELS);
 		_pixels.bind(_postproc_ds, MESH_BINDING_PIXELS);
@@ -272,9 +286,7 @@ public:
 	}
 
 	// Adding elements
-	// TODO: element actions from base class?
 	void add_do(const ptr &e) override {
-		std::cout << "ADDED ELEMENT\n";
 		LatchingPacket lp {
 			.vertices = &_vertices,
 			.triangles = &_triangles,
@@ -297,6 +309,7 @@ public:
 		_light_indices.sync_upload();
 
 		// Rebind to descriptor sets
+		// TODO: method
 		_vertices.bind(_mesh_ds, MESH_BINDING_VERTICES);
 		_triangles.bind(_mesh_ds, MESH_BINDING_TRIANGLES);
 		_materials.bind(_mesh_ds, MESH_BINDING_MATERIALS);
@@ -314,6 +327,9 @@ public:
 		// Rebind to descriptor sets
 		_bvh.bind(_mesh_ds, MESH_BINDING_BVH);
 	}
+
+	// Adding scenes
+	void add_scene(const Scene &scene) override;
 
 	// Number of triangles
 	size_t triangle_count() const {

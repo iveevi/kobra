@@ -1,5 +1,7 @@
 // Engine headers
 #include "../../include/raytracing/layer.hpp"
+#include "../../include/raytracing/sphere.hpp"
+#include "../../include/raytracing/mesh.hpp"
 
 namespace kobra {
 
@@ -318,10 +320,7 @@ void Layer::_init_postproc_pipeline(const Vulkan::Swapchain &swapchain)
 		.logicOp = VK_LOGIC_OP_COPY,
 		.attachmentCount = 1,
 		.pAttachments = &color_blend_attachment,
-		.blendConstants[0] = 0.0f,
-		.blendConstants[1] = 0.0f,
-		.blendConstants[2] = 0.0f,
-		.blendConstants[3] = 0.0f
+		.blendConstants = {0.0f, 0.0f, 0.0f, 0.0f}
 	};
 
 	// Pipeline layout
@@ -394,6 +393,48 @@ void Layer::_init_postproc_pipeline(const Vulkan::Swapchain &swapchain)
 		.pipeline = pipeline,
 		.layout = pipeline_layout
 	};
+}
+
+////////////////////
+// Public methods //
+////////////////////
+
+// Adding scenes
+void Layer::add_scene(const Scene &scene)
+{
+	// Iterate through each object
+	// and check if it is compatible
+	// with this layer
+	for (const auto &obj : scene) {
+		std::string type = obj->type();
+
+		std::cout << "TRYING TO ADD " << type << "\n";
+		if (type == kobra::Sphere::object_type) {
+			kobra::Sphere *sphere = dynamic_cast
+				<kobra::Sphere *> (obj.get());
+			Sphere *nsphere = new Sphere(*sphere);
+			kobra::Layer <_element> ::add(ptr(nsphere));
+		}
+
+		if (type == Sphere::object_type) {
+			Sphere *sphere = dynamic_cast
+				<Sphere *> (obj.get());
+			kobra::Layer <_element> ::add(ptr(sphere));
+		}
+
+		if (type == kobra::Mesh::object_type) {
+			kobra::Mesh *mesh = dynamic_cast
+				<kobra::Mesh *> (obj.get());
+			Mesh *nmesh = new Mesh(*mesh);
+			kobra::Layer <_element> ::add(ptr(nmesh));
+		}
+
+		if (type == Mesh::object_type) {
+			Mesh *mesh = dynamic_cast
+				<Mesh *> (obj.get());
+			kobra::Layer <_element> ::add(ptr(mesh));
+		}
+	}
 }
 
 }

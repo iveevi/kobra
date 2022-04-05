@@ -160,7 +160,7 @@ public:
 			window.command_pool,
 			"resources/sky.jpg"
 		);
-		
+
 		wall1->set_material(mat);
 		mat.albedo_sampler = nullptr;
 
@@ -176,7 +176,7 @@ public:
 		mat.albedo = {0.5, 1.0, 0.5};
 		mesh1->set_material(mat);
 
-		// Walls
+		/* Walls
 		rt_layer.add(mesh0);
 		rt_layer.add(sphere1);
 		rt_layer.add(wall1);
@@ -185,7 +185,7 @@ public:
 		rt_layer.add(wall3);
 		rt_layer.add(wall4);
 		rt_layer.add(wall5);
-		rt_layer.add(light1);
+		rt_layer.add(light1); */
 
 		Scene scene({
 			mesh0, sphere1,
@@ -196,10 +196,10 @@ public:
 
 		scene.save("scene.kobra");
 
-		Scene alt_scene("scene.kobra");
+		Scene alt_scene(context, window.command_pool, "scene.kobra");
 		alt_scene.save("scene2.kobra");
 
-		// throw int(0);
+		rt_layer.add_scene(alt_scene);
 
 		// Add GUI elements
 		gui_layer = gui::Layer(window, VK_ATTACHMENT_LOAD_OP_LOAD);

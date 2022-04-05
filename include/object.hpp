@@ -45,18 +45,8 @@ public:
 	virtual void save(std::ofstream &) const = 0;
 
 	void save_object(std::ofstream &file) const {
-		// First save transform
-		file << "[TRANSFORM]" << std::endl;
-
-		glm::vec3 position = _transform.position;
-		glm::vec3 rotation = _transform.rotation;
-		glm::vec3 scale = _transform.scale;
-
-		file << "position=" << position.x << "," << position.y << "," << position.z << std::endl;
-		file << "rotation=" << rotation.x << "," << rotation.y << "," << rotation.z << std::endl;
-		file << "scale=" << scale.x << "," << scale.y << "," << scale.z << std::endl;
-
-		// Save rest of object
+		// Save transform, then rest of the object
+		_transform.save(file);
 		save(file);
 	}
 };

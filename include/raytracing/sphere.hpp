@@ -24,6 +24,7 @@ public:
 
 	Sphere(const kobra::Sphere &sphere)
 			: Object(object_type, sphere.transform()),
+			Renderable(sphere.material()),
 			kobra::Sphere(sphere) {}
 
 	// Latching to layer
@@ -46,12 +47,12 @@ public:
 		
 		// Write the material
 		_material.write_material(lp.materials);
+		std::cout << "LATCHING RT SPHERE: material albedo source: "
+			<< _material.albedo_source << std::endl;
 		
 		// TODO: method for this?
-		if (_material.albedo_sampler) {
-			KOBRA_LOG_FILE(warn) << "Sphere has albedo texture, obj_id = " << obj_id << std::endl;
+		if (_material.albedo_sampler)
 			lp.albedo_samplers[obj_id] = _material.albedo_sampler->get_image_info();
-		}
 
 		// Write the transform
 		// TODO: do we still need this?

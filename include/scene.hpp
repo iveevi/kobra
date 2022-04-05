@@ -7,6 +7,7 @@
 #include <vector>
 
 // Engine headers
+#include "backend.hpp"
 #include "logger.hpp"
 #include "object.hpp"
 
@@ -24,7 +25,9 @@ public:
 	Scene() = default;
 
 	// Constructor from file
-	Scene(const std::string &);
+	Scene(const Vulkan::Context &,
+		const VkCommandPool &,
+		const std::string &);
 
 	// Constructor from list of objects
 	Scene(const std::vector <Object *> &);

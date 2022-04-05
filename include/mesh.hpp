@@ -1,6 +1,9 @@
 #ifndef MESH_H_
 #define MESH_H_
 
+// Standard headers
+#include <optional>
+
 // Engine headers
 #include "primitive.hpp"
 #include "logger.hpp"	// TODO: remove
@@ -33,8 +36,9 @@ public:
 	Mesh() = default;
 
 	// Simple constructor
-	Mesh(const Mesh &mesh, const Transform &transform) :
-			Object(object_type, transform),
+	Mesh(const Mesh &mesh, const Transform &transform)
+			: Object(object_type, transform),
+			Renderable(mesh.material()),
 			_source(mesh._source),
 			_source_index(mesh._source_index),
 			_vertices(mesh._vertices),
@@ -68,6 +72,10 @@ public:
 
 	// Mesh factories
 	static Mesh make_box(const glm::vec3 &, const glm::vec3 &);
+
+	// Read from file
+	static std::optional <Mesh> from_file(const Vulkan::Context &,
+		const VkCommandPool &, std::ifstream &);
 
 	// Friends
 	friend class Model;
