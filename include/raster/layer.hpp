@@ -19,6 +19,14 @@ namespace raster {
 //	all the elements that need
 //	to be rendered
 class Layer {
+public:
+	// Rendering mode
+	enum class Mode {
+		ALBEDO,
+		NORMAL,
+		BLINN_PHONG
+	};
+protected:
 	// All of the layer's cameras
 	std::vector <Camera>	_cameras;
 
@@ -36,7 +44,30 @@ class Layer {
 	VkRenderPass		_render_pass;
 
 	// All rendering pipelines
-	Vulkan::Pipeline	_pipeline;
+	struct {
+		Vulkan::Pipeline	albedo;
+		Vulkan::Pipeline	normals;
+		Vulkan::Pipeline	blinn_phong;
+	} _pipelines;
+
+	// Current rendering mode
+	Mode			_mode = Mode::ALBEDO;
+
+	// Get current pipeline
+	Vulkan::Pipeline *get_pipeline() {
+		switch (_mode) {
+		case Mode::ALBEDO:
+			return &_pipelines.albedo;
+		case Mode::NORMAL:
+			return &_pipelines.normals;
+		case Mode::BLINN_PHONG:
+			return &_pipelines.blinn_phong;
+		default:
+			break;
+		}
+
+		return nullptr;
+	}
 
 	// Initialize Vulkan structures
 	void _initialize_vulkan_structures(const VkAttachmentLoadOp load) {
@@ -61,11 +92,26 @@ class Layer {
 		});
 
 		// Create pipelines
-		_pipeline = make_pipeline (
+		// TODO: move this make_pipline function here
+		_pipelines.albedo = make_pipeline(
+			_wctx,
+			_render_pass,
+			shaders[0],
+			shaders[1]
+		);
+
+		_pipelines.normals = make_pipeline(
 			_wctx,
 			_render_pass,
 			shaders[0],
 			shaders[2]
+		);
+
+		_pipelines.blinn_phong = make_pipeline(
+			_wctx,
+			_render_pass,
+			shaders[0],
+			shaders[3]
 		);
 	}
 
@@ -164,6 +210,11 @@ public:
 		*_active_camera = camera;
 	}
 
+	// Set rendering mode
+	void set_mode(const Mode &mode) {
+		_mode = mode;
+	}
+
 	// Render
 	void render(const VkCommandBuffer &cmd_buffer, const VkFramebuffer &framebuffer) {
 		// Check initialization status
@@ -201,14 +252,14 @@ public:
 		// TODO: pipeline struct with all the necessary info
 		vkCmdBindPipeline(cmd_buffer,
 			VK_PIPELINE_BIND_POINT_GRAPHICS,
-			_pipeline.pipeline
+			get_pipeline()->pipeline
 		);
 
 		// Initialize render packet
 		RenderPacket packet {
 			.cmd = cmd_buffer,
 
-			.pipeline_layout = _pipeline.layout,
+			.pipeline_layout = get_pipeline()->layout,
 
 			// TODO: warn on null camera
 			.view = _active_camera->view(),

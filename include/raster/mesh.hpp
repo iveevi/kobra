@@ -24,6 +24,7 @@ public:
 	// Constructor
 	Mesh (const Vulkan::Context &ctx, const kobra::Mesh &mesh)
 			: Object(object_type, mesh.transform()),
+			Renderable(mesh.material()),
 			kobra::Mesh(mesh) {
 		// Allocate vertex and index buffers
 		BFM_Settings vb_settings {
@@ -54,12 +55,16 @@ public:
 	}
 
 	// MVP structure
+	struct PC_Material {
+		glm::vec3 albedo;
+	};
+
 	struct MVP {
 		glm::mat4 model;
 		glm::mat4 view;
 		glm::mat4 projection;
 
-		Material material;
+		PC_Material material;
 	};
 
 	// Render
@@ -69,7 +74,11 @@ public:
 			_transform.matrix(),
 			rp.view,
 			rp.proj,
-			_material
+
+			// TODO: Material method (also keep PC_Material there)
+			{
+				_material.albedo
+			}
 		};
 
 		// Bind vertex buffer

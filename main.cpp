@@ -187,7 +187,6 @@ class RTApp :  public BaseApp {
 		});
 
 		scene.save("scene.kobra");
-
 	}
 public:
 	// TODO: app to distinguish the number fo attachments
@@ -216,6 +215,7 @@ public:
 
 		// Rasterization layer
 		raster_layer = raster::Layer(window, VK_ATTACHMENT_LOAD_OP_CLEAR);
+		raster_layer.set_mode(raster::Layer::Mode::BLINN_PHONG);
 		raster_layer.add(scene);
 
 		// GUI layer
@@ -283,7 +283,6 @@ public:
 		raster_layer.set_active_camera(camera);
 
 		// Render appropriate layer
-		std::cout << "rnder mode: " << (raster ? "raster" : "raytracing") << std::endl;
 		if (raster)
 			raster_layer.render(cmd, framebuffer);
 		else
