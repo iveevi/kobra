@@ -558,7 +558,7 @@ vec3 point_light_full(Hit hit, Ray ray, vec3 pos)
 		if (h.object == -1) {
 			// No hit, full contribution
 			color += r.contr * light_contr.x * hit.mat.albedo;
-		} else if (h.mat.shading == SHADING_TYPE_EMMISIVE
+		} else if (h.mat.shading == SHADING_TYPE_EMISSIVE
 				|| h.time > light_contr.y) {
 			// Hit object counts as light
 			color += r.contr * light_contr.x * hit.mat.albedo;
@@ -674,7 +674,7 @@ vec3 color_at(Ray ray)
 		if (hit.object == -1) {
 			// No hit
 			color += hit.mat.albedo;
-		} else if (hit.mat.shading == SHADING_TYPE_EMMISIVE) {
+		} else if (hit.mat.shading == SHADING_TYPE_EMISSIVE) {
 			// Emissive
 			color += hit.mat.albedo;
 		} else {

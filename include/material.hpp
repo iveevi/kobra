@@ -77,11 +77,28 @@ struct Material {
 		std::sscanf(line.c_str(), "albedo=%f %f %f", &albedo.x, &albedo.y, &albedo.z);
 
 		// Read shading type
+		char buf1[1024];
 		float shading_type;
 		int tmp;
 		std::getline(file, line);
-		std::sscanf(line.c_str(), "shading_type=%d", &tmp);
-		shading_type = *((float *) &tmp);
+		std::sscanf(line.c_str(), "shading_type=%s", buf1);
+		
+		// TODO: helper method
+		// Check if the shading type is literal
+		std::string stype = buf1;
+		if (stype == "DIFFUSE") {
+			shading_type = SHADING_TYPE_DIFFUSE;
+		} else if (stype == "EMISSIVE") {
+			shading_type = SHADING_TYPE_EMISSIVE;
+		} else if (stype == "REFLECTION") {
+			shading_type = SHADING_TYPE_REFLECTION;
+		} else if (stype == "REFRACTION") {
+			shading_type = SHADING_TYPE_REFRACTION;
+		} else {
+			std::sscanf(buf1, "%d", &tmp);
+			shading_type = tmp;
+			shading_type = *((float *) &tmp);
+		}
 
 		// Read ior
 		float ior;
@@ -89,11 +106,11 @@ struct Material {
 		std::sscanf(line.c_str(), "ior=%f", &ior);
 
 		// Read albedo source
-		char buf[1024];
+		char buf2[1024];
 		std::string albedo_source;
 		std::getline(file, line);
-		std::sscanf(line.c_str(), "albedo_source=%s", buf);
-		albedo_source = buf;
+		std::sscanf(line.c_str(), "albedo_source=%s", buf2);
+		albedo_source = buf2;
 
 		// Construct and return material
 		Material mat;

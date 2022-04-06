@@ -85,7 +85,7 @@ public:
 		lp.transforms->push_back(transform().matrix());
 
 		// If the material is emmisive, write as a light
-		if (_material.shading_type == SHADING_TYPE_EMMISIVE) {
+		if (_material.shading_type == SHADING_TYPE_EMISSIVE) {
 			std::cout << "Mesh: is emmisive" << std::endl;
 
 			for (size_t i = 0; i < triangle_count(); i++) {
@@ -98,7 +98,7 @@ public:
 				uint ic = _indices[3 * i + 2] + offset;
 
 				float type = LIGHT_TYPE_AREA;
-				
+
 				// Header
 				glm::vec4 header {
 					type,

@@ -84,8 +84,8 @@ public:
 
 	// Pipeline structure
 	struct Pipeline {
-		VkPipeline pipeline;
-		VkPipelineLayout layout;
+		VkPipeline pipeline = VK_NULL_HANDLE;
+		VkPipelineLayout layout = VK_NULL_HANDLE;
 	};
 
 	// Pipeline creation structure

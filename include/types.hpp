@@ -11,7 +11,7 @@ const float SHADING_TYPE_LIGHT		= 0x00000003;	// TODO: depreciate
 const float SHADING_TYPE_SIMPLE		= 0x00000004;
 
 // Emmisive objects
-const float SHADING_TYPE_EMMISIVE	= 0x00000005;
+const float SHADING_TYPE_EMISSIVE	= 0x00000005;
 
 // Raytracing shading types
 const float SHADING_TYPE_DIFFUSE	= 1 << 4;

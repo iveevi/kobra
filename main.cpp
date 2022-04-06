@@ -16,11 +16,13 @@
 #include "include/raytracing/sphere.hpp"
 #include "include/scene.hpp"
 #include "include/types.hpp"
+#include "include/raster/layer.hpp"
 
 using namespace kobra;
 
 class RTApp :  public BaseApp {
 	rt::Layer	rt_layer;
+	raster::Layer	raster_layer;
 
 	Camera 		*active_camera;
 
@@ -65,23 +67,8 @@ class RTApp :  public BaseApp {
 		camera->transform.rotation.x = pitch;
 		camera->transform.rotation.y = yaw;
 	}
-public:
-	RTApp(Vulkan *vk) : BaseApp({
-		vk,
-		800, 800, 2,
-		"RTApp"
-	}) {
-		// Add RT elements
-		rt_layer = rt::Layer(window);
 
-		Camera camera {
-			Transform { {0, 6, 16}, {-0.2, 0, 0} },
-			Tunings { 45.0f, 800, 800 }
-		};
-
-		rt_layer.add_camera(camera);
-		active_camera = rt_layer.activate_camera(0);
-
+	void create_scene() {
 		Model model("resources/benchmark/suzanne.obj");
 
 		Mesh box = Mesh::make_box({1, -1, 3.0}, {1, 1, 1});
@@ -122,12 +109,12 @@ public:
 
 		light1->set_material(Material {
 			.albedo = {1, 1, 1},
-			.shading_type = SHADING_TYPE_EMMISIVE
+			.shading_type = SHADING_TYPE_EMISSIVE
 		});
 
 		light2->set_material(Material {
 			.albedo = {1, 1, 1},
-			.shading_type = SHADING_TYPE_EMMISIVE
+			.shading_type = SHADING_TYPE_EMISSIVE
 		});
 
 		// mesh0->transform().scale = glm::vec3 {0.1f};
@@ -176,17 +163,6 @@ public:
 		mat.albedo = {0.5, 1.0, 0.5};
 		mesh1->set_material(mat);
 
-		/* Walls
-		rt_layer.add(mesh0);
-		rt_layer.add(sphere1);
-		rt_layer.add(wall1);
-		rt_layer.add(mesh1);
-		rt_layer.add(wall2);
-		rt_layer.add(wall3);
-		rt_layer.add(wall4);
-		rt_layer.add(wall5);
-		rt_layer.add(light1); */
-
 		Scene scene({
 			mesh0, sphere1,
 			wall1, mesh1,
@@ -196,10 +172,30 @@ public:
 
 		scene.save("scene.kobra");
 
-		Scene alt_scene(context, window.command_pool, "scene.kobra");
-		alt_scene.save("scene2.kobra");
+	}
+public:
+	// TODO: app to distinguish the number fo attachments
+	RTApp(Vulkan *vk) : BaseApp({
+		vk,
+		800, 800, 2,
+		"RTApp"
+	}, true) {
+		// Add RT elements
+		// rt_layer = rt::Layer(window);
 
-		rt_layer.add_scene(alt_scene);
+		Camera camera {
+			Transform { {0, 6, 16}, {-0.2, 0, 0} },
+			Tunings { 45.0f, 800, 800 }
+		};
+
+		/* rt_layer.add_camera(camera);
+		active_camera = rt_layer.activate_camera(0); */
+
+		Scene scene(context, window.command_pool, "scene.kobra");
+		// rt_layer.add_scene(scene);
+
+		raster_layer = raster::Layer(window, camera);
+		raster_layer.add(scene);
 
 		// Add GUI elements
 		gui_layer = gui::Layer(window, VK_ATTACHMENT_LOAD_OP_LOAD);
@@ -257,7 +253,8 @@ public:
 			active_camera->transform.move(-up * speed);
 
 		// Render RT layer
-		rt_layer.render(cmd, framebuffer);
+		// rt_layer.render(cmd, framebuffer);
+		raster_layer.render(cmd, framebuffer);
 
 		// Overlay statistics
 		// TODO: should be made a standalone layer

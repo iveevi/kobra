@@ -256,7 +256,7 @@ public:
 		_transforms.bind(_mesh_ds, MESH_BINDING_TRANSFORMS);
 		_lights.bind(_mesh_ds, MESH_BINDING_LIGHTS);
 		_light_indices.bind(_mesh_ds, MESH_BINDING_LIGHT_INDICES);
-		
+
 		// Rebind to descriptor sets
 		_bvh = BVH(_context, _get_bboxes());
 		_bvh.bind(_mesh_ds, MESH_BINDING_BVH);
@@ -287,6 +287,11 @@ public:
 
 	// Adding elements
 	void add_do(const ptr &e) override {
+		if (_pipelines.mesh.pipeline == VK_NULL_HANDLE) {
+			KOBRA_LOG_FUNC(warn) << "rt::Layer is not yet initialized\n";
+			return;
+		}
+
 		LatchingPacket lp {
 			.vertices = &_vertices,
 			.triangles = &_triangles,
@@ -365,6 +370,12 @@ public:
 
 	// Render
 	void render(const VkCommandBuffer &cmd, const VkFramebuffer &framebuffer) {
+		// Handle null case
+		if (_pipelines.mesh.pipeline == VK_NULL_HANDLE) {
+			KOBRA_LOG_FUNC(warn) << "rt::Layer is not yet initialized\n";
+			return;
+		}
+
 		///////////////////////////
 		// Mesh compute pipeline //
 		///////////////////////////
