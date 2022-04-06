@@ -6,6 +6,7 @@
 
 // Standard headers
 #include <memory>
+#include <vector>
 
 // Engine headers
 #include "../backend.hpp"
@@ -30,8 +31,8 @@ struct Vertex {
 	}
 
 	// Get vertex attribute descriptions
-	static std::array <VertexAttribute, 2> vertex_attributes() {
-		return std::array <VertexAttribute, 2> {
+	static std::vector <VertexAttribute> vertex_attributes() {
+		return {
 			VertexAttribute {
 				.location = 0,
 				.binding = 0,

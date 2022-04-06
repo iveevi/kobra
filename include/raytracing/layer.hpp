@@ -31,7 +31,7 @@ class Layer : public kobra::Layer <rt::_element> {
 	std::vector <Camera>	_cameras;
 
 	// Active camera
-	Camera			*_active_camera;
+	Camera			*_active_camera = nullptr;
 
 	// Vulkan context
 	Vulkan::Context		_context;
@@ -210,9 +210,9 @@ public:
 			_context.phdev,
 			_context.device,
 			wctx.swapchain,
-			VK_ATTACHMENT_LOAD_OP_LOAD,
+			VK_ATTACHMENT_LOAD_OP_CLEAR,
 			VK_ATTACHMENT_STORE_OP_STORE,
-			false
+			true	// TODO: remove the option
 		);
 
 		// Initialize pipelines
@@ -368,6 +368,19 @@ public:
 		return _active_camera;
 	}
 
+	// Set active camera
+	void set_active_camera(const Camera &camera) {
+		// If active camera has not been set
+		if (_active_camera == nullptr) {
+			if (_cameras.empty())
+				_cameras.push_back(camera);
+
+			_active_camera = &_cameras[0];
+		}
+
+		*_active_camera = camera;
+	}
+
 	// Render
 	void render(const VkCommandBuffer &cmd, const VkFramebuffer &framebuffer) {
 		// Handle null case
@@ -476,6 +489,12 @@ public:
 			0, sizeof(PC_Viewport), &pc_vp
 		);
 
+		// Clear colors
+		VkClearValue clear_values[2] = {
+			{ .color = { 0.0f, 0.0f, 0.0f, 1.0f } },
+			{ .depthStencil = { 1.0f, 0 } }
+		};
+
 		// Begin render pass
 		// TODO: context method
 		VkRenderPassBeginInfo rp_info {
@@ -486,8 +505,8 @@ public:
 				.offset = {0, 0},
 				.extent = _extent
 			},
-			.clearValueCount = 0,
-			.pClearValues = nullptr
+			.clearValueCount = 2,
+			.pClearValues = clear_values
 		};
 
 		vkCmdBeginRenderPass(cmd, &rp_info, VK_SUBPASS_CONTENTS_INLINE);

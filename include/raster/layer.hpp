@@ -19,8 +19,11 @@ namespace raster {
 //	all the elements that need
 //	to be rendered
 class Layer {
-	// Layer's camera
-	Camera			_camera;
+	// All of the layer's cameras
+	std::vector <Camera>	_cameras;
+
+	// Active camera
+	Camera			*_active_camera = nullptr;
 
 	// List of elements
 	// TODO: map elements to their respective pipelines
@@ -62,7 +65,7 @@ class Layer {
 			_wctx,
 			_render_pass,
 			shaders[0],
-			shaders[3]
+			shaders[2]
 		);
 	}
 
@@ -75,16 +78,10 @@ public:
 	// Constructor
 	// TODO: inherit, and add a extra variable to check initialization
 	// status
-	Layer(const App::Window &wctx, const Camera &camera,
-			const VkAttachmentLoadOp &load = VK_ATTACHMENT_LOAD_OP_LOAD)
-			: _camera(camera), _wctx(wctx) {
+	Layer(const App::Window &wctx, const VkAttachmentLoadOp &load = VK_ATTACHMENT_LOAD_OP_LOAD)
+			: _wctx(wctx) {
 		_initialize_vulkan_structures(load);
 		_initialized = true;
-	}
-
-	// Get camera
-	Camera &camera() {
-		return _camera;
 	}
 
 	// Add elements
@@ -125,6 +122,46 @@ public:
 				_elements.push_back(Element(raster_mesh));
 			}
 		}
+	}
+
+	// Number of cameras
+	size_t camera_count() const {
+		return _cameras.size();
+	}
+
+	// Add a camera to the layer
+	void add_camera(const Camera &camera) {
+		_cameras.push_back(camera);
+	}
+
+	// Active camera
+	Camera *active_camera() {
+		return _active_camera;
+	}
+
+	// Activate a camera
+	Camera *activate_camera(size_t index) {
+		if (index < _cameras.size()) {
+			_active_camera = &_cameras[index];
+		} else {
+			KOBRA_LOG_FUNC(warn) << "Camera index out of range ["
+				<< index << "/" << _cameras.size() << "]";
+		}
+
+		return _active_camera;
+	}
+
+	// Set active camera
+	void set_active_camera(const Camera &camera) {
+		// If active camera has not been set
+		if (_active_camera == nullptr) {
+			if (_cameras.empty())
+				_cameras.push_back(camera);
+
+			_active_camera = &_cameras[0];
+		}
+
+		*_active_camera = camera;
 	}
 
 	// Render
@@ -173,8 +210,9 @@ public:
 
 			.pipeline_layout = _pipeline.layout,
 
-			.view = _camera.view(),
-			.proj = _camera.perspective()
+			// TODO: warn on null camera
+			.view = _active_camera->view(),
+			.proj = _active_camera->perspective()
 		};
 
 		// Render all elements

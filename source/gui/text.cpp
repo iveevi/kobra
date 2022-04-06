@@ -21,7 +21,43 @@ void Text::refresh()
 // Create the pipeline
 void TextRender::_make_pipeline(const App::Window &wctx, const VkRenderPass &render_pass)
 {
-	auto context = wctx.context;
+	/* Load all shaders
+	auto shaders = wctx.context.make_shaders({
+		"shaders/bin/gui/basic_vert.spv",
+		"shaders/bin/gui/basic_frag.spv"
+	}); */
+
+	// Create pipelines
+	Vulkan::PipelineInfo grp_info {
+		.swapchain = wctx.swapchain,
+		.render_pass = render_pass,
+		
+		// TODO: shader module class for resource management
+		.vert = _vertex,
+		.frag = _fragment,
+		
+		.dsls = {_layout},
+
+		.vertex_binding = Glyph::Vertex::vertex_binding(),
+		.vertex_attributes = Glyph::Vertex::vertex_attributes(),
+
+		.depth_test = false,
+
+		.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+
+		.viewport {
+			.width = (int) wctx.width,
+			.height = (int) wctx.height,
+			.x = 0,
+			.y = 0
+		}
+	};
+
+	auto ppl = wctx.context.make_pipeline(grp_info);
+	_pipeline = ppl.pipeline;
+	_pipeline_layout = ppl.layout;
+
+	/* auto context = wctx.context;
 	auto swapchain = wctx.swapchain;
 
 	// Create pipeline stages
@@ -191,7 +227,7 @@ void TextRender::_make_pipeline(const App::Window &wctx, const VkRenderPass &ren
 
 	// Assign pipeline info
 	_pipeline = pipeline;
-	_pipeline_layout = pipeline_layout;
+	_pipeline_layout = pipeline_layout; */
 }
 
 }

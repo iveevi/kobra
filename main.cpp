@@ -2,35 +2,51 @@
 #include <cstring>
 #include <iostream>
 #include <thread>
+#include <vulkan/vulkan_core.h>
 
+// Engine macros
 #define KOBRA_VALIDATION_LAYERS
 #define KOBRA_ERROR_ONLY
 #define KOBRA_THROW_ERROR
 
+// Engine headers
 #include "include/app.hpp"
 #include "include/backend.hpp"
 #include "include/gui/layer.hpp"
+#include "include/io/event.hpp"
 #include "include/model.hpp"
+#include "include/raster/layer.hpp"
 #include "include/raytracing/layer.hpp"
 #include "include/raytracing/mesh.hpp"
 #include "include/raytracing/sphere.hpp"
 #include "include/scene.hpp"
 #include "include/types.hpp"
-#include "include/raster/layer.hpp"
 
 using namespace kobra;
 
 class RTApp :  public BaseApp {
+	// Application camera
+	Camera		camera;
+
+	// RT or Raster
+	bool		raster = true;
+
+	// Layers
 	rt::Layer	rt_layer;
 	raster::Layer	raster_layer;
-
-	Camera 		*active_camera;
-
-	// GUI elements
 	gui::Layer	gui_layer;
 
+	// GUI elements
 	gui::Text	*text_frame_rate;
 	gui::Text	*layer_info;
+
+	// Keyboard listener
+	static void keyboard_handler(void *user, const io::KeyboardEvent &event) {
+		RTApp *app = (RTApp *) user;
+
+		if (event.key == GLFW_KEY_TAB && event.action == GLFW_PRESS)
+			app->raster = !app->raster;
+	}
 
 	// Mouve camera
 	static void mouse_movement(void *user, const io::MouseEvent &event) {
@@ -175,30 +191,38 @@ class RTApp :  public BaseApp {
 	}
 public:
 	// TODO: app to distinguish the number fo attachments
+	// TODO: just remove the option of no depth buffer (always use depth buffer)
 	RTApp(Vulkan *vk) : BaseApp({
 		vk,
 		800, 800, 2,
 		"RTApp"
 	}, true) {
-		// Add RT elements
-		// rt_layer = rt::Layer(window);
-
-		Camera camera {
+		// Construct camera
+		camera = Camera {
 			Transform { {0, 6, 16}, {-0.2, 0, 0} },
 			Tunings { 45.0f, 800, 800 }
 		};
 
-		/* rt_layer.add_camera(camera);
-		active_camera = rt_layer.activate_camera(0); */
-
+		// Load scene
 		Scene scene(context, window.command_pool, "scene.kobra");
-		// rt_layer.add_scene(scene);
 
-		raster_layer = raster::Layer(window, camera);
+		///////////////////////
+		// Initialize layers //
+		///////////////////////
+
+		// Ray tracing layer
+		rt_layer = rt::Layer(window);
+		rt_layer.add_scene(scene);
+
+		// Rasterization layer
+		raster_layer = raster::Layer(window, VK_ATTACHMENT_LOAD_OP_CLEAR);
 		raster_layer.add(scene);
 
-		// Add GUI elements
+		// GUI layer
 		gui_layer = gui::Layer(window, VK_ATTACHMENT_LOAD_OP_LOAD);
+
+		// TODO: method to add gui elements
+		// TODO: add_scene for gui layer
 		gui_layer.load_font("default", "resources/fonts/noto_sans.ttf");
 
 		text_frame_rate = gui_layer.text_render("default")->text(
@@ -217,7 +241,8 @@ public:
 		gui_layer.add(layer_info);
 
 		// Add event listeners
-		window.mouse_events->subscribe(mouse_movement, active_camera);
+		window.keyboard_events->subscribe(keyboard_handler, this);
+		window.mouse_events->subscribe(mouse_movement, &camera);
 		window.cursor_mode(GLFW_CURSOR_DISABLED);
 	}
 
@@ -231,32 +256,41 @@ public:
 		Vulkan::begin(cmd);
 
 		// WASDEQ movement
+		// TODO: method
 		float speed = 20.0f * frame_time;
 
-		glm::vec3 forward = active_camera->transform.forward();
-		glm::vec3 right = active_camera->transform.right();
-		glm::vec3 up = active_camera->transform.up();
+		glm::vec3 forward = camera.transform.forward();
+		glm::vec3 right = camera.transform.right();
+		glm::vec3 up = camera.transform.up();
 
 		if (input.is_key_down(GLFW_KEY_W))
-			active_camera->transform.move(forward * speed);
+			camera.transform.move(forward * speed);
 		else if (input.is_key_down(GLFW_KEY_S))
-			active_camera->transform.move(-forward * speed);
+			camera.transform.move(-forward * speed);
 
 		if (input.is_key_down(GLFW_KEY_A))
-			active_camera->transform.move(-right * speed);
+			camera.transform.move(-right * speed);
 		else if (input.is_key_down(GLFW_KEY_D))
-			active_camera->transform.move(right * speed);
+			camera.transform.move(right * speed);
 
 		if (input.is_key_down(GLFW_KEY_E))
-			active_camera->transform.move(up * speed);
+			camera.transform.move(up * speed);
 		else if (input.is_key_down(GLFW_KEY_Q))
-			active_camera->transform.move(-up * speed);
+			camera.transform.move(-up * speed);
 
-		// Render RT layer
-		// rt_layer.render(cmd, framebuffer);
-		raster_layer.render(cmd, framebuffer);
+		// Copy camera contents to each relevant layer
+		rt_layer.set_active_camera(camera);
+		raster_layer.set_active_camera(camera);
+
+		// Render appropriate layer
+		std::cout << "rnder mode: " << (raster ? "raster" : "raytracing") << std::endl;
+		if (raster)
+			raster_layer.render(cmd, framebuffer);
+		else
+			rt_layer.render(cmd, framebuffer);
 
 		// Overlay statistics
+		// TODO: method to update gui elements
 		// TODO: should be made a standalone layer
 		std::sprintf(buffer, "time: %.2f ms, fps: %.2f",
 			1000 * frame_time,
@@ -267,7 +301,7 @@ public:
 
 		// RT layer statistics
 		// TODO: why can i set str to an integer
-		layer_info->str = std::to_string(rt_layer.triangle_count()) + " triangles";
+		// layer_info->str = std::to_string(rt_layer.triangle_count()) + " triangles";
 
 		gui_layer.render(cmd, framebuffer);
 

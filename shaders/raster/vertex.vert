@@ -34,7 +34,7 @@ void main()
 
 	// Output necessary info
 	out_position	= (model * vec4(position, 1.0)).xyz;
-	out_normal	= normal;
+	out_normal	= normalize((model * vec4(normal, 0.0)).xyz);
 	out_tex_coord	= tex_coord;
 	out_material	= material;
 }

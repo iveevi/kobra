@@ -43,8 +43,8 @@ public:
 		}
 
 		// Get vertex attribute descriptions
-		static std::array <VertexAttribute, 1> vertex_attributes() {
-			return std::array <VertexAttribute, 1> {
+		static std::vector <VertexAttribute> vertex_attributes() {
+			return {
 				VertexAttribute {
 					.location = 0,
 					.binding = 0,

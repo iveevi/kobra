@@ -132,13 +132,13 @@ public:
 		}
 
 		// Create a shader module
-		VkShaderModule make_shader(const std::string &path) {
+		VkShaderModule make_shader(const std::string &path) const {
 			Glob g = vk->_read_file(path);
 			return vk->_mk_shader_module(device, g);
 		}
 
 		// Create multiple shader modules
-		std::vector <VkShaderModule> make_shaders(const std::vector <std::string> &paths) {
+		std::vector <VkShaderModule> make_shaders(const std::vector <std::string> &paths) const {
 			std::vector <VkShaderModule> modules;
 			modules.reserve(paths.size());
 			for (const auto &path : paths)
@@ -173,10 +173,7 @@ public:
 
 			VkPipelineShaderStageCreateInfo shader_stages[] = { vertex, fragment };
 
-			// Vertex input
-			// auto binding_description = gui::Vertex::vertex_binding();
-			// auto attribute_descriptions = gui::Vertex::vertex_attributes();
-
+			// Create vertex input state
 			VkPipelineVertexInputStateCreateInfo vertex_input {
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
 				.vertexBindingDescriptionCount = 1,
@@ -287,6 +284,20 @@ public:
 				throw std::runtime_error("failed to create pipeline layout!");
 			}
 
+			// Depth stencil if requested
+			VkPipelineDepthStencilStateCreateInfo depth_stencil {
+				.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+				.depthTestEnable = info.depth_test,
+				.depthWriteEnable = info.depth_test, // TODO: depth test struct
+				.depthCompareOp = VK_COMPARE_OP_LESS,
+				.depthBoundsTestEnable = VK_FALSE,
+				.stencilTestEnable = VK_FALSE,
+				.front = {},
+				.back = {},
+				.minDepthBounds = 0.0f,
+				.maxDepthBounds = 1.0f
+			};
+
 			// Graphics pipeline
 			VkGraphicsPipelineCreateInfo pipeline_info {
 				.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
@@ -297,7 +308,7 @@ public:
 				.pViewportState = &viewport_state,
 				.pRasterizationState = &rasterizer,
 				.pMultisampleState = &multisampling,
-				.pDepthStencilState = nullptr,
+				.pDepthStencilState = &depth_stencil,
 				.pColorBlendState = &color_blending,
 				.pDynamicState = nullptr,
 				.layout = pipeline_layout,
@@ -307,22 +318,8 @@ public:
 				.basePipelineIndex = -1
 			};
 
-			// Depth stencil if requested
-			VkPipelineDepthStencilStateCreateInfo depth_stencil {
-				.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-				.depthTestEnable = VK_TRUE,
-				.depthWriteEnable = VK_TRUE,
-				.depthCompareOp = VK_COMPARE_OP_LESS,
-				.depthBoundsTestEnable = VK_FALSE,
-				.stencilTestEnable = VK_FALSE,
-				.front = {},
-				.back = {},
-				.minDepthBounds = 0.0f,
-				.maxDepthBounds = 1.0f
-			};
-
-			if (info.depth_test)
-				pipeline_info.pDepthStencilState = &depth_stencil;
+			/* if (info.depth_test)
+				pipeline_info.pDepthStencilState = &depth_stencil; */
 
 			VkPipeline pipeline;
 			result = vkCreateGraphicsPipelines(
@@ -839,6 +836,7 @@ private:
 			VkDebugUtilsMessageTypeFlagsEXT messageType,
 			const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
 			void *pUserData) {
+		// Errors
 		if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
 			Logger::error() << "[Vulkan Validation Layer] "
 				<< pCallbackData->pMessage << std::endl;
@@ -850,9 +848,23 @@ private:
 
 #endif
 
-		} else {
-
 #ifndef KOBRA_VALIDATION_ERROR_ONLY
+
+		// Warnings
+		} else if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+			Logger::warn() << "[Vulkan Validation Layer] "
+				<< pCallbackData->pMessage << std::endl;
+
+
+#ifdef KOBRA_THROW_WARNING
+
+			throw std::runtime_error("[Vulkan Validation Layer] "
+				"An warning occured in the validation layer");
+
+#endif
+
+		// Info
+		} else {
 
 			Logger::notify() << "[Vulkan Validation Layer] "
 				<< pCallbackData->pMessage << std::endl;
@@ -1053,7 +1065,7 @@ public:
 	}
 
 	// TODO: pop deletion tasks
-	
+
 	// Create an image
 	void make_image(const VkPhysicalDevice &phdev, const VkDevice &device,
 			uint32_t width, uint32_t height,
