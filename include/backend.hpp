@@ -353,7 +353,6 @@ public:
 				throw std::runtime_error("failed to create graphics pipeline!");
 			}
 
-			Logger::ok("[profiler] Pipeline created");
 			return {pipeline, pipeline_layout};
 		}
 	};
@@ -1502,9 +1501,6 @@ public:
 		}
 
 		// Log creation
-		Logger::ok() << "[Vulkan] Surface created (VkSurfaceKHR="
-			<< new_surface << ")\n";
-
 		return Surface {window, new_surface};
 	}
 
@@ -1556,9 +1552,6 @@ public:
 		}
 
 		// Log creation and return
-		Logger::ok() << "[Vulkan] Descriptor pool created (VkDescriptorPool="
-			<< new_descriptor_pool << ")\n";
-
 		return new_descriptor_pool;
 	}
 
@@ -1588,8 +1581,6 @@ public:
 		}
 
 		// Log creation and return
-		Logger::ok() << "[Vulkan] Descriptor set layout created (VkDescriptorSetLayout="
-			<< new_descriptor_set_layout << ")\n";
 		return new_descriptor_set_layout;
 	}
 

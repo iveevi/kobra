@@ -248,6 +248,22 @@ public:
 		upload();
 	}
 
+	// Clear all data
+	void clear() {
+		_warn_null_buffer();
+		if (settings.usage_type == BFM_WRITE_ONLY) {
+			std::memset(
+				cpu_buffer.data(),
+				0,
+				settings.size * sizeof(T)
+			);
+		}
+
+		// Reset push index and upload
+		push_index = 0;
+		sync_upload();
+	}
+
 	// Update descriptor set
 	void bind(VkDescriptorSet descriptor_set, uint32_t binding) const {
 		VkDescriptorBufferInfo buffer_info {

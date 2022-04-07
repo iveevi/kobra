@@ -147,10 +147,12 @@ void Layer::add_scene(const Scene &scene)
 
 			// Create a sphere mesh
 			kobra::Mesh mesh = kobra::Mesh::make_sphere(
-				sphere->center(), sphere->radius()
+				// TODO: no center -- should always be 0,0,0
+				{0, 0, 0}, sphere->radius()
 			);
 
 			raster::Mesh *raster_mesh = new raster::Mesh(_wctx.context, mesh);
+			raster_mesh->transform() = sphere->transform();
 			raster_mesh->set_material(sphere->material());
 			raster_mesh->set_name(sphere->name());
 			add(raster_mesh);

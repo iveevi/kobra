@@ -13,7 +13,6 @@ namespace kobra {
 // Basic sphere class
 class Sphere : virtual public Object, virtual public Renderable {
 protected:
-	glm::vec3	_center;
 	float		_radius;
 public:
 	static constexpr char object_type[] = "Sphere";
@@ -22,18 +21,18 @@ public:
 	Sphere() = default;
 
 	// Constructor
-	Sphere(const glm::vec3 &center, float radius) :
-			Object(object_type, Transform {center}),
-			_center(center), _radius(radius) {}
+	Sphere(float radius)
+			: Object(object_type, Transform()),
+			_radius(radius) {}
 
 	Sphere(const Sphere &sphere, const Transform &transform)
 			: Object(object_type, transform),
 			Renderable(sphere.material()),
-			_center(transform.position), _radius(sphere._radius) {}
+			_radius(sphere._radius) {}
 
 	// Getters
 	const glm::vec3 &center() const {
-		return _center;
+		return _transform.position;
 	}
 
 	float radius() const {
@@ -43,7 +42,6 @@ public:
 	// Virtual methods
 	void save(std::ofstream &file) const override {
 		file << "[SPHERE]\n";
-		file << "center=" << _center.x << " " << _center.y << " " << _center.z << "\n";
 		file << "radius=" << _radius << "\n";
 		_material.save(file);
 	}
@@ -53,11 +51,6 @@ public:
 			const VkCommandPool &command_pool,
 			std::ifstream &file) {
 		std::string line;
-
-		// Read center
-		glm::vec3 center;
-		std::getline(file, line);
-		std::sscanf(line.c_str(), "center=%f %f %f", &center.x, &center.y, &center.z);
 
 		// Read radius
 		float radius;
@@ -79,7 +72,7 @@ public:
 		}
 
 		// Construct and return sphere
-		Sphere sphere(center, radius);
+		Sphere sphere(radius);
 		sphere.set_material(material.value());
 		return sphere;
 	}

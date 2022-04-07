@@ -12,6 +12,7 @@
 // Engine headers
 #include "include/app.hpp"
 #include "include/backend.hpp"
+#include "include/capture.hpp"
 #include "include/gui/gui.hpp"
 #include "include/gui/layer.hpp"
 #include "include/gui/rect.hpp"
@@ -27,6 +28,87 @@
 using namespace kobra;
 
 // RT capture class
+// TODO: turn in an engine module
+class RTCapture : public BaseApp {
+	Camera		camera;
+	rt::Layer	layer;
+	rt::Batch	batch;
+	rt::BatchIndex	index;
+	bool		term = false;
+public:
+	// Constructor from scene file and camera
+	RTCapture(Vulkan *vk, const char *scene_file, const Camera &camera)
+			: BaseApp({
+				vk,
+				800, 800, 2,
+				"RT Capture",
+			}, true),
+			camera(camera) {
+		// Load scene
+		Scene scene = Scene(context, window.command_pool, scene_file);
+
+		// Create raster layer
+		layer = rt::Layer(window);
+		layer.add_scene(scene);
+		layer.set_active_camera(camera);
+
+		// Create batch
+		// TODO: a method to generate optimal batch sizes (eg 50x50 is
+		// faster than 10x10)
+		batch = rt::Batch(800, 800, 100, 100, 1);
+		index = batch.make_batch_index(0, 0, 16, 1);
+	}
+
+	// Render loop
+	void record(const VkCommandBuffer &cmd, const VkFramebuffer &framebuffer) override {
+		static float time = 0.0f;
+
+		// Start recording command buffer
+		Vulkan::begin(cmd);
+
+		// Render scene
+		layer.render(cmd, framebuffer, index);
+
+		// End recording command buffer
+		Vulkan::end(cmd);
+
+		// Track progress
+		time += frame_time;
+		float progress = batch.progress();
+		float eta = time * (1.0f - progress) / progress;
+		std::printf("Progress: %.2f%%, Total time: %.2fs (+%.2fs), ETA: %.2fs\n",
+			progress * 100.0f, time, frame_time, eta);
+
+		// Next batch
+		batch.increment(index);
+	}
+
+	// Treminator
+	void terminate() override {
+		bool b = batch.completed();
+		if (term || b) {
+			glfwSetWindowShouldClose(surface.window, GLFW_TRUE);
+			auto buffer = layer.pixels();
+			
+			// TODO: make an easier an more straight forward way to
+			// save a buffer to an image
+			Image img {
+				.width = 800,
+				.height = 800
+			};
+
+			Capture::snapshot(buffer, img);
+			img.write("capture.png");
+			KOBRA_LOG_FUNC(notify) << "Capture saved to capture.png\n";
+		}
+	}
+
+	// Terminate now
+	// TODO: base app should have a terminate function
+	void terminate_now() {
+		term = true;
+	}
+};
 
 // Main class
 class RTApp :  public BaseApp {
@@ -36,11 +118,16 @@ class RTApp :  public BaseApp {
 	// RT or Raster
 	bool		raster = true;
 	bool		modified = false;
+	bool		show_mouse = false;
 
 	// Layers
 	rt::Layer	rt_layer;
 	raster::Layer	raster_layer;
 	gui::Layer	gui_layer;
+
+	// Capturer
+	RTCapture	*capturer = nullptr;
+	std::thread	*capturer_thread = nullptr;
 
 	// Current scene
 	Scene		scene;
@@ -316,11 +403,40 @@ class RTApp :  public BaseApp {
 				}
 			}
 
-			// Saving the scene with Ctrl+S
-			if (event.key == GLFW_KEY_S &&
+			// Saving the scene with Ctrl
+			if (event.key == GLFW_KEY_K &&
 				event.mods == GLFW_MOD_CONTROL) {
 				KOBRA_LOG_FILE(notify) << "Saving scene...\n";
 				app->scene.save("scene.kobra");
+			}
+
+			// Refresh rasterization
+			if (event.key == GLFW_KEY_R &&
+				event.mods == GLFW_MOD_CONTROL) {
+				KOBRA_LOG_FILE(notify) << "Force refreshing scene...\n";
+				app->scene.save("scene.kobra");
+				app->scene = Scene(app->context, app->window.command_pool, "scene.kobra");
+				app->raster_layer = raster::Layer(app->window, VK_ATTACHMENT_LOAD_OP_CLEAR);
+				app->raster_layer.add_scene(app->scene);
+				app->raster_layer.set_active_camera(app->camera);
+				app->raster_layer.set_mode(raster::Layer::Mode::BLINN_PHONG);
+			}
+
+			// Toggle mouse visibility
+			if (event.key == GLFW_KEY_M) {
+				app->show_mouse = !app->show_mouse;
+				app->window.cursor_mode(
+					app->show_mouse ? GLFW_CURSOR_NORMAL
+						: GLFW_CURSOR_HIDDEN
+				);
+			}
+
+			// Start a capture
+			if (event.key == GLFW_KEY_C) {
+				app->capturer = new RTCapture(app->context.vk, "scene.kobra", app->camera);
+				app->capturer_thread = new std::thread([&]() {
+					app->capturer->run();
+				});
 			}
 		}
 	}
@@ -368,8 +484,12 @@ class RTApp :  public BaseApp {
 		box.transform().rotation = {0, 30, 0};
 
 		// rt::Mesh *mesh0 = new rt::Mesh(box);
-		rt::Sphere *mesh0 = new rt::Sphere({-1, 0, 3.0}, 1.0);
-		rt::Sphere *sphere1 = new rt::Sphere({2, 2, 0.0}, 1.0);
+		rt::Sphere *mesh0 = new rt::Sphere(1.0);
+		mesh0->transform().position = {-1, 0, 3.0};
+
+		rt::Sphere *sphere1 = new rt::Sphere(1.0);
+		sphere1->transform().position = {2, 2, 0.0};
+
 		rt::Mesh *mesh1 = new rt::Mesh(model[0]);
 		mesh1->transform().position = {2, -1, 3};
 		mesh1->transform().rotation = {0, -30, 0};
@@ -516,6 +636,16 @@ public:
 		window.cursor_mode(GLFW_CURSOR_DISABLED);
 	}
 
+	// Destructor
+	~RTApp() {
+		if (capturer) {
+			capturer->terminate_now();
+			capturer_thread->join();
+			delete capturer_thread;
+			delete capturer;
+		}
+	}
+
 	// Override record method
 	// TODO: preview raytraced scene with a very low resolution
 	void record(const VkCommandBuffer &cmd, const VkFramebuffer &framebuffer) override {
@@ -565,8 +695,16 @@ public:
 			raster_layer.render(cmd, framebuffer);
 		} else {
 			if (modified) {
-				rt_layer.clear();
+				// TODO: fix clear method
+				// rt_layer.clear();
+				// rt_layer.add_scene(scene);
+				KOBRA_LOG_FILE(notify) << "Reconstructing RT layer\n";
+				scene.save("scene.kobra");
+				scene = Scene(context, window.command_pool, "scene.kobra");
+
+				rt_layer = rt::Layer(window);
 				rt_layer.add_scene(scene);
+				rt_layer.set_active_camera(camera);
 				modified = false;
 			}
 

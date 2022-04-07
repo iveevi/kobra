@@ -115,6 +115,19 @@ const Layer::DSLBindings Layer::_postproc_bindings = {
 	},
 };
 
+////////////////////////
+// BatchIndex methods //
+////////////////////////
+
+void BatchIndex::callback() const
+{
+	if (batch == nullptr)
+		return;
+
+	// Increment corresponding batch sample
+	batch->increment_sample_count(*this);
+}
+
 //////////////////////////////
 // Private helper functions //
 //////////////////////////////

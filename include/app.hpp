@@ -58,6 +58,9 @@ public:
 		}
 	};
 protected:
+	// Application name
+	std::string		name;
+
 	// This application's window context
 	Window			window;
 
@@ -78,7 +81,7 @@ protected:
 public:
 	// Constructor
 	// TODO: constructor for multiple windows?
-	App(const Info &info) : frame_index(0) {
+	App(const Info &info) : name(info.name), frame_index(0) {
 		// Create surface
 		width = info.width;
 		height = info.height;
@@ -146,10 +149,12 @@ public:
 
 			// Get frame time
 			frame_time = frame_timer.lap()/scale;
-			// std::cout << "frame_time = " << frame_time << std::endl;
 		}
 
 		context.vk->idle(context.device);
+
+		// Cleanup
+		glfwDestroyWindow(surface.window);
 	}
 
 	// Frame function (must be implemented by user)

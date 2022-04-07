@@ -18,9 +18,9 @@ public:
 	Sphere() = default;
 
 	// Constructor
-	Sphere(const glm::vec3& center, float radius)
-			: Object(object_type, Transform {center}),
-			kobra::Sphere(center, radius) {}
+	Sphere(float radius)
+			: Object(object_type, Transform()),
+			kobra::Sphere(radius) {}
 
 	Sphere(const kobra::Sphere &sphere)
 			: Object(sphere.name(), object_type, sphere.transform()),
@@ -33,7 +33,7 @@ public:
 		uint offset = lp.vertices->push_size()/2;
 
 		// Add vertex data
-		lp.vertices->push_back(glm::vec4 {_center, _radius});
+		lp.vertices->push_back(glm::vec4 {_transform.position, _radius});
 		lp.vertices->push_back(glm::vec4 {0.0});
 
 		// Add as an object

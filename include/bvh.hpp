@@ -318,6 +318,11 @@ public:
 			node->write(&_bf_nodes);
 		_bf_nodes.sync_upload();
 	}
+	
+	// Clear the buffer
+	void clear() {
+		_bf_nodes.clear();
+	}
 
 	// Bind buffer to descriptor set
 	void bind(const VkDescriptorSet &dset, size_t index) {

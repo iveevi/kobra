@@ -22,6 +22,138 @@ namespace kobra {
 
 namespace rt {
 
+// Forward declarations
+class Batch;
+
+// Batch index
+class BatchIndex {
+	Batch *batch = nullptr;
+public:
+	uint width;
+	uint height;
+
+	uint offset_x;
+	uint offset_y;
+
+	uint pixel_samples;
+	uint light_samples;
+
+	// Default constructor
+	BatchIndex() = default;
+
+	// Constructor
+	BatchIndex(int w, int h, int x, int y, int p, int l)
+			: width(w), height(h), offset_x(x), offset_y(y),
+			pixel_samples(p), light_samples(l) {}
+
+	// Set original batch
+	void set_batch(Batch *batch) {
+		this->batch = batch;
+	}
+
+	// Callback to originating batch
+	void callback() const;
+};
+
+// Batch class
+class Batch {
+	int width;
+	int height;
+
+	int batch_width;
+	int batch_height;
+
+	int batches_x;
+	int batches_y;
+
+	int batch_x;
+	int batch_y;
+
+	int max_samples;
+
+	// int **sample_count = nullptr;
+	std::vector <std::vector <int>> sample_count;
+public:
+	// Default constuctor
+	Batch() = default;
+
+	// Constructor
+	Batch(int w, int h, int bw, int bh, int maxs)
+			: width(w), height(h), batch_width(bw), batch_height(bh),
+			  batch_x(0), batch_y(0), max_samples(maxs) {
+		// Get total number
+		batches_x = (width + batch_width - 1) / batch_width;
+		batches_y = (height + batch_height - 1) / batch_height;
+
+		// Initialize sample count
+		sample_count.resize(batches_x);
+		for (int i = 0; i < batches_x; i++) {
+			sample_count[i].resize(batches_y);
+			for (int j = 0; j < batches_y; j++)
+				sample_count[i][j] = 0;
+		}
+	}
+
+	// TODO: callbacks for completed back indices?
+	
+	// Make batch index
+	BatchIndex make_batch_index(int x, int y, int p = 1, int l = 1) {
+		BatchIndex bi {
+			batch_width,
+			batch_height,
+			x * batch_width,
+			y * batch_height,
+			p, l
+		};
+
+		bi.set_batch(this);
+		return bi;
+	}
+
+	// "Increment" batch index
+	void increment(BatchIndex &index) {
+		index.offset_x += batch_width;
+		if (index.offset_x >= width) {
+			index.offset_x = 0;
+			index.offset_y += batch_height;
+		}
+	}
+
+	// Increment sample count
+	void increment_sample_count(const BatchIndex &index) {
+		// Get corresponding index
+		int x = index.offset_x / batch_width;
+		int y = index.offset_y / batch_height;
+
+		// Increment sample count
+		sample_count[x][y]++;
+	}
+
+	// Check if batch is fully completed
+	bool completed() const {
+		for (int i = 0; i < batches_x; i++) {
+			for (int j = 0; j < batches_y; j++) {
+				if (sample_count[i][j] < max_samples)
+					return false;
+			}
+		}
+
+		return true;
+	}
+
+	// Progress
+	float progress() const {
+		int total = 0;
+		for (int i = 0; i < batches_x; i++) {
+			for (int j = 0; j < batches_y; j++)
+				total += sample_count[i][j];
+		}
+
+		return (float) total / (float) (batches_x * batches_y * max_samples);
+	}
+};
+
+// Layer class
 class Layer : public kobra::Layer <rt::_element> {
 	// Private aliases
 	using DSLBinding = VkDescriptorSetLayoutBinding;
@@ -336,6 +468,22 @@ public:
 	// Adding scenes
 	void add_scene(const Scene &scene) override;
 
+	// Clearning all data
+	void clear() override {
+		// Call parents clear
+		kobra::Layer <_element> ::clear();
+
+		// Clear all the buffers
+		// _pixels.clear();
+		_vertices.clear();
+		_triangles.clear();
+		_materials.clear();
+		_lights.clear();
+		_light_indices.clear();
+		_transforms.clear();
+		_bvh.clear();
+	}
+
 	// Number of triangles
 	size_t triangle_count() const {
 		return _triangles.push_size();
@@ -381,11 +529,23 @@ public:
 		*_active_camera = camera;
 	}
 
+	// Get pixel buffer
+	const BufferManager <uint> &pixels() {
+		return _pixels;
+	}
+
 	// Render
+	// TODO: replace duplicate code (call other overload)
 	void render(const VkCommandBuffer &cmd, const VkFramebuffer &framebuffer) {
-		// Handle null case
+		// Handle null pipeline
 		if (_pipelines.mesh.pipeline == VK_NULL_HANDLE) {
 			KOBRA_LOG_FUNC(warn) << "rt::Layer is not yet initialized\n";
+			return;
+		}
+
+		// Handle null active camera
+		if (_active_camera == nullptr) {
+			KOBRA_LOG_FUNC(warn) << "rt::Layer has no active camera\n";
 			return;
 		}
 
@@ -512,6 +672,135 @@ public:
 		vkCmdBeginRenderPass(cmd, &rp_info, VK_SUBPASS_CONTENTS_INLINE);
 		vkCmdDraw(cmd, 6, 1, 0, 0);
 		vkCmdEndRenderPass(cmd);
+	}
+	
+	void render(const VkCommandBuffer &cmd, const VkFramebuffer &framebuffer, const BatchIndex &bi) {
+		// Handle null pipeline
+		if (_pipelines.mesh.pipeline == VK_NULL_HANDLE) {
+			KOBRA_LOG_FUNC(warn) << "rt::Layer is not yet initialized\n";
+			return;
+		}
+
+		// Handle null active camera
+		if (_active_camera == nullptr) {
+			KOBRA_LOG_FUNC(warn) << "rt::Layer has no active camera\n";
+			return;
+		}
+
+		///////////////////////////
+		// Mesh compute pipeline //
+		///////////////////////////
+
+		// TODO: context method
+		vkCmdBindPipeline(cmd,
+			VK_PIPELINE_BIND_POINT_COMPUTE,
+			_pipelines.mesh.pipeline
+		);
+
+		// Prepare push constants
+		PushConstants pc {
+			.width = _extent.width,
+			.height = _extent.height,
+
+			.xoffset = bi.offset_x,
+			.yoffset = bi.offset_y,
+
+			.triangles = (uint) _triangles.push_size(),
+			.lights = (uint) _light_indices.push_size(),
+
+			// TODO: still unable to do large number of samples
+			.samples_per_pixel = bi.pixel_samples,
+			.samples_per_light = bi.light_samples,
+
+			.camera_position = _active_camera->transform.position,
+			.camera_forward = _active_camera->transform.forward(),
+			.camera_up = _active_camera->transform.up(),
+			.camera_right = _active_camera->transform.right(),
+
+			.camera_tunings = glm::vec4 {
+				active_camera()->tunings.scale,
+				active_camera()->tunings.aspect,
+				0, 0
+			}
+		};
+
+		// Bind descriptor set
+		vkCmdBindDescriptorSets(cmd,
+			VK_PIPELINE_BIND_POINT_COMPUTE,
+			_pipelines.mesh.layout,
+			0, 1, &_mesh_ds,
+			0, nullptr
+		);
+
+		// Push constants
+		vkCmdPushConstants(cmd,
+			_pipelines.mesh.layout,
+			VK_SHADER_STAGE_COMPUTE_BIT,
+			0, sizeof(PushConstants), &pc
+		);
+
+		// Dispatch the compute shader
+		vkCmdDispatch(cmd,
+			bi.width,
+			bi.height,
+			1
+		);
+
+		//////////////////////////////
+		// Post-processing pipeline //
+		//////////////////////////////
+
+		vkCmdBindPipeline(cmd,
+			VK_PIPELINE_BIND_POINT_GRAPHICS,
+			_pipelines.postproc.pipeline
+		);
+
+		// Bind descriptor set
+		vkCmdBindDescriptorSets(cmd,
+			VK_PIPELINE_BIND_POINT_GRAPHICS,
+			_pipelines.postproc.layout,
+			0, 1, &_postproc_ds,
+			0, nullptr
+		);
+
+		// Push constants
+		PC_Viewport pc_vp {
+			.width = _extent.width,
+			.height = _extent.height
+		};
+
+		vkCmdPushConstants(cmd,
+			_pipelines.postproc.layout,
+			VK_SHADER_STAGE_FRAGMENT_BIT,
+			0, sizeof(PC_Viewport), &pc_vp
+		);
+
+		// Clear colors
+		VkClearValue clear_values[2] = {
+			{ .color = { 0.0f, 0.0f, 0.0f, 1.0f } },
+			{ .depthStencil = { 1.0f, 0 } }
+		};
+
+		// Begin render pass
+		// TODO: context method
+		VkRenderPassBeginInfo rp_info {
+			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+			.renderPass = _render_pass,
+			.framebuffer = framebuffer,
+			.renderArea = {
+				.offset = {0, 0},
+				.extent = _extent
+			},
+			.clearValueCount = 2,
+			.pClearValues = clear_values
+		};
+
+		vkCmdBeginRenderPass(cmd, &rp_info, VK_SUBPASS_CONTENTS_INLINE);
+		vkCmdDraw(cmd, 6, 1, 0, 0);
+		vkCmdEndRenderPass(cmd);
+
+		// Callback for batch index
+		bi.callback();
 	}
 };
 
