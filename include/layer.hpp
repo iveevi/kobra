@@ -64,6 +64,21 @@ public:
 	// Adding scenes
 	virtual void add_scene(const Scene &scene) = 0;
 
+	// Indexing elements
+	ptr operator[](size_t index) const {
+		return _elements[index];
+	}
+
+	// Clear all elements
+	virtual void clear() {
+		_elements.clear();
+	}
+
+	// Number of elements
+	size_t size() const {
+		return _elements.size();
+	}
+
 	// TODO: variadic overload (implement collect method in common)
 };
 

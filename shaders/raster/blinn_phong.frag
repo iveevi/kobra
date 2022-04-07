@@ -3,6 +3,7 @@
 // Modules
 #include "io_set.glsl"
 #include "light_set.glsl"
+#include "highlight.glsl"
 
 // TODO: move to light_set module
 vec3 point_light(vec3 light_position, vec3 position)
@@ -29,6 +30,7 @@ void main()
 	// First check if the object is emissive
 	if (abs(material.shading_type - 5.0) < 0.01) {
 		fragment = vec4(material.albedo, 1.0);
+		HL_OUT();
 		return;
 	}
 
@@ -43,4 +45,5 @@ void main()
 
 	// Output
 	fragment = vec4(color, 1.0);
+	HL_OUT();
 }

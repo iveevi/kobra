@@ -408,7 +408,6 @@ void Layer::add_scene(const Scene &scene)
 	for (const auto &obj : scene) {
 		std::string type = obj->type();
 
-		std::cout << "TRYING TO ADD " << type << "\n";
 		if (type == kobra::Sphere::object_type) {
 			kobra::Sphere *sphere = dynamic_cast
 				<kobra::Sphere *> (obj.get());

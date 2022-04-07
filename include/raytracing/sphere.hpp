@@ -23,7 +23,7 @@ public:
 			kobra::Sphere(center, radius) {}
 
 	Sphere(const kobra::Sphere &sphere)
-			: Object(object_type, sphere.transform()),
+			: Object(sphere.name(), object_type, sphere.transform()),
 			Renderable(sphere.material()),
 			kobra::Sphere(sphere) {}
 

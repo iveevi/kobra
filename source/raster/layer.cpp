@@ -152,6 +152,7 @@ void Layer::add_scene(const Scene &scene)
 
 			raster::Mesh *raster_mesh = new raster::Mesh(_wctx.context, mesh);
 			raster_mesh->set_material(sphere->material());
+			raster_mesh->set_name(sphere->name());
 			add(raster_mesh);
 		}
 	}

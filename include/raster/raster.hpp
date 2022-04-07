@@ -4,6 +4,7 @@
 // Engine headers
 #include "../../shaders/raster/constants.h"
 #include "../buffer_manager.hpp"
+#include "../object.hpp"
 #include "../vertex.hpp"
 
 namespace kobra {
@@ -23,6 +24,8 @@ struct RenderPacket {
 	// View and projection matrices
 	glm::mat4 view;
 	glm::mat4 proj;
+
+	int highlight;
 };
 
 //////////////////////
@@ -42,7 +45,7 @@ struct LatchingPacket {
 };
 
 // Rasterization elements
-struct _element {
+struct _element : virtual public Object {
 	// Virtual destructor
 	virtual ~_element() = default;
 

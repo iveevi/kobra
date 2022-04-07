@@ -22,12 +22,9 @@ public:
 
 	// constructor from mesh
 	Mesh(const kobra::Mesh &mesh)
-			: Object(object_type, mesh.transform()),
+			: Object(mesh.name(), object_type, mesh.transform()),
 			Renderable(mesh.material()),
-			kobra::Mesh(mesh) {
-		std::cout << "Mesh: " << vertex_count() << " vertices, "
-			<< triangle_count() << " triangles" << std::endl;
-	}
+			kobra::Mesh(mesh) {}
 
 	// Latch to layer
 	void latch(const LatchingPacket &lp, size_t id) override {
@@ -73,8 +70,6 @@ public:
 		}
 
 		// Write the material
-		std::cout << "LATCHING RT MESH: material albedo source: "
-			<< _material.albedo_source << std::endl;
 		_material.write_material(lp.materials);
 
 		// TODO: method for this?
@@ -86,8 +81,6 @@ public:
 
 		// If the material is emmisive, write as a light
 		if (_material.shading_type == SHADING_TYPE_EMISSIVE) {
-			std::cout << "Mesh: is emmisive" << std::endl;
-
 			for (size_t i = 0; i < triangle_count(); i++) {
 				// Write light index
 				uint index = lp.lights->push_size();

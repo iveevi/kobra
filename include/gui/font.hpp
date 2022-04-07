@@ -163,6 +163,9 @@ class Font {
 	// Font metrics
 	std::unordered_map <char, FT_Glyph_Metrics>	_metrics;
 
+	// Lint height
+	float						_line_height;
+
 	// Check FreeType error
 	void check_error(FT_Error error) const {
 		if (error) {
@@ -187,6 +190,9 @@ class Font {
 
 		// Set font size
 		check_error(FT_Set_Char_Size(face, 0, 1000 * 64, 96, 96));
+
+		// Get line height
+		_line_height = face->height / (64.0f * 1000.0f);
 
 		// Process
 		size_t total_points = 0;
@@ -310,6 +316,7 @@ public:
 		return it->second;
 	}
 
+	// Retrieve glyph metrics
 	const FT_Glyph_Metrics &metrics(char c) const {
 		auto it = _metrics.find(c);
 		if (it == _metrics.end()) {
@@ -321,6 +328,7 @@ public:
 		return it->second;
 	}
 
+	// Retrieve glyph descriptor set
 	const VkDescriptorSet &glyph_ds(char c) const {
 		auto it = _glyph_ds.find(c);
 		if (it == _glyph_ds.end()) {
@@ -330,6 +338,11 @@ public:
 		}
 
 		return it->second;
+	}
+
+	// Get line height
+	float line_height() const {
+		return _line_height;
 	}
 };
 

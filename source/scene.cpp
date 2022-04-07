@@ -20,6 +20,28 @@ static ObjectPtr load_object(const Vulkan::Context &ctx,
 {
 	std::string header;
 
+	// Read object intro header
+	std::getline(fin, header);
+	if (header != "[OBJECT]") {
+		KOBRA_LOG_FUNC(error) << "Expected [OBJECT] header, got "
+			<< header << std::endl;
+		return nullptr;
+	}
+
+	// Get object name
+	std::string name;
+	std::getline(fin, header);
+
+	// Get substring (name=...)
+	auto pos = header.find('=');
+	if (pos == std::string::npos) {
+		KOBRA_LOG_FUNC(error) << "Expected '=' in object name, got "
+			<< header << std::endl;
+		return nullptr;
+	}
+
+	name = header.substr(pos + 1);
+
 	// Read transform header
 	std::getline(fin, header);
 	if (header != "[TRANSFORM]") {
@@ -41,7 +63,9 @@ static ObjectPtr load_object(const Vulkan::Context &ctx,
 		if (!sphere)
 			return nullptr;
 
-		return ObjectPtr(new Sphere(*sphere, *t));
+		auto optr = ObjectPtr(new Sphere(*sphere, *t));
+		optr->set_name(name);
+		return optr;
 	}
 
 	if (header == "[MESH]") {
@@ -49,7 +73,9 @@ static ObjectPtr load_object(const Vulkan::Context &ctx,
 		if (!mesh)
 			return nullptr;
 
-		return ObjectPtr(new Mesh(*mesh, *t));
+		auto optr = ObjectPtr(new Mesh(*mesh, *t));
+		optr->set_name(name);
+		return optr;
 	}
 
 	// Else
@@ -111,6 +137,7 @@ Scene::Scene(const std::vector <ObjectPtr> &objs)
 // Methods //
 /////////////
 
+// Iterators
 Scene::iterator Scene::begin() const
 {
 	return _objects.begin();
@@ -121,6 +148,18 @@ Scene::iterator Scene::end() const
 	return _objects.end();
 }
 
+// Indexing
+ObjectPtr Scene::operator[](const std::string &name) const
+{
+	for (auto &obj : _objects) {
+		if (obj->name() == name)
+			return obj;
+	}
+
+	return nullptr;
+}
+
+// Saving
 void Scene::save(const std::string &filename) const
 {
 	// Open the file

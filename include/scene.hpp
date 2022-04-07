@@ -20,6 +20,8 @@ public:
 	using iterator = std::vector <ObjectPtr> ::const_iterator;
 private:
 	std::vector <ObjectPtr> _objects;
+
+	// TODO: hash map of names
 public:
 	// Default constructor
 	Scene() = default;
@@ -36,6 +38,9 @@ public:
 	// Iterators
 	iterator begin() const;
 	iterator end() const;
+
+	// Retrieve object by name
+	ObjectPtr operator[](const std::string &) const;
 
 	// Save objects to file
 	void save(const std::string &) const;

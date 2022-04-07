@@ -219,6 +219,15 @@ public:
 
 		// Create glyphs
 		for (char c : text) {
+			// If newline
+			if (c == '\n') {
+				x = pos.x;
+				y += _font.line_height();
+				KOBRA_LOG_FUNC(notify) << "Newline: height = " << _font.line_height()
+					<< " y = " << y << std::endl;
+				continue;
+			}
+
 			// Get metrics for current character
 			FT_Glyph_Metrics metrics = _font.metrics(c);
 
@@ -299,7 +308,13 @@ public:
 
 		// Create glyphs
 		for (char c : txt->str) {
-			// std::cout << "\tc = " << c << " (" << (int) c << ")" << std::endl;
+			// If newline
+			if (c == '\n') {
+				x = txt->pos.x;
+				y += _font.line_height();
+				continue;
+			}
+
 			// Get metrics for current character
 			FT_Glyph_Metrics metrics = _font.metrics(c);
 
@@ -314,8 +329,6 @@ public:
 			float h = metrics.height * iheight;
 
 			maxy = std::max(maxy, y0 + h);
-
-			// std::cout << "\t\tbounds = " << x0 << ", " << y0 << ", " << w << ", " << h << std::endl;
 
 			// Create glyph
 			Glyph g {

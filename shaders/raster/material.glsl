@@ -4,4 +4,5 @@
 struct Material {
 	vec3	albedo;
 	float	shading_type;
+	float	hightlight;
 };

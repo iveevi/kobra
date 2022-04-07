@@ -4,6 +4,7 @@
 // Standard headers
 #include <fstream>
 #include <memory>
+#include <string>
 
 // Engine headers
 #include "transform.hpp"
@@ -12,8 +13,12 @@ namespace kobra {
 
 // Scene object
 class Object {
+	// Generate unique names
+	static int _name_id;
+
+	static std::string _generate_name();
 protected:
-	// TODO: name?
+	std::string	_name;
 	std::string	_type;
 	Transform	_transform;
 public:
@@ -22,7 +27,12 @@ public:
 
 	// Constructor
 	Object(const std::string &type, const Transform &transform)
-			: _type(type), _transform(transform) {}
+			: _type(type), _transform(transform) {
+		_name = _generate_name();
+	}
+
+	Object(const std::string &name, const std::string &type, const Transform &transform)
+			: _name(name), _type(type), _transform(transform) {}
 
 	// Virtual destructor
 	virtual ~Object() {}
@@ -30,6 +40,16 @@ public:
 	// Get type
 	const std::string &type() const {
 		return _type;
+	}
+
+	// Get name
+	const std::string &name() const {
+		return _name;
+	}
+
+	// Set name
+	void set_name(const std::string &name) {
+		_name = name;
 	}
 
 	// Get transform
@@ -45,7 +65,9 @@ public:
 	virtual void save(std::ofstream &) const = 0;
 
 	void save_object(std::ofstream &file) const {
-		// Save transform, then rest of the object
+		// Save name, transform, then rest of the object
+		file << "[OBJECT]" << std::endl;
+		file << "name=" << _name << std::endl;
 		_transform.save(file);
 		save(file);
 	}

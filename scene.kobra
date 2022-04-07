@@ -1,27 +1,33 @@
+[OBJECT]
+name=Object 2
 [TRANSFORM]
-position=-0.75 -0.6 1
+position=1.94 4.47001 -3.94
 rotation=0 0 0
 scale=1 1 1
 [SPHERE]
-center=-1 0 3
+center=0 0 0
 radius=1
 [MATERIAL]
 albedo=0 0 0
 shading_type=1124073472
 ior=1.3
 albedo_source=resources/wood_floor_albedo.jpg
+[OBJECT]
+name=Object 3
 [TRANSFORM]
-position=2 2 0
+position=0 0 0
 rotation=0 0 0
 scale=1 1 1
 [SPHERE]
-center=2 2 0
+center=0 0 0
 radius=1
 [MATERIAL]
 albedo=0 0 0
-shading_type=REFLECTION
+shading_type=1098907648
 ior=1
-albedo_source=0
+albedo_source=resources/wood_floor_albedo.jpg
+[OBJECT]
+name=Object 4
 [TRANSFORM]
 position=0 0 0
 rotation=0 0 0
@@ -68,54 +74,23 @@ f 23 24 21
 albedo=0.7 0.7 0.7
 shading_type=1098907648
 ior=1
-albedo_source=resources/wood_floor_albedo.jpg
+albedo_source=resources/sky.jpg
+[OBJECT]
+name=Object 0
 [TRANSFORM]
-position=0 0 0
-rotation=0 30 0
+position=-3.52 -0.160001 -2.99999
+rotation=0 -30 0
 scale=1 1 1
 [MESH]
-source=0
-v 0 -2 4 0 0 1 0 0
-v 2 -2 4 0 0 1 1 0
-v 2 0 4 0 0 1 1 1
-v 0 0 4 0 0 1 0 1
-v 0 -2 2 0 0 -1 0 0
-v 2 -2 2 0 0 -1 1 0
-v 2 0 2 0 0 -1 1 1
-v 0 0 2 0 0 -1 0 1
-v 0 -2 4 -1 0 0 0 0
-v 0 -2 2 -1 0 0 1 0
-v 0 0 2 -1 0 0 1 1
-v 0 0 4 -1 0 0 0 1
-v 2 -2 4 1 0 0 0 0
-v 2 -2 2 1 0 0 1 0
-v 2 0 2 1 0 0 1 1
-v 2 0 4 1 0 0 0 1
-v 0 0 4 0 1 0 0 0
-v 2 0 4 0 1 0 1 0
-v 2 0 2 0 1 0 1 1
-v 0 0 2 0 1 0 0 1
-v 0 -2 4 0 -1 0 0 0
-v 2 -2 4 0 -1 0 1 0
-v 2 -2 2 0 -1 0 1 1
-v 0 -2 2 0 -1 0 0 1
-f 1 2 3
-f 3 4 1
-f 5 6 7
-f 7 8 5
-f 9 10 11
-f 11 12 9
-f 13 14 15
-f 15 16 13
-f 17 18 19
-f 19 20 17
-f 21 22 23
-f 23 24 21
+source=resources/benchmark/suzanne.obj
+index=0
 [MATERIAL]
 albedo=0.5 1 0.5
 shading_type=1098907648
 ior=1
 albedo_source=0
+[OBJECT]
+name=Object 5
 [TRANSFORM]
 position=0 0 0
 rotation=0 0 0
@@ -163,6 +138,8 @@ albedo=0.7 0.7 0.7
 shading_type=1098907648
 ior=1
 albedo_source=0
+[OBJECT]
+name=Object 6
 [TRANSFORM]
 position=0 0 0
 rotation=0 0 0
@@ -210,6 +187,8 @@ albedo=1 0.5 0.5
 shading_type=1098907648
 ior=1
 albedo_source=0
+[OBJECT]
+name=Object 7
 [TRANSFORM]
 position=0 0 0
 rotation=0 0 0
@@ -257,6 +236,8 @@ albedo=0.5 0.5 1
 shading_type=1098907648
 ior=1
 albedo_source=0
+[OBJECT]
+name=Object 8
 [TRANSFORM]
 position=0 0 0
 rotation=0 0 0
@@ -304,16 +285,18 @@ albedo=0.7 0.7 0.7
 shading_type=1098907648
 ior=1
 albedo_source=0
+[OBJECT]
+name=Object 9
 [TRANSFORM]
 position=0 0 0
 rotation=0 0 0
 scale=1 1 1
 [MESH]
 source=0
-v -0.5 7.5 3.5 0 0 0 0 0
-v 0.5 7.5 3.5 0 0 0 -1.32877e+15 3.07305e-41
-v 0.5 7.5 2.5 0 0 0 -1.3277e+15 3.07305e-41
-v -0.5 7.5 2.5 0 0 0 4.59761e+24 -1.33567e+15
+v -0.5 7.5 3.5 0 0 0 5.01665e-43 0
+v 0.5 7.5 3.5 0 0 0 3.40277e-37 4.58911e-41
+v 0.5 7.5 2.5 0 0 0 2.91816 3.06408e-41
+v -0.5 7.5 2.5 0 0 0 -1.14748e+29 4.58897e-41
 f 1 2 3
 f 1 3 4
 [MATERIAL]

@@ -19,7 +19,7 @@ layout (push_constant) uniform PushConstants
 	Material material;
 };
 
-// Out color
+// Out variables
 layout (location = 0) out vec3		out_position;
 layout (location = 1) out vec3		out_normal;
 layout (location = 2) out vec2		out_tex_coord;

@@ -26,17 +26,28 @@
 
 using namespace kobra;
 
+// RT capture class
+
+// Main class
 class RTApp :  public BaseApp {
 	// Application camera
 	Camera		camera;
 
 	// RT or Raster
 	bool		raster = true;
+	bool		modified = false;
 
 	// Layers
 	rt::Layer	rt_layer;
 	raster::Layer	raster_layer;
 	gui::Layer	gui_layer;
+
+	// Current scene
+	Scene		scene;
+
+	// Raster state
+	int		highlight = -1;
+	bool		edit_mode = false;
 
 	// GUI state
 	struct {
@@ -44,17 +55,30 @@ class RTApp :  public BaseApp {
 		gui::Text	*text_frame_rate;
 		gui::Text	*layer_info;
 		gui::Rect	*stats_bg;
+
+		// Help
+		gui::Text	*text_help;
+		gui::Rect	*help_bg;
+
+		// Editing
+		gui::Text	*text_position;
+		gui::Text	*text_rotation;
+		gui::Text	*text_scale;
+		gui::Rect	*edit_bg;
 	} gui;
 
 	// Initialize GUI elements
-	void _init_gui() {
+	void initialize_gui() {
 		// TODO: rounded corners
 		// TODO: color type
-		
+
 		// TODO: method to add gui elements
 		// TODO: add_scene for gui layer
+
+		// Fonts
 		gui_layer.load_font("default", "resources/fonts/noto_sans.ttf");
 
+		// Statistics
 		gui.text_frame_rate = gui_layer.text_render("default")->text(
 			"fps",
 			window.coordinates(10, 10),
@@ -78,15 +102,71 @@ class RTApp :  public BaseApp {
 		gui.stats_bg->children.push_back(gui::Element(gui.layer_info));
 
 		glm::vec4 bounds = gui::get_bounding_box(gui.stats_bg->children);
+		bounds += 0.01f * glm::vec4 {-1, -1, 1, 1};
 		gui.stats_bg->set_bounds(bounds);
 
 		gui_layer.add(gui.stats_bg);
+
+		// Help
+		gui.text_help = gui_layer.text_render("default")->text(
+			"[h] Help, [c] Capture, [g] Edit objects, [tab] Toggle RT preview",
+			window.coordinates(10, 750),
+			{1, 1, 1, 1}, 0.5
+		);
+
+		gui.help_bg = new gui::Rect(
+			window.coordinates(0, 0),
+			window.coordinates(0, 0),
+			{0.4, 0.4, 0.4}
+		);
+
+		gui.help_bg->children.push_back(gui::Element(gui.text_help));
+		bounds = gui::get_bounding_box(gui.help_bg->children);
+		// bounds += 0.01f * glm::vec4 {1, 1, -1, -1};
+		gui.help_bg->set_bounds(bounds);
+
+		gui_layer.add(gui.help_bg);
+
+		// Editing
+		gui.text_position = gui_layer.text_render("default")->text(
+			"Position: (0, 0, 0)",
+			window.coordinates(450, 630),
+			{1, 1, 1, 1}, 0.5
+		);
+
+		gui.text_rotation = gui_layer.text_render("default")->text(
+			"Rotation: (0, 0, 0)",
+			window.coordinates(450, 650),
+			{1, 1, 1, 1}, 0.5
+		);
+
+		gui.text_scale = gui_layer.text_render("default")->text(
+			"Scale: (1, 1, 1)",
+			window.coordinates(450, 670),
+			{1, 1, 1, 1}, 0.5
+		);
+
+		gui.edit_bg = new gui::Rect(
+			window.coordinates(0, 0),
+			window.coordinates(0, 0),
+			{0.4, 0.4, 0.4}
+		);
+
+		gui.edit_bg->children.push_back(gui::Element(gui.text_position));
+		gui.edit_bg->children.push_back(gui::Element(gui.text_rotation));
+		gui.edit_bg->children.push_back(gui::Element(gui.text_scale));
+
+		bounds = gui::get_bounding_box(gui.edit_bg->children);
+		bounds += 0.01f * glm::vec4 {-1, -1, 1, 1};
+		gui.edit_bg->set_bounds(bounds);
+
+		gui_layer.add(gui.edit_bg);
 	}
 
-	// Render GUI frame
-	void _render_gui() {
+	// Update GUI elements
+	void update_gui() {
 		static char buffer[1024];
-		
+
 		// Overlay statistics
 		// TODO: statistics should be made a standalone layer
 		std::sprintf(buffer, "time: %.2f ms, fps: %.2f",
@@ -98,10 +178,82 @@ class RTApp :  public BaseApp {
 
 		// RT layer statistics
 		gui.layer_info->str = std::to_string(rt_layer.triangle_count()) + " triangles";
-		
+
 		// Update bounds
 		glm::vec4 bounds = gui::get_bounding_box(gui.stats_bg->children);
+		bounds += 0.01f * glm::vec4 {-1, -1, 1, 1};
 		gui.stats_bg->set_bounds(bounds);
+
+		// Edit mode
+		if (edit_mode) {
+			auto eptr = raster_layer[highlight];
+			auto transform = eptr->transform();
+
+			// Update text
+			std::sprintf(buffer, "Position: (%.2f, %.2f, %.2f)",
+				transform.position.x,
+				transform.position.y,
+				transform.position.z
+			);
+
+			gui.text_position->str = buffer;
+
+			std::sprintf(buffer, "Rotation: (%.2f, %.2f, %.2f)",
+				transform.rotation.x,
+				transform.rotation.y,
+				transform.rotation.z
+			);
+
+			gui.text_rotation->str = buffer;
+
+			std::sprintf(buffer, "Scale: (%.2f, %.2f, %.2f)",
+				transform.scale.x,
+				transform.scale.y,
+				transform.scale.z
+			);
+
+			gui.text_scale->str = buffer;
+
+			// Update bounds
+			bounds = gui::get_bounding_box(gui.edit_bg->children);
+			bounds += 0.01f * glm::vec4 {-1, -1, 1, 1};
+			gui.edit_bg->set_bounds(bounds);
+		}
+	}
+
+	// Input handling for edit mode
+	// TODO: text to indicate mode and name of selected object
+	int row = 0;
+	int col = 0;
+
+	void handle_edit_mode() {
+		// Assume edit mode
+		auto eptr = raster_layer[highlight];
+		auto &transform = eptr->transform();
+		float speed = 0.01f;
+
+		// TODO: determine a reference to a float
+		float *fptr = nullptr;
+		if (row == 0) {
+			fptr = &transform.position[col];
+		} else if (row == 1) {
+			fptr = &transform.rotation[col];
+			speed = 0.1f;
+		} else if (row == 2) {
+			fptr = &transform.scale[col];
+		}
+
+		if (input.is_key_down('=')) {
+			*fptr += speed;
+			modified = true;
+		} else if (input.is_key_down('-')) {
+			*fptr -= speed;
+			modified = true;
+		}
+
+		// Save with corresponding scene object
+		std::string name = eptr->name();
+		scene[name]->transform() = transform;
 	}
 
 	// Keyboard listener
@@ -120,6 +272,56 @@ class RTApp :  public BaseApp {
 				app->raster_layer.set_mode(raster::Layer::Mode::NORMAL);
 			if (event.key == GLFW_KEY_3)
 				app->raster_layer.set_mode(raster::Layer::Mode::BLINN_PHONG);
+
+			// Editting mode
+			if (event.key == GLFW_KEY_G)
+				app->edit_mode = !app->edit_mode;
+
+			// Selecting objects
+			if (app->edit_mode) {
+				if (app->highlight == -1)
+					app->highlight = 0;
+
+				// Left and right arrow keys
+				int count = 0;
+				if (event.key == GLFW_KEY_LEFT_BRACKET) {
+					app->highlight = (app->highlight + 1)
+						% app->rt_layer.size();
+				}
+
+				if (event.key == GLFW_KEY_RIGHT_BRACKET) {
+					app->highlight = (app->highlight
+						+ app->rt_layer.size() - 1)
+						% app->rt_layer.size();
+				}
+
+				// Up down left right to select
+				// transform property
+				if (event.key == GLFW_KEY_UP)
+					app->row = (app->row + 1) % 3;
+
+				if (event.key == GLFW_KEY_DOWN)
+					app->row = (app->row + 2) % 3;
+
+				if (event.key == GLFW_KEY_LEFT)
+					app->col = (app->col + 2) % 3;
+
+				if (event.key == GLFW_KEY_RIGHT)
+					app->col = (app->col + 1) % 3;
+
+				// Reset object transforms
+				if (event.key == GLFW_KEY_R) {
+					auto eptr = app->raster_layer[app->highlight];
+					eptr->transform() = Transform();
+				}
+			}
+
+			// Saving the scene with Ctrl+S
+			if (event.key == GLFW_KEY_S &&
+				event.mods == GLFW_MOD_CONTROL) {
+				KOBRA_LOG_FILE(notify) << "Saving scene...\n";
+				app->scene.save("scene.kobra");
+			}
 		}
 	}
 
@@ -168,7 +370,9 @@ class RTApp :  public BaseApp {
 		// rt::Mesh *mesh0 = new rt::Mesh(box);
 		rt::Sphere *mesh0 = new rt::Sphere({-1, 0, 3.0}, 1.0);
 		rt::Sphere *sphere1 = new rt::Sphere({2, 2, 0.0}, 1.0);
-		rt::Mesh *mesh1 = new rt::Mesh(box);
+		rt::Mesh *mesh1 = new rt::Mesh(model[0]);
+		mesh1->transform().position = {2, -1, 3};
+		mesh1->transform().rotation = {0, -30, 0};
 
 		// Box entire scene
 		rt::Mesh *wall1 = new rt::Mesh(Mesh::make_box({0, -2, 0}, {5, 0.1, 5}));
@@ -278,7 +482,11 @@ public:
 		};
 
 		// Load scene
-		Scene scene(context, window.command_pool, "scene.kobra");
+		// create_scene();
+		scene = Scene(context, window.command_pool, "scene.kobra");
+
+		for (auto &obj : scene)
+			std::cout << "Scene object: " << obj->name() << std::endl;
 
 		///////////////////////
 		// Initialize layers //
@@ -293,11 +501,14 @@ public:
 		raster_layer.set_mode(raster::Layer::Mode::BLINN_PHONG);
 		raster_layer.add_scene(scene);
 
+		for (int i = 0; i < raster_layer.size(); i++)
+			std::cout << "Rasterization layer object: " << raster_layer[i]->name() << std::endl;
+
 		// GUI layer
 		// TODO: be able to load gui elements from scene
 		// TODO: naming objects
 		gui_layer = gui::Layer(window, VK_ATTACHMENT_LOAD_OP_LOAD);
-		_init_gui();
+		initialize_gui();
 
 		// Add event listeners
 		window.keyboard_events->subscribe(keyboard_handler, this);
@@ -336,18 +547,34 @@ public:
 		else if (input.is_key_down(GLFW_KEY_Q))
 			camera.transform.move(-up * speed);
 
+		// Input
+		if (edit_mode)
+			handle_edit_mode();
+
 		// Copy camera contents to each relevant layer
 		rt_layer.set_active_camera(camera);
 		raster_layer.set_active_camera(camera);
 
+		// Highlight appropriate object
+		raster_layer.clear_highlight();
+		if (edit_mode)
+			raster_layer.set_highlight(highlight, true);
+
 		// Render appropriate layer
-		if (raster)
+		if (raster) {
 			raster_layer.render(cmd, framebuffer);
-		else
+		} else {
+			if (modified) {
+				rt_layer.clear();
+				rt_layer.add_scene(scene);
+				modified = false;
+			}
+
 			rt_layer.render(cmd, framebuffer);
+		}
 
 		// Render GUI
-		_render_gui();
+		update_gui();
 		gui_layer.render(cmd, framebuffer);
 
 		// End recording command buffer

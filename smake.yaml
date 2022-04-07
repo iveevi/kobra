@@ -13,6 +13,7 @@ definitions:
     source/logger.cpp,
     source/mesh.cpp,
     source/model.cpp,
+    source/object.cpp,
     source/scene.cpp,
     source/texture.cpp,
     source/vertex.cpp,

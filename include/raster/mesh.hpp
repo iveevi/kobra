@@ -23,7 +23,7 @@ public:
 
 	// Constructor
 	Mesh (const Vulkan::Context &ctx, const kobra::Mesh &mesh)
-			: Object(object_type, mesh.transform()),
+			: Object(mesh.name(), object_type, mesh.transform()),
 			Renderable(mesh.material()),
 			kobra::Mesh(mesh) {
 		// Allocate vertex and index buffers
@@ -69,6 +69,7 @@ public:
 	struct PC_Material {
 		glm::vec3	albedo;
 		float		shading_type;
+		float		hightlight;
 	};
 
 	struct MVP {
@@ -84,13 +85,15 @@ public:
 		// Get the MVP
 		MVP mvp {
 			_transform.matrix(),
+
 			rp.view,
 			rp.proj,
 
 			// TODO: Material method (also keep PC_Material there)
 			{
 				_material.albedo,
-				_material.shading_type
+				_material.shading_type,
+				(float) rp.highlight,
 			}
 		};
 

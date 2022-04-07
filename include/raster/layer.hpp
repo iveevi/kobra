@@ -97,6 +97,9 @@ protected:
 
 	// Descriptor set bindings
 	static const DSLBindings	_common_dsl_bindings;
+
+	// Highlight status and methods
+	std::vector <bool>		_highlighted;
 public:
 	// Default
 	Layer() = default;
@@ -118,6 +121,9 @@ public:
 
 		// Add element
 		e->latch(lp);
+
+		// Add highlight element
+		_highlighted.push_back(false);
 
 		// Refresh all buffers
 		_refresh(_ubo_point_lights_buffer,
@@ -172,6 +178,21 @@ public:
 	// Set rendering mode
 	void set_mode(const Mode &mode) {
 		_mode = mode;
+	}
+
+	// Set highlight
+	void set_highlight(size_t index, bool highlight) {
+		if (index < _highlighted.size()) {
+			_highlighted[index] = highlight;
+		} else {
+			KOBRA_LOG_FUNC(warn) << "Highlight index out of range ["
+				<< index << "/" << _highlighted.size() << "]";
+		}
+	}
+
+	// Clear highlighting
+	void clear_highlight() {
+		_highlighted = std::vector <bool> (_highlighted.size(), false);
 	}
 
 	// Render
@@ -234,8 +255,10 @@ public:
 		};
 
 		// Render all elements
-		for (auto &e : _elements)
-			e->render(packet);
+		for (int i = 0; i < _elements.size(); i++) {
+			packet.highlight = _highlighted[i];
+			_elements[i]->render(packet);
+		}
 
 		// End render pass
 		vkCmdEndRenderPass(cmd_buffer);
