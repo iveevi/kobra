@@ -65,8 +65,6 @@ public:
 	virtual void add_scene(const Scene &scene) = 0;
 
 	// TODO: variadic overload (implement collect method in common)
-
-	// TODO: virtual render method
 };
 
 }

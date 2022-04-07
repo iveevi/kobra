@@ -12,7 +12,9 @@
 // Engine headers
 #include "include/app.hpp"
 #include "include/backend.hpp"
+#include "include/gui/gui.hpp"
 #include "include/gui/layer.hpp"
+#include "include/gui/rect.hpp"
 #include "include/io/event.hpp"
 #include "include/model.hpp"
 #include "include/raster/layer.hpp"
@@ -36,16 +38,89 @@ class RTApp :  public BaseApp {
 	raster::Layer	raster_layer;
 	gui::Layer	gui_layer;
 
-	// GUI elements
-	gui::Text	*text_frame_rate;
-	gui::Text	*layer_info;
+	// GUI state
+	struct {
+		// Statistics
+		gui::Text	*text_frame_rate;
+		gui::Text	*layer_info;
+		gui::Rect	*stats_bg;
+	} gui;
+
+	// Initialize GUI elements
+	void _init_gui() {
+		// TODO: rounded corners
+		// TODO: color type
+		
+		// TODO: method to add gui elements
+		// TODO: add_scene for gui layer
+		gui_layer.load_font("default", "resources/fonts/noto_sans.ttf");
+
+		gui.text_frame_rate = gui_layer.text_render("default")->text(
+			"fps",
+			window.coordinates(10, 10),
+			{1, 1, 1, 1}
+		);
+
+		gui.layer_info = gui_layer.text_render("default")->text(
+			"",
+			window.coordinates(10, 60),
+			{1, 1, 1, 1}
+		);
+
+		gui.stats_bg = new gui::Rect(
+			window.coordinates(0, 0),
+			window.coordinates(0, 0),
+			{0.4, 0.4, 0.4}
+		);
+
+		// TODO: direct method to add gui elements
+		gui.stats_bg->children.push_back(gui::Element(gui.text_frame_rate));
+		gui.stats_bg->children.push_back(gui::Element(gui.layer_info));
+
+		glm::vec4 bounds = gui::get_bounding_box(gui.stats_bg->children);
+		gui.stats_bg->set_bounds(bounds);
+
+		gui_layer.add(gui.stats_bg);
+	}
+
+	// Render GUI frame
+	void _render_gui() {
+		static char buffer[1024];
+		
+		// Overlay statistics
+		// TODO: statistics should be made a standalone layer
+		std::sprintf(buffer, "time: %.2f ms, fps: %.2f",
+			1000 * frame_time,
+			1.0f/frame_time
+		);
+
+		gui.text_frame_rate->str = buffer;
+
+		// RT layer statistics
+		gui.layer_info->str = std::to_string(rt_layer.triangle_count()) + " triangles";
+		
+		// Update bounds
+		glm::vec4 bounds = gui::get_bounding_box(gui.stats_bg->children);
+		gui.stats_bg->set_bounds(bounds);
+	}
 
 	// Keyboard listener
 	static void keyboard_handler(void *user, const io::KeyboardEvent &event) {
 		RTApp *app = (RTApp *) user;
 
-		if (event.key == GLFW_KEY_TAB && event.action == GLFW_PRESS)
-			app->raster = !app->raster;
+		if (event.action == GLFW_PRESS) {
+			// Tab
+			if (event.key == GLFW_KEY_TAB)
+				app->raster = !app->raster;
+
+			// 1, 2, 3 to switch rasterization mode
+			if (event.key == GLFW_KEY_1)
+				app->raster_layer.set_mode(raster::Layer::Mode::ALBEDO);
+			if (event.key == GLFW_KEY_2)
+				app->raster_layer.set_mode(raster::Layer::Mode::NORMAL);
+			if (event.key == GLFW_KEY_3)
+				app->raster_layer.set_mode(raster::Layer::Mode::BLINN_PHONG);
+		}
 	}
 
 	// Mouve camera
@@ -216,29 +291,13 @@ public:
 		// Rasterization layer
 		raster_layer = raster::Layer(window, VK_ATTACHMENT_LOAD_OP_CLEAR);
 		raster_layer.set_mode(raster::Layer::Mode::BLINN_PHONG);
-		raster_layer.add(scene);
+		raster_layer.add_scene(scene);
 
 		// GUI layer
+		// TODO: be able to load gui elements from scene
+		// TODO: naming objects
 		gui_layer = gui::Layer(window, VK_ATTACHMENT_LOAD_OP_LOAD);
-
-		// TODO: method to add gui elements
-		// TODO: add_scene for gui layer
-		gui_layer.load_font("default", "resources/fonts/noto_sans.ttf");
-
-		text_frame_rate = gui_layer.text_render("default")->text(
-			"fps",
-			window.coordinates(0, 0),
-			{1, 1, 1, 1}
-		);
-
-		layer_info = gui_layer.text_render("default")->text(
-			"",
-			window.coordinates(0, 50),
-			{1, 1, 1, 1}
-		);
-
-		gui_layer.add(text_frame_rate);
-		gui_layer.add(layer_info);
+		_init_gui();
 
 		// Add event listeners
 		window.keyboard_events->subscribe(keyboard_handler, this);
@@ -249,7 +308,6 @@ public:
 	// Override record method
 	// TODO: preview raytraced scene with a very low resolution
 	void record(const VkCommandBuffer &cmd, const VkFramebuffer &framebuffer) override {
-		static char buffer[1024];
 		static float time = 0.0f;
 
 		// Start recording command buffer
@@ -288,20 +346,8 @@ public:
 		else
 			rt_layer.render(cmd, framebuffer);
 
-		// Overlay statistics
-		// TODO: method to update gui elements
-		// TODO: should be made a standalone layer
-		std::sprintf(buffer, "time: %.2f ms, fps: %.2f",
-			1000 * frame_time,
-			1.0f/frame_time
-		);
-
-		text_frame_rate->str = buffer;
-
-		// RT layer statistics
-		// TODO: why can i set str to an integer
-		// layer_info->str = std::to_string(rt_layer.triangle_count()) + " triangles";
-
+		// Render GUI
+		_render_gui();
 		gui_layer.render(cmd, framebuffer);
 
 		// End recording command buffer

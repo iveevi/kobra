@@ -15,9 +15,11 @@ definitions:
     source/model.cpp,
     source/scene.cpp,
     source/texture.cpp,
+    source/vertex.cpp,
     source/vulkan.cpp,
     source/gui/text.cpp,
     source/io/event.cpp,
+    source/raster/layer.cpp,
     source/raytracing/layer.cpp'
 
 builds:

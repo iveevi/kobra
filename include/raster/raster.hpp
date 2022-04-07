@@ -2,6 +2,7 @@
 #define RASTER_H_
 
 // Engine headers
+#include "../../shaders/raster/constants.h"
 #include "../buffer_manager.hpp"
 #include "../vertex.hpp"
 
@@ -24,10 +25,29 @@ struct RenderPacket {
 	glm::mat4 proj;
 };
 
+//////////////////////
+// Light structures //
+//////////////////////
+
+// Uniform buffer of point lights
+struct UBO_PointLights {
+	int number = 0;
+
+	aligned_vec4 positions[MAX_POINT_LIGHTS];
+};
+
+// Latching packet
+struct LatchingPacket {
+	UBO_PointLights *ubo_point_lights;
+};
+
 // Rasterization elements
 struct _element {
 	// Virtual destructor
 	virtual ~_element() = default;
+
+	// Latch to layer
+	virtual void latch(const LatchingPacket &) = 0;
 
 	// Virtual methods
 	virtual void render(RenderPacket &) = 0;

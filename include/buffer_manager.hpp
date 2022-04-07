@@ -18,8 +18,11 @@ enum BFM_Usage {
 // Settings for buffer manager
 struct BFM_Settings {
 	size_t			size;
-	VkBufferUsageFlags	usage;
+	// TODO: remove this
 	BFM_Usage		usage_type;
+
+	VkBufferUsageFlags	usage;
+	VkDescriptorType	descriptor_type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 };
 
 // Manages buffer and associated memory
@@ -260,7 +263,7 @@ public:
 			.dstBinding = binding,
 			.dstArrayElement = 0,
 			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.descriptorType = settings.descriptor_type,
 			.pImageInfo = nullptr,
 			.pBufferInfo = &buffer_info,
 			.pTexelBufferView = nullptr

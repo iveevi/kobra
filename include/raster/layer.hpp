@@ -6,9 +6,11 @@
 
 // Engine headers
 #include "../app.hpp"
+#include "../buffer_manager.hpp"
 #include "../camera.hpp"
+#include "../layer.hpp"
 #include "../scene.hpp"
-#include "pipeline.hpp"
+#include "mesh.hpp"
 #include "raster.hpp"
 
 namespace kobra {
@@ -18,7 +20,7 @@ namespace raster {
 // Layer class holds
 //	all the elements that need
 //	to be rendered
-class Layer {
+class Layer : public kobra::Layer <raster::_element> {
 public:
 	// Rendering mode
 	enum class Mode {
@@ -27,21 +29,25 @@ public:
 		BLINN_PHONG
 	};
 protected:
+	// Private aliases
+	using DSLBinding = VkDescriptorSetLayoutBinding;
+	using DSLBindings = std::vector <DSLBinding>;
+
 	// All of the layer's cameras
-	std::vector <Camera>	_cameras;
+	std::vector <Camera>		_cameras;
 
 	// Active camera
-	Camera			*_active_camera = nullptr;
+	Camera				*_active_camera = nullptr;
 
 	// List of elements
 	// TODO: map elements to their respective pipelines
-	std::vector <Element>	_elements;
+	// std::vector <Element>		_elements;
 
 	// Application context
-	App::Window		_wctx;
+	App::Window			_wctx;
 
 	// Render pass
-	VkRenderPass		_render_pass;
+	VkRenderPass			_render_pass;
 
 	// All rendering pipelines
 	struct {
@@ -50,11 +56,28 @@ protected:
 		Vulkan::Pipeline	blinn_phong;
 	} _pipelines;
 
+	// Descriptor set and layout
+	VkDescriptorSet			_common_ds;
+	VkDescriptorSetLayout		_common_dsl;
+
+	// Buffers for lights
+	BufferManager <uint8_t>		_ubo_point_lights_buffer;
+
+	// Refresh a buffer with its data
+	void _refresh(BufferManager <uint8_t> &buffer, const uint8_t *data, size_t size, size_t binding) {
+		_ubo_point_lights_buffer.write(data, size);
+		_ubo_point_lights_buffer.sync_upload();
+		_ubo_point_lights_buffer.bind(_common_ds, binding);
+	}
+
+	// Corresponding structures
+	UBO_PointLights			_ubo_point_lights;
+
 	// Current rendering mode
-	Mode			_mode = Mode::ALBEDO;
+	Mode				_mode = Mode::ALBEDO;
 
 	// Get current pipeline
-	Vulkan::Pipeline *get_pipeline() {
+	Vulkan::Pipeline *_get_pipeline() {
 		switch (_mode) {
 		case Mode::ALBEDO:
 			return &_pipelines.albedo;
@@ -70,53 +93,10 @@ protected:
 	}
 
 	// Initialize Vulkan structures
-	void _initialize_vulkan_structures(const VkAttachmentLoadOp load) {
-		// Create render pass
-		_render_pass = _wctx.context.vk->make_render_pass(
-			_wctx.context.phdev,
-			_wctx.context.device,
-			_wctx.swapchain,
-			load,
-			VK_ATTACHMENT_STORE_OP_STORE,
-			true
-		);
+	void _initialize_vulkan_structures(const VkAttachmentLoadOp &);
 
-		// Load necessary shader modules
-		// TODO: create a map of names to shaders (for fragment, since
-		// vertex is the same)
-		std::vector <VkShaderModule> shaders = _wctx.context.make_shaders({
-			"shaders/bin/raster/vertex.spv",
-			"shaders/bin/raster/color_frag.spv",
-			"shaders/bin/raster/normal_frag.spv",
-			"shaders/bin/raster/blinn_phong_frag.spv"
-		});
-
-		// Create pipelines
-		// TODO: move this make_pipline function here
-		_pipelines.albedo = make_pipeline(
-			_wctx,
-			_render_pass,
-			shaders[0],
-			shaders[1]
-		);
-
-		_pipelines.normals = make_pipeline(
-			_wctx,
-			_render_pass,
-			shaders[0],
-			shaders[2]
-		);
-
-		_pipelines.blinn_phong = make_pipeline(
-			_wctx,
-			_render_pass,
-			shaders[0],
-			shaders[3]
-		);
-	}
-
-	// Initialization status
-	bool _initialized = false;
+	// Descriptor set bindings
+	static const DSLBindings	_common_dsl_bindings;
 public:
 	// Default
 	Layer() = default;
@@ -127,48 +107,27 @@ public:
 	Layer(const App::Window &wctx, const VkAttachmentLoadOp &load = VK_ATTACHMENT_LOAD_OP_LOAD)
 			: _wctx(wctx) {
 		_initialize_vulkan_structures(load);
-		_initialized = true;
 	}
 
-	// Add elements
-	void add(const Element &element) {
-		_elements.push_back(element);
-	}
+	// Adding elements
+	void add_do(const ptr &e) override {
+		// Prepare latching packet
+		LatchingPacket lp {
+			.ubo_point_lights = &_ubo_point_lights
+		};
 
-	void add(_element *ptr) {
-		_elements.push_back(Element(ptr));
-	}
+		// Add element
+		e->latch(lp);
 
-	// Add multiple elements
-	void add(const std::vector <Element> &elements) {
-		_elements.insert(
-			_elements.end(),
-			elements.begin(),
-			elements.end()
+		// Refresh all buffers
+		_refresh(_ubo_point_lights_buffer,
+			(const uint8_t *) &_ubo_point_lights,
+			sizeof(_ubo_point_lights), 0
 		);
 	}
 
-	void add(const std::vector <_element *> &elements) {
-		for (auto &e : elements)
-			_elements.push_back(Element(e));
-	}
-
 	// Import scene objects
-	void add(const Scene &scene) {
-		for (const ObjectPtr &obj : scene) {
-			// TODO: latre also add cameras
-			if (obj->type() == raster::Mesh::object_type) {
-				raster::Mesh *mesh = dynamic_cast
-					<raster::Mesh *> (obj.get());
-				_elements.push_back(Element(mesh));
-			} else if (obj->type() == kobra::Mesh::object_type) {
-				kobra::Mesh *mesh = dynamic_cast
-					<kobra::Mesh *> (obj.get());
-				raster::Mesh *raster_mesh = new raster::Mesh(_wctx.context, *mesh);
-				_elements.push_back(Element(raster_mesh));
-			}
-		}
-	}
+	void add_scene(const Scene &) override;
 
 	// Number of cameras
 	size_t camera_count() const {
@@ -218,7 +177,7 @@ public:
 	// Render
 	void render(const VkCommandBuffer &cmd_buffer, const VkFramebuffer &framebuffer) {
 		// Check initialization status
-		if (!_initialized) {
+		if (_get_pipeline()->pipeline == VK_NULL_HANDLE) {
 			KOBRA_LOG_FUNC(warn) << "calling ::render() on"
 				" raster::Layer (" << this << ") which has not"
 				" been yet been initialized\n";
@@ -252,14 +211,22 @@ public:
 		// TODO: pipeline struct with all the necessary info
 		vkCmdBindPipeline(cmd_buffer,
 			VK_PIPELINE_BIND_POINT_GRAPHICS,
-			get_pipeline()->pipeline
+			_get_pipeline()->pipeline
+		);
+
+		// Bind descriptor set
+		vkCmdBindDescriptorSets(cmd_buffer,
+			VK_PIPELINE_BIND_POINT_GRAPHICS,
+			_get_pipeline()->layout,
+			0, 1, &_common_ds,
+			0, nullptr
 		);
 
 		// Initialize render packet
 		RenderPacket packet {
 			.cmd = cmd_buffer,
 
-			.pipeline_layout = get_pipeline()->layout,
+			.pipeline_layout = _get_pipeline()->layout,
 
 			// TODO: warn on null camera
 			.view = _active_camera->view(),

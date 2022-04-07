@@ -41,6 +41,14 @@ using VertexAttribute = VkVertexInputAttributeDescription;
 // (and other per device objects)
 class Vulkan {
 public:
+	////////////////////
+	// Public aliases //
+	////////////////////
+
+	using DS = VkDescriptorSet;
+	using DSL = VkDescriptorSetLayout;
+	using DSLB = VkDescriptorSetLayoutBinding;
+
 	///////////////////////
 	// Public structures //
 	///////////////////////
@@ -144,6 +152,16 @@ public:
 			for (const auto &path : paths)
 				modules.push_back(make_shader(path));
 			return modules;
+		}
+		
+		// Create descritpor set layout
+		DSL make_dsl(const std::vector <DSLB> &bindings) const {
+			return vk->make_descriptor_set_layout(device, bindings);
+		}
+
+		// Create a descriptor set
+		DS make_ds(const VkDescriptorPool &pool, const DSL &layout) const {
+			return vk->make_descriptor_set(device, pool, layout);
 		}
 
 		// Get supported formats
@@ -347,7 +365,6 @@ public:
 	using CommandBufferMaker = std::function <void (const Vulkan *, size_t)>;
 	using DeletionTask = std::function <void (Vulkan *)>;	// TODO: Is this Vulkan object needed?
 
-	using DS = VkDescriptorSet;
 	using DSLayout = VkDescriptorSetLayout;
 
 	// Vulkan basic context

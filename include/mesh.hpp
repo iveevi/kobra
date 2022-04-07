@@ -58,6 +58,21 @@ public:
 		return _indices.size() / 3;
 	}
 
+	// Centroid of the mesh
+	glm::vec3 centroid() const {
+		glm::vec3 s {0.0f, 0.0f, 0.0f};
+
+		// Sum the centroids of all triangles
+		for (size_t i = 0; i < _indices.size(); i += 3) {
+			s += _vertices[_indices[i]].position;
+			s += _vertices[_indices[i + 1]].position;
+			s += _vertices[_indices[i + 2]].position;
+		}
+
+		// Divide by the number of triangles
+		return s / (3.0f * triangle_count());
+	}
+
 	// Get data
 	const VertexList &vertices() const {
 		return _vertices;
@@ -72,6 +87,7 @@ public:
 
 	// Mesh factories
 	static Mesh make_box(const glm::vec3 &, const glm::vec3 &);
+	static Mesh make_sphere(const glm::vec3 &, float, int = 16, int = 16);
 
 	// Read from file
 	static std::optional <Mesh> from_file(const Vulkan::Context &,

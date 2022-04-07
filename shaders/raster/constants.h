@@ -1,0 +1,1 @@
+#define MAX_POINT_LIGHTS 32

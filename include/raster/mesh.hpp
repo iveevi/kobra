@@ -54,9 +54,21 @@ public:
 		_ib.upload();
 	}
 
+	// Latch to layer
+	void latch(const LatchingPacket &lp) override {
+		// Only do stuff if the mesh is emissive
+		if (_material.shading_type != SHADING_TYPE_EMISSIVE)
+			return;
+
+		KOBRA_LOG_FUNC(notify) << "Latching emissive mesh\n";
+		lp.ubo_point_lights->positions
+			[lp.ubo_point_lights->number++] = this->centroid();
+	}
+
 	// MVP structure
 	struct PC_Material {
-		glm::vec3 albedo;
+		glm::vec3	albedo;
+		float		shading_type;
 	};
 
 	struct MVP {
@@ -77,7 +89,8 @@ public:
 
 			// TODO: Material method (also keep PC_Material there)
 			{
-				_material.albedo
+				_material.albedo,
+				_material.shading_type
 			}
 		};
 

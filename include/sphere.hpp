@@ -31,6 +31,15 @@ public:
 			Renderable(sphere.material()),
 			_center(transform.position), _radius(sphere._radius) {}
 
+	// Getters
+	const glm::vec3 &center() const {
+		return _center;
+	}
+
+	float radius() const {
+		return _radius;
+	}
+
 	// Virtual methods
 	void save(std::ofstream &file) const override {
 		file << "[SPHERE]\n";

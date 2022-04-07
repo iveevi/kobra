@@ -1,4 +1,7 @@
+#include "../../include/types.hpp"
+
 // Material properties
 struct Material {
-	vec3 albedo;
+	vec3	albedo;
+	float	shading_type;
 };
