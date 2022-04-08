@@ -19,6 +19,7 @@ const int MESH_BINDING_LIGHT_INDICES	= 7;
 // Samplers
 const int MESH_BINDING_ALBEDOS		= 8;
 const int MESH_BINDING_NORMAL_MAPS	= 9;
+const int MESH_BINDING_ENVIRONMENT	= 10;
 
 // TODO: mesh roughness/bump map
 

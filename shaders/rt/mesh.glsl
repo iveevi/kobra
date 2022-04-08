@@ -57,6 +57,9 @@ uniform sampler2D s2_albedo[MAX_TEXTURES];
 layout (set = 0, binding = MESH_BINDING_NORMAL_MAPS)
 uniform sampler2D s2_normals[MAX_TEXTURES];
 
+layout (set = 0, binding = MESH_BINDING_ENVIRONMENT)
+uniform sampler2D s2_environment;
+
 // Push constants
 // TODO: # of samples should be a push constant
 layout (push_constant) uniform PushConstants
@@ -273,7 +276,7 @@ Intersection ray_sphere_intersect(Ray ray, uint a, uint d)
 
 		// Get the color
 		it.mat.albedo = texture(s2_albedo[0], uv).rgb;
-		
+
 		// Get material index at the second element
 		it.mat = mat_at(d, uv);
 	}
@@ -325,7 +328,7 @@ Intersection ray_intersect(Ray ray, uint index)
 		// Correct the normal direction
 		if (dot(it.normal, tex) < 0.0)
 			tex = -tex; */
-		
+
 		// Get material index at the second element
 		it.mat = mat_at(d, tex_coord);
 
@@ -375,6 +378,20 @@ struct Hit {
 
 	Material mat;
 };
+
+// Sample environment map
+vec3 sample_environment(Ray ray)
+{
+	// Get uv coordinates
+	vec2 uv = vec2(0.0);
+	uv.x = atan(ray.direction.x, ray.direction.z) / (2.0 * PI) + 0.5;
+	uv.y = asin(ray.direction.y) / PI + 0.5;
+
+	// Get the color
+	vec3 tex = texture(s2_environment, uv).rgb;
+
+	return tex;
+}
 
 // Get closest object
 Hit closest_object(Ray ray)
@@ -427,7 +444,7 @@ Hit closest_object(Ray ray)
 	// Color of closest object
 	vec3 color = vec3(0.0);	// TODO: sample from either texture or gradient
 	if (min_index < 0)
-		mini.mat.albedo = color;
+		mini.mat.albedo = sample_environment(ray);
 
 	vec3 point = ray.origin + ray.direction * mini.time;
 
@@ -651,7 +668,25 @@ vec3 light_contr(Hit hit, Ray ray)
 	for (int i = 0; i < pc.lights; i++)
 		contr += single_area_light_contr(hit, ray, i);
 
-	return contr/float(pc.lights);
+	///////////////////////////////////
+	// Sample light from environment //
+	///////////////////////////////////
+
+	// TODO: note, this is not complete
+	// First, get the reflected ray
+	vec3 r = reflect(ray.direction, hit.normal);
+	Ray refl = Ray(hit.point + hit.normal * 0.001, r, 1.0, 1.0);
+
+	// If the environment is not occlude, add it
+	Hit env_hit = closest_object(refl);
+	if (env_hit.object == -1) {
+		vec3 color = env_hit.mat.albedo;
+		float value = dot(color, hit.normal);
+		float luminance = 0.3 * color.x + 0.59 * color.y + 0.11 * color.z;
+		contr += value * luminance * hit.mat.albedo;
+	}
+
+	return contr/float(pc.lights + 1);
 }
 
 vec3 color_at(Ray ray)

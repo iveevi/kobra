@@ -80,7 +80,7 @@ public:
 	// Constructor
 	Batch(int w, int h, int bw, int bh, int maxs)
 			: width(w), height(h), batch_width(bw), batch_height(bh),
-			  batch_x(0), batch_y(0), max_samples(maxs) {
+			batch_x(0), batch_y(0), max_samples(maxs) {
 		// Get total number
 		batches_x = (width + batch_width - 1) / batch_width;
 		batches_y = (height + batch_height - 1) / batch_height;
@@ -94,8 +94,6 @@ public:
 		}
 	}
 
-	// TODO: callbacks for completed back indices?
-	
 	// Make batch index
 	BatchIndex make_batch_index(int x, int y, int p = 1, int l = 1) {
 		BatchIndex bi {
@@ -170,6 +168,9 @@ class Layer : public kobra::Layer <rt::_element> {
 
 	// Descriptor pool
 	VkDescriptorPool	_descriptor_pool;
+
+	// Command pool
+	VkCommandPool		_command_pool;
 
 	// Swapchain extent
 	VkExtent2D		_extent;
@@ -249,6 +250,9 @@ class Layer : public kobra::Layer <rt::_element> {
 
 	// Empty sampler
 	Sampler			_empty_sampler;
+
+	// Environment sampler
+	Sampler			_env_sampler;
 
 	// Vector of image descriptors
 	ImageDescriptors	_albedo_image_descriptors;
@@ -335,7 +339,8 @@ public:
 	Layer(const App::Window &wctx)
 			: _context(wctx.context),
 			_extent(wctx.swapchain.extent),
-			_descriptor_pool(wctx.descriptor_pool) {
+			_descriptor_pool(wctx.descriptor_pool),
+			_command_pool(wctx.command_pool) {
 		// Create the render pass
 		// TODO: context method
 		_render_pass = _context.vk->make_render_pass(
@@ -401,8 +406,12 @@ public:
 		// Fill sampler arrays with blank samplers //
 		/////////////////////////////////////////////
 
-		// Empty sampler
-		_empty_sampler = Sampler::blank_sampler(_context, wctx.command_pool);
+		// Initialize samplers
+		_empty_sampler = Sampler::blank_sampler(_context, _command_pool);
+		_env_sampler = Sampler::blank_sampler(_context, _command_pool);
+
+		// Binding environment sampler
+		_env_sampler.bind(_mesh_ds, MESH_BINDING_ENVIRONMENT);
 
 		// Albedos
 		while (_albedo_image_descriptors.size() < MAX_TEXTURES)
@@ -467,6 +476,33 @@ public:
 
 	// Adding scenes
 	void add_scene(const Scene &scene) override;
+
+	// Set environment map
+	void set_environment_map(const Texture &env) {
+		// Create texture packet
+		TexturePacket tp = make_texture(_context,
+			_command_pool,
+			env,
+			VK_FORMAT_R8G8B8A8_UNORM,
+			VK_IMAGE_USAGE_SAMPLED_BIT
+				| VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+		);
+
+		// TODO: do this inside make_texture method automatically
+		// TODO: constructor for texture packet instead of this garbage
+		tp.transition_manual(_context,
+			_command_pool,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_TRANSFER_BIT
+		);
+
+		// Construct and rebind
+		_env_sampler = Sampler(_context, tp);
+		_env_sampler.bind(_mesh_ds, MESH_BINDING_ENVIRONMENT);
+	}
 
 	// Clearning all data
 	void clear() override {
@@ -673,7 +709,7 @@ public:
 		vkCmdDraw(cmd, 6, 1, 0, 0);
 		vkCmdEndRenderPass(cmd);
 	}
-	
+
 	void render(const VkCommandBuffer &cmd, const VkFramebuffer &framebuffer, const BatchIndex &bi) {
 		// Handle null pipeline
 		if (_pipelines.mesh.pipeline == VK_NULL_HANDLE) {

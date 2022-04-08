@@ -95,6 +95,14 @@ const Layer::DSLBindings Layer::_mesh_compute_bindings {
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 		.pImmutableSamplers = nullptr
 	},
+
+	DSLBinding {
+		.binding = MESH_BINDING_ENVIRONMENT,
+		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.pImmutableSamplers = nullptr
+	},
 };
 
 const Layer::DSLBindings Layer::_postproc_bindings = {

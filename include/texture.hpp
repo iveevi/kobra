@@ -358,6 +358,7 @@ inline VkImageView make_image_view(const Vulkan::Context &ctx,
 
 // Create texture (as VkImage)
 // TODO: seriously, save the image layoutttt
+[[deprecated("Create a constructor for this function")]]
 inline TexturePacket make_texture(const Vulkan::Context &ctx,
 		const VkCommandPool &cpool,
 		const Texture &texture,

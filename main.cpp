@@ -51,6 +51,9 @@ public:
 		layer = rt::Layer(window);
 		layer.add_scene(scene);
 		layer.set_active_camera(camera);
+		layer.set_environment_map(
+			load_image_texture("resources/skies/background_3.jpg", 4)
+		);
 
 		// Create batch
 		// TODO: a method to generate optimal batch sizes (eg 50x50 is
@@ -89,7 +92,7 @@ public:
 		if (term || b) {
 			glfwSetWindowShouldClose(surface.window, GLFW_TRUE);
 			auto buffer = layer.pixels();
-			
+
 			// TODO: make an easier an more straight forward way to
 			// save a buffer to an image
 			Image img {
@@ -615,6 +618,11 @@ public:
 		// Ray tracing layer
 		rt_layer = rt::Layer(window);
 		rt_layer.add_scene(scene);
+
+		// TODO: m8 gotta really fix auto channels
+		rt_layer.set_environment_map(
+			load_image_texture("resources/skies/background_3.jpg", 4)
+		);
 
 		// Rasterization layer
 		raster_layer = raster::Layer(window, VK_ATTACHMENT_LOAD_OP_CLEAR);
