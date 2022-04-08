@@ -361,20 +361,20 @@ public:
 
 		BFM_Settings pixel_settings {
 			.size = pixels,
+			.usage_type = BFM_READ_ONLY,
 			.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-			.usage_type = BFM_READ_ONLY
 		};
 
 		BFM_Settings viewport_settings {
 			.size = 2,
+			.usage_type = BFM_WRITE_ONLY,
 			.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-			.usage_type = BFM_WRITE_ONLY
 		};
 
 		BFM_Settings write_only_settings {
 			.size = 1024,
+			.usage_type = BFM_WRITE_ONLY,
 			.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-			.usage_type = BFM_WRITE_ONLY
 		};
 
 		_pixels = BufferManager <uint> (_context, pixel_settings);
@@ -442,6 +442,7 @@ public:
 			.light_indices = &_light_indices,
 
 			.albedo_samplers = _albedo_image_descriptors,
+			.normal_samplers = _normal_image_descriptors,
 		};
 
 		e->latch(lp, _elements.size());

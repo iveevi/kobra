@@ -16,6 +16,34 @@ inline bool file_exists(const std::string &file)
 	return f.good();
 }
 
+// Get directory
+inline std::string get_directory(const std::string &file)
+{
+	// Unix
+#ifdef __unix__
+
+	return file.substr(0, file.find_last_of('/'));
+
+#endif
+
+	// Windows
+
+#ifdef _WIN32
+
+	return file.substr(0, file.find_last_of('\\'));
+
+#endif
+}
+
+// Relative or absolute path
+inline std::string get_path(const std::string &file, const std::string &dir)
+{
+	std::string full = dir + "/" + file;
+	if (file_exists(full))
+		return full;
+	return file;
+}
+
 // Printf to string
 inline std::string sprintf(const char *fmt, ...)
 {

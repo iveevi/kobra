@@ -16,7 +16,7 @@ namespace kobra {
 
 static ObjectPtr load_object(const Vulkan::Context &ctx,
 		const VkCommandPool &command_pool,
-		std::ifstream &fin)
+		std::ifstream &fin, const std::string &path)
 {
 	std::string header;
 
@@ -59,7 +59,7 @@ static ObjectPtr load_object(const Vulkan::Context &ctx,
 
 	// Switch on the object type
 	if (header == "[SPHERE]") {
-		auto sphere = Sphere::from_file(ctx, command_pool, fin);
+		auto sphere = Sphere::from_file(ctx, command_pool, fin, path);
 		if (!sphere)
 			return nullptr;
 
@@ -69,7 +69,7 @@ static ObjectPtr load_object(const Vulkan::Context &ctx,
 	}
 
 	if (header == "[MESH]") {
-		auto mesh = Mesh::from_file(ctx, command_pool, fin);
+		auto mesh = Mesh::from_file(ctx, command_pool, fin, path);
 		if (!mesh)
 			return nullptr;
 
@@ -107,11 +107,12 @@ Scene::Scene(const Vulkan::Context &ctx,
 			break;
 
 		// Read the next object
-		ObjectPtr obj = load_object(ctx, command_pool, fin);
+		ObjectPtr obj = load_object(ctx, command_pool, fin, filename);
 
 		// Check if the object is valid
 		if (obj) {
 			// Add the object to the scene
+			KOBRA_LOG_FUNC(notify) << "Loaded object \"" << obj->name() << "\"\n";
 			_objects.push_back(obj);
 		} else {
 			// Skip the line

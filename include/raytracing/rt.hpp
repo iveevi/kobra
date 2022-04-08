@@ -53,6 +53,7 @@ struct LatchingPacket {
 
 	// Samplers
 	ImageDescriptors	&albedo_samplers;
+	ImageDescriptors	&normal_samplers;
 };
 
 // Element type

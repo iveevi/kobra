@@ -80,7 +80,7 @@ public:
 	virtual void write_object(kobra::WorldUpdate &wu) {
 		// Deal with material
 		uint mati = wu.bf_mats->push_size();
-		_material.write_material(wu);
+		// _material.write_material(wu);
 
 		// Deal with transform
 		uint tati = wu.bf_trans->push_size();

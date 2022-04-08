@@ -18,9 +18,7 @@ enum BFM_Usage {
 // Settings for buffer manager
 struct BFM_Settings {
 	size_t			size;
-	// TODO: remove this
 	BFM_Usage		usage_type;
-
 	VkBufferUsageFlags	usage;
 	VkDescriptorType	descriptor_type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 };

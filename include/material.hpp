@@ -12,6 +12,7 @@
 #include "texture.hpp"
 #include "types.hpp"
 #include "world_update.hpp"
+#include "common.hpp"
 
 namespace kobra {
 
@@ -25,10 +26,12 @@ struct Material {
 
 	// Sources
 	std::string	albedo_source;
+	std::string	normal_source;
 
 	// Texture
 	// TODO: this should be privagte
 	Sampler 	*albedo_sampler = nullptr;
+	Sampler 	*normal_sampler = nullptr;
 
 	// Setters
 	void set_albedo(const Vulkan::Context &ctx, const VkCommandPool &command_pool, const std::string &path) {
@@ -36,19 +39,15 @@ struct Material {
 		albedo_sampler = new Sampler(ctx, command_pool, path);
 	}
 
-	// Write to buffer
-	// TODO: delete this
-	void write_material(kobra::WorldUpdate &wu) const {
-		wu.bf_mats->push_back(aligned_vec4(albedo, shading_type));
-		wu.bf_mats->push_back(aligned_vec4(
-			{ior, (!albedo_sampler), 0, 0}
-		));
+	void set_normal(const Vulkan::Context &ctx, const VkCommandPool &command_pool, const std::string &path) {
+		normal_source = path;
+		normal_sampler = new Sampler(ctx, command_pool, path);
 	}
 
 	void write_material(Buffer4f *bf_mats) const {
 		bf_mats->push_back(aligned_vec4(albedo, shading_type));
 		bf_mats->push_back(aligned_vec4(
-			{ior, (!albedo_sampler), 0, 0}
+			{ior, (!albedo_sampler), (!normal_sampler), 0}
 		));
 	}
 
@@ -63,12 +62,15 @@ struct Material {
 		file << "ior=" << ior << std::endl;
 
 		file << "albedo_source=" << (albedo_sampler ? albedo_source : "0") << std::endl;
+		file << "normal_source=" << (normal_sampler ? normal_source : "0") << std::endl;
 	}
 
 	// Read material from file
+	// TODO: pack args into a struct
 	static std::optional <Material> from_file(const Vulkan::Context &ctx,
 			const VkCommandPool &command_pool,
-			std::ifstream &file) {
+			std::ifstream &file,
+			const std::string &scene_file) {
 		std::string line;
 
 		// Read albedo
@@ -112,14 +114,36 @@ struct Material {
 		std::sscanf(line.c_str(), "albedo_source=%s", buf2);
 		albedo_source = buf2;
 
+		// Read normal source
+		char buf3[1024];
+		std::string normal_source;
+		std::getline(file, line);
+		std::sscanf(line.c_str(), "normal_source=%s", buf3);
+		normal_source = buf3;
+
 		// Construct and return material
 		Material mat;
 		mat.albedo = albedo;
 		mat.shading_type = shading_type;
 		mat.ior = ior;
 
-		if (albedo_source != "0")
+		if (albedo_source != "0") {
+			albedo_source = common::get_path(
+				albedo_source,
+				common::get_directory(scene_file)
+			);
+
 			mat.set_albedo(ctx, command_pool, albedo_source);
+		}
+
+		if (normal_source != "0") {
+			normal_source = common::get_path(
+				normal_source,
+				common::get_directory(scene_file)
+			);
+
+			mat.set_normal(ctx, command_pool, normal_source);
+		}
 
 		// Return material
 		return mat;

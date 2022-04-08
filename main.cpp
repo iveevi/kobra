@@ -27,6 +27,14 @@
 
 using namespace kobra;
 
+// Scene path
+std::string scene_path = "../assets/scene.kobra";
+
+// TODO: focus on adding objects to the scene (spheres, boxes, models)
+// TODO: RT sampling sphere lights
+// TODO: mouse panning, not FPS
+// TODO: input window for RT Capture (etner # of samples, ect)
+
 // RT capture class
 // TODO: turn in an engine module
 class RTCapture : public BaseApp {
@@ -37,7 +45,7 @@ class RTCapture : public BaseApp {
 	bool		term = false;
 public:
 	// Constructor from scene file and camera
-	RTCapture(Vulkan *vk, const char *scene_file, const Camera &camera)
+	RTCapture(Vulkan *vk, const std::string &scene_file, const Camera &camera)
 			: BaseApp({
 				vk,
 				800, 800, 2,
@@ -58,8 +66,8 @@ public:
 		// Create batch
 		// TODO: a method to generate optimal batch sizes (eg 50x50 is
 		// faster than 10x10)
-		batch = rt::Batch(800, 800, 100, 100, 1);
-		index = batch.make_batch_index(0, 0, 16, 1);
+		batch = rt::Batch(800, 800, 5, 5, 1);
+		index = batch.make_batch_index(0, 0, 16, 100);
 	}
 
 	// Render loop
@@ -410,15 +418,15 @@ class RTApp :  public BaseApp {
 			if (event.key == GLFW_KEY_K &&
 				event.mods == GLFW_MOD_CONTROL) {
 				KOBRA_LOG_FILE(notify) << "Saving scene...\n";
-				app->scene.save("scene.kobra");
+				app->scene.save(scene_path);
 			}
 
 			// Refresh rasterization
 			if (event.key == GLFW_KEY_R &&
 				event.mods == GLFW_MOD_CONTROL) {
 				KOBRA_LOG_FILE(notify) << "Force refreshing scene...\n";
-				app->scene.save("scene.kobra");
-				app->scene = Scene(app->context, app->window.command_pool, "scene.kobra");
+				app->scene.save(scene_path);
+				app->scene = Scene(app->context, app->window.command_pool, scene_path);
 				app->raster_layer = raster::Layer(app->window, VK_ATTACHMENT_LOAD_OP_CLEAR);
 				app->raster_layer.add_scene(app->scene);
 				app->raster_layer.set_active_camera(app->camera);
@@ -436,7 +444,7 @@ class RTApp :  public BaseApp {
 
 			// Start a capture
 			if (event.key == GLFW_KEY_C) {
-				app->capturer = new RTCapture(app->context.vk, "scene.kobra", app->camera);
+				app->capturer = new RTCapture(app->context.vk, scene_path, app->camera);
 				app->capturer_thread = new std::thread([&]() {
 					app->capturer->run();
 				});
@@ -588,7 +596,7 @@ class RTApp :  public BaseApp {
 			light1
 		});
 
-		scene.save("scene.kobra");
+		scene.save(scene_path);
 	}
 public:
 	// TODO: app to distinguish the number fo attachments
@@ -606,7 +614,7 @@ public:
 
 		// Load scene
 		// create_scene();
-		scene = Scene(context, window.command_pool, "scene.kobra");
+		scene = Scene(context, window.command_pool, scene_path);
 
 		for (auto &obj : scene)
 			std::cout << "Scene object: " << obj->name() << std::endl;
@@ -707,8 +715,8 @@ public:
 				// rt_layer.clear();
 				// rt_layer.add_scene(scene);
 				KOBRA_LOG_FILE(notify) << "Reconstructing RT layer\n";
-				scene.save("scene.kobra");
-				scene = Scene(context, window.command_pool, "scene.kobra");
+				scene.save(scene_path);
+				scene = Scene(context, window.command_pool, scene_path);
 
 				rt_layer = rt::Layer(window);
 				rt_layer.add_scene(scene);

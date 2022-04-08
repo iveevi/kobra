@@ -49,7 +49,8 @@ public:
 	// Read sphere object from file
 	static std::optional <Sphere> from_file(const Vulkan::Context &ctx,
 			const VkCommandPool &command_pool,
-			std::ifstream &file) {
+			std::ifstream &file,
+			const std::string &scene_file) {
 		std::string line;
 
 		// Read radius
@@ -65,7 +66,10 @@ public:
 		}
 
 		// Read material
-		std::optional <Material> material = Material::from_file(ctx, command_pool, file);
+		std::optional <Material> material = Material::from_file(ctx,
+			command_pool, file, scene_file
+		);
+
 		if (!material) {
 			KOBRA_LOG_FUNC(error) << "Invalid kobra scene file format\n";
 			return std::nullopt;

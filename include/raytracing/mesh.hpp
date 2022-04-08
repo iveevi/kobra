@@ -75,6 +75,8 @@ public:
 		// TODO: method for this?
 		if (_material.albedo_sampler)
 			lp.albedo_samplers[obj_id] = _material.albedo_sampler->get_image_info();
+		if (_material.normal_sampler)
+			lp.normal_samplers[obj_id] = _material.normal_sampler->get_image_info();
 
 		// Write the transform
 		lp.transforms->push_back(transform().matrix());

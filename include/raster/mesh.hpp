@@ -29,14 +29,14 @@ public:
 		// Allocate vertex and index buffers
 		BFM_Settings vb_settings {
 			.size = this->_vertices.size(),
+			.usage_type = BFM_WRITE_ONLY,
 			.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-			.usage_type = BFM_WRITE_ONLY
 		};
 
 		BFM_Settings ib_settings {
 			.size = this->_indices.size(),
+			.usage_type = BFM_WRITE_ONLY,
 			.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-			.usage_type = BFM_WRITE_ONLY
 		};
 
 		// TODO: alloc method for BufferManagers
@@ -61,8 +61,9 @@ public:
 			return;
 
 		KOBRA_LOG_FUNC(notify) << "Latching emissive mesh\n";
+		glm::vec3 pos = _transform.apply(centroid());
 		lp.ubo_point_lights->positions
-			[lp.ubo_point_lights->number++] = this->centroid();
+			[lp.ubo_point_lights->number++] = pos;
 	}
 
 	// MVP structure

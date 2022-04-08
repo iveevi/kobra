@@ -5,6 +5,9 @@
 #include "light_set.glsl"
 #include "highlight.glsl"
 
+// Fixed ambient light
+const float ambience = 0.1;
+
 // TODO: move to light_set module
 vec3 point_light(vec3 light_position, vec3 position)
 {
@@ -22,7 +25,7 @@ vec3 point_light(vec3 light_position, vec3 position)
 		), 32
 	);
 
-	return material.albedo * intensity * (diffuse);
+	return material.albedo * intensity * (diffuse + ambience);
 }
 
 void main()

@@ -132,9 +132,10 @@ struct Sphere {
 
 // Material structure
 struct Material {
-	vec3 albedo;
-	float shading;
-	float ior;
+	vec3	albedo;
+	float	shading;
+	float	ior;
+	float	has_normal;
 };
 
 // Default "constructor"
@@ -142,7 +143,7 @@ Material mat_default()
 {
 	return Material(
 		vec3(0.5f, 0.5f, 0.5f),
-		-1.0f, 1.0f
+		-1.0f, 1.0f, 1.0f
 	);
 }
 
@@ -162,7 +163,8 @@ Material mat_at(uint index, vec2 uv)
 	return Material(
 		color,
 		raw0.w,
-		raw1.x
+		raw1.x,
+		raw1.z
 	);
 }
 
@@ -275,6 +277,7 @@ Intersection ray_sphere_intersect(Ray ray, uint a, uint d)
 		uv.y = asin(ray.direction.y) / PI + 0.5;
 
 		// Get the color
+		// TODO: reuse from mesh
 		it.mat.albedo = texture(s2_albedo[0], uv).rgb;
 
 		// Get material index at the second element
@@ -321,17 +324,16 @@ Intersection ray_intersect(Ray ray, uint index)
 		vec2 tex_coord = t1 * (1 - b1 - b2) + t2 * b1 + t3 * b2;
 		tex_coord = clamp(tex_coord, vec2(0.0), vec2(1.0));
 
-		/* Get texture
-		tex_coord.y = 1.0 - tex_coord.y;
-		vec3 tex = texture(s2_normals, tex_coord).xyz;
-
-		// Correct the normal direction
-		if (dot(it.normal, tex) < 0.0)
-			tex = -tex; */
-
-		// Get material index at the second element
+		// Transfer albedo
 		it.mat = mat_at(d, tex_coord);
 
+		// Transfer normal
+		if (it.mat.has_normal < 0.5) {
+			tex_coord.y = 1.0 - tex_coord.y;
+			vec3 n = texture(s2_normals[d], tex_coord).rgb;
+			n = normalize(n);
+			it.normal = n;
+		}
 	}
 
 	return it;
@@ -668,16 +670,18 @@ vec3 light_contr(Hit hit, Ray ray)
 	for (int i = 0; i < pc.lights; i++)
 		contr += single_area_light_contr(hit, ray, i);
 
+	return contr/float(pc.lights);
+
 	///////////////////////////////////
 	// Sample light from environment //
 	///////////////////////////////////
 
-	// TODO: note, this is not complete
+	/* TODO: note, this is not complete
 	// First, get the reflected ray
 	vec3 r = reflect(ray.direction, hit.normal);
 	Ray refl = Ray(hit.point + hit.normal * 0.001, r, 1.0, 1.0);
 
-	// If the environment is not occlude, add it
+	If the environment is not occlude, add it
 	Hit env_hit = closest_object(refl);
 	if (env_hit.object == -1) {
 		vec3 color = env_hit.mat.albedo;
@@ -686,7 +690,7 @@ vec3 light_contr(Hit hit, Ray ray)
 		contr += value * luminance * hit.mat.albedo;
 	}
 
-	return contr/float(pc.lights + 1);
+	return contr/float(pc.lights + 1); */
 }
 
 vec3 color_at(Ray ray)

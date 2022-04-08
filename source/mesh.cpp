@@ -1,3 +1,4 @@
+#include "../include/common.hpp"
 #include "../include/mesh.hpp"
 #include "../include/model.hpp"
 
@@ -270,7 +271,9 @@ static std::optional <Mesh> load_raw_mesh(std::ifstream &fin)
 // Read from file
 std::optional <Mesh> Mesh::from_file(const Vulkan::Context &ctx,
 		const VkCommandPool &command_pool,
-		std::ifstream &file) {
+		std::ifstream &file,
+		const std::string &scene_file)
+{
 	std::string line;
 
 	// Read source
@@ -300,6 +303,11 @@ std::optional <Mesh> Mesh::from_file(const Vulkan::Context &ctx,
 		}
 
 		// Load from file
+		source = common::get_path(
+			source,
+			common::get_directory(scene_file)
+		);
+
 		Model model(source);
 		mesh = model[source_index];
 	}
@@ -311,7 +319,7 @@ std::optional <Mesh> Mesh::from_file(const Vulkan::Context &ctx,
 		return std::nullopt;
 	}
 
-	auto mat = Material::from_file(ctx, command_pool, file);
+	auto mat = Material::from_file(ctx, command_pool, file, scene_file);
 	if (!mat)
 		return std::nullopt;
 
