@@ -240,7 +240,7 @@ Intersection ray_intersect(Ray ray, uint index)
 
 		// Interpolate texture coordinates
 		vec2 tex_coord = t1 * (1 - b1 - b2) + t2 * b1 + t3 * b2;
-		tex_coord = clamp(tex_coord, vec2(0.0), vec2(1.0));
+		tex_coord.y = 1.0 - tex_coord.y;
 
 		// Transfer albedo
 		it.mat = mat_at(d, tex_coord);
@@ -248,14 +248,17 @@ Intersection ray_intersect(Ray ray, uint index)
 		// Transfer normal
 		// TODO: method to account for normal mapping
 		if (it.mat.has_normal < 0.5) {
-			// tex_coord.y = 1.0 - tex_coord.y;
 			vec3 n = texture(s2_normals[d], tex_coord).rgb;
-			// n = normalize(2 * n - 1.0);
+			n = normalize(2 * n - 1.0);
 
 			// Get tbn matrix
-			vec3 t = normalize(cross(v2 - v1, v3 - v1));
-			vec3 b = normalize(cross(v3 - v2, v1 - v2));
-			mat3 tbn = mat3(t, b, n);
+			vec3 world_normal = normalize(it.normal);
+			vec3 tangent = normalize(cross(world_normal, vec3(0.0, 1.0, 0.0)));
+			if (length(tangent) < 0.001)
+				tangent = normalize(cross(world_normal, vec3(1.0, 0.0, 0.0)));
+			vec3 bitangent = normalize(cross(tangent, world_normal));
+
+			mat3 tbn = mat3(tangent, bitangent, world_normal);
 
 			// Transform normal
 			it.normal = normalize(tbn * n);
@@ -621,8 +624,8 @@ vec3 light_contr(Hit hit, Ray ray)
 
 vec3 color_at(Ray ray)
 {
-	// TODO: consider adding a normal map mode
-	/* Hit hit = closest_object(ray);
+	/* TODO: consider adding a normal map mode
+	Hit hit = closest_object(ray);
 	if (hit.object == -1)
 		return vec3(0.0);
 	return hit.normal * 0.5 + 0.5; */

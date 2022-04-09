@@ -72,9 +72,7 @@ protected:
 
 			// Normalize the tangent and bitangent
 			v.tangent = glm::normalize(v.tangent);
-			std::cout << "bitangent = " << v.bitangent.x << " " << v.bitangent.y << " " << v.bitangent.z << std::endl;
 			v.bitangent = glm::normalize(v.bitangent);
-			std::cout << "\tnormalized = bitangent = " << v.bitangent.x << " " << v.bitangent.y << " " << v.bitangent.z << std::endl;
 		}
 	}
 public:

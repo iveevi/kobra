@@ -51,7 +51,7 @@ void main()
 	// Output necessary info
 	out_position		= (model * vec4(position, 1.0)).xyz;
 	out_normal		= vert_normal;
-	out_tex_coord		= tex_coord;
+	out_tex_coord		= vec2(tex_coord.x, 1.0 - tex_coord.y);
 	out_tbn			= tbn;
 	out_tbn_transpose	= transpose(tbn);
 	out_material		= material;
