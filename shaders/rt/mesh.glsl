@@ -2,89 +2,7 @@
 
 // Import bindings
 #include "mesh_bindings.h"
-
-// TODO: all these buffer bindings should be in a single file
-layout (set = 0, binding = MESH_BINDING_PIXELS, std430) buffer Pixels
-{
-	uint pixels[];
-} frame;
-
-layout (set = 0, binding = MESH_BINDING_VERTICES, std430) buffer Vertices
-{
-	vec4 data[];
-} vertices;
-
-layout (set = 0, binding = MESH_BINDING_TRIANGLES, std430) buffer Triangles
-{
-	vec4 data[];
-} triangles;
-
-// Mesh transforms
-// TODO: is this even needed? its too slow to compute every frame
-layout (set = 0, binding = MESH_BINDING_TRANSFORMS, std430) buffer Transforms
-{
-	mat4 data[];
-} transforms;
-
-// Acceleration structure
-layout (set = 0, binding = MESH_BINDING_BVH, std430) buffer BVH
-{
-	vec4 data[];
-} bvh;
-
-// Materials
-layout (set = 0, binding = MESH_BINDING_MATERIALS, std430) buffer Materials
-{
-	vec4 data[];
-} materials;
-
-// Lights
-layout (set = 0, binding = MESH_BINDING_LIGHTS, std430) buffer Lights
-{
-	vec4 data[];
-} lights;
-
-// Light indices
-layout (set = 0, binding = MESH_BINDING_LIGHT_INDICES, std430) buffer LightIndices
-{
-	uint data[];
-} light_indices;
-
-// Textures
-layout (set = 0, binding = MESH_BINDING_ALBEDOS)
-uniform sampler2D s2_albedo[MAX_TEXTURES];
-
-layout (set = 0, binding = MESH_BINDING_NORMAL_MAPS)
-uniform sampler2D s2_normals[MAX_TEXTURES];
-
-layout (set = 0, binding = MESH_BINDING_ENVIRONMENT)
-uniform sampler2D s2_environment;
-
-// Push constants
-// TODO: # of samples should be a push constant
-layout (push_constant) uniform PushConstants
-{
-	// Viewport
-	uint	width;
-	uint	height;
-	uint	xoffset;
-	uint	yoffset;
-
-	// Size variables
-	uint	triangles;
-	uint	lights;
-	uint	samples_per_pixel;
-	uint	samples_per_light;
-
-	// Camera
-	vec3	camera_position;
-	vec3	camera_forward;
-	vec3	camera_up;
-	vec3	camera_right;
-
-	// scale, aspect
-	vec4	properties;
-} pc;
+#include "layouts.glsl"
 
 // Ray structure
 struct Ray {
@@ -328,11 +246,19 @@ Intersection ray_intersect(Ray ray, uint index)
 		it.mat = mat_at(d, tex_coord);
 
 		// Transfer normal
+		// TODO: method to account for normal mapping
 		if (it.mat.has_normal < 0.5) {
-			tex_coord.y = 1.0 - tex_coord.y;
+			// tex_coord.y = 1.0 - tex_coord.y;
 			vec3 n = texture(s2_normals[d], tex_coord).rgb;
-			n = normalize(n);
-			it.normal = n;
+			// n = normalize(2 * n - 1.0);
+
+			// Get tbn matrix
+			vec3 t = normalize(cross(v2 - v1, v3 - v1));
+			vec3 b = normalize(cross(v3 - v2, v1 - v2));
+			mat3 tbn = mat3(t, b, n);
+
+			// Transform normal
+			it.normal = normalize(tbn * n);
 		}
 	}
 
@@ -695,6 +621,12 @@ vec3 light_contr(Hit hit, Ray ray)
 
 vec3 color_at(Ray ray)
 {
+	// TODO: consider adding a normal map mode
+	/* Hit hit = closest_object(ray);
+	if (hit.object == -1)
+		return vec3(0.0);
+	return hit.normal * 0.5 + 0.5; */
+
 	// Array of rays
 	Ray rays[MAX_DEPTH];
 	rays[0] = ray;

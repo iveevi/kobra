@@ -25,16 +25,64 @@ protected:
 	std::string	_source;
 	int		_source_index = -1;
 
-	// List of vertices
+	// Vertices and indices
 	VertexList 	_vertices;
-
-	// List of indices
 	Indices		_indices;
+
+	// Process tangent and bitangent
+	void _process_vertex_data() {
+		// Iterate over all vertices
+		for (int i = 0; i < _vertices.size(); i++) {
+			// Get the vertex
+			Vertex &v = _vertices[i];
+
+			// Calculate tangent and bitangent
+			v.tangent = glm::vec3(0.0f);
+			v.bitangent = glm::vec3(0.0f);
+
+			// Iterate over all faces
+			for (int j = 0; j < _indices.size(); j += 3) {
+				// Get the face
+				int face0 = _indices[j];
+				int face1 = _indices[j + 1];
+				int face2 = _indices[j + 2];
+
+				// Check if the vertex is part of the face
+				if (face0 == i || face1 == i || face2 == i) {
+					// Get the face vertices
+					const auto &v1 = _vertices[face0];
+					const auto &v2 = _vertices[face1];
+					const auto &v3 = _vertices[face2];
+
+					glm::vec3 e1 = v2.position - v1.position;
+					glm::vec3 e2 = v3.position - v1.position;
+
+					glm::vec2 uv1 = v2.tex_coords - v1.tex_coords;
+					glm::vec2 uv2 = v3.tex_coords- v1.tex_coords;
+
+					float r = 1.0f / (uv1.x * uv2.y - uv1.y * uv2.x);
+					glm::vec3 tangent = (e1 * uv2.y - e2 * uv1.y) * r;
+					glm::vec3 bitangent = (e2 * uv1.x - e1 * uv2.x) * r;
+
+					// Add the tangent and bitangent to the vertex
+					v.tangent += tangent;
+					v.bitangent += bitangent;
+				}
+			}
+
+			// Normalize the tangent and bitangent
+			v.tangent = glm::normalize(v.tangent);
+			std::cout << "bitangent = " << v.bitangent.x << " " << v.bitangent.y << " " << v.bitangent.z << std::endl;
+			v.bitangent = glm::normalize(v.bitangent);
+			std::cout << "\tnormalized = bitangent = " << v.bitangent.x << " " << v.bitangent.y << " " << v.bitangent.z << std::endl;
+		}
+	}
 public:
 	// Default constructor
 	Mesh() = default;
 
 	// Simple constructor
+	// TODO: load tangent and bitangent in loading models
 	Mesh(const Mesh &mesh, const Transform &transform)
 			: Object(object_type, transform),
 			Renderable(mesh.material()),
@@ -46,7 +94,10 @@ public:
 	Mesh(const VertexList &vs, const Indices &is,
 			const Transform &t = Transform())
 			: Object(object_type, t),
-			_vertices(vs), _indices(is) {}
+			_vertices(vs), _indices(is) {
+		// Process the vertex data
+		_process_vertex_data();
+	}
 
 	// Properties
 	size_t vertex_count() const {

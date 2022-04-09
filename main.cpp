@@ -28,7 +28,7 @@
 using namespace kobra;
 
 // Scene path
-std::string scene_path = "../assets/scene.kobra";
+std::string scene_path = "scene.kobra";
 
 // TODO: focus on adding objects to the scene (spheres, boxes, models)
 // TODO: RT sampling sphere lights

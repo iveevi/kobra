@@ -9,7 +9,8 @@ Texture load_image_texture(const std::string &filename, int chan)
 	// TODO: function in common.hpp
 	std::ifstream file(filename, std::ios::binary);
 	if (!file.is_open()) {
-		Logger::error("Failed to open file: " + filename);
+		KOBRA_LOG_FILE(error) << "Failed to open file: \""
+			<< filename << "\"" << std::endl;
 		return {};
 	}
 
@@ -18,7 +19,8 @@ Texture load_image_texture(const std::string &filename, int chan)
 	stbi_set_flip_vertically_on_load(true);  
 	byte *image = stbi_load(filename.c_str(), &width, &height, &channels, 0);
 	if (!image) {
-		Logger::error("Failed to load image: " + filename);
+		KOBRA_LOG_FILE(error) << "Failed to load image: \""
+			<< filename << "\"" << std::endl;
 		return {};
 	}
 

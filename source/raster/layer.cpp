@@ -1,5 +1,6 @@
 #include "../../include/raster/layer.hpp"
 #include "../../include/sphere.hpp"
+#include "../../shaders/raster/bindings.h"
 
 namespace kobra {
 
@@ -9,13 +10,27 @@ namespace raster {
 // Static variables //
 //////////////////////
 
-const Layer::DSLBindings Layer::_common_dsl_bindings {
+const Layer::DSLBindings Layer::_full_dsl_bindings {
 	DSLBinding {
-		.binding = 0,
+		.binding = RASTER_BINDING_ALBEDO_MAP,
+		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+	},
+
+	DSLBinding {
+		.binding = RASTER_BINDING_NORMAL_MAP,
+		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+	},
+
+	DSLBinding {
+		.binding = RASTER_BINDING_POINT_LIGHTS,
 		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 		.descriptorCount = 1,
 		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-	}
+	},
 };
 
 /////////////////////
@@ -35,11 +50,7 @@ void Layer::_initialize_vulkan_structures(const VkAttachmentLoadOp &load)
 	);
 
 	// Create descriptor set and layout
-	_common_dsl = _wctx.context.make_dsl(_common_dsl_bindings);
-	_common_ds = _wctx.context.make_ds(
-		_wctx.descriptor_pool,
-		_common_dsl
-	);
+	_full_dsl = _wctx.context.make_dsl(_full_dsl_bindings);
 
 	// Load necessary shader modules
 	// TODO: create a map of names to shaders (for fragment, since
@@ -63,7 +74,7 @@ void Layer::_initialize_vulkan_structures(const VkAttachmentLoadOp &load)
 		.swapchain = _wctx.swapchain,
 		.render_pass = _render_pass,
 
-		.dsls = {_common_dsl},
+		.dsls = {_full_dsl},
 
 		.vertex_binding = Vertex::vertex_binding(),
 		.vertex_attributes = Vertex::vertex_attributes(),
@@ -112,12 +123,6 @@ void Layer::_initialize_vulkan_structures(const VkAttachmentLoadOp &load)
 
 	_ubo_point_lights_buffer = BufferManager
 		<uint8_t> (_wctx.context, write_settings);
-
-	// Initial refresh
-	_refresh(_ubo_point_lights_buffer,
-		(const uint8_t *) &_ubo_point_lights,
-		sizeof(_ubo_point_lights), 0
-	);
 }
 
 ////////////////////

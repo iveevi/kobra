@@ -373,8 +373,8 @@ inline TexturePacket make_texture(const Vulkan::Context &ctx,
 	if (texture.data.size() > 0) {
 		BFM_Settings staging_settings {
 			.size = texture.data.size(),
+			.usage_type = BFM_WRITE_ONLY,
 			.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-			.usage_type = BFM_WRITE_ONLY
 		};
 
 		BufferManager <byte> staging_buffer {ctx, staging_settings};
@@ -492,6 +492,8 @@ public:
 
 	// Create a blank sampler
 	static Sampler blank_sampler(const Vulkan::Context &ctx, const VkCommandPool &command_pool) {
+		// TODO: cache a sampler if the empty has already been
+		// constructed
 		Texture blank {
 			.width = 1,
 			.height = 1,

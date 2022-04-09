@@ -1,0 +1,8 @@
+#ifndef RASTER_BINDINGS
+#define RASTER_BINDINGS
+
+const int RASTER_BINDING_ALBEDO_MAP	= 0;
+const int RASTER_BINDING_NORMAL_MAP	= 1;
+const int RASTER_BINDING_POINT_LIGHTS	= 3;
+
+#endif

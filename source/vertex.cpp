@@ -52,6 +52,20 @@ std::vector <VertexAttribute> Vertex::vertex_attributes()
 			.binding = 0,
 			.format = VK_FORMAT_R32G32_SFLOAT,
 			.offset = offsetof(Vertex, tex_coords)
+		},
+
+		VertexAttribute {
+			.location = 3,
+			.binding = 0,
+			.format = VK_FORMAT_R32G32B32_SFLOAT,
+			.offset = offsetof(Vertex, tangent)
+		},
+
+		VertexAttribute {
+			.location = 4,
+			.binding = 0,
+			.format = VK_FORMAT_R32G32B32_SFLOAT,
+			.offset = offsetof(Vertex, bitangent)
 		}
 	};
 }

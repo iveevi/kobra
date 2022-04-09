@@ -5,6 +5,7 @@
 #include <vector>
 
 // Engine headers
+#include "../../shaders/raster/bindings.h"
 #include "../app.hpp"
 #include "../buffer_manager.hpp"
 #include "../camera.hpp"
@@ -39,10 +40,6 @@ protected:
 	// Active camera
 	Camera				*_active_camera = nullptr;
 
-	// List of elements
-	// TODO: map elements to their respective pipelines
-	// std::vector <Element>		_elements;
-
 	// Application context
 	App::Window			_wctx;
 
@@ -57,17 +54,17 @@ protected:
 	} _pipelines;
 
 	// Descriptor set and layout
-	VkDescriptorSet			_common_ds;
-	VkDescriptorSetLayout		_common_dsl;
+	VkDescriptorSetLayout		_full_dsl;
 
 	// Buffers for lights
 	BufferManager <uint8_t>		_ubo_point_lights_buffer;
 
 	// Refresh a buffer with its data
-	void _refresh(BufferManager <uint8_t> &buffer, const uint8_t *data, size_t size, size_t binding) {
-		_ubo_point_lights_buffer.write(data, size);
-		_ubo_point_lights_buffer.sync_upload();
-		_ubo_point_lights_buffer.bind(_common_ds, binding);
+	static void _refresh(BufferManager <uint8_t> &buffer, const uint8_t *data, size_t size,
+			const VkDescriptorSet &ds, size_t binding) {
+		buffer.write(data, size);
+		buffer.sync_upload();
+		buffer.bind(ds, binding);
 	}
 
 	// Corresponding structures
@@ -96,7 +93,7 @@ protected:
 	void _initialize_vulkan_structures(const VkAttachmentLoadOp &);
 
 	// Descriptor set bindings
-	static const DSLBindings	_common_dsl_bindings;
+	static const DSLBindings	_full_dsl_bindings;
 
 	// Highlight status and methods
 	std::vector <bool>		_highlighted;
@@ -116,7 +113,10 @@ public:
 	void add_do(const ptr &e) override {
 		// Prepare latching packet
 		LatchingPacket lp {
-			.ubo_point_lights = &_ubo_point_lights
+			.context = &_wctx.context,
+			.command_pool = &_wctx.command_pool,
+			.ubo_point_lights = &_ubo_point_lights,
+			.layer = this
 		};
 
 		// Add element
@@ -124,12 +124,18 @@ public:
 
 		// Add highlight element
 		_highlighted.push_back(false);
+		
+		// Refresh lights for all elements
+		for (int i = 0; i < _elements.size(); i++) {
+			// Update once for all element, bind once for all
+			_refresh(_ubo_point_lights_buffer,
+				(const uint8_t *) &_ubo_point_lights,
+				sizeof(_ubo_point_lights),
 
-		// Refresh all buffers
-		_refresh(_ubo_point_lights_buffer,
-			(const uint8_t *) &_ubo_point_lights,
-			sizeof(_ubo_point_lights), 0
-		);
+				_elements[i]->get_local_ds(),
+				RASTER_BINDING_POINT_LIGHTS
+			);
+		}
 	}
 
 	// Import scene objects
@@ -195,6 +201,14 @@ public:
 		_highlighted = std::vector <bool> (_highlighted.size(), false);
 	}
 
+	// Serve a descriptor set
+	VkDescriptorSet serve_ds() {
+		return _wctx.context.make_ds(
+			_wctx.descriptor_pool,
+			_full_dsl
+		);
+	}
+
 	// Render
 	void render(const VkCommandBuffer &cmd_buffer, const VkFramebuffer &framebuffer) {
 		// Check initialization status
@@ -235,13 +249,13 @@ public:
 			_get_pipeline()->pipeline
 		);
 
-		// Bind descriptor set
+		/* Bind descriptor set
 		vkCmdBindDescriptorSets(cmd_buffer,
 			VK_PIPELINE_BIND_POINT_GRAPHICS,
 			_get_pipeline()->layout,
-			0, 1, &_common_ds,
+			0, 1, &_full_ds,
 			0, nullptr
-		);
+		); */
 
 		// Initialize render packet
 		RenderPacket packet {
@@ -257,6 +271,14 @@ public:
 		// Render all elements
 		for (int i = 0; i < _elements.size(); i++) {
 			packet.highlight = _highlighted[i];
+			/* _refresh(_ubo_point_lights_buffer,
+				(const uint8_t *) &_ubo_point_lights,
+				sizeof(_ubo_point_lights),
+
+				_elements[i]->get_local_ds(),
+				RASTER_BINDING_POINT_LIGHTS
+			); */
+
 			_elements[i]->render(packet);
 		}
 

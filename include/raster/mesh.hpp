@@ -2,6 +2,7 @@
 #define KOBRA_RASTER_MESH_H_
 
 // Engine headers
+#include "../backend.hpp"
 #include "../mesh.hpp"
 #include "raster.hpp"
 
@@ -17,6 +18,9 @@ private:
 	// Vertex and index buffers
 	VertexBuffer 	_vb;
 	IndexBuffer	_ib;
+
+	// Descriptor set
+	VkDescriptorSet	_ds = VK_NULL_HANDLE;
 public:
 	// Default constructor
 	Mesh() = default;
@@ -55,15 +59,11 @@ public:
 	}
 
 	// Latch to layer
-	void latch(const LatchingPacket &lp) override {
-		// Only do stuff if the mesh is emissive
-		if (_material.shading_type != SHADING_TYPE_EMISSIVE)
-			return;
+	void latch(const LatchingPacket &) override;
 
-		KOBRA_LOG_FUNC(notify) << "Latching emissive mesh\n";
-		glm::vec3 pos = _transform.apply(centroid());
-		lp.ubo_point_lights->positions
-			[lp.ubo_point_lights->number++] = pos;
+	// Get local descriptor set
+	VkDescriptorSet get_local_ds() const override {
+		return _ds;
 	}
 
 	// MVP structure
@@ -71,6 +71,8 @@ public:
 		glm::vec3	albedo;
 		float		shading_type;
 		float		hightlight;
+		float		has_albedo;
+		float		has_normal;
 	};
 
 	struct MVP {
@@ -95,8 +97,18 @@ public:
 				_material.albedo,
 				_material.shading_type,
 				(float) rp.highlight,
+				(float) (_material.albedo_sampler != nullptr),
+				(float) (_material.normal_sampler != nullptr),
 			}
 		};
+
+		// Bind the descriptor set
+		vkCmdBindDescriptorSets(rp.cmd,
+			VK_PIPELINE_BIND_POINT_GRAPHICS,
+			rp.pipeline_layout,
+			0, 1, &_ds,
+			0, nullptr
+		);
 
 		// Bind vertex buffer
 		VkBuffer	buffers[] = {_vb.vk_buffer()};

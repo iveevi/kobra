@@ -15,6 +15,9 @@ namespace raster {
 using VertexBuffer = BufferManager <Vertex>;
 using IndexBuffer = BufferManager <uint32_t>;
 
+// Forward declarations
+class Layer;
+
 // Rasterization abstraction and primitives
 struct RenderPacket {
 	VkCommandBuffer cmd;
@@ -41,7 +44,10 @@ struct UBO_PointLights {
 
 // Latching packet
 struct LatchingPacket {
-	UBO_PointLights *ubo_point_lights;
+	Vulkan::Context *context;
+	VkCommandPool	*command_pool;
+	UBO_PointLights	*ubo_point_lights;
+	Layer		*layer;
 };
 
 // Rasterization elements
@@ -51,6 +57,9 @@ struct _element : virtual public Object {
 
 	// Latch to layer
 	virtual void latch(const LatchingPacket &) = 0;
+
+	// Get local descriptor set
+	virtual VkDescriptorSet get_local_ds() const = 0;
 
 	// Virtual methods
 	virtual void render(RenderPacket &) = 0;

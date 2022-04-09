@@ -21,6 +21,7 @@ definitions:
     source/gui/text.cpp,
     source/io/event.cpp,
     source/raster/layer.cpp,
+    source/raster/mesh.cpp,
     source/raytracing/layer.cpp'
 
 builds:
