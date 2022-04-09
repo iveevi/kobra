@@ -18,45 +18,42 @@ definitions:
     source/texture.cpp,
     source/vertex.cpp,
     source/vulkan.cpp,
+    source/engine/rt_capture.cpp,
     source/gui/text.cpp,
     source/io/event.cpp,
     source/raster/layer.cpp,
     source/raster/mesh.cpp,
     source/raytracing/layer.cpp'
+  - includes: 'thirdparty,
+    thirdparty/freetype/include,
+    thirdparty/glm,
+    thirdparty/imgui,
+    thirdparty/assimp/include'
+  - libs: 'glfw,
+    vulkan,
+    assimp,
+    pthread,
+    avcodec,
+    avformat,
+    avutil,
+    freetype'
 
 builds:
   - kobra_release:
-    - sources: main.cpp, kobra_source, imgui_source
-    - idirs: 'thirdparty,
-      thirdparty/freetype/include,
-      thirdparty/glm,
-      thirdparty/imgui,
-      thirdparty/assimp/include'
+    - sources: main.cpp, kobra_source
+    - idirs: includes
     - flags: '-O3 -std=c++17'
-    - libraries: 'glfw,
-      vulkan,
-      assimp,
-      pthread,
-      avcodec,
-      avformat,
-      avutil,
-      freetype'
+    - libraries: libs
   - kobra_debug:
-    - sources: main.cpp, kobra_source, imgui_source
-    - idirs: 'thirdparty,
-      thirdparty/freetype/include,
-      thirdparty/glm,
-      thirdparty/imgui,
-      thirdparty/assimp/include'
-    - libraries: 'glfw,
-      vulkan,
-      assimp,
-      pthread,
-      avcodec,
-      avformat,
-      avutil,
-      freetype'
+    - sources: main.cpp, kobra_source
+    - idirs: includes
+    - libraries: libs
     - flags: '-std=c++17 -g'
+  - kobra_wall:
+    - sources: main.cpp, kobra_source
+    - idirs: includes
+    - libraries: libs
+    - flags: '-std=c++17 -Wall -Werror'
   - experimental_normal:
     - sources: 'experimental/kobra.cpp,
       experimental/render.cpp,
@@ -79,13 +76,15 @@ builds:
 
 targets:
   - kobra:
-    - modes: 'gdb'
+    - modes: 'gdb, wall'
     - builds:
       - default: kobra_release
       - gdb: kobra_debug
+      - wall: kobra_wall
     - postbuilds:
       - default: '{}'
       - gdb: 'gdb {}'
+      - wall: '{}'
   - experimental:
     - builds:
       - default: experimental_normal

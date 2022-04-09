@@ -73,10 +73,15 @@ public:
 		_material.write_material(lp.materials);
 
 		// TODO: method for this?
-		if (_material.albedo_sampler)
+		if (_material.albedo_sampler) {
+			std::cout << "Writing albedo texture, source = " << _material.albedo_source << std::endl;
 			lp.albedo_samplers[obj_id] = _material.albedo_sampler->get_image_info();
-		if (_material.normal_sampler)
+		}
+
+		if (_material.normal_sampler) {
+			std::cout << "Writing normal texture, source = " << _material.normal_source << std::endl;
 			lp.normal_samplers[obj_id] = _material.normal_sampler->get_image_info();
+		}
 
 		// Write the transform
 		lp.transforms->push_back(transform().matrix());

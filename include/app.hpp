@@ -78,6 +78,9 @@ protected:
 	Timer			frame_timer;
 	double 			frame_time = 0.0;
 	size_t			frame_index;
+
+	// Termination status
+	bool			terminated = false;
 public:
 	// Constructor
 	// TODO: constructor for multiple windows?
@@ -138,6 +141,10 @@ public:
 		// Start timer
 		frame_timer.start();
 		while (!glfwWindowShouldClose(surface.window)) {
+			// Check if manually terminated
+			if (terminated)
+				break;
+
 			// Poll events
 			glfwPollEvents();
 
@@ -155,6 +162,11 @@ public:
 
 		// Cleanup
 		glfwDestroyWindow(surface.window);
+	}
+
+	// Manually terminate application
+	void terminate_now() {
+		terminated = true;
 	}
 
 	// Frame function (must be implemented by user)

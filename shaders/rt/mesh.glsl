@@ -249,18 +249,22 @@ Intersection ray_intersect(Ray ray, uint index)
 		// TODO: method to account for normal mapping
 		if (it.mat.has_normal < 0.5) {
 			vec3 n = texture(s2_normals[d], tex_coord).rgb;
-			n = normalize(2 * n - 1.0);
+			n = 2 * n - 1.0;
 
-			// Get tbn matrix
 			vec3 world_normal = normalize(it.normal);
-			vec3 tangent = normalize(cross(world_normal, vec3(0.0, 1.0, 0.0)));
-			if (length(tangent) < 0.001)
-				tangent = normalize(cross(world_normal, vec3(1.0, 0.0, 0.0)));
-			vec3 bitangent = normalize(cross(tangent, world_normal));
+
+			vec3 e1 = v2 - v1;
+			vec3 e2 = v3 - v1;
+
+			vec2 uv1 = t2 - t1;
+			vec2 uv2 = t3 - t1;
+
+			float r = 1.0 / (uv1.x * uv2.y - uv2.x * uv1.y);
+			vec3 tangent = normalize(e1 * uv2.y - e2 * uv1.y) * r;
+			vec3 bitangent = normalize(e2 * uv1.x - e1 * uv2.x) * r;
 
 			mat3 tbn = mat3(tangent, bitangent, world_normal);
 
-			// Transform normal
 			it.normal = normalize(tbn * n);
 		}
 	}

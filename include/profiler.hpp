@@ -2,6 +2,7 @@
 #define PROFILER_H_
 
 // Standard headers
+#include <cmath>
 #include <queue>
 #include <stack>
 #include <string>
@@ -87,7 +88,7 @@ public:
 
 	// Pretty print frame
 	static std::string pretty(const Frame &frame, double ptime = -1.0f, size_t indent = 0) {
-		static std::string indent_str = "  ";
+		static std::string indent_str = "        ";
 
 		std::string str;
 
@@ -100,7 +101,32 @@ public:
 		str += "[" + frame.name + "] ";
 
 		// Print time
-		str += std::to_string(frame.time) + " us";
+		std::string time_str;
+
+		float time = frame.time;
+		std::string units = " us";
+
+		// Milliseconds
+		if (time > 1000.0f) {
+			float us = std::fmod(us, 1000.0f);
+			time = time / 1000.0f;
+			time_str = time_str + std::to_string((long int) us) + " us";
+			units = " ms";
+		}
+
+		// Seconds
+		if (time > 1000.0f) {
+			float ms = std::fmod(ms, 1000.0f);
+			time = time / 1000.0f;
+			time_str = std::to_string((long int) ms)
+				+ " ms, " + time_str;
+			units = " s";
+		}
+
+		str += std::to_string((long int) time) + units;
+		if (!time_str.empty())
+			str += ", " + time_str;
+
 		if (ptime >= 0.0f)
 			str += " (" + std::to_string(frame.time / ptime * 100.0) + "%)";
 		str += "\n";
@@ -110,6 +136,12 @@ public:
 			str += istr + "\u2514\u2500 " + pretty(child, frame.time, indent + 1);
 
 		return str;
+	}
+
+	// Singleton
+	static Profiler &one() {
+		static Profiler profiler;
+		return profiler;
 	}
 };
 

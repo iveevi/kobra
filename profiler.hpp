@@ -11,6 +11,7 @@
 using namespace kobra;
 
 // Profiler application
+// TODO: turn into an engine module
 class ProfilerApplication : public kobra::App {
 	// Vulkan structures
 	VkRenderPass			render_pass;
@@ -40,7 +41,7 @@ public:
 		.ctx = vk,
 		.width = 800,
 		.height = 600,
-		.name = "Mercury Profiler"
+		.name = "Kobra Profiler"
 	}), profiler(p) {
 		// Create render pass
 		render_pass = context.vk->make_render_pass(
@@ -257,8 +258,6 @@ public:
 
 	// Record command buffers
 	void record(VkCommandBuffer cbuf, VkFramebuffer fbuf) {
-		profiler->frame("Frame window");
-
 		// Pop frame from the profiler
 		if (profiler->size() > 0) {
 			auto frame = profiler->pop();
@@ -268,23 +267,17 @@ public:
 			wborder->set_bounds(bbox);
 		}
 
-		profiler->end();
-
 		// Begin recording
-		profiler->frame("Command buffer");
 		Vulkan::begin(cbuf);
 
 		layer.render(cbuf, fbuf);
 
 		// End the command buffer
 		Vulkan::end(cbuf);
-		profiler->end();
 	}
 
 	// Present frame
 	void present() {
-		profiler->frame("Present");
-
 		// Wait for the next image in the swap chain
 		vkWaitForFences(
 			context.vk_device(), 1,
@@ -336,9 +329,7 @@ public:
 			smph_render_finished[frame_index],
 		};
 
-		profiler->frame("Record");
 		record(command_buffers[image_index], swapchain.framebuffers[image_index]);
-		profiler->end();
 
 		// Create information
 		// TODO: method
@@ -358,12 +349,10 @@ public:
 		// Submit the command buffer
 		vkResetFences(context.device.device, 1, &in_flight_fences[frame_index]);
 
-		profiler->frame("Submit");
 		result = vkQueueSubmit(
 			context.device.graphics_queue, 1, &submit_info,
 			in_flight_fences[frame_index]
 		);
-		profiler->end();
 
 		if (result != VK_SUCCESS) {
 			Logger::error("[main] Failed to submit draw command buffer!");
@@ -388,20 +377,11 @@ public:
 			&present_info
 		);
 
-		/* if (result == VK_ERROR_OUT_OF_DATE_KHR
-				|| result == VK_SUBOPTIMAL_KHR
-				|| framebuffer_resized) {
-			framebuffer_resized = false;
-			_remk_swapchain();
-		} else*/
-
 		// TODO: check resizing (in app)
 		if (result != VK_SUCCESS) {
 			Logger::error("[Vulkan] Failed to present swap chain image!");
 			throw (-1);
 		}
-
-		profiler->end();
 	}
 
 	void frame() override {

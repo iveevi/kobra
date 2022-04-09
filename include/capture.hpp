@@ -22,6 +22,7 @@ namespace kobra {
 
 // Image structure
 // TODO: eventually move to another header
+// TODO: what is the different between this an a textuer
 struct Image {
 	size_t width;
 	size_t height;

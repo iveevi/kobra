@@ -3,9 +3,10 @@
 #include <optional>
 
 // Engine headers
-#include "../include/scene.hpp"
-#include "../include/model.hpp"
 #include "../include/mesh.hpp"
+#include "../include/model.hpp"
+#include "../include/profiler.hpp"
+#include "../include/scene.hpp"
 #include "../include/sphere.hpp"
 
 namespace kobra {
@@ -59,7 +60,10 @@ static ObjectPtr load_object(const Vulkan::Context &ctx,
 
 	// Switch on the object type
 	if (header == "[SPHERE]") {
+		Profiler::one().frame("Loading sphere");
 		auto sphere = Sphere::from_file(ctx, command_pool, fin, path);
+		Profiler::one().end();
+
 		if (!sphere)
 			return nullptr;
 
@@ -69,7 +73,10 @@ static ObjectPtr load_object(const Vulkan::Context &ctx,
 	}
 
 	if (header == "[MESH]") {
+		Profiler::one().frame("Loading mesh");
 		auto mesh = Mesh::from_file(ctx, command_pool, fin, path);
+		Profiler::one().end();
+
 		if (!mesh)
 			return nullptr;
 
@@ -107,7 +114,9 @@ Scene::Scene(const Vulkan::Context &ctx,
 			break;
 
 		// Read the next object
+		Profiler::one().frame("Loading object");
 		ObjectPtr obj = load_object(ctx, command_pool, fin, filename);
+		Profiler::one().end();
 
 		// Check if the object is valid
 		if (obj) {
