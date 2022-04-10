@@ -15,6 +15,7 @@ namespace kobra {
 // Helper functions //
 //////////////////////
 
+// TODO: loading models (with appropriate materials, etc)
 static ObjectPtr load_object(const Vulkan::Context &ctx,
 		const VkCommandPool &command_pool,
 		std::ifstream &fin, const std::string &path)

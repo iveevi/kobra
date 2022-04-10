@@ -3,27 +3,118 @@
 // Scene path
 std::string scene_path = "scene.kobra";
 
+// Experimental GUI app
+class GUIApp : public BaseApp {
+	gui::Layer layer;
+
+	// Elements
+	gui::Text *text_expl;
+	gui::Text *text_input;
+
+	// Keyboard input
+	// TODO: macro to generate signature
+	static void keyboard_handler(void *user, const io::KeyboardEvent &event) {
+		// Delete key delays
+		static const int delete_key_delay_max = 2;
+		static int delete_key_delay = 0;
+
+		GUIApp *app = (GUIApp *) user;
+
+		// If escape, then terminate
+		if (event.key == GLFW_KEY_ESCAPE) {
+			app->terminate_now();
+			return;
+		}
+
+		// If the character is printable, then add it to the input
+		bool pressed_only = (event.action == GLFW_PRESS);
+
+		if (std::isprint(event.key) && pressed_only) {
+			char c = std::tolower(event.key);
+			if (event.mods == GLFW_MOD_SHIFT)
+				c = std::toupper(c);
+
+			app->text_input->str += c;
+		}
+
+		// Delete last character
+		if (event.key == GLFW_KEY_BACKSPACE) {
+			if (pressed_only) {
+				app->text_input->str.pop_back();
+				delete_key_delay = 0;
+			} else {
+				delete_key_delay++;
+				if (delete_key_delay > delete_key_delay_max) {
+					app->text_input->str.pop_back();
+					delete_key_delay = 0;
+				}
+			}
+		}
+	}
+public:
+	GUIApp(Vulkan *vk) : BaseApp({
+		vk,
+		1000, 1000, 2,
+		"GUI App"
+	}, true) {
+		// Initialize layer and load all fonts
+		layer = gui::Layer(window, VK_ATTACHMENT_LOAD_OP_CLEAR);
+		layer.load_font("default", "resources/fonts/noto_sans.ttf");
+
+		// Create text
+		text_expl = layer.text_render("default")->text(
+			"Input: ",
+			window.coordinates(10, 10),
+			{1, 1, 1, 1}, 0.5
+		);
+
+		text_input = layer.text_render("default")->text(
+			"",
+			window.coordinates(80, 10),
+			{1, 1, 1, 1}, 0.5
+		);
+
+		// Add elements
+		layer.add(std::vector <gui::_element *> {
+			text_expl,
+			text_input
+		});
+
+		// Bind keyboard handler
+		window.keyboard_events->subscribe(keyboard_handler, this);
+	}
+
+	void record(const VkCommandBuffer &cmd, const VkFramebuffer &framebuffer) override {
+		Vulkan::begin(cmd);
+		layer.render(cmd, framebuffer);
+		Vulkan::end(cmd);
+	}
+};
+
 int main()
 {
 	Vulkan *vulkan = new Vulkan();
 
-	RTApp rt_app {vulkan};
-	// ProfilerApplication papp {vulkan, &Profiler::one()};
+	// GUIApp gui_app {vulkan};
+	RTApp main_app {vulkan};
+	ProfilerApp profiler_app {vulkan, &Profiler::one()};
 
 	std::thread t1 {
-		[&rt_app]() {
-			rt_app.run();
+		[&]() {
+			main_app.run();
 		}
 	};
 
-	/* std::thread t2 {
-		[&papp]() {
-			papp.run();
+	std::thread t2 {
+		[&]() {
+			profiler_app.run();
 		}
-	}; */
+	};
 
 	t1.join();
-	// t2.join();	// TODO: terminate now method
+
+	profiler_app.terminate_now();
+	t2.join();
 
 	delete vulkan;
 }
@@ -139,7 +230,7 @@ void RTApp::keyboard_handler(void *user, const io::KeyboardEvent &event)
 // Mouse movement
 void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 {
-	static const int drag_button = GLFW_MOUSE_BUTTON_LEFT;
+	static const int drag_button = GLFW_MOUSE_BUTTON_MIDDLE;
 
 	static const float sensitivity = 0.001f;
 

@@ -8,7 +8,7 @@
 #include <vulkan/vulkan_core.h>
 
 // Engine macros
-// #define KOBRA_VALIDATION_LAYERS
+#define KOBRA_VALIDATION_LAYERS
 #define KOBRA_ERROR_ONLY
 #define KOBRA_THROW_ERROR
 
@@ -38,7 +38,6 @@ extern std::string scene_path;
 
 // TODO: focus on adding objects to the scene (spheres, boxes, models)
 // TODO: RT sampling sphere lights
-// TODO: mouse panning, not FPS
 // TODO: input window for RT Capture (etner # of samples, ect)
 
 // Main class
@@ -274,14 +273,14 @@ class RTApp :  public BaseApp {
 		std::string name = eptr->name();
 		scene[name]->transform() = transform;
 	}
-	
+
 	// Keyboard handler
 	static void keyboard_handler(void *, const io::KeyboardEvent &);
 
 	// Mouve camera
 	static void mouse_movement(void *, const io::MouseEvent &);
 
-	void create_scene() {
+	/* void create_scene() {
 		Model model("resources/benchmark/suzanne.obj");
 
 		Mesh box = Mesh::make_box({1, -1, 3.0}, {1, 1, 1});
@@ -390,13 +389,13 @@ class RTApp :  public BaseApp {
 		});
 
 		scene.save(scene_path);
-	}
+	} */
 public:
 	// TODO: just remove the option of no depth buffer (always use depth buffer)
 	RTApp(Vulkan *vk) : BaseApp({
 		vk,
 		1000, 1000, 2,
-		"RTApp"
+		"RT App"
 	}, true) {
 		// Construct camera
 		camera = Camera {

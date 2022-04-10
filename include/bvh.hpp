@@ -110,8 +110,8 @@ public:
 		// Allocate buffer
 		BFM_Settings nodes_settings {
 			.size = 1024,
+			.usage_type = BFM_WRITE_ONLY,
 			.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-			.usage_type = BFM_WRITE_ONLY
 		};
 
 		_bf_nodes = Buffer4f(ctx, nodes_settings);
@@ -318,7 +318,7 @@ public:
 			node->write(&_bf_nodes);
 		_bf_nodes.sync_upload();
 	}
-	
+
 	// Clear the buffer
 	void clear() {
 		_bf_nodes.clear();

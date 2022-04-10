@@ -70,18 +70,15 @@ public:
 		}
 
 		// Write the material
-		_material.write_material(lp.materials);
+		_material.serialize(lp.materials);
 
-		// TODO: method for this?
-		if (_material.albedo_sampler) {
-			std::cout << "Writing albedo texture, source = " << _material.albedo_source << std::endl;
-			lp.albedo_samplers[obj_id] = _material.albedo_sampler->get_image_info();
-		}
+		auto albedo_descriptor = _material.get_albedo_descriptor();
+		if (albedo_descriptor)
+			lp.albedo_samplers[id - 1] = albedo_descriptor.value();
 
-		if (_material.normal_sampler) {
-			std::cout << "Writing normal texture, source = " << _material.normal_source << std::endl;
-			lp.normal_samplers[obj_id] = _material.normal_sampler->get_image_info();
-		}
+		auto normal_descriptor = _material.get_normal_descriptor();
+		if (normal_descriptor)
+			lp.normal_samplers[id - 1] = normal_descriptor.value();
 
 		// Write the transform
 		lp.transforms->push_back(transform().matrix());

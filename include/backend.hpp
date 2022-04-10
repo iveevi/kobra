@@ -31,12 +31,6 @@ const uint32_t HEIGHT = 600;
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
-// Extra aliases
-using DSLBinding = VkDescriptorSetLayoutBinding;
-
-using VertexBinding = VkVertexInputBindingDescription;
-using VertexAttribute = VkVertexInputAttributeDescription;
-
 // TODO: aux class which stores device and physcial device
 // (and other per device objects)
 class Vulkan {
@@ -48,6 +42,9 @@ public:
 	using DS = VkDescriptorSet;
 	using DSL = VkDescriptorSetLayout;
 	using DSLB = VkDescriptorSetLayoutBinding;
+
+	using VB = VkVertexInputBindingDescription;
+	using VA = VkVertexInputAttributeDescription;
 
 	///////////////////////
 	// Public structures //
@@ -98,24 +95,24 @@ public:
 
 	// Pipeline creation structure
 	struct PipelineInfo {
-		Swapchain				swapchain;
+		Swapchain		swapchain;
 
-		VkRenderPass				render_pass;
+		VkRenderPass		render_pass;
 
-		VkShaderModule				vert;
-		VkShaderModule				frag;
+		VkShaderModule		vert;
+		VkShaderModule		frag;
 
-		std::vector <VkDescriptorSetLayout>	dsls;
+		std::vector <DSL>	dsls;
 
-		VertexBinding				vertex_binding;
-		std::vector <VertexAttribute>		vertex_attributes;
+		VB			vertex_binding;
+		std::vector <VA>	vertex_attributes;
 
-		size_t					push_consts;
-		VkPushConstantRange *			push_consts_range;
+		size_t			push_consts;
+		VkPushConstantRange	*push_consts_range;
 
-		bool					depth_test;
+		bool			depth_test;
 
-		VkPrimitiveTopology			topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+		VkPrimitiveTopology	topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
 		struct {
 			// TODO: make floats
@@ -153,7 +150,7 @@ public:
 				modules.push_back(make_shader(path));
 			return modules;
 		}
-		
+
 		// Create descritpor set layout
 		DSL make_dsl(const std::vector <DSLB> &bindings) const {
 			return vk->make_descriptor_set_layout(device, bindings);
@@ -336,9 +333,6 @@ public:
 				.basePipelineIndex = -1
 			};
 
-			/* if (info.depth_test)
-				pipeline_info.pDepthStencilState = &depth_stencil; */
-
 			VkPipeline pipeline;
 			result = vkCreateGraphicsPipelines(
 				vk_device(),
@@ -350,7 +344,8 @@ public:
 			);
 
 			if (result != VK_SUCCESS) {
-				throw std::runtime_error("failed to create graphics pipeline!");
+				KOBRA_LOG_FUNC(error) << "Failed to create graphics pipeline!\n";
+				return {VK_NULL_HANDLE, VK_NULL_HANDLE};
 			}
 
 			return {pipeline, pipeline_layout};

@@ -308,7 +308,7 @@ std::optional <Mesh> Mesh::from_file(const Vulkan::Context &ctx,
 			common::get_directory(scene_file)
 		);
 
-		Model model(source);
+		const Model &model = Model::load(source);
 		mesh = model[source_index];
 	}
 

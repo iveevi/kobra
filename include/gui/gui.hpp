@@ -16,14 +16,15 @@ namespace kobra {
 
 // Core definitions for GUI
 namespace gui {
+
 // Vertex data
 struct Vertex {
 	glm::vec2 pos;
 	glm::vec3 color;
 
 	// Get vertex binding description
-	static VertexBinding vertex_binding() {
-		return VertexBinding {
+	static Vulkan::VB vertex_binding() {
+		return Vulkan::VB {
 			.binding = 0,
 			.stride = sizeof(Vertex),
 			.inputRate = VK_VERTEX_INPUT_RATE_VERTEX
@@ -31,16 +32,16 @@ struct Vertex {
 	}
 
 	// Get vertex attribute descriptions
-	static std::vector <VertexAttribute> vertex_attributes() {
+	static std::vector <Vulkan::VA> vertex_attributes() {
 		return {
-			VertexAttribute {
+			Vulkan::VA {
 				.location = 0,
 				.binding = 0,
 				.format = VK_FORMAT_R32G32_SFLOAT,
 				.offset = offsetof(Vertex, pos)
 			},
 
-			VertexAttribute {
+			Vulkan::VA {
 				.location = 1,
 				.binding = 0,
 				.format = VK_FORMAT_R32G32B32_SFLOAT,

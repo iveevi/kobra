@@ -2,6 +2,13 @@
 
 namespace kobra {
 
+/////////////////////////////
+// Static member variables //
+/////////////////////////////
+
+// Static cache of previously loaded models
+std::unordered_map <std::string, Model> Model::_cache;
+
 ////////////////////
 // Assimp helpers //
 ////////////////////
@@ -133,6 +140,24 @@ Mesh &Model::operator[](size_t i)
 const Mesh &Model::operator[](size_t i) const
 {
 	return _meshes[i];
+}
+
+////////////////////
+// Static methods //
+////////////////////
+
+// Loading a model from a file, accounting for cache
+const Model &Model::load(const std::string &path)
+{
+	// Check if the model is already loaded
+	auto it = _cache.find(path);
+	if (it != _cache.end())
+		return it->second;
+
+	// Add the model to the cache
+	_cache[path] = Model(path);
+
+	return _cache[path];
 }
 
 }

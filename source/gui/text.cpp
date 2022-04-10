@@ -21,21 +21,21 @@ void Text::refresh()
 // Create the pipeline
 void TextRender::_make_pipeline(const App::Window &wctx, const VkRenderPass &render_pass)
 {
-	/* Load all shaders
+	// Load all shaders
 	auto shaders = wctx.context.make_shaders({
-		"shaders/bin/gui/basic_vert.spv",
-		"shaders/bin/gui/basic_frag.spv"
-	}); */
+		"shaders/bin/gui/glyph_vert.spv",
+		"shaders/bin/gui/bitmap_frag.spv"
+	});
 
-	// Create pipelines
+	/* Create pipeline
 	Vulkan::PipelineInfo grp_info {
 		.swapchain = wctx.swapchain,
 		.render_pass = render_pass,
-		
+
 		// TODO: shader module class for resource management
-		.vert = _vertex,
-		.frag = _fragment,
-		
+		.vert = shaders[0],
+		.frag = shaders[1],
+
 		.dsls = {_layout},
 
 		.vertex_binding = Glyph::Vertex::vertex_binding(),
@@ -53,34 +53,27 @@ void TextRender::_make_pipeline(const App::Window &wctx, const VkRenderPass &ren
 		}
 	};
 
-	auto ppl = wctx.context.make_pipeline(grp_info);
-	_pipeline = ppl.pipeline;
-	_pipeline_layout = ppl.layout;
+	_pipeline = wctx.context.make_pipeline(grp_info); */
 
-	/* auto context = wctx.context;
+	auto context = wctx.context;
 	auto swapchain = wctx.swapchain;
-
 	// Create pipeline stages
 	VkPipelineShaderStageCreateInfo vertex {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 		.stage = VK_SHADER_STAGE_VERTEX_BIT,
-		.module = _vertex,
+		.module = shaders[0],
 		.pName = "main"
 	};
-
 	VkPipelineShaderStageCreateInfo fragment {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 		.stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-		.module = _fragment,
+		.module = shaders[1],
 		.pName = "main"
 	};
-
 	VkPipelineShaderStageCreateInfo shader_stages[] = { vertex, fragment };
-
 	// Vertex input
 	auto binding_description = gui::Glyph::Vertex::vertex_binding();
 	auto attribute_descriptions = gui::Glyph::Vertex::vertex_attributes();
-
 	VkPipelineVertexInputStateCreateInfo vertex_input {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
 		.vertexBindingDescriptionCount = 1,
@@ -88,14 +81,12 @@ void TextRender::_make_pipeline(const App::Window &wctx, const VkRenderPass &ren
 		.vertexAttributeDescriptionCount = static_cast <uint32_t> (attribute_descriptions.size()),
 		.pVertexAttributeDescriptions = attribute_descriptions.data()
 	};
-
 	// Input assembly
 	VkPipelineInputAssemblyStateCreateInfo input_assembly {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
 		.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
 		.primitiveRestartEnable = VK_FALSE
 	};
-
 	// Viewport
 	VkViewport viewport {
 		.x = 0.0f,
@@ -105,13 +96,11 @@ void TextRender::_make_pipeline(const App::Window &wctx, const VkRenderPass &ren
 		.minDepth = 0.0f,
 		.maxDepth = 1.0f
 	};
-
 	// Scissor
 	VkRect2D scissor {
 		.offset = {0, 0},
 		.extent = swapchain.extent
 	};
-
 	VkPipelineViewportStateCreateInfo viewport_state {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
 		.viewportCount = 1,
@@ -119,7 +108,6 @@ void TextRender::_make_pipeline(const App::Window &wctx, const VkRenderPass &ren
 		.scissorCount = 1,
 		.pScissors = &scissor
 	};
-
 	// Rasterizer
 	// TODO: method
 	VkPipelineRasterizationStateCreateInfo rasterizer {
@@ -132,7 +120,6 @@ void TextRender::_make_pipeline(const App::Window &wctx, const VkRenderPass &ren
 		.depthBiasEnable = VK_FALSE,
 		.lineWidth = 1.0f
 	};
-
 	// Multisampling
 	// TODO: method
 	VkPipelineMultisampleStateCreateInfo multisampling {
@@ -144,7 +131,6 @@ void TextRender::_make_pipeline(const App::Window &wctx, const VkRenderPass &ren
 		.alphaToCoverageEnable = VK_FALSE,
 		.alphaToOneEnable = VK_FALSE
 	};
-
 	// Color blending
 	VkPipelineColorBlendAttachmentState color_blend_attachment {
 		.blendEnable = VK_TRUE,
@@ -159,7 +145,6 @@ void TextRender::_make_pipeline(const App::Window &wctx, const VkRenderPass &ren
 			| VK_COLOR_COMPONENT_B_BIT
 			| VK_COLOR_COMPONENT_A_BIT
 	};
-
 	VkPipelineColorBlendStateCreateInfo color_blending {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
 		.logicOpEnable = VK_FALSE,
@@ -168,7 +153,6 @@ void TextRender::_make_pipeline(const App::Window &wctx, const VkRenderPass &ren
 		.pAttachments = &color_blend_attachment,
 		.blendConstants = {0.0f, 0.0f, 0.0f, 0.0f}
 	};
-
 	// Pipeline layout
 	VkPipelineLayoutCreateInfo pipeline_layout_info {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -176,7 +160,6 @@ void TextRender::_make_pipeline(const App::Window &wctx, const VkRenderPass &ren
 		.pSetLayouts = &_layout,
 		.pushConstantRangeCount = 0
 	};
-
 	VkPipelineLayout pipeline_layout;
 	VkResult result = vkCreatePipelineLayout(
 		context.vk_device(),
@@ -184,10 +167,23 @@ void TextRender::_make_pipeline(const App::Window &wctx, const VkRenderPass &ren
 		nullptr,
 		&pipeline_layout
 	);
-
 	if (result != VK_SUCCESS) {
 		throw std::runtime_error("failed to create pipeline layout!");
 	}
+
+	// Depth stencil if requested
+	VkPipelineDepthStencilStateCreateInfo depth_stencil {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+		.depthTestEnable = VK_FALSE,
+		.depthWriteEnable = VK_FALSE,
+		.depthCompareOp = VK_COMPARE_OP_LESS,
+		.depthBoundsTestEnable = VK_FALSE,
+		.stencilTestEnable = VK_FALSE,
+		.front = {},
+		.back = {},
+		.minDepthBounds = 0.0f,
+		.maxDepthBounds = 1.0f
+	};
 
 	// Graphics pipeline
 	VkGraphicsPipelineCreateInfo pipeline_info {
@@ -199,7 +195,7 @@ void TextRender::_make_pipeline(const App::Window &wctx, const VkRenderPass &ren
 		.pViewportState = &viewport_state,
 		.pRasterizationState = &rasterizer,
 		.pMultisampleState = &multisampling,
-		.pDepthStencilState = nullptr,
+		.pDepthStencilState = &depth_stencil,
 		.pColorBlendState = &color_blending,
 		.pDynamicState = nullptr,
 		.layout = pipeline_layout,
@@ -208,7 +204,6 @@ void TextRender::_make_pipeline(const App::Window &wctx, const VkRenderPass &ren
 		.basePipelineHandle = VK_NULL_HANDLE,
 		.basePipelineIndex = -1
 	};
-
 	VkPipeline pipeline;
 	result = vkCreateGraphicsPipelines(
 		context.vk_device(),
@@ -218,16 +213,16 @@ void TextRender::_make_pipeline(const App::Window &wctx, const VkRenderPass &ren
 		nullptr,
 		&pipeline
 	);
-
 	if (result != VK_SUCCESS) {
 		throw std::runtime_error("failed to create graphics pipeline!");
 	}
-
 	Logger::ok("[TextRender] Pipeline created");
 
-	// Assign pipeline info
+	/* Assign pipeline info
 	_pipeline = pipeline;
 	_pipeline_layout = pipeline_layout; */
+
+	_pipeline = {pipeline, pipeline_layout};
 }
 
 }

@@ -2,8 +2,9 @@
 #define MODEL_H_
 
 // Standard headers
-#include <vector>
 #include <fstream>
+#include <unordered_map>
+#include <vector>
 
 // Assimp headers
 #include <assimp/Importer.hpp>
@@ -22,19 +23,24 @@ class Model {
 protected:
 	// Filename
 	std::string		_filename;
+
 	// Meshes
 	std::vector <Mesh>	_meshes;
 
 	// Assimp helpers
 	void _process_node(aiNode *, const aiScene *);
 	void _process_mesh(aiMesh *, const aiScene *);
+
+	// Static cache of previously loaded models
+	static std::unordered_map <std::string, Model> _cache;
+
+	// These constructors are private to force
+	// 	the use of the factory method
+	Model(const char *s);
+	Model(const std::string &);
 public:
 	// Default constructor
 	Model() = default;
-
-	// Constructors
-	Model(const char *s);
-	Model(const std::string &);
 
 	// Properties
 	size_t mesh_count() const;
@@ -42,6 +48,9 @@ public:
 
 	Mesh &operator[](size_t);
 	const Mesh &operator[](size_t) const;
+
+	// Load model
+	static const Model &load(const std::string &);
 };
 
 }

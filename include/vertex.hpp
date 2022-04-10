@@ -28,10 +28,10 @@ struct Vertex {
 	Vertex(const glm::vec3 &, const glm::vec3 &, const glm::vec2 &);
 
 	// Vertex binding
-	static VertexBinding vertex_binding();
+	static Vulkan::VB vertex_binding();
 
 	// Get vertex attribute descriptions
-	static std::vector <VertexAttribute> vertex_attributes();
+	static std::vector <Vulkan::VA> vertex_attributes();
 };
 
 // Aliases

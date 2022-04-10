@@ -274,6 +274,7 @@ public:
 	virtual void terminate() {}
 
 	// Present frame
+	// TODO: add a present method in backend
 	void present() {
 		// Wait for the next image in the swap chain
 		vkWaitForFences(

@@ -97,8 +97,8 @@ public:
 				_material.albedo,
 				_material.shading_type,
 				(float) rp.highlight,
-				(float) (_material.albedo_sampler != nullptr),
-				(float) (_material.normal_sampler != nullptr),
+				(float) _material.has_albedo(),
+				(float) _material.has_normal(),
 			}
 		};
 

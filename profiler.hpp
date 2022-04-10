@@ -12,7 +12,7 @@ using namespace kobra;
 
 // Profiler application
 // TODO: turn into an engine module
-class ProfilerApplication : public kobra::App {
+class ProfilerApp : public kobra::App {
 	// Vulkan structures
 	VkRenderPass			render_pass;
 	VkCommandPool			command_pool;
@@ -34,10 +34,15 @@ class ProfilerApplication : public kobra::App {
 
 	// Objects to save
 	gui::Text *			t1;
+
+	// Depth resources
+	VkImage 			depth_image;
+	VkDeviceMemory			depth_image_memory;
+	VkImageView			depth_image_view;
 public:
 	// TODO: base app class that initializes vulkun structures and does the
 	// presenting
-	ProfilerApplication(Vulkan *vk, Profiler *p) : App({
+	ProfilerApp(Vulkan *vk, Profiler *p) : App({
 		.ctx = vk,
 		.width = 800,
 		.height = 600,
@@ -49,11 +54,33 @@ public:
 			context.device,
 			swapchain,
 			VK_ATTACHMENT_LOAD_OP_CLEAR,
-			VK_ATTACHMENT_STORE_OP_STORE
+			VK_ATTACHMENT_STORE_OP_STORE,
+			true
 		);
 
+		std::vector <VkImageView> extras;
+
+		// Create depth image
+		VkFormat depth_format = context.find_depth_format();
+		context.vk->make_image(context.phdev, context.vk_device(),
+			width, height, depth_format,
+			VK_IMAGE_TILING_OPTIMAL,
+			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			depth_image, depth_image_memory
+		);
+
+		// Create depth image view
+		depth_image_view = context.vk->make_image_view(
+			context.vk_device(),
+			depth_image, depth_format,
+			VK_IMAGE_ASPECT_DEPTH_BIT
+		);
+
+		extras.push_back(depth_image_view);
+
 		// Create framebuffers
-		context.vk->make_framebuffers(context.device, swapchain, render_pass);
+		context.vk->make_framebuffers(context.device, swapchain, render_pass, extras);
 
 		// Create command pool
 		// TODO: context method

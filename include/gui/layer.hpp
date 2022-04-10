@@ -62,14 +62,14 @@ class Layer {
 	void _alloc_rects() {
 		BFM_Settings vb_settings {
 			.size = 1024,
+			.usage_type = BFM_WRITE_ONLY,
 			.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-			.usage_type = BFM_WRITE_ONLY
 		};
 
 		BFM_Settings ib_settings {
 			.size = 1024,
+			.usage_type = BFM_WRITE_ONLY,
 			.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-			.usage_type = BFM_WRITE_ONLY
 		};
 
 		rects.vb = VertexBuffer(_wctx.context, vb_settings);
@@ -94,15 +94,15 @@ public:
 			"shaders/bin/gui/basic_vert.spv",
 			"shaders/bin/gui/basic_frag.spv"
 		});
-	
+
 		// Create pipelines
 		Vulkan::PipelineInfo grp_info {
 			.swapchain = wctx.swapchain,
 			.render_pass = _render_pass,
-			
+
 			.vert = shaders[0],
 			.frag = shaders[1],
-			
+
 			.dsls = {},
 
 			.vertex_binding = Vertex::vertex_binding(),
@@ -166,7 +166,10 @@ public:
 	void render(const VkCommandBuffer &cmd_buffer, const VkFramebuffer &framebuffer) {
 		// Start render pass
 		// TODO: vulkan method
-		VkClearValue clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
+		VkClearValue clear_colors[] {
+			{0.0f, 0.0f, 0.0f, 1.0f}, // Color
+			{1.0f, 0.0f, 0.0f, 1.0f}  // Depth
+		};
 
 		VkRenderPassBeginInfo render_pass_info {
 			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -176,8 +179,8 @@ public:
 				.offset = {0, 0},
 				.extent = _wctx.swapchain.extent
 			},
-			.clearValueCount = 1,
-			.pClearValues = &clear_color
+			.clearValueCount = 2,
+			.pClearValues = clear_colors
 		};
 
 		vkCmdBeginRenderPass(cmd_buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);

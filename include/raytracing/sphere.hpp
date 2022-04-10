@@ -46,13 +46,15 @@ public:
 		});
 		
 		// Write the material
-		_material.write_material(lp.materials);
-		std::cout << "LATCHING RT SPHERE: material albedo source: "
-			<< _material.albedo_source << std::endl;
+		_material.serialize(lp.materials);
 		
-		// TODO: method for this?
-		if (_material.albedo_sampler)
-			lp.albedo_samplers[obj_id] = _material.albedo_sampler->get_image_info();
+		auto albedo_descriptor = _material.get_albedo_descriptor();
+		if (albedo_descriptor)
+			lp.albedo_samplers[id - 1] = albedo_descriptor.value();
+
+		auto normal_descriptor = _material.get_normal_descriptor();
+		if (normal_descriptor)
+			lp.normal_samplers[id - 1] = normal_descriptor.value();
 
 		// Write the transform
 		// TODO: do we still need this?

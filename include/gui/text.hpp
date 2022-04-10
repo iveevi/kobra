@@ -125,11 +125,7 @@ private:
 	Font					_font;
 
 	// Vulkan structures
-	VkPipeline				_pipeline;
-	VkPipelineLayout			_pipeline_layout;
-
-	VkShaderModule				_vertex;
-	VkShaderModule				_fragment;
+	Vulkan::Pipeline			_pipeline;
 
 	// Descriptors
 	VkDescriptorSetLayout			_layout;
@@ -159,7 +155,7 @@ private:
 	}
 public:
 	// Default constructor
-	TextRender() {}
+	TextRender() = default;
 
 	// Constructor from paht to font file
 	TextRender(const App::Window &wctx, const VkRenderPass &render_pass, const std::string &path) {
@@ -168,11 +164,8 @@ public:
 
 		// Create the descriptor set
 		// TODO: remove later, use the ones from font
-		_layout = Glyph::make_bitmap_dsl(context);
-
-		// Load shaders
-		_vertex = context.vk->make_shader(context.device, "shaders/bin/gui/glyph_vert.spv");
-		_fragment = context.vk->make_shader(context.device, "shaders/bin/gui/bitmap_frag.spv");
+		// _layout = Glyph::make_bitmap_dsl(context);
+		_layout = context.make_dsl({Glyph::bitmap_binding});
 
 		// Allocate vertex buffer
 		_vbuf = Glyph::VertexBuffer(context, Glyph::vb_settings);
@@ -416,10 +409,9 @@ public:
 	// Render text
 	void render(const Vulkan::Context &ctx, const VkCommandPool &cpool, const VkCommandBuffer &cmd) {
 		// Bind pipeline
-		vkCmdBindPipeline(
-			cmd,
+		vkCmdBindPipeline(cmd,
 			VK_PIPELINE_BIND_POINT_GRAPHICS,
-			_pipeline
+			_pipeline.pipeline
 		);
 
 		// Update vertex buffer
@@ -432,12 +424,11 @@ public:
 			VkDescriptorSet set = _font.glyph_ds(c.first);
 
 			// Bind descriptor set
-			vkCmdBindDescriptorSets(
-				cmd,
+			// TODO: vulkan backend function
+			vkCmdBindDescriptorSets(cmd,
 				VK_PIPELINE_BIND_POINT_GRAPHICS,
-				_pipeline_layout,
-				0,
-				1, &set,
+				_pipeline.layout,
+				0, 1, &set,
 				0, nullptr
 			);
 

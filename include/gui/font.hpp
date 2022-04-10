@@ -26,6 +26,7 @@ namespace kobra {
 namespace gui {
 
 // Glyph structure
+// TODO: separate header
 // TODO: text class will hold shaders and stuff
 class Glyph {
 public:
@@ -34,8 +35,8 @@ public:
 		glm::vec4 bounds;
 
 		// Get vertex binding description
-		static VertexBinding vertex_binding() {
-			return VertexBinding {
+		static Vulkan::VB vertex_binding() {
+			return Vulkan::VB {
 				.binding = 0,
 				.stride = sizeof(Vertex),
 				.inputRate = VK_VERTEX_INPUT_RATE_VERTEX
@@ -43,9 +44,9 @@ public:
 		}
 
 		// Get vertex attribute descriptions
-		static std::vector <VertexAttribute> vertex_attributes() {
+		static std::vector <Vulkan::VA> vertex_attributes() {
 			return {
-				VertexAttribute {
+				Vulkan::VA {
 					.location = 0,
 					.binding = 0,
 					.format = VK_FORMAT_R32G32B32A32_SFLOAT,
@@ -100,54 +101,37 @@ public:
 	// Static buffer properties
 	static constexpr BFM_Settings vb_settings {
 		.size = 1024,
+		.usage_type = BFM_WRITE_ONLY,
 		.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-		.usage_type = BFM_WRITE_ONLY
 	};
 
 	// TODO: remove
 	static constexpr BFM_Settings ib_settings {
 		.size = 1024,
+		.usage_type = BFM_WRITE_ONLY,
 		.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-		.usage_type = BFM_WRITE_ONLY
 	};
 
-	// Descriptor sets for shader
-	static constexpr VkDescriptorSetLayoutBinding bitmap_dsl {
+	// Descriptor set layout binding
+	static constexpr Vulkan::DSLB bitmap_binding {
 		.binding = 0,
 		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 		.descriptorCount = 1,
 		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
 	};
 
-	// Make descriptor set layout
-	static VkDescriptorSetLayout make_bitmap_dsl(const Vulkan::Context &ctx) {
-		static VkDescriptorSetLayout dsl = VK_NULL_HANDLE;
-
-		if (dsl != VK_NULL_HANDLE)
-			return dsl;
-
-		// Create layout if not created
-		dsl = ctx.vk->make_descriptor_set_layout(
-			ctx.device,
-			{ bitmap_dsl }
-		);
-
-		return dsl;
+	/* Make descriptor set layout
+	[[deprecated("Manually create the descriptor set layout using bitmap_binding")]]
+	static Vulkan::DSL make_bitmap_dsl(const Vulkan::Context &ctx) {
+		return ctx.make_dsl({bitmap_binding});
 	}
 
 	// Make descriptor set
+	// TODO: this is not a very nice method
+	[[deprecated("Manually create the descriptor set using bitmap_binding")]]
 	static VkDescriptorSet make_bitmap_ds(const Vulkan::Context &ctx, const VkDescriptorPool &pool) {
-		VkDescriptorSet ds = VK_NULL_HANDLE;
-
-		// Create descriptor set
-		ds = ctx.vk->make_descriptor_set(
-			ctx.device,
-			pool,
-			make_bitmap_dsl(ctx)
-		);
-
-		return ds;
-	}
+		return ctx.make_ds(pool, make_bitmap_dsl(ctx));
+	} */
 };
 
 // Font class holds information
@@ -198,6 +182,11 @@ class Font {
 		size_t total_points = 0;
 		size_t total_cells = 0;
 
+		// Create DSL for general Glyph
+		Vulkan::DSL general_dsl = ctx.make_dsl({
+			Glyph::bitmap_binding
+		});
+
 		// Add space character
 		{
 			TexturePacket tp = make_texture(
@@ -221,7 +210,8 @@ class Font {
 
 			Sampler sampler(ctx, tp);
 
-			VkDescriptorSet ds = Glyph::make_bitmap_ds(ctx, dpool);
+			// VkDescriptorSet ds = Glyph::make_bitmap_ds(ctx, dpool);
+			Vulkan::DS ds = ctx.make_ds(dpool, general_dsl);
 			sampler.bind(ds, 0);
 
 			_glyph_ds[' '] = ds;
@@ -285,7 +275,8 @@ class Font {
 			_bitmaps[c] = tp;
 			_metrics[c] = face->glyph->metrics;
 
-			VkDescriptorSet ds = Glyph::make_bitmap_ds(ctx, dpool);
+			// VkDescriptorSet ds = Glyph::make_bitmap_ds(ctx, dpool);
+			Vulkan::DS ds = ctx.make_ds(dpool, general_dsl);
 			Sampler sampler(ctx, tp);
 			sampler.bind(ds, 0);
 
