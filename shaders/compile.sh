@@ -2,11 +2,11 @@
 mkdir -p bin bin/gui bin/generic bin/raster
 
 # Compile GENERIC mode shaders
-glslc -fshader-stage=compute rt/pixel.glsl -o bin/generic/pixel.spv
-glslc -fshader-stage=vertex postproc/postproc.vert -o bin/generic/pp_vert.spv
-glslc -fshader-stage=fragment postproc/postproc.frag -o bin/generic/pp_frag.spv
+# glslc -fshader-stage=compute rt/pixel.glsl -o bin/generic/pixel.spv
+# glslc -fshader-stage=vertex postproc/postproc.vert -o bin/generic/pp_vert.spv
+# glslc -fshader-stage=fragment postproc/postproc.frag -o bin/generic/pp_frag.spv
 
-glslc -fshader-stage=compute rt/mesh.glsl -o bin/generic/mesh.spv
+glslc -fshader-stage=compute rt/path_trace.glsl -o bin/generic/path_trace.spv
 glslc -fshader-stage=vertex rt/postproc/postproc.vert -o bin/generic/postproc_vert.spv
 glslc -fshader-stage=fragment rt/postproc/postproc.frag -o bin/generic/postproc_frag.spv
 

@@ -2,7 +2,7 @@
 #define KOBRA_RT_MESH_H_
 
 // Engine headers
-#include "../../shaders/rt/mesh_bindings.h"
+#include "../../shaders/rt/bindings.h"
 #include "../app.hpp"
 #include "../buffer_manager.hpp"
 #include "../mesh.hpp"

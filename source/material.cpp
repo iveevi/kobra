@@ -1,4 +1,9 @@
+// Standard headers
+#include <thread>
+
+// Engine headers
 #include "../include/material.hpp"
+#include "../include/profiler.hpp"
 
 namespace kobra {
 
@@ -208,22 +213,38 @@ std::optional <Material> Material::from_file
 	mat.shading_type = shading_type;
 	mat.ior = ior;
 
+	// TODO: create a texture loader agent to handle multithreaded textures
+	std::thread *albdeo_loader = nullptr;
 	if (albedo_source != "0") {
-		albedo_source = common::get_path(
-			albedo_source,
-			common::get_directory(scene_file)
-		);
+		auto load_albedo = [&]() {
+			Profiler::one().frame("Loading albedo texture");
+			albedo_source = common::get_path(
+				albedo_source,
+				common::get_directory(scene_file)
+			);
 
-		mat.set_albedo(ctx, command_pool, albedo_source);
+			mat.set_albedo(ctx, command_pool, albedo_source);
+			Profiler::one().end();
+		};
+
+		albdeo_loader = new std::thread(load_albedo);
 	}
 
 	if (normal_source != "0") {
+		Profiler::one().frame("Loading normal texture");
 		normal_source = common::get_path(
 			normal_source,
 			common::get_directory(scene_file)
 		);
 
 		mat.set_normal(ctx, command_pool, normal_source);
+		Profiler::one().end();
+	}
+
+	// Wait for albedo and normal to load
+	if (albdeo_loader != nullptr) {
+		albdeo_loader->join();
+		delete albdeo_loader;
 	}
 
 	// Return material

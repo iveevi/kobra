@@ -9,9 +9,8 @@
 // Engine headers
 #include "buffer_manager.hpp"
 #include "core.hpp"
-#include "texture.hpp"
+#include "sampler.hpp"
 #include "types.hpp"
-#include "world_update.hpp"
 #include "common.hpp"
 
 namespace kobra {

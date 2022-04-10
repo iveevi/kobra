@@ -88,7 +88,7 @@ public:
 
 	// Pretty print frame
 	static std::string pretty(const Frame &frame, double ptime = -1.0f, size_t indent = 0) {
-		static std::string indent_str = "        ";
+		static std::string indent_str = "  ";
 
 		std::string str;
 

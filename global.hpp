@@ -435,14 +435,12 @@ public:
 
 		// GUI layer
 		// TODO: be able to load gui elements from scene
-		// TODO: naming objects
 		gui_layer = gui::Layer(window, VK_ATTACHMENT_LOAD_OP_LOAD);
 		initialize_gui();
 
 		// Add event listeners
 		window.keyboard_events->subscribe(keyboard_handler, this);
 		window.mouse_events->subscribe(mouse_movement, &camera);
-		// window.cursor_mode(GLFW_CURSOR_DISABLED);
 
 		// Show results of profiling
 		auto frame = Profiler::one().pop();

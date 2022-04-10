@@ -292,6 +292,7 @@ public:
 			glm::vec4 bbox = gui::get_bounding_box(wborder->children);
 			bbox += 0.025f * glm::vec4 {-1, -1, 1, 1};
 			wborder->set_bounds(bbox);
+			std::cout << "Got frame: " << frame.name << std::endl;
 		}
 
 		// Begin recording

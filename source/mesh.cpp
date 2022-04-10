@@ -1,6 +1,7 @@
 #include "../include/common.hpp"
 #include "../include/mesh.hpp"
 #include "../include/model.hpp"
+#include "../include/profiler.hpp"
 
 namespace kobra {
 
@@ -283,6 +284,8 @@ std::optional <Mesh> Mesh::from_file(const Vulkan::Context &ctx,
 	std::string source = buf;
 
 	// Load mesh
+	Profiler::one().frame("Loading mesh contents");
+
 	Mesh mesh;
 	if (source == "0") {
 		// Load raw mesh
@@ -311,8 +314,10 @@ std::optional <Mesh> Mesh::from_file(const Vulkan::Context &ctx,
 		const Model &model = Model::load(source);
 		mesh = model[source_index];
 	}
+	Profiler::one().end();
 
 	// Read material header, then material
+	Profiler::one().frame("Loading mesh material");
 	std::getline(file, line);
 	if (line != "[MATERIAL]") {
 		KOBRA_LOG_FUNC(error) << "Expected material header\n";
@@ -324,6 +329,7 @@ std::optional <Mesh> Mesh::from_file(const Vulkan::Context &ctx,
 		return std::nullopt;
 
 	mesh.set_material(*mat);
+	Profiler::one().end();
 
 	// Return mesh
 	return mesh;

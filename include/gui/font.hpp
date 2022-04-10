@@ -18,7 +18,7 @@
 // Engine headers
 #include "../common.hpp"
 #include "../logger.hpp"
-#include "../texture.hpp"
+#include "../sampler.hpp"
 #include "gui.hpp"
 
 namespace kobra {

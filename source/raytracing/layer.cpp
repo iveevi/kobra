@@ -176,7 +176,7 @@ void Layer::_init_mesh_compute_pipeline()
 	VkPipeline mesh_pp;
 
 	VkShaderModule mesh_shader_module = _context.make_shader(
-		"shaders/bin/generic/mesh.spv"
+		"shaders/bin/generic/path_trace.spv"
 	);
 
 	VkComputePipelineCreateInfo mesh_pp_ci = {

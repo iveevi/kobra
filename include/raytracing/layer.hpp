@@ -6,7 +6,7 @@
 #include <vulkan/vulkan_core.h>
 
 // Engine headers
-#include "../../shaders/rt/mesh_bindings.h"
+#include "../../shaders/rt/bindings.h"
 #include "../app.hpp"
 #include "../backend.hpp"
 #include "../bbox.hpp"

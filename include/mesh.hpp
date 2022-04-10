@@ -90,11 +90,13 @@ public:
 			_indices(mesh._indices) {}
 
 	Mesh(const VertexList &vs, const Indices &is,
-			const Transform &t = Transform())
+			const Transform &t = Transform(),
+			bool calculate_tangents = true)
 			: Object(object_type, t),
 			_vertices(vs), _indices(is) {
 		// Process the vertex data
-		_process_vertex_data();
+		if (calculate_tangents)
+			_process_vertex_data();
 	}
 
 	// Properties

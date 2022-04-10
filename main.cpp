@@ -1,7 +1,7 @@
 #include "global.hpp"
 
 // Scene path
-std::string scene_path = "scene.kobra";
+std::string scene_path = "../assets/ruins/scene.kobra";
 
 // Experimental GUI app
 class GUIApp : public BaseApp {
@@ -97,7 +97,6 @@ int main()
 
 	// GUIApp gui_app {vulkan};
 	RTApp main_app {vulkan};
-	ProfilerApp profiler_app {vulkan, &Profiler::one()};
 
 	std::thread t1 {
 		[&]() {
@@ -105,16 +104,7 @@ int main()
 		}
 	};
 
-	std::thread t2 {
-		[&]() {
-			profiler_app.run();
-		}
-	};
-
 	t1.join();
-
-	profiler_app.terminate_now();
-	t2.join();
 
 	delete vulkan;
 }

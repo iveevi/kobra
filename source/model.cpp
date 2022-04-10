@@ -1,4 +1,5 @@
 #include "../include/model.hpp"
+#include "../include/profiler.hpp"
 
 namespace kobra {
 
@@ -101,11 +102,13 @@ Model::Model(const std::string &filename) : _filename(filename)
 	Assimp::Importer importer;
 
 	// Read scene
+	Profiler::one().frame("Assimp readFile");
 	const aiScene *scene = importer.ReadFile(
 		filename, aiProcess_Triangulate
 			| aiProcess_GenSmoothNormals
 			| aiProcess_FlipUVs
 	);
+	Profiler::one().end();
 
 	// Check if the scene was loaded
 	if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE
@@ -115,7 +118,9 @@ Model::Model(const std::string &filename) : _filename(filename)
 	}
 
 	// Process the scene (root node)
+	Profiler::one().frame("Assimp processNode");
 	_process_node(scene->mRootNode, scene);
+	Profiler::one().end();
 }
 
 ////////////////

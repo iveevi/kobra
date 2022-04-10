@@ -1,6 +1,7 @@
 #version 450
 
-#include "../mesh_bindings.h"
+// Import bindings
+#include "../bindings.h"
 
 // TODO: later, pass pixels as a texture sampler
 layout (set = 0, binding = MESH_BINDING_PIXELS, std430) buffer Pixels
