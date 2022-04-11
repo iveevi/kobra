@@ -21,7 +21,7 @@ void Mesh::latch(const LatchingPacket &lp)
 	if (_material.shading_type != SHADING_TYPE_EMISSIVE)
 		return;
 
-	glm::vec3 pos = _transform.apply(centroid());
+	glm::vec3 pos = center();
 	lp.ubo_point_lights->positions
 		[lp.ubo_point_lights->number++] = pos;
 }

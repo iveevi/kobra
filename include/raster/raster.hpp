@@ -52,16 +52,15 @@ struct LatchingPacket {
 
 // Rasterization elements
 struct _element : virtual public Object {
+	// Highlight status
+	bool highlight = false;
+
 	// Virtual destructor
 	virtual ~_element() = default;
 
-	// Latch to layer
-	virtual void latch(const LatchingPacket &) = 0;
-
-	// Get local descriptor set
-	virtual VkDescriptorSet get_local_ds() const = 0;
-
 	// Virtual methods
+	virtual VkDescriptorSet get_local_ds() const = 0;
+	virtual void latch(const LatchingPacket &) = 0;
 	virtual void render(RenderPacket &) = 0;
 };
 

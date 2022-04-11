@@ -109,7 +109,7 @@ public:
 	}
 
 	// Centroid of the mesh
-	glm::vec3 centroid() const {
+	glm::vec3 center() const override {
 		glm::vec3 s {0.0f, 0.0f, 0.0f};
 
 		// Sum the centroids of all triangles
@@ -120,7 +120,7 @@ public:
 		}
 
 		// Divide by the number of triangles
-		return s / (3.0f * triangle_count());
+		return s / (3.0f * triangle_count()) + _transform.position;
 	}
 
 	// Get data
@@ -130,6 +130,61 @@ public:
 
 	const Indices &indices() const {
 		return _indices;
+	}
+
+	// Ray intersection
+	float intersect(const Ray &ray) const override {
+		// Shortest time to intersection so far
+		float t = std::numeric_limits <float> ::max();
+
+		// Lambda helper to calculate the time
+		//	to intersection for a given triangle
+		auto time_to_triangle = [&ray](const glm::vec3 &a,
+				const glm::vec3 b,
+				const glm::vec3 &c) -> float {
+			glm::vec3 e1 = b - a;
+			glm::vec3 e2 = c - a;
+
+			glm::vec3 p = glm::cross(ray.direction, e2);
+			float det = glm::dot(e1, p);
+			if (det > -0.00001f && det < 0.00001f)
+				return -1;
+
+			float inv_det = 1.0f / det;
+			glm::vec3 tvec = ray.origin - a;
+			float u = glm::dot(tvec, p) * inv_det;
+			if (u < 0.0f || u > 1.0f)
+				return -1;
+
+			glm::vec3 q = glm::cross(tvec, e1);
+			float v = glm::dot(ray.direction, q) * inv_det;
+			if (v < 0.0f || u + v > 1.0f)
+				return -1;
+
+			return glm::dot(e2, q) * inv_det;
+		};
+
+		// Iterate over all triangles
+		for (size_t i = 0; i < _indices.size(); i += 3) {
+			// Get the triangle vertices
+			const auto &v1 = _vertices[_indices[i]];
+			const auto &v2 = _vertices[_indices[i + 1]];
+			const auto &v3 = _vertices[_indices[i + 2]];
+
+			auto tv1 = _transform.apply(v1.position);
+			auto tv2 = _transform.apply(v2.position);
+			auto tv3 = _transform.apply(v3.position);
+
+			// Calculate the time to intersection
+			float t_triangle = time_to_triangle(tv1, tv2, tv3);
+
+			// Check if the ray intersects the triangle
+			if (t_triangle > 0.0f && t_triangle < t)
+				t = t_triangle;
+		}
+
+		// Return the time to intersection
+		return t;
 	}
 
 	// Virtual methods

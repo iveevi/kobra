@@ -35,13 +35,16 @@ class Gizmo {
 		// Constructor
 		TransformGizmo(const Vulkan::Context &context) {
 			glm::vec3 pos {0.0f};
-			x_box = new raster::Mesh(context, Mesh::make_box(pos, {1, 0.01, 0.01}));
-			y_box = new raster::Mesh(context, Mesh::make_box(pos, {0.01, 1, 0.01}));
-			z_box = new raster::Mesh(context, Mesh::make_box(pos, {0.01, 0.01, 1}));
+
+			x_box = new raster::Mesh(context, Mesh::make_box(pos, {0.5, 0.01, 0.01}));
+			y_box = new raster::Mesh(context, Mesh::make_box(pos, {0.01, 0.5, 0.01}));
+			z_box = new raster::Mesh(context, Mesh::make_box(pos, {0.01, 0.01, 0.5}));
 
 			x_box->material().albedo = {1, 0, 0};
 			y_box->material().albedo = {0, 1, 0};
 			z_box->material().albedo = {0, 0, 1};
+
+			set_position({0, 0, 0});
 		}
 
 		// Destructor
@@ -53,9 +56,9 @@ class Gizmo {
 
 		// Set position of gizmo
 		void set_position(const glm::vec3 &pos) override {
-			x_box->transform().position = pos;
-			y_box->transform().position = pos;
-			z_box->transform().position = pos;
+			x_box->transform().position = {pos.x + 0.5, pos.y, pos.z};
+			y_box->transform().position = {pos.x, pos.y + 0.5, pos.z};
+			z_box->transform().position = {pos.x, pos.y, pos.z + 0.5};
 		}
 
 		// Render gizmo
@@ -87,10 +90,7 @@ private:
 	void _init_vulkan_structures(const Vulkan::Swapchain &swapchain) {
 		// Create render pass
 		// TODO: context method for this
-		_render_pass = _context.vk->make_render_pass(
-			_context.phdev,
-			_context.device,
-			swapchain,
+		_render_pass = _context.make_render_pass(swapchain,
 			VK_ATTACHMENT_LOAD_OP_LOAD,
 			VK_ATTACHMENT_STORE_OP_STORE
 		);
@@ -171,27 +171,21 @@ public:
 	// Render all gizmos
 	void render(const VkCommandBuffer &cmd, const VkFramebuffer &framebuffer) {
 		// Start gizmo render pass
-		VkClearValue clear_colors[] = {
+		VkRect2D render_area {
+			.offset = {0, 0},
+			.extent = _extent
+		};
+
+		std::vector <VkClearValue> clear_colors {
 			{.color = {0.0f, 0.0f, 0.0f, 1.0f}},
 			{.depthStencil = {1.0f, 0}}
 		};
 
-		VkRenderPassBeginInfo render_pass_info = {
-			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-			.renderPass = _render_pass,
-			// TODO: should each Vulkan::Pipeline have a refernce to its render pass?
-			.framebuffer = framebuffer,
-			.renderArea = {
-				.offset = { 0, 0 },
-				.extent = _extent
-			},
-			.clearValueCount = 2,
-			.pClearValues = clear_colors
-		};
-
-		vkCmdBeginRenderPass(cmd,
-			&render_pass_info,
-			VK_SUBPASS_CONTENTS_INLINE
+		Vulkan::begin_render_pass(cmd,
+			_render_pass,
+			framebuffer,
+			render_area,
+			clear_colors
 		);
 
 		// Bind pipeline
@@ -216,7 +210,7 @@ public:
 			gizmo->render(packet);
 
 		// End render pass
-		vkCmdEndRenderPass(cmd);
+		Vulkan::end_render_pass(cmd);
 	}
 };
 

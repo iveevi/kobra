@@ -5,6 +5,9 @@
 #include <fstream>
 #include <string>
 
+// GLM header
+#include <glm/glm.hpp>
+
 namespace kobra {
 
 namespace common {
@@ -56,6 +59,15 @@ inline std::string sprintf(const char *fmt, ...)
 }
 
 }
+
+///////////////////////
+// Simple structures //
+///////////////////////
+
+struct Ray {
+	glm::vec3 origin;
+	glm::vec3 direction;
+};
 
 }
 

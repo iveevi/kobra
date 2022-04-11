@@ -8,7 +8,7 @@
 #include <vulkan/vulkan_core.h>
 
 // Engine macros
-#define KOBRA_VALIDATION_LAYERS
+// #define KOBRA_VALIDATION_LAYERS
 #define KOBRA_ERROR_ONLY
 #define KOBRA_THROW_ERROR
 
@@ -285,195 +285,6 @@ class RTApp :  public BaseApp {
 	// Mouve camera
 	static void mouse_movement(void *, const io::MouseEvent &);
 
-	/* void create_scene() {
-		Model model("resources/benchmark/suzanne.obj");
-
-		Mesh box = Mesh::make_box({1, -1, 3.0}, {1, 1, 1});
-		box.transform().rotation = {0, 30, 0};
-
-		// rt::Mesh *mesh0 = new rt::Mesh(box);
-		rt::Sphere *mesh0 = new rt::Sphere(1.0);
-		mesh0->transform().position = {-1, 0, 3.0};
-
-		rt::Sphere *sphere1 = new rt::Sphere(1.0);
-		sphere1->transform().position = {2, 2, 0.0};
-
-		rt::Mesh *mesh1 = new rt::Mesh(model[0]);
-		mesh1->transform().position = {2, -1, 3};
-		mesh1->transform().rotation = {0, -30, 0};
-
-		// Box entire scene
-		rt::Mesh *wall1 = new rt::Mesh(Mesh::make_box({0, -2, 0}, {5, 0.1, 5}));
-		rt::Mesh *wall2 = new rt::Mesh(Mesh::make_box({0, 8, 0}, {5, 0.1, 5}));
-		rt::Mesh *wall3 = new rt::Mesh(Mesh::make_box({-5, 3, 0}, {0.1, 5, 5}));
-		rt::Mesh *wall4 = new rt::Mesh(Mesh::make_box({5, 3, 0}, {0.1, 5, 5}));
-		rt::Mesh *wall5 = new rt::Mesh(Mesh::make_box({0, 3, -5}, {5, 5, 0.1}));
-
-		// Square light source
-		glm::vec3 center {0, 7.5, 3.0};
-		Mesh light_mesh(
-			VertexList {
-				Vertex { {center.x - 0.5, center.y, center.z + 0.5}, {0, 0, 0} },
-				Vertex { {center.x + 0.5, center.y, center.z + 0.5}, {0, 0, 0} },
-				Vertex { {center.x + 0.5, center.y, center.z - 0.5}, {0, 0, 0} },
-				Vertex { {center.x - 0.5, center.y, center.z - 0.5}, {0, 0, 0} },
-			},
-
-			IndexList {
-				0, 1, 2,
-				0, 2, 3
-			}
-		);
-
-		rt::Mesh *light1 = new rt::Mesh(light_mesh);
-		rt::Mesh *light2 = new rt::Mesh(light_mesh);
-
-		light2->transform().position = {0, 10, 0.0};
-
-		light1->set_material(Material {
-			.albedo = {1, 1, 1},
-			.shading_type = SHADING_TYPE_EMISSIVE
-		});
-
-		light2->set_material(Material {
-			.albedo = {1, 1, 1},
-			.shading_type = SHADING_TYPE_EMISSIVE
-		});
-
-		// mesh0->transform().scale = glm::vec3 {0.1f};
-		mesh0->transform().move({0.25, -0.6, -2});
-
-		Material mat {
-			.albedo = {0, 0, 0},
-			.shading_type = SHADING_TYPE_REFRACTION,
-			.ior = 1.3
-		};
-
-		mat.set_albedo(context,
-			window.command_pool,
-			"resources/wood_floor_albedo.jpg"
-		);
-
-		// mesh1->transform().scale = glm::vec3 {0.1f};
-
-		mesh0->set_material(mat);
-		mat.ior = 1.0;
-
-		mat.shading_type = SHADING_TYPE_DIFFUSE;
-		sphere1->set_material(mat);
-
-		// Set wall materials
-		mat.albedo = {0.7, 0.7, 0.7};
-		mat.shading_type = SHADING_TYPE_DIFFUSE;
-
-		mat.set_albedo(context,
-			window.command_pool,
-			"resources/sky.jpg"
-		);
-
-		wall1->set_material(mat);
-		mat.albedo_sampler = nullptr;
-
-		wall2->set_material(mat);
-		wall5->set_material(mat);
-
-		mat.albedo = {1.0, 0.5, 0.5};
-		wall3->set_material(mat);
-
-		mat.albedo = {0.5, 0.5, 1.0};
-		wall4->set_material(mat);
-
-		mat.albedo = {0.5, 1.0, 0.5};
-		mesh1->set_material(mat);
-
-		Scene scene({
-			mesh0, sphere1,
-			wall1, mesh1,
-			wall2, wall3, wall4, wall5,
-			light1
-		});
-
-		scene.save(scene_path);
-	} */
-
-	// Gizmo
-	VkRenderPass			gizmo_render_pass;
-	Vulkan::Pipeline		gizmo_pipeline;
-
-	raster::Mesh			*x_box;
-	raster::Mesh			*y_box;
-	raster::Mesh			*z_box;
-
-	void init_gizmo_objects() {
-		// Create render pass
-		gizmo_render_pass = context.vk->make_render_pass(
-			context.phdev,
-			context.device,
-			swapchain,
-			VK_ATTACHMENT_LOAD_OP_LOAD,
-			VK_ATTACHMENT_STORE_OP_STORE
-		);
-
-		// Load shaders
-		auto shaders = context.make_shaders({
-			"shaders/bin/raster/vertex.spv",
-			"shaders/bin/raster/plain_color_frag.spv"
-		});
-
-		// Push constants
-		VkPushConstantRange pcr {
-			.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-			.offset = 0,
-			.size = sizeof(typename raster::Mesh::MVP)
-		};
-
-		// Creation info
-		Vulkan::PipelineInfo info {
-			.swapchain = swapchain,
-			.render_pass = gizmo_render_pass,
-
-			.vert = shaders[0],
-			.frag = shaders[1],
-
-			.dsls = {},
-
-			.vertex_binding = Vertex::vertex_binding(),
-			.vertex_attributes = Vertex::vertex_attributes(),
-
-			.push_consts = 1,
-			.push_consts_range = &pcr,
-
-			.depth_test = false,
-
-			.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-
-			.viewport {
-				.width = (int) width,
-				.height = (int) height,
-				.x = 0,
-				.y = 0
-			}
-		};
-
-		gizmo_pipeline = context.make_pipeline(info);
-
-		// Gizmo objects
-		x_box = new raster::Mesh(context,
-			Mesh::make_box({0, 0, 0}, {1, 0.01, 0.01})
-		);
-		x_box->material().albedo = {1, 0, 0};
-
-		y_box = new raster::Mesh(context,
-			Mesh::make_box({0, 0, 0}, {0.01, 1, 0.01})
-		);
-		y_box->material().albedo = {0, 1, 0};
-
-		z_box = new raster::Mesh(context,
-			Mesh::make_box({0, 0, 0}, {0.01, 0.01, 1})
-		);
-		z_box->material().albedo = {0, 0, 1};
-	}
-
 	// Gizmo things
 	engine::Gizmo::Handle		gizmo_handle;
 	engine::Gizmo			gizmo_set;
@@ -526,10 +337,6 @@ public:
 		gui_layer = gui::Layer(window, VK_ATTACHMENT_LOAD_OP_LOAD);
 		initialize_gui();
 
-		// Line "layer"
-		// TODO: should be embedded into the GUI layer
-		// init_line_objects();
-
 		// Gizmo layer
 		// TODO: all layer type constructor should take a mandatory load
 		// operation
@@ -538,11 +345,11 @@ public:
 
 		// Add event listeners
 		window.keyboard_events->subscribe(keyboard_handler, this);
-		window.mouse_events->subscribe(mouse_movement, &camera);
+		window.mouse_events->subscribe(mouse_movement, this);
 
 		// Show results of profiling
 		auto frame = Profiler::one().pop();
-		std::cout << Profiler::pretty(frame);
+		// std::cout << Profiler::pretty(frame);
 	}
 
 	// Destructor
@@ -595,10 +402,10 @@ public:
 		raster_layer.set_active_camera(camera);
 		gizmo_set.set_camera(camera);
 
-		// Highlight appropriate object
+		/* Highlight appropriate object
 		raster_layer.clear_highlight();
 		if (edit_mode)
-			raster_layer.set_highlight(highlight, true);
+			raster_layer.set_highlight(highlight, true); */
 
 		// Render appropriate layer
 		if (raster) {
@@ -628,108 +435,6 @@ public:
 
 		// Render gizmo
 		gizmo_set.render(cmd, framebuffer);
-
-		/* Start gizmo render pass
-		VkClearValue clear_colors[] = {
-			{.color = {0.0f, 0.0f, 0.0f, 1.0f}},
-			{.depthStencil = {1.0f, 0}}
-		};
-
-		VkRenderPassBeginInfo render_pass_info = {
-			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-			.renderPass = gizmo_render_pass,
-			// TODO: should each Vulkan::Pipeline have a refernce to its render pass?
-			.framebuffer = framebuffer,
-			.renderArea = {
-				.offset = { 0, 0 },
-				.extent = swapchain.extent
-			},
-			.clearValueCount = 2,
-			.pClearValues = clear_colors
-		};
-
-		vkCmdBeginRenderPass(cmd,
-			&render_pass_info,
-			VK_SUBPASS_CONTENTS_INLINE
-		);
-
-		// Bind pipeline
-		vkCmdBindPipeline(cmd,
-			VK_PIPELINE_BIND_POINT_GRAPHICS,
-			gizmo_pipeline.pipeline
-		);
-
-		// Initialize render packet
-		raster::RenderPacket packet {
-			.cmd = cmd,
-
-			.pipeline_layout = gizmo_pipeline.layout,
-
-			// TODO: warn on null camera
-			.view = camera.view(),
-			.proj = camera.perspective()
-		};
-
-		// Render gizmo
-		x_box->draw(packet);
-		y_box->draw(packet);
-		z_box->draw(packet);
-
-		// End render pass
-		vkCmdEndRenderPass(cmd); */
-
-		/* Start line render pass
-		// TODO: vulkan method
-		VkClearValue clear_colors[] = {
-			{.color = {0.0f, 0.0f, 0.0f, 1.0f}},
-			{.depthStencil = {1.0f, 0}}
-		};
-
-		VkRenderPassBeginInfo render_pass_info = {
-			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-			.renderPass = line_render_pass,
-			// TODO: should each Vulkan::Pipeline have a refernce to its render pass?
-			.framebuffer = framebuffer,
-			.renderArea = {
-				.offset = { 0, 0 },
-				.extent = swapchain.extent
-			},
-			.clearValueCount = 2,
-			.pClearValues = clear_colors
-		};
-
-		vkCmdBeginRenderPass(cmd,
-			&render_pass_info,
-			VK_SUBPASS_CONTENTS_INLINE
-		);
-
-		// Line rendering
-		vkCmdBindPipeline(cmd,
-			VK_PIPELINE_BIND_POINT_GRAPHICS,
-			line_pipeline.pipeline
-		);
-
-		// Push vertex and index buffers
-		// TODO: Should be a buffermanager method
-		VkDeviceSize offsets[1] = { 0 };
-		vkCmdBindVertexBuffers(cmd,
-			0, 1, &line_vertex_buffer.vk_buffer(),
-			offsets
-		);
-
-		vkCmdBindIndexBuffer(cmd,
-			line_index_buffer.vk_buffer(),
-			0, VK_INDEX_TYPE_UINT32
-		);
-
-		// Draw lines
-		vkCmdDrawIndexed(cmd,
-			line_index_buffer.push_size(),
-			1, 0, 0, 0
-		);
-
-		// End line render pass
-		vkCmdEndRenderPass(cmd); */
 
 		// End recording command buffer
 		Vulkan::end(cmd);

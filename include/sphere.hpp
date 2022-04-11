@@ -31,12 +31,27 @@ public:
 			_radius(sphere._radius) {}
 
 	// Getters
-	const glm::vec3 &center() const {
+	glm::vec3 center() const override {
 		return _transform.position;
 	}
 
 	float radius() const {
 		return _radius;
+	}
+	
+	// Ray intersection
+	float intersect(const Ray &ray) const override {
+		glm::vec3 oc = ray.origin - _transform.position;
+		float a = glm::dot(ray.direction, ray.direction);
+		float b = 2.0f * glm::dot(oc, ray.direction);
+		float c = glm::dot(oc, oc) - _radius * _radius;
+		float discriminant = b * b - 4.0f * a * c;
+		if (discriminant < 0.0f)
+			return -1.0f;
+		float t = (-b - std::sqrt(discriminant)) / (2.0f * a);
+		if (t < 0.0f)
+			t = (-b + std::sqrt(discriminant)) / (2.0f * a);
+		return t;
 	}
 
 	// Virtual methods

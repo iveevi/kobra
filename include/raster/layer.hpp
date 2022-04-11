@@ -96,7 +96,7 @@ protected:
 	static const DSLBindings	_full_dsl_bindings;
 
 	// Highlight status and methods
-	std::vector <bool>		_highlighted;
+	// std::vector <bool>		_highlighted;
 public:
 	// Default
 	Layer() = default;
@@ -123,7 +123,7 @@ public:
 		e->latch(lp);
 
 		// Add highlight element
-		_highlighted.push_back(false);
+		// _highlighted.push_back(false);
 
 		// Refresh lights for all elements
 		for (int i = 0; i < _elements.size(); i++) {
@@ -186,7 +186,22 @@ public:
 		_mode = mode;
 	}
 
-	// Set highlight
+	// Index an element
+	ptr operator[](size_t index) {
+		return _elements[index];
+	}
+
+	// Index an element by name
+	ptr operator[](const std::string &name) {
+		for (auto &e : _elements) {
+			if (e->name() == name)
+				return e;
+		}
+
+		return nullptr;
+	}
+
+	/* Set highlight
 	void set_highlight(size_t index, bool highlight) {
 		if (index < _highlighted.size()) {
 			_highlighted[index] = highlight;
@@ -194,11 +209,12 @@ public:
 			KOBRA_LOG_FUNC(warn) << "Highlight index out of range ["
 				<< index << "/" << _highlighted.size() << "]";
 		}
-	}
+	} */
 
 	// Clear highlighting
 	void clear_highlight() {
-		_highlighted = std::vector <bool> (_highlighted.size(), false);
+		for (auto &e : _elements)
+			e->highlight = false;
 	}
 
 	// Serve a descriptor set
@@ -262,7 +278,10 @@ public:
 
 		// Render all elements
 		for (int i = 0; i < _elements.size(); i++) {
-			packet.highlight = _highlighted[i];
+			// packet.highlight = _highlighted[i];
+			// TODO: if this approach works, then remove this
+			// variable from the struct
+			packet.highlight = _elements[i]->highlight;
 			_elements[i]->render(packet);
 		}
 

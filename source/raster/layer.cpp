@@ -149,6 +149,9 @@ void Layer::add_scene(const Scene &scene)
 			kobra::Sphere *sphere = dynamic_cast
 				<kobra::Sphere *> (obj.get());
 
+			glm::vec3 pos = sphere->transform().position;
+			std::cout << "Sphere: " << pos.x << ", " << pos.y << ", " << pos.z << std::endl;
+
 			// Create a sphere mesh
 			kobra::Mesh mesh = kobra::Mesh::make_sphere(
 				// TODO: no center -- should always be 0,0,0

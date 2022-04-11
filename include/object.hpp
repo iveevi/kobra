@@ -7,6 +7,7 @@
 #include <string>
 
 // Engine headers
+#include "common.hpp"
 #include "transform.hpp"
 
 namespace kobra {
@@ -60,10 +61,7 @@ public:
 	const Transform& transform() const {
 		return _transform;
 	}
-
-	// Write to file
-	virtual void save(std::ofstream &) const = 0;
-
+	
 	void save_object(std::ofstream &file) const {
 		// Save name, transform, then rest of the object
 		file << "[OBJECT]" << std::endl;
@@ -71,6 +69,11 @@ public:
 		_transform.save(file);
 		save(file);
 	}
+
+	// Virtual methods
+	virtual float intersect(const Ray &) const = 0;
+	virtual glm::vec3 center() const = 0;
+	virtual void save(std::ofstream &) const = 0;
 };
 
 // Smart pointer

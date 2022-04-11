@@ -6,6 +6,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 // Engine headers
+#include "common.hpp"
 #include "transform.hpp"
 
 namespace kobra {
@@ -62,6 +63,18 @@ struct Camera {
 			0.01f, 100.0f
 		);
 
+	}
+
+	// Generate ray
+	Ray generate_ray(float x, float y) const {
+		float cx = (2 * x - 1) * tunings.scale * tunings.aspect;
+		float cy = (1 - 2 * y) * tunings.scale;
+
+		glm::vec3 dir = cx * transform.right()
+			+ cy * transform.up()
+			+ transform.forward();
+
+		return Ray {transform.position, dir};
 	}
 };
 

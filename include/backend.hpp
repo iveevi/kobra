@@ -169,6 +169,15 @@ public:
 		// Get supported depth format
 		VkFormat find_depth_format() const;
 
+		// Create a render pass
+		VkRenderPass make_render_pass(const Swapchain &swapchain,
+				const VkAttachmentLoadOp &load_op,
+				const VkAttachmentStoreOp &store_op) {
+			return vk->make_render_pass(phdev, device,
+				swapchain, load_op, store_op
+			);
+		}
+
 		// Create a graphics pipeline
 		Pipeline make_pipeline(const PipelineInfo &info) const {
 			// Create pipeline stages
@@ -1742,6 +1751,30 @@ public:
 
 	static void end(const VkCommandBuffer cbuf) {
 		vkEndCommandBuffer(cbuf);
+	}
+
+	static void begin_render_pass(const VkCommandBuffer &cmd,
+			const VkRenderPass &render_pass,
+			const VkFramebuffer &framebuffer,
+			const VkRect2D &render_area,
+			const std::vector <VkClearValue> &clear_values) {
+		VkRenderPassBeginInfo render_pass_info = {
+			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+			.renderPass = render_pass,
+			.framebuffer = framebuffer,
+			.renderArea = render_area,
+			.clearValueCount = (uint32_t) clear_values.size(),
+			.pClearValues = clear_values.data()
+		};
+
+		vkCmdBeginRenderPass(cmd,
+			&render_pass_info,
+			VK_SUBPASS_CONTENTS_INLINE
+		);
+	}
+
+	static void end_render_pass(const VkCommandBuffer &cmd) {
+		vkCmdEndRenderPass(cmd);
 	}
 
 	// Static member variables

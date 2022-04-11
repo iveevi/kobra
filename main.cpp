@@ -221,6 +221,7 @@ void RTApp::keyboard_handler(void *user, const io::KeyboardEvent &event)
 void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 {
 	static const int drag_button = GLFW_MOUSE_BUTTON_MIDDLE;
+	static const int select_button = GLFW_MOUSE_BUTTON_LEFT;
 
 	static const float sensitivity = 0.001f;
 
@@ -232,6 +233,41 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 
 	static float yaw = 0.0f;
 	static float pitch = 0.0f;
+
+	RTApp *app = (RTApp *) user;
+
+	// Clicking (shoots a ray)
+	if (event.action == GLFW_PRESS && event.button == select_button) {
+		std::cout << "Clicked at " << event.xpos << ", " << event.ypos << "\n\n";
+
+		float x = event.xpos / (float) app->window.width;
+		float y = event.ypos / (float) app->window.height;
+		Ray ray = app->camera.generate_ray(x, y);
+
+		float t = std::numeric_limits <float> ::max();
+		std::string name = "";
+
+		for (auto &obj : app->scene) {
+			float t_ = obj->intersect(ray);
+			if (t_ >= 0.0 && t_ < t) {
+				t = t_;
+				name = obj->name();
+			}
+		}
+
+		std::cout << "Closest object: " << name << ", time = " << t << "\n";
+		if (name.length() > 0) {
+			app->raster_layer.clear_highlight();
+
+			auto ptr = app->raster_layer[name];
+			ptr->highlight = true;
+
+			glm::vec3 position = ptr->center();
+			std::cout << "\tCenter: " << position.x << ", " << position.y << ", " << position.z << "\n";
+
+			app->gizmo_handle->set_position(position);
+		}
+	}
 
 	// Dragging only with the drag button
 	bool is_drag_button = (event.button == drag_button);
@@ -245,7 +281,7 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 		float dx = event.xpos - px;
 		float dy = event.ypos - py;
 
-		Camera *camera = (Camera *) user;
+		Camera &camera = app->camera;
 
 		yaw -= dx * sensitivity;
 		pitch -= dy * sensitivity;
@@ -255,8 +291,8 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 		if (pitch < -89.0f)
 			pitch = -89.0f;
 
-		camera->transform.rotation.x = pitch;
-		camera->transform.rotation.y = yaw;
+		camera.transform.rotation.x = pitch;
+		camera.transform.rotation.y = yaw;
 	}
 
 	// Update previous position

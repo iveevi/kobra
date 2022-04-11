@@ -55,6 +55,9 @@ static ObjectPtr load_object(const Vulkan::Context &ctx,
 	auto t = Transform::from_file(fin);
 	if (!t)
 		return nullptr;
+	std::cout << "Loaded transform:\n";
+	glm::vec3 v = t->position;
+	std::cout << "\tPosition: " << v.x << ", " << v.y << ", " << v.z << std::endl;
 
 	// Read the object header
 	std::getline(fin, header);
@@ -70,6 +73,7 @@ static ObjectPtr load_object(const Vulkan::Context &ctx,
 
 		auto optr = ObjectPtr(new Sphere(*sphere, *t));
 		optr->set_name(name);
+		optr->transform() = *t;
 		return optr;
 	}
 
@@ -83,6 +87,7 @@ static ObjectPtr load_object(const Vulkan::Context &ctx,
 
 		auto optr = ObjectPtr(new Mesh(*mesh, *t));
 		optr->set_name(name);
+		optr->transform() = *t;
 		return optr;
 	}
 
