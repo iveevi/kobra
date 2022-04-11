@@ -1,13 +1,13 @@
 #version 450
 
 // Inputs
-layout(location = 0) in vec3 fcolor;
+layout(location = 0) in vec3 in_color;
 
 // Outputs
-layout(location = 0) out vec4 color;
+layout(location = 0) out vec4 fragment;
 
 // Main function
 void main()
 {
-	color = vec4(fcolor, 1.0);
+	fragment = vec4(in_color, 1.0);
 }

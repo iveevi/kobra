@@ -369,7 +369,6 @@ VkRenderPass Vulkan::make_render_pass(const VkPhysicalDevice &phdev,
 		const Swapchain &swch,
 		VkAttachmentLoadOp load_op,
 		VkAttachmentStoreOp store_op,
-		bool depth_attachment,
 		VkImageLayout initial_layout,
 		VkImageLayout final_layout) const
 {
@@ -411,21 +410,19 @@ VkRenderPass Vulkan::make_render_pass(const VkPhysicalDevice &phdev,
 		.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
 	};
 
-	if (depth_attachment) {
-		VkAttachmentDescription depth_attachment {
-			.format = _find_depth_format(phdev),
-			.samples = VK_SAMPLE_COUNT_1_BIT,
-			.loadOp = load_op,
-			.storeOp = store_op,
-			.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-			.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-			.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-			.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-		};
+	VkAttachmentDescription depth_attachment {
+		.format = _find_depth_format(phdev),
+		.samples = VK_SAMPLE_COUNT_1_BIT,
+		.loadOp = load_op,
+		.storeOp = store_op,
+		.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+		.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+		.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+	};
 
-		attachments.push_back(depth_attachment);
-		subpass.pDepthStencilAttachment = &depth_attachment_ref;
-	}
+	attachments.push_back(depth_attachment);
+	subpass.pDepthStencilAttachment = &depth_attachment_ref;
 
 	VkSubpassDependency dependency {
 		.srcSubpass = VK_SUBPASS_EXTERNAL,
@@ -438,14 +435,12 @@ VkRenderPass Vulkan::make_render_pass(const VkPhysicalDevice &phdev,
 	};
 
 	// Modify dependency if depth attachment
-	if (depth_attachment) {
-		dependency.srcStageMask |= VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
-			| VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-		dependency.dstStageMask |= VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
-			| VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-		dependency.dstAccessMask |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
-			| VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
-	}
+	dependency.srcStageMask |= VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
+		| VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+	dependency.dstStageMask |= VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
+		| VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+	dependency.dstAccessMask |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
+		| VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
 
 	// Create render pass
 	VkRenderPassCreateInfo render_pass_info {

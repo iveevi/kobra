@@ -13,10 +13,10 @@
 #define KOBRA_THROW_ERROR
 
 // Engine headers
-#include "profiler.hpp"
 #include "include/app.hpp"
 #include "include/backend.hpp"
 #include "include/capture.hpp"
+#include "include/engine/gizmo.hpp"
 #include "include/engine/rt_capture.hpp"
 #include "include/gui/gui.hpp"
 #include "include/gui/layer.hpp"
@@ -30,6 +30,7 @@
 #include "include/raytracing/sphere.hpp"
 #include "include/scene.hpp"
 #include "include/types.hpp"
+#include "profiler.hpp"
 
 using namespace kobra;
 
@@ -65,6 +66,10 @@ class RTApp :  public BaseApp {
 	// Raster state
 	int			highlight = -1;
 	bool			edit_mode = false;
+
+	// Raytracing state
+	rt::Batch		batch;
+	rt::BatchIndex		batch_index;
 
 	// GUI state
 	// TODO: gui window abstraction (uses screen info returns as well)
@@ -390,13 +395,95 @@ class RTApp :  public BaseApp {
 
 		scene.save(scene_path);
 	} */
+
+	// Gizmo
+	VkRenderPass			gizmo_render_pass;
+	Vulkan::Pipeline		gizmo_pipeline;
+
+	raster::Mesh			*x_box;
+	raster::Mesh			*y_box;
+	raster::Mesh			*z_box;
+
+	void init_gizmo_objects() {
+		// Create render pass
+		gizmo_render_pass = context.vk->make_render_pass(
+			context.phdev,
+			context.device,
+			swapchain,
+			VK_ATTACHMENT_LOAD_OP_LOAD,
+			VK_ATTACHMENT_STORE_OP_STORE
+		);
+
+		// Load shaders
+		auto shaders = context.make_shaders({
+			"shaders/bin/raster/vertex.spv",
+			"shaders/bin/raster/plain_color_frag.spv"
+		});
+
+		// Push constants
+		VkPushConstantRange pcr {
+			.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+			.offset = 0,
+			.size = sizeof(typename raster::Mesh::MVP)
+		};
+
+		// Creation info
+		Vulkan::PipelineInfo info {
+			.swapchain = swapchain,
+			.render_pass = gizmo_render_pass,
+
+			.vert = shaders[0],
+			.frag = shaders[1],
+
+			.dsls = {},
+
+			.vertex_binding = Vertex::vertex_binding(),
+			.vertex_attributes = Vertex::vertex_attributes(),
+
+			.push_consts = 1,
+			.push_consts_range = &pcr,
+
+			.depth_test = false,
+
+			.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+
+			.viewport {
+				.width = (int) width,
+				.height = (int) height,
+				.x = 0,
+				.y = 0
+			}
+		};
+
+		gizmo_pipeline = context.make_pipeline(info);
+
+		// Gizmo objects
+		x_box = new raster::Mesh(context,
+			Mesh::make_box({0, 0, 0}, {1, 0.01, 0.01})
+		);
+		x_box->material().albedo = {1, 0, 0};
+
+		y_box = new raster::Mesh(context,
+			Mesh::make_box({0, 0, 0}, {0.01, 1, 0.01})
+		);
+		y_box->material().albedo = {0, 1, 0};
+
+		z_box = new raster::Mesh(context,
+			Mesh::make_box({0, 0, 0}, {0.01, 0.01, 1})
+		);
+		z_box->material().albedo = {0, 0, 1};
+	}
+
+	// Gizmo things
+	engine::Gizmo::Handle		gizmo_handle;
+	engine::Gizmo			gizmo_set;
 public:
 	// TODO: just remove the option of no depth buffer (always use depth buffer)
 	RTApp(Vulkan *vk) : BaseApp({
 		vk,
 		1000, 1000, 2,
 		"RT App"
-	}, true) {
+	}) {
 		// Construct camera
 		camera = Camera {
 			Transform { {0, 6, 16}, {-0.2, 0, 0} },
@@ -420,6 +507,10 @@ public:
 		rt_layer = rt::Layer(window);
 		rt_layer.add_scene(scene);
 
+		// Initialize batch and batch index
+		batch = rt::Batch(1000, 1000, 50, 50, 1);
+		batch_index = batch.make_batch_index(0, 0);
+
 		// TODO: m8 gotta really fix auto channels
 		rt_layer.set_environment_map(
 			load_image_texture("resources/skies/background_3.jpg", 4)
@@ -430,13 +521,20 @@ public:
 		raster_layer.set_mode(raster::Layer::Mode::BLINN_PHONG);
 		raster_layer.add_scene(scene);
 
-		for (int i = 0; i < raster_layer.size(); i++)
-			std::cout << "Rasterization layer object: " << raster_layer[i]->name() << std::endl;
-
 		// GUI layer
 		// TODO: be able to load gui elements from scene
 		gui_layer = gui::Layer(window, VK_ATTACHMENT_LOAD_OP_LOAD);
 		initialize_gui();
+
+		// Line "layer"
+		// TODO: should be embedded into the GUI layer
+		// init_line_objects();
+
+		// Gizmo layer
+		// TODO: all layer type constructor should take a mandatory load
+		// operation
+		gizmo_set = engine::Gizmo(window, VK_ATTACHMENT_LOAD_OP_LOAD);
+		gizmo_handle = gizmo_set.transform_gizmo();
 
 		// Add event listeners
 		window.keyboard_events->subscribe(keyboard_handler, this);
@@ -495,6 +593,7 @@ public:
 		// Copy camera contents to each relevant layer
 		rt_layer.set_active_camera(camera);
 		raster_layer.set_active_camera(camera);
+		gizmo_set.set_camera(camera);
 
 		// Highlight appropriate object
 		raster_layer.clear_highlight();
@@ -519,12 +618,118 @@ public:
 				modified = false;
 			}
 
-			rt_layer.render(cmd, framebuffer);
+			rt_layer.render(cmd, framebuffer, batch_index);
+			batch.increment(batch_index);
 		}
 
 		// Render GUI
 		update_gui();
 		gui_layer.render(cmd, framebuffer);
+
+		// Render gizmo
+		gizmo_set.render(cmd, framebuffer);
+
+		/* Start gizmo render pass
+		VkClearValue clear_colors[] = {
+			{.color = {0.0f, 0.0f, 0.0f, 1.0f}},
+			{.depthStencil = {1.0f, 0}}
+		};
+
+		VkRenderPassBeginInfo render_pass_info = {
+			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+			.renderPass = gizmo_render_pass,
+			// TODO: should each Vulkan::Pipeline have a refernce to its render pass?
+			.framebuffer = framebuffer,
+			.renderArea = {
+				.offset = { 0, 0 },
+				.extent = swapchain.extent
+			},
+			.clearValueCount = 2,
+			.pClearValues = clear_colors
+		};
+
+		vkCmdBeginRenderPass(cmd,
+			&render_pass_info,
+			VK_SUBPASS_CONTENTS_INLINE
+		);
+
+		// Bind pipeline
+		vkCmdBindPipeline(cmd,
+			VK_PIPELINE_BIND_POINT_GRAPHICS,
+			gizmo_pipeline.pipeline
+		);
+
+		// Initialize render packet
+		raster::RenderPacket packet {
+			.cmd = cmd,
+
+			.pipeline_layout = gizmo_pipeline.layout,
+
+			// TODO: warn on null camera
+			.view = camera.view(),
+			.proj = camera.perspective()
+		};
+
+		// Render gizmo
+		x_box->draw(packet);
+		y_box->draw(packet);
+		z_box->draw(packet);
+
+		// End render pass
+		vkCmdEndRenderPass(cmd); */
+
+		/* Start line render pass
+		// TODO: vulkan method
+		VkClearValue clear_colors[] = {
+			{.color = {0.0f, 0.0f, 0.0f, 1.0f}},
+			{.depthStencil = {1.0f, 0}}
+		};
+
+		VkRenderPassBeginInfo render_pass_info = {
+			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+			.renderPass = line_render_pass,
+			// TODO: should each Vulkan::Pipeline have a refernce to its render pass?
+			.framebuffer = framebuffer,
+			.renderArea = {
+				.offset = { 0, 0 },
+				.extent = swapchain.extent
+			},
+			.clearValueCount = 2,
+			.pClearValues = clear_colors
+		};
+
+		vkCmdBeginRenderPass(cmd,
+			&render_pass_info,
+			VK_SUBPASS_CONTENTS_INLINE
+		);
+
+		// Line rendering
+		vkCmdBindPipeline(cmd,
+			VK_PIPELINE_BIND_POINT_GRAPHICS,
+			line_pipeline.pipeline
+		);
+
+		// Push vertex and index buffers
+		// TODO: Should be a buffermanager method
+		VkDeviceSize offsets[1] = { 0 };
+		vkCmdBindVertexBuffers(cmd,
+			0, 1, &line_vertex_buffer.vk_buffer(),
+			offsets
+		);
+
+		vkCmdBindIndexBuffer(cmd,
+			line_index_buffer.vk_buffer(),
+			0, VK_INDEX_TYPE_UINT32
+		);
+
+		// Draw lines
+		vkCmdDrawIndexed(cmd,
+			line_index_buffer.push_size(),
+			1, 0, 0, 0
+		);
+
+		// End line render pass
+		vkCmdEndRenderPass(cmd); */
 
 		// End recording command buffer
 		Vulkan::end(cmd);

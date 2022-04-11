@@ -84,6 +84,7 @@ public:
 	};
 
 	// Render
+	// TODO: call draw
 	void render(RenderPacket &rp) override {
 		// Get the MVP
 		MVP mvp {
@@ -109,6 +110,45 @@ public:
 			0, 1, &_ds,
 			0, nullptr
 		);
+
+		// Bind vertex buffer
+		VkBuffer	buffers[] = {_vb.vk_buffer()};
+		VkDeviceSize	offsets[] = {0};
+
+		vkCmdBindVertexBuffers(rp.cmd, 0, 1, buffers, offsets);
+
+		// Bind index buffer
+		vkCmdBindIndexBuffer(rp.cmd, _ib.vk_buffer(), 0, VK_INDEX_TYPE_UINT32);
+
+		// Push constants
+		vkCmdPushConstants(
+			rp.cmd, rp.pipeline_layout,
+			VK_SHADER_STAGE_VERTEX_BIT,
+			0, sizeof(MVP), &mvp
+		);
+
+		// Draw
+		vkCmdDrawIndexed(rp.cmd, _ib.push_size(), 1, 0, 0, 0);
+	}
+	
+	// Draw without descriptor set
+	void draw(RenderPacket &rp) {
+		// Get the MVP
+		MVP mvp {
+			_transform.matrix(),
+
+			rp.view,
+			rp.proj,
+
+			// TODO: Material method (also keep PC_Material there)
+			{
+				_material.albedo,
+				_material.shading_type,
+				(float) rp.highlight,
+				(float) _material.has_albedo(),
+				(float) _material.has_normal(),
+			}
+		};
 
 		// Bind vertex buffer
 		VkBuffer	buffers[] = {_vb.vk_buffer()};

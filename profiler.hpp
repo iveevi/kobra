@@ -54,8 +54,7 @@ public:
 			context.device,
 			swapchain,
 			VK_ATTACHMENT_LOAD_OP_CLEAR,
-			VK_ATTACHMENT_STORE_OP_STORE,
-			true
+			VK_ATTACHMENT_STORE_OP_STORE
 		);
 
 		std::vector <VkImageView> extras;

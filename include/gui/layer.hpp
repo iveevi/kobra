@@ -47,8 +47,7 @@ class Layer {
 			_wctx.context.device,
 			_wctx.swapchain,
 			load,
-			VK_ATTACHMENT_STORE_OP_STORE,
-			true
+			VK_ATTACHMENT_STORE_OP_STORE
 		);
 	}
 

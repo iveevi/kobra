@@ -26,6 +26,7 @@ definitions:
     source/io/event.cpp,
     source/raster/layer.cpp,
     source/raster/mesh.cpp,
+    source/raytracing/batch.cpp,
     source/raytracing/layer.cpp'
   - includes: 'thirdparty,
     thirdparty/freetype/include,

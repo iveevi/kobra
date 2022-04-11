@@ -10,7 +10,7 @@ RTCapture::RTCapture(Vulkan *vk, const std::string &scene_file, const Camera &ca
 			vk,
 			800, 800, 2,
 			"RT Capture",
-		}, true),
+		}),
 		camera(camera)
 {
 	// Load scene

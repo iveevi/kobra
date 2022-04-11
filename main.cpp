@@ -1,7 +1,7 @@
 #include "global.hpp"
 
 // Scene path
-std::string scene_path = "../assets/ruins/scene.kobra";
+std::string scene_path = "scene.kobra";
 
 // Experimental GUI app
 class GUIApp : public BaseApp {
@@ -56,7 +56,7 @@ public:
 		vk,
 		1000, 1000, 2,
 		"GUI App"
-	}, true) {
+	}) {
 		// Initialize layer and load all fonts
 		layer = gui::Layer(window, VK_ATTACHMENT_LOAD_OP_CLEAR);
 		layer.load_font("default", "resources/fonts/noto_sans.ttf");

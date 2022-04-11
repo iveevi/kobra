@@ -1382,13 +1382,12 @@ public:
 
 	// Create a render pass
 	VkRenderPass make_render_pass(const VkPhysicalDevice &phdev,
-		const Device &device,
-		const Swapchain &swch,
-		VkAttachmentLoadOp,
-		VkAttachmentStoreOp,
-		bool = false,
-		VkImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-		VkImageLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) const;
+			const Device &device,
+			const Swapchain &swch,
+			VkAttachmentLoadOp,
+			VkAttachmentStoreOp,
+			VkImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+			VkImageLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) const;
 
 	// Start and end a render pass
 	void begin_render_pass(VkCommandBuffer, VkFramebuffer,

@@ -123,19 +123,6 @@ const Layer::DSLBindings Layer::_postproc_bindings = {
 	},
 };
 
-////////////////////////
-// BatchIndex methods //
-////////////////////////
-
-void BatchIndex::callback() const
-{
-	if (batch == nullptr)
-		return;
-
-	// Increment corresponding batch sample
-	batch->increment_sample_count(*this);
-}
-
 //////////////////////////////
 // Private helper functions //
 //////////////////////////////
@@ -455,6 +442,139 @@ void Layer::add_scene(const Scene &scene)
 			kobra::Layer <_element> ::add(ptr(mesh));
 		}
 	}
+}
+
+// Render a batch
+void Layer::render(const VkCommandBuffer &cmd,
+		const VkFramebuffer &framebuffer,
+		const BatchIndex &bi)
+{
+	// Handle null pipeline
+	if (_pipelines.mesh.pipeline == VK_NULL_HANDLE) {
+		KOBRA_LOG_FUNC(warn) << "rt::Layer is not yet initialized\n";
+		return;
+	}
+
+	// Handle null active camera
+	if (_active_camera == nullptr) {
+		KOBRA_LOG_FUNC(warn) << "rt::Layer has no active camera\n";
+		return;
+	}
+
+	///////////////////////////
+	// Mesh compute pipeline //
+	///////////////////////////
+
+	// TODO: context method
+	vkCmdBindPipeline(cmd,
+		VK_PIPELINE_BIND_POINT_COMPUTE,
+		_pipelines.mesh.pipeline
+	);
+
+	// Prepare push constants
+	PushConstants pc {
+		.width = _extent.width,
+		.height = _extent.height,
+
+		.xoffset = bi.offset_x,
+		.yoffset = bi.offset_y,
+
+		.triangles = (uint) _triangles.push_size(),
+		.lights = (uint) _light_indices.push_size(),
+
+		// TODO: still unable to do large number of samples
+		.samples_per_pixel = bi.pixel_samples,
+		.samples_per_light = bi.light_samples,
+
+		.camera_position = _active_camera->transform.position,
+		.camera_forward = _active_camera->transform.forward(),
+		.camera_up = _active_camera->transform.up(),
+		.camera_right = _active_camera->transform.right(),
+
+		.camera_tunings = glm::vec4 {
+			active_camera()->tunings.scale,
+			active_camera()->tunings.aspect,
+			0, 0
+		}
+	};
+
+	// Bind descriptor set
+	vkCmdBindDescriptorSets(cmd,
+		VK_PIPELINE_BIND_POINT_COMPUTE,
+		_pipelines.mesh.layout,
+		0, 1, &_mesh_ds,
+		0, nullptr
+	);
+
+	// Push constants
+	vkCmdPushConstants(cmd,
+		_pipelines.mesh.layout,
+		VK_SHADER_STAGE_COMPUTE_BIT,
+		0, sizeof(PushConstants), &pc
+	);
+
+	// Dispatch the compute shader
+	vkCmdDispatch(cmd,
+		bi.width,
+		bi.height,
+		1
+	);
+
+	//////////////////////////////
+	// Post-processing pipeline //
+	//////////////////////////////
+
+	vkCmdBindPipeline(cmd,
+		VK_PIPELINE_BIND_POINT_GRAPHICS,
+		_pipelines.postproc.pipeline
+	);
+
+	// Bind descriptor set
+	vkCmdBindDescriptorSets(cmd,
+		VK_PIPELINE_BIND_POINT_GRAPHICS,
+		_pipelines.postproc.layout,
+		0, 1, &_postproc_ds,
+		0, nullptr
+	);
+
+	// Push constants
+	PC_Viewport pc_vp {
+		.width = _extent.width,
+		.height = _extent.height
+	};
+
+	vkCmdPushConstants(cmd,
+		_pipelines.postproc.layout,
+		VK_SHADER_STAGE_FRAGMENT_BIT,
+		0, sizeof(PC_Viewport), &pc_vp
+	);
+
+	// Clear colors
+	VkClearValue clear_values[2] = {
+		{ .color = { 0.0f, 0.0f, 0.0f, 1.0f } },
+		{ .depthStencil = { 1.0f, 0 } }
+	};
+
+	// Begin render pass
+	// TODO: context method
+	VkRenderPassBeginInfo rp_info {
+		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+		.renderPass = _render_pass,
+		.framebuffer = framebuffer,
+		.renderArea = {
+			.offset = {0, 0},
+			.extent = _extent
+		},
+		.clearValueCount = 2,
+		.pClearValues = clear_values
+	};
+
+	vkCmdBeginRenderPass(cmd, &rp_info, VK_SUBPASS_CONTENTS_INLINE);
+	vkCmdDraw(cmd, 6, 1, 0, 0);
+	vkCmdEndRenderPass(cmd);
+
+	// Callback for batch index
+	bi.callback();
 }
 
 }

@@ -45,8 +45,7 @@ void Layer::_initialize_vulkan_structures(const VkAttachmentLoadOp &load)
 		_wctx.context.device,
 		_wctx.swapchain,
 		load,
-		VK_ATTACHMENT_STORE_OP_STORE,
-		true
+		VK_ATTACHMENT_STORE_OP_STORE
 	);
 
 	// Create descriptor set and layout

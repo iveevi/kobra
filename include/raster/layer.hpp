@@ -124,7 +124,7 @@ public:
 
 		// Add highlight element
 		_highlighted.push_back(false);
-		
+
 		// Refresh lights for all elements
 		for (int i = 0; i < _elements.size(); i++) {
 			// Update once for all element, bind once for all
@@ -249,14 +249,6 @@ public:
 			_get_pipeline()->pipeline
 		);
 
-		/* Bind descriptor set
-		vkCmdBindDescriptorSets(cmd_buffer,
-			VK_PIPELINE_BIND_POINT_GRAPHICS,
-			_get_pipeline()->layout,
-			0, 1, &_full_ds,
-			0, nullptr
-		); */
-
 		// Initialize render packet
 		RenderPacket packet {
 			.cmd = cmd_buffer,
@@ -271,14 +263,6 @@ public:
 		// Render all elements
 		for (int i = 0; i < _elements.size(); i++) {
 			packet.highlight = _highlighted[i];
-			/* _refresh(_ubo_point_lights_buffer,
-				(const uint8_t *) &_ubo_point_lights,
-				sizeof(_ubo_point_lights),
-
-				_elements[i]->get_local_ds(),
-				RASTER_BINDING_POINT_LIGHTS
-			); */
-
 			_elements[i]->render(packet);
 		}
 
