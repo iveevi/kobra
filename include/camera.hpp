@@ -55,7 +55,7 @@ struct Camera {
 		);
 	};
 
-	// Get projection matrix
+	// Get perspective matrix
 	glm::mat4 perspective() const {
 		return glm::perspective(
 			glm::radians(tunings.fov),
@@ -63,6 +63,11 @@ struct Camera {
 			0.01f, 100.0f
 		);
 
+	}
+
+	// Get projection matrix
+	glm::mat4 projection() const {
+		return perspective() * view();
 	}
 
 	// Generate ray

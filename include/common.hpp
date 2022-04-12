@@ -3,6 +3,7 @@
 
 // Standard headers
 #include <fstream>
+#include <iostream>
 #include <string>
 
 // GLM header
@@ -58,6 +59,29 @@ inline std::string sprintf(const char *fmt, ...)
 	return std::string(buf);
 }
 
+}
+
+////////////////////
+// Math functions //
+////////////////////
+
+// Closest distance between line segment and point
+inline float distance(const glm::vec2 &a, const glm::vec2 &b, const glm::vec2 &p)
+{
+	glm::vec2 ab = b - a;
+	glm::vec2 ap = p - a;
+	float t = glm::dot(ap, ab) / glm::dot(ab, ab);
+	if (t < 0.0f)
+		return glm::length(p - a);
+	if (t > 1.0f)
+		return glm::length(p - b);
+	return glm::length(p - a - t * ab);
+}
+
+// Project point onto plane, assuming origin is at (0, 0, 0)
+inline glm::vec3 point_onto_plane(const glm::vec3 &point, const glm::vec3 &normal)
+{
+	return point - glm::dot(point, normal) * normal;
 }
 
 ///////////////////////

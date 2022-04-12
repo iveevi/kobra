@@ -8,6 +8,7 @@
 #include "../app.hpp"
 #include "../backend.hpp"
 #include "../camera.hpp"
+#include "../object.hpp"
 #include "../raster/mesh.hpp"
 
 namespace kobra {
@@ -18,10 +19,23 @@ namespace engine {
 // 	gizmos in the scene (could be multiple)
 class Gizmo {
 	// Gizmo substructure
-	struct _gizmo {
-		bool visible = true;
+	class _gizmo {
+		ObjectPtr	object;
+	public:
+		bool		visible = true;
+
+		// Bind the gizmo to an object
+		void bind(ObjectPtr object) {
+			this->object = object;
+		}
+
+		// Get the object the gizmo is bound to
+		ObjectPtr get_object() {
+			return object;
+		}
 
 		// Virtual methods
+		virtual const glm::vec3 &get_position() const = 0;
 		virtual void set_position(const glm::vec3 &) = 0;
 		virtual void render(raster::RenderPacket &) = 0;
 	};
@@ -31,11 +45,12 @@ class Gizmo {
 		raster::Mesh	*x_box;
 		raster::Mesh	*y_box;
 		raster::Mesh	*z_box;
+
+		// TODO: make protected
+		glm::vec3	pos {0.0f};
 	public:
 		// Constructor
 		TransformGizmo(const Vulkan::Context &context) {
-			glm::vec3 pos {0.0f};
-
 			x_box = new raster::Mesh(context, Mesh::make_box(pos, {0.5, 0.01, 0.01}));
 			y_box = new raster::Mesh(context, Mesh::make_box(pos, {0.01, 0.5, 0.01}));
 			z_box = new raster::Mesh(context, Mesh::make_box(pos, {0.01, 0.01, 0.5}));
@@ -53,9 +68,15 @@ class Gizmo {
 			delete y_box;
 			delete z_box;
 		}
+		
+		// Get position of gizmo
+		const glm::vec3 &get_position() const override {
+			return pos;
+		}
 
 		// Set position of gizmo
-		void set_position(const glm::vec3 &pos) override {
+		void set_position(const glm::vec3 &x) override {
+			pos = x;
 			x_box->transform().position = {pos.x + 0.5, pos.y, pos.z};
 			y_box->transform().position = {pos.x, pos.y + 0.5, pos.z};
 			z_box->transform().position = {pos.x, pos.y, pos.z + 0.5};

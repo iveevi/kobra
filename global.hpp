@@ -430,8 +430,8 @@ public:
 		}
 
 		// Render GUI
-		update_gui();
-		gui_layer.render(cmd, framebuffer);
+		// update_gui();
+		// gui_layer.render(cmd, framebuffer);
 
 		// Render gizmo
 		gizmo_set.render(cmd, framebuffer);

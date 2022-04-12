@@ -220,6 +220,7 @@ void RTApp::keyboard_handler(void *user, const io::KeyboardEvent &event)
 // Mouse movement
 void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 {
+	// TODO: refactor to pan
 	static const int drag_button = GLFW_MOUSE_BUTTON_MIDDLE;
 	static const int select_button = GLFW_MOUSE_BUTTON_LEFT;
 
@@ -227,14 +228,35 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 
 	static bool first_movement = true;
 	static bool dragging = false;
+	static bool dragging_select = false;
 
 	static float px = 0.0f;
 	static float py = 0.0f;
+
+	static float pdx = 0.0f;
+	static float pdy = 0.0f;
 
 	static float yaw = 0.0f;
 	static float pitch = 0.0f;
 
 	RTApp *app = (RTApp *) user;
+
+	float dx = event.x - px;
+	float dy = event.y - py;
+
+	// Dragging only with the drag button
+	bool is_drag_button = (event.button == drag_button);
+	if (event.action == GLFW_PRESS && is_drag_button)
+		dragging = true;
+	else if (event.action == GLFW_RELEASE && is_drag_button)
+		dragging = false;
+
+	// Dragging select
+	bool is_select_button = (event.button == select_button);
+	if (event.action == GLFW_PRESS && is_select_button)
+		dragging_select = true;
+	else if (event.action == GLFW_RELEASE && is_select_button)
+		dragging_select = false;
 
 	// Clicking (shoots a ray)
 	if (event.action == GLFW_PRESS && event.button == select_button) {
@@ -255,7 +277,6 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 			}
 		}
 
-		std::cout << "Closest object: " << name << ", time = " << t << "\n";
 		if (name.length() > 0) {
 			app->raster_layer.clear_highlight();
 
@@ -263,24 +284,59 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 			ptr->highlight = true;
 
 			glm::vec3 position = ptr->center();
-			std::cout << "\tCenter: " << position.x << ", " << position.y << ", " << position.z << "\n";
-
 			app->gizmo_handle->set_position(position);
+			app->gizmo_handle->bind(ptr);
 		}
 	}
 
-	// Dragging only with the drag button
-	bool is_drag_button = (event.button == drag_button);
-	if (event.action == GLFW_PRESS && is_drag_button)
-		dragging = true;
-	else if (event.action == GLFW_RELEASE && is_drag_button)
-		dragging = false;
+	// Dragging in gizmo
+	if (dragging_select) {
+		// Gizmo positions
+		glm::vec3 a = app->gizmo_handle->get_position();
+		glm::vec3 b = a + glm::vec3 {0, 1, 0};
+
+		// Convert to window coordinates
+		glm::mat4 proj = app->camera.projection();
+
+		glm::vec4 a_ = proj * glm::vec4(a, 1.0f);
+		glm::vec4 b_ = proj * glm::vec4(b, 1.0f);
+
+		// Convert to screen coordinates
+		a_ /= a_.w;
+		b_ /= b_.w;
+
+		// Convert to pixel coordinates
+		a_ = a_ * 0.5f + 0.5f;
+		b_ = b_ * 0.5f + 0.5f;
+
+		// Convert to pixel coordinates
+		a_ *= (float) app->window.width;
+		b_ *= (float) app->window.height;
+
+		// Clicked coordinates
+		float x = event.xpos;
+		float y = app->window.height - event.ypos;
+
+		float d = distance(a_, b_, {x, y});
+		if (d < 20) {
+			// Transform to world coordinates
+			glm::mat4 inv_proj = glm::inverse(proj);
+			glm::vec4 a_ = inv_proj * glm::vec4(a, 1.0f);
+
+			dx = dx * a_.w / (float) app->window.width;
+			dy = dy * a_.w / (float) app->window.height;
+
+			std::cout << "Success!\n";
+			std::cout << "\tdx: " << dx << ", dy: " << dy << "\n";
+			ObjectPtr ptr = app->gizmo_handle->get_object();
+			ptr->transform().position.y -= (dy - 0.01)/2;
+			app->gizmo_handle->set_position(ptr->center());
+			app->scene[ptr->name()]->transform() = ptr->transform();
+		}
+	}
 
 	// Only if dragging
 	if (dragging) {
-		float dx = event.xpos - px;
-		float dy = event.ypos - py;
-
 		Camera &camera = app->camera;
 
 		yaw -= dx * sensitivity;
@@ -298,4 +354,7 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 	// Update previous position
 	px = event.xpos;
 	py = event.ypos;
+
+	pdx = dx;
+	pdy = dy;
 }
