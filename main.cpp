@@ -229,20 +229,22 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 	static bool first_movement = true;
 	static bool dragging = false;
 	static bool dragging_select = false;
+	static bool gizmo_dragging = false;
 
 	static float px = 0.0f;
 	static float py = 0.0f;
 
-	static float pdx = 0.0f;
-	static float pdy = 0.0f;
+	static glm::vec2 previous_dir {0.0f, 0.0f};
 
 	static float yaw = 0.0f;
 	static float pitch = 0.0f;
 
 	RTApp *app = (RTApp *) user;
 
-	float dx = event.x - px;
-	float dy = event.y - py;
+	// Deltas and directions
+	float dx = event.xpos - px;
+	float dy = event.ypos - py;
+	glm::vec2 dir {dx, dy};
 
 	// Dragging only with the drag button
 	bool is_drag_button = (event.button == drag_button);
@@ -262,35 +264,8 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 	if (event.action == GLFW_PRESS && event.button == select_button) {
 		std::cout << "Clicked at " << event.xpos << ", " << event.ypos << "\n\n";
 
-		float x = event.xpos / (float) app->window.width;
-		float y = event.ypos / (float) app->window.height;
-		Ray ray = app->camera.generate_ray(x, y);
-
-		float t = std::numeric_limits <float> ::max();
-		std::string name = "";
-
-		for (auto &obj : app->scene) {
-			float t_ = obj->intersect(ray);
-			if (t_ >= 0.0 && t_ < t) {
-				t = t_;
-				name = obj->name();
-			}
-		}
-
-		if (name.length() > 0) {
-			app->raster_layer.clear_highlight();
-
-			auto ptr = app->raster_layer[name];
-			ptr->highlight = true;
-
-			glm::vec3 position = ptr->center();
-			app->gizmo_handle->set_position(position);
-			app->gizmo_handle->bind(ptr);
-		}
-	}
-
-	// Dragging in gizmo
-	if (dragging_select) {
+		// Prioritize selecting gizmo
+		
 		// Gizmo positions
 		glm::vec3 a = app->gizmo_handle->get_position();
 		glm::vec3 b = a + glm::vec3 {0, 1, 0};
@@ -319,17 +294,71 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 
 		float d = distance(a_, b_, {x, y});
 		if (d < 20) {
-			// Transform to world coordinates
-			glm::mat4 inv_proj = glm::inverse(proj);
-			glm::vec4 a_ = inv_proj * glm::vec4(a, 1.0f);
+			gizmo_dragging = true;
+		} else {
+			// Select an object instead
+			x = event.xpos / (float) app->window.width;
+			y = event.ypos / (float) app->window.height;
+			Ray ray = app->camera.generate_ray(x, y);
 
-			dx = dx * a_.w / (float) app->window.width;
-			dy = dy * a_.w / (float) app->window.height;
+			float t = std::numeric_limits <float> ::max();
+			std::string name = "";
 
-			std::cout << "Success!\n";
-			std::cout << "\tdx: " << dx << ", dy: " << dy << "\n";
+			for (auto &obj : app->scene) {
+				float t_ = obj->intersect(ray);
+				if (t_ >= 0.0 && t_ < t) {
+					t = t_;
+					name = obj->name();
+				}
+			}
+
+			if (name.length() > 0) {
+				app->raster_layer.clear_highlight();
+
+				auto ptr = app->raster_layer[name];
+				ptr->highlight = true;
+
+				glm::vec3 position = ptr->center();
+				app->gizmo_handle->set_position(position);
+				app->gizmo_handle->bind(ptr);
+			}
+		}
+	} else if (event.action == GLFW_RELEASE && event.button == select_button) {
+		gizmo_dragging = false;
+	}
+
+	// Dragging in gizmo
+	if (dragging_select && gizmo_dragging && app->gizmo_handle->get_object() != nullptr) {
+		// Gizmo positions
+		glm::vec3 a = app->gizmo_handle->get_position();
+		glm::vec3 b = a + glm::vec3 {0, 1, 0};
+
+		// Convert to window coordinates
+		glm::mat4 proj = app->camera.projection();
+
+		glm::vec4 a_ = proj * glm::vec4(a, 1.0f);
+		glm::vec4 b_ = proj * glm::vec4(b, 1.0f);
+
+		// Convert to screen coordinates
+		a_ /= a_.w;
+		b_ /= b_.w;
+
+		// Convert to pixel coordinates
+		a_ = a_ * 0.5f + 0.5f;
+		b_ = b_ * 0.5f + 0.5f;
+
+		// Convert to pixel coordinates
+		a_ *= (float) app->window.width;
+		b_ *= (float) app->window.height;
+
+		float length = distance(glm::vec2(a_), glm::vec2(b_));
+
+		// Transform dx and dy to world coordinates
+		float dy_ = dy/length;
+	
+		if (std::abs(dy_) > 0.001) {
 			ObjectPtr ptr = app->gizmo_handle->get_object();
-			ptr->transform().position.y -= (dy - 0.01)/2;
+			ptr->transform().position.y -= dy_;
 			app->gizmo_handle->set_position(ptr->center());
 			app->scene[ptr->name()]->transform() = ptr->transform();
 		}
@@ -355,6 +384,5 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 	px = event.xpos;
 	py = event.ypos;
 
-	pdx = dx;
-	pdy = dy;
+	previous_dir = dir;
 }

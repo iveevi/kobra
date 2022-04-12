@@ -51,9 +51,9 @@ class Gizmo {
 	public:
 		// Constructor
 		TransformGizmo(const Vulkan::Context &context) {
-			x_box = new raster::Mesh(context, Mesh::make_box(pos, {0.5, 0.01, 0.01}));
-			y_box = new raster::Mesh(context, Mesh::make_box(pos, {0.01, 0.5, 0.01}));
-			z_box = new raster::Mesh(context, Mesh::make_box(pos, {0.01, 0.01, 0.5}));
+			x_box = new raster::Mesh(context, Mesh::make_box(pos, {0.5, 0.02, 0.02}));
+			y_box = new raster::Mesh(context, Mesh::make_box(pos, {0.02, 0.5, 0.02}));
+			z_box = new raster::Mesh(context, Mesh::make_box(pos, {0.02, 0.02, 0.5}));
 
 			x_box->material().albedo = {1, 0, 0};
 			y_box->material().albedo = {0, 1, 0};

@@ -122,9 +122,6 @@ public:
 		// Add element
 		e->latch(lp);
 
-		// Add highlight element
-		// _highlighted.push_back(false);
-
 		// Refresh lights for all elements
 		for (int i = 0; i < _elements.size(); i++) {
 			// Update once for all element, bind once for all
@@ -200,16 +197,6 @@ public:
 
 		return nullptr;
 	}
-
-	/* Set highlight
-	void set_highlight(size_t index, bool highlight) {
-		if (index < _highlighted.size()) {
-			_highlighted[index] = highlight;
-		} else {
-			KOBRA_LOG_FUNC(warn) << "Highlight index out of range ["
-				<< index << "/" << _highlighted.size() << "]";
-		}
-	} */
 
 	// Clear highlighting
 	void clear_highlight() {
