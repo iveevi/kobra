@@ -79,6 +79,15 @@ public:
 		return _elements.size();
 	}
 
+	// Iterators
+	typename std::vector <ptr>::iterator begin() {
+		return _elements.begin();
+	}
+
+	typename std::vector <ptr>::iterator end() {
+		return _elements.end();
+	}
+
 	// TODO: variadic overload (implement collect method in common)
 };
 

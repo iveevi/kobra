@@ -1,7 +1,7 @@
 [OBJECT]
 name=Sphere A
 [TRANSFORM]
-position=2.38 2.93 0
+position=2.94268 2.93 5.81194
 rotation=0 0 0
 scale=1 1 1
 [SPHERE]
@@ -15,14 +15,14 @@ normal_source=0
 [OBJECT]
 name=Sphere B
 [TRANSFORM]
-position=0 0 0
+position=0 6.23929 0
 rotation=0 0 0
 scale=1 1 1
 [SPHERE]
 radius=1
 [MATERIAL]
 albedo=0 0 0
-shading_type=REFLECTION
+shading_type=1115684864
 ior=1
 albedo_source=0
 normal_source=0
@@ -79,7 +79,7 @@ normal_source=resources/wood_floor_normal.jpg
 [OBJECT]
 name=Monkey
 [TRANSFORM]
-position=1.24999 4.73001 3.22
+position=-2.14984 4.73001 3.22
 rotation=0 -30 0
 scale=1 1 1
 [MESH]

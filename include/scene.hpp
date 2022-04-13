@@ -35,6 +35,9 @@ public:
 	Scene(const std::vector <Object *> &);
 	Scene(const std::vector <ObjectPtr> &);
 
+	// Add object
+	void add(const ObjectPtr &);
+
 	// Iterators
 	iterator begin() const;
 	iterator end() const;

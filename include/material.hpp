@@ -22,8 +22,8 @@ class Material {
 	Sampler 	*normal_sampler = nullptr;
 
 	// Texture sources (for scene loading)
-	std::string	albedo_source;
-	std::string	normal_source;
+	std::string	albedo_source = "";
+	std::string	normal_source = "";
 public:
 	glm::vec3	albedo;		// Albedo color
 	float		shading_type;	// Shading types, see types.h

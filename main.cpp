@@ -178,19 +178,22 @@ void RTApp::keyboard_handler(void *user, const io::KeyboardEvent &event)
 		if (event.key == GLFW_KEY_K &&
 			event.mods == GLFW_MOD_CONTROL) {
 			KOBRA_LOG_FILE(notify) << "Saving scene...\n";
-			app->scene.save(scene_path);
+			// app->scene.save(scene_path);
+			app->save(scene_path);
+			app->gizmo_handle->deselect();
 		}
 
 		// Refresh rasterization
 		if (event.key == GLFW_KEY_R &&
 			event.mods == GLFW_MOD_CONTROL) {
 			KOBRA_LOG_FILE(notify) << "Force refreshing scene...\n";
-			app->scene.save(scene_path);
+			app->save(scene_path);
 			app->scene = Scene(app->context, app->window.command_pool, scene_path);
 			app->raster_layer = raster::Layer(app->window, VK_ATTACHMENT_LOAD_OP_CLEAR);
 			app->raster_layer.add_scene(app->scene);
 			app->raster_layer.set_active_camera(app->camera);
 			app->raster_layer.set_mode(raster::Layer::Mode::BLINN_PHONG);
+			app->gizmo_handle->deselect();
 		}
 
 		// Toggle mouse visibility
@@ -262,42 +265,19 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 
 	// Clicking (shoots a ray)
 	if (event.action == GLFW_PRESS && event.button == select_button) {
-		// Prioritize selecting gizmo
-		
-		// Gizmo positions
-		glm::vec3 a = app->gizmo_handle->get_position();
-		glm::vec3 b = a + glm::vec3 {0, 1, 0};
-
 		// Convert to window coordinates
 		glm::mat4 proj = app->camera.projection();
-
-		glm::vec4 a_ = proj * glm::vec4(a, 1.0f);
-		glm::vec4 b_ = proj * glm::vec4(b, 1.0f);
-
-		// Convert to screen coordinates
-		a_ /= a_.w;
-		b_ /= b_.w;
-
-		// Convert to pixel coordinates
-		a_ = a_ * 0.5f + 0.5f;
-		b_ = b_ * 0.5f + 0.5f;
-
-		// Convert to pixel coordinates
-		a_ *= (float) app->window.width;
-		b_ *= (float) app->window.height;
 
 		// Clicked coordinates
 		float x = event.xpos;
 		float y = (app->window.height - event.ypos);
 
-		float d = distance(a_, b_, {x, y});
-
-		app->gizmo_handle->handle_select(proj,
+		bool activated = app->gizmo_handle->handle_select(proj,
 			x, y, app->window.width,
 			app->window.height
 		);
 
-		if (d < 20) {
+		if (app->gizmo_handle->get_object() != nullptr && activated) {
 			gizmo_dragging = true;
 		} else {
 			// Select an object instead
@@ -308,7 +288,7 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 			float t = std::numeric_limits <float> ::max();
 			std::string name = "";
 
-			for (auto &obj : app->scene) {
+			for (auto &obj : app->raster_layer) {
 				float t_ = obj->intersect(ray);
 				if (t_ >= 0.0 && t_ < t) {
 					t = t_;
@@ -316,6 +296,10 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 				}
 			}
 
+			// TODO: also poppup window with info (name, transform,
+			// material, ect)
+			// TODO: make a poppup info window template for
+			// materials
 			if (name.length() > 0) {
 				app->raster_layer.clear_highlight();
 
@@ -325,6 +309,12 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 				glm::vec3 position = ptr->center();
 				app->gizmo_handle->set_position(position);
 				app->gizmo_handle->bind(ptr);
+			} else {
+				auto ptr = app->gizmo_handle->get_object();
+				if (ptr != nullptr) {
+					app->raster_layer[ptr->name()]->highlight = false;
+					app->gizmo_handle->deselect();
+				}
 			}
 		}
 	} else if (event.action == GLFW_RELEASE && event.button == select_button) {
@@ -333,39 +323,11 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 
 	// Dragging in gizmo
 	if (dragging_select && gizmo_dragging && app->gizmo_handle->get_object() != nullptr) {
-		// Gizmo positions
-		glm::vec3 a = app->gizmo_handle->get_position();
-		glm::vec3 b = a + glm::vec3 {0, 1, 0};
-
-		// Convert to window coordinates
 		glm::mat4 proj = app->camera.projection();
-
-		glm::vec4 a_ = proj * glm::vec4(a, 1.0f);
-		glm::vec4 b_ = proj * glm::vec4(b, 1.0f);
-
-		// Convert to screen coordinates
-		a_ /= a_.w;
-		b_ /= b_.w;
-
-		// Convert to pixel coordinates
-		a_ = a_ * 0.5f + 0.5f;
-		b_ = b_ * 0.5f + 0.5f;
-
-		// Convert to pixel coordinates
-		a_ *= (float) app->window.width;
-		b_ *= (float) app->window.height;
-
-		float length = distance(glm::vec2(a_), glm::vec2(b_));
-
-		// Transform dx and dy to world coordinates
-		float dy_ = dy/length;
-	
-		if (std::abs(dy_) > 0.001) {
-			ObjectPtr ptr = app->gizmo_handle->get_object();
-			ptr->transform().position.y -= dy_;
-			app->gizmo_handle->set_position(ptr->center());
-			app->scene[ptr->name()]->transform() = ptr->transform();
-		}
+		app->gizmo_handle->handle_drag(proj,
+			dx, -dy,
+			app->window.width, app->window.height
+		);
 	}
 
 	// Only if dragging

@@ -279,6 +279,16 @@ class RTApp :  public BaseApp {
 		scene[name]->transform() = transform;
 	}
 
+	// Save element currently in raster_layer
+	void save(const std::string &path) {
+		for (auto &e : raster_layer) {
+			scene[e->name()]->transform() = e->transform();
+			// TODO: later will need to copy material, etc
+		}
+
+		scene.save(path);
+	}
+
 	// Keyboard handler
 	static void keyboard_handler(void *, const io::KeyboardEvent &);
 
@@ -434,7 +444,8 @@ public:
 		// gui_layer.render(cmd, framebuffer);
 
 		// Render gizmo
-		gizmo_set.render(cmd, framebuffer);
+		if (gizmo_handle->get_object() != nullptr)
+			gizmo_set.render(cmd, framebuffer);
 
 		// End recording command buffer
 		Vulkan::end(cmd);

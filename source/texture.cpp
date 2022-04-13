@@ -12,6 +12,7 @@ Texture load_image_texture(const std::string &filename, int chan)
 	if (!file.is_open()) {
 		KOBRA_LOG_FILE(error) << "Failed to open file: \""
 			<< filename << "\"" << std::endl;
+		throw std::runtime_error("Failed to open file");
 		return {};
 	}
 

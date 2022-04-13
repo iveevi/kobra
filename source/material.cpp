@@ -19,11 +19,15 @@ Material::Material(const Material &other)
 		: albedo(other.albedo), shading_type(other.shading_type),
 		ior(other.ior)
 {
-	if (other.albedo_sampler != nullptr)
+	if (other.albedo_sampler != nullptr) {
 		albedo_sampler = new Sampler(*other.albedo_sampler);
+		albedo_source = other.albedo_source;
+	}
 
-	if (other.normal_sampler != nullptr)
+	if (other.normal_sampler != nullptr) {
 		normal_sampler = new Sampler(*other.normal_sampler);
+		normal_source = other.normal_source;
+	}
 }
 
 // Assignment operator
@@ -39,6 +43,7 @@ Material &Material::operator=(const Material &other)
 				delete albedo_sampler;
 
 			albedo_sampler = new Sampler(*other.albedo_sampler);
+			albedo_source = other.albedo_source;
 		}
 
 		if (other.normal_sampler != nullptr) {
@@ -46,6 +51,7 @@ Material &Material::operator=(const Material &other)
 				delete normal_sampler;
 
 			normal_sampler = new Sampler(*other.normal_sampler);
+			normal_source = other.normal_source;
 		}
 	}
 
@@ -216,6 +222,7 @@ std::optional <Material> Material::from_file
 	// TODO: create a texture loader agent to handle multithreaded textures
 	std::thread *albdeo_loader = nullptr;
 	if (albedo_source != "0") {
+		std::cout << "Loading albedo texture: " << albedo_source << std::endl;
 		auto load_albedo = [&]() {
 			Profiler::one().frame("Loading albedo texture");
 			albedo_source = common::get_path(
@@ -231,6 +238,7 @@ std::optional <Material> Material::from_file
 	}
 
 	if (normal_source != "0") {
+		std::cout << "Loading normal texture: " << normal_source << std::endl;
 		Profiler::one().frame("Loading normal texture");
 		normal_source = common::get_path(
 			normal_source,

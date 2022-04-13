@@ -153,6 +153,12 @@ Scene::Scene(const std::vector <ObjectPtr> &objs)
 // Methods //
 /////////////
 
+// Add object
+void Scene::add(const ObjectPtr &obj)
+{
+	_objects.push_back(obj);
+}
+
 // Iterators
 Scene::iterator Scene::begin() const
 {

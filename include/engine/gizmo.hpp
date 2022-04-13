@@ -20,6 +20,7 @@ namespace engine {
 class Gizmo {
 	// Gizmo substructure
 	class _gizmo {
+	protected:
 		ObjectPtr	object;
 	public:
 		bool		visible = true;
@@ -34,9 +35,17 @@ class Gizmo {
 			return object;
 		}
 
+		// Deselect
+		void deselect() {
+			object = nullptr;
+			this->deactivate();
+		}
+
 		// Virtual methods
 		virtual const glm::vec3 &get_position() const = 0;
-		virtual void handle_select(const glm::mat4 &, float, float, float, float) = 0;
+		virtual bool handle_select(const glm::mat4 &, float, float, float, float) = 0;
+		virtual void handle_drag(const glm::mat4 &, float, float, float, float) = 0;
+		virtual void deactivate() = 0;
 		virtual void set_position(const glm::vec3 &) = 0;
 		virtual void render(raster::RenderPacket &) = 0;
 	};
@@ -49,6 +58,9 @@ class Gizmo {
 
 		// TODO: make protected
 		glm::vec3	pos {0.0f};
+
+		// Currently active axis
+		int		active_axis = -1;
 	public:
 		// Constructor
 		TransformGizmo(const Vulkan::Context &context) {
@@ -69,14 +81,14 @@ class Gizmo {
 			delete y_box;
 			delete z_box;
 		}
-		
+
 		// Get position of gizmo
 		const glm::vec3 &get_position() const override {
 			return pos;
 		}
 
 		// Handle initial selection
-		void handle_select(const glm::mat4 &proj, float x, float y, float w, float h) override {
+		bool handle_select(const glm::mat4 &proj, float x, float y, float w, float h) override {
 			glm::vec4 a = {pos, 1};
 			glm::vec4 b = {pos + glm::vec3(1, 0, 0), 1};
 			glm::vec4 c = {pos + glm::vec3(0, 1, 0), 1};
@@ -103,7 +115,79 @@ class Gizmo {
 			float d_y = distance(a_, c_, {x, y});
 			float d_z = distance(a_, d_, {x, y});
 
-			std::cout << "d_x: " << d_x << ", d_y: " << d_y << ", d_z: " << d_z << std::endl;
+			// Activate axis based on the smallest distance
+			bool activate_x = (d_x < 20) && (d_x < d_y) && (d_x < d_z);
+			bool activate_y = (d_y < 20) && (d_y < d_x) && (d_y < d_z);
+			bool activate_z = (d_z < 20) && (d_z < d_x) && (d_z < d_y);
+
+			if (activate_x)
+				active_axis = 0;
+			else if (activate_y)
+			      active_axis = 1;
+			else if (activate_z)
+			      active_axis = 2;
+			else
+				active_axis = -1;
+
+			return (active_axis != -1);
+		}
+
+		// Handle dragging
+		void handle_drag(const glm::mat4 &proj, float dx, float dy, float w, float h) override {
+			if (active_axis == -1)
+				return;
+
+			glm::vec4 a = {pos, 1};
+			glm::vec4 b = {pos + glm::vec3(1, 0, 0), 1};
+			glm::vec4 c = {pos + glm::vec3(0, 1, 0), 1};
+			glm::vec4 d = {pos + glm::vec3(0, 0, 1), 1};
+
+			// TODO: static helper method
+			auto project = [&](const glm::vec4 &v) -> glm::vec2 {
+				glm::vec4 v_ = proj * v;
+				v_ = v_ / v_.w;
+
+				glm::vec2 v_2 = {v_.x, v_.y};
+				v_2 = v_2 * 0.5f + 0.5f;
+
+				v_2 *= glm::vec2 {w, h};
+
+				return v_2;
+			};
+
+			// TODO: only do these calculation for the relevant axis
+			glm::vec2 a_ = project(a);
+			glm::vec2 b_ = project(b);
+			glm::vec2 c_ = project(c);
+			glm::vec2 d_ = project(d);
+
+			float scale_x = glm::length(b_ - a_);
+			float scale_y = glm::length(c_ - a_);
+			float scale_z = glm::length(d_ - a_);
+
+			float dd = 0;
+			if (active_axis == 0 && scale_x > 0) {
+				dd = glm::dot(glm::normalize(b_ - a_), glm::vec2 {dx, dy});
+				dd /= scale_x;
+			} else if (active_axis == 1 && scale_y > 0) {
+				dd = glm::dot(glm::normalize(c_ - a_), glm::vec2 {dx, dy});
+				dd /= scale_y;
+			} else if (active_axis == 2 && scale_z > 0) {
+				dd = glm::dot(glm::normalize(d_ - a_), glm::vec2 {dx, dy});
+				dd /= scale_z;
+			}
+
+			// Move the bound object
+			object->transform().position[active_axis] += dd;
+
+			// Update position and boxes
+			pos[active_axis] += dd;
+			set_position(pos);
+		}
+
+		// Deactivate gizmo
+		void deactivate() override {
+			active_axis = -1;
 		}
 
 		// Set position of gizmo
