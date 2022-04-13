@@ -262,8 +262,6 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 
 	// Clicking (shoots a ray)
 	if (event.action == GLFW_PRESS && event.button == select_button) {
-		std::cout << "Clicked at " << event.xpos << ", " << event.ypos << "\n\n";
-
 		// Prioritize selecting gizmo
 		
 		// Gizmo positions
@@ -290,15 +288,21 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 
 		// Clicked coordinates
 		float x = event.xpos;
-		float y = app->window.height - event.ypos;
+		float y = (app->window.height - event.ypos);
 
 		float d = distance(a_, b_, {x, y});
+
+		app->gizmo_handle->handle_select(proj,
+			x, y, app->window.width,
+			app->window.height
+		);
+
 		if (d < 20) {
 			gizmo_dragging = true;
 		} else {
 			// Select an object instead
-			x = event.xpos / (float) app->window.width;
-			y = event.ypos / (float) app->window.height;
+			float x = event.xpos / (float) app->window.width;
+			float y = event.ypos / (float) app->window.height;
 			Ray ray = app->camera.generate_ray(x, y);
 
 			float t = std::numeric_limits <float> ::max();

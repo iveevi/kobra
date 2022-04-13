@@ -36,6 +36,7 @@ class Gizmo {
 
 		// Virtual methods
 		virtual const glm::vec3 &get_position() const = 0;
+		virtual void handle_select(const glm::mat4 &, float, float, float, float) = 0;
 		virtual void set_position(const glm::vec3 &) = 0;
 		virtual void render(raster::RenderPacket &) = 0;
 	};
@@ -72,6 +73,37 @@ class Gizmo {
 		// Get position of gizmo
 		const glm::vec3 &get_position() const override {
 			return pos;
+		}
+
+		// Handle initial selection
+		void handle_select(const glm::mat4 &proj, float x, float y, float w, float h) override {
+			glm::vec4 a = {pos, 1};
+			glm::vec4 b = {pos + glm::vec3(1, 0, 0), 1};
+			glm::vec4 c = {pos + glm::vec3(0, 1, 0), 1};
+			glm::vec4 d = {pos + glm::vec3(0, 0, 1), 1};
+
+			auto project = [&](const glm::vec4 &v) -> glm::vec2 {
+				glm::vec4 v_ = proj * v;
+				v_ = v_ / v_.w;
+
+				glm::vec2 v_2 = {v_.x, v_.y};
+				v_2 = v_2 * 0.5f + 0.5f;
+
+				v_2 *= glm::vec2 {w, h};
+
+				return v_2;
+			};
+
+			glm::vec2 a_ = project(a);
+			glm::vec2 b_ = project(b);
+			glm::vec2 c_ = project(c);
+			glm::vec2 d_ = project(d);
+
+			float d_x = distance(a_, b_, {x, y});
+			float d_y = distance(a_, c_, {x, y});
+			float d_z = distance(a_, d_, {x, y});
+
+			std::cout << "d_x: " << d_x << ", d_y: " << d_y << ", d_z: " << d_z << std::endl;
 		}
 
 		// Set position of gizmo

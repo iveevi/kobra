@@ -22,33 +22,9 @@ struct Vertex {
 	glm::vec2 pos;
 	glm::vec3 color;
 
-	// Get vertex binding description
-	static Vulkan::VB vertex_binding() {
-		return Vulkan::VB {
-			.binding = 0,
-			.stride = sizeof(Vertex),
-			.inputRate = VK_VERTEX_INPUT_RATE_VERTEX
-		};
-	}
-
-	// Get vertex attribute descriptions
-	static std::vector <Vulkan::VA> vertex_attributes() {
-		return {
-			Vulkan::VA {
-				.location = 0,
-				.binding = 0,
-				.format = VK_FORMAT_R32G32_SFLOAT,
-				.offset = offsetof(Vertex, pos)
-			},
-
-			Vulkan::VA {
-				.location = 1,
-				.binding = 0,
-				.format = VK_FORMAT_R32G32B32_SFLOAT,
-				.offset = offsetof(Vertex, color)
-			}
-		};
-	}
+	// Get Vulkan info for vertex
+	static Vulkan::VB vertex_binding();
+	static std::vector <Vulkan::VA> vertex_attributes();
 };
 
 // Aliases
@@ -67,22 +43,9 @@ struct RenderPacket {
 
 	// TODO: text renders so that text can become an object
 
-	// Reset the render packet
-	void reset() {
-		rects.vb->reset_push_back();
-		rects.ib->reset_push_back();
-	}
-
-	// Sync the render packet
-	void sync() {
-		// Sync sizes
-		rects.vb->sync_size();
-		rects.ib->sync_size();
-
-		// Upload
-		rects.vb->upload();
-		rects.ib->upload();
-	}
+	// Methods
+	void reset();
+	void sync();
 };
 
 // Abstract GUI element type
@@ -101,77 +64,15 @@ struct _element {
 	virtual glm::vec4 bounding_box() const = 0;
 
 	// Wrapper function to render
-	void render_element(RenderPacket &packet) {
-		// Render this
-		render(packet);
-
-		// Render all children
-		for (auto &child : children)
-			child->render_element(packet);
-	}
+	void render_element(RenderPacket &);
 };
 
 // Aliases
 using Element = std::shared_ptr <_element>;
 
 // Bounding box for a list of elements
-inline glm::vec4 get_bounding_box(const std::vector <_element *> &elements) {
-	// Throw on empty list
-	if (elements.empty())
-		throw std::runtime_error("Empty list of elements");
-
-	// Initialize bounding box
-	glm::vec4 bounding_box = glm::vec4 {
-		std::numeric_limits <float>::max(),
-		std::numeric_limits <float>::max(),
-		-std::numeric_limits <float>::max(),
-		-std::numeric_limits <float>::max()
-	};
-
-	// Loop through all elements
-	for (auto &element : elements) {
-		// Get the bounding box
-		auto bb = element->bounding_box();
-
-		// Update bounding box
-		bounding_box.x = std::min(bounding_box.x, bb.x);
-		bounding_box.y = std::min(bounding_box.y, bb.y);
-		bounding_box.z = std::max(bounding_box.z, bb.z);
-		bounding_box.w = std::max(bounding_box.w, bb.w);
-	}
-
-	// Return bounding box
-	return bounding_box;
-}
-
-inline glm::vec4 get_bounding_box(const std::vector <Element> &elements) {
-	// Throw on empty list
-	if (elements.empty())
-		throw std::runtime_error("Empty list of elements");
-
-	// Initialize bounding box
-	glm::vec4 bounding_box = glm::vec4 {
-		std::numeric_limits <float>::max(),
-		std::numeric_limits <float>::max(),
-		-std::numeric_limits <float>::max(),
-		-std::numeric_limits <float>::max()
-	};
-
-	// Loop through all elements
-	for (auto &element : elements) {
-		// Get the bounding box
-		auto bb = element->bounding_box();
-
-		// Update bounding box
-		bounding_box.x = std::min(bounding_box.x, bb.x);
-		bounding_box.y = std::min(bounding_box.y, bb.y);
-		bounding_box.z = std::max(bounding_box.z, bb.z);
-		bounding_box.w = std::max(bounding_box.w, bb.w);
-	}
-
-	// Return bounding box
-	return bounding_box;
-}
+glm::vec4 get_bounding_box(const std::vector <_element *> &);
+glm::vec4 get_bounding_box(const std::vector <Element> &);
 
 }
 

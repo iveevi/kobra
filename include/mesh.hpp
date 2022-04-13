@@ -5,7 +5,6 @@
 #include <optional>
 
 // Engine headers
-#include "primitive.hpp"
 #include "logger.hpp"	// TODO: remove
 #include "transform.hpp"
 #include "types.hpp"
