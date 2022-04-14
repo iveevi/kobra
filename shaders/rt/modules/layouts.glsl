@@ -69,6 +69,11 @@ layout (push_constant) uniform PushConstants
 	uint	samples_per_pixel;
 	uint	samples_per_light;
 
+	// Other options
+	uint	accumulate;	// TODO: replace with just present
+	uint	present;
+	uint	total;
+
 	// Camera
 	vec3	camera_position;
 	vec3	camera_forward;

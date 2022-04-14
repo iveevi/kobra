@@ -7,7 +7,7 @@ namespace rt {
 ////////////////////////////
 // BatchIndex constructor //
 ////////////////////////////
-	
+
 BatchIndex::BatchIndex(int w, int h, int x, int y, int p, int l)
 		: width(w), height(h), offset_x(x), offset_y(y),
 		pixel_samples(p), light_samples(l) {}
@@ -76,14 +76,27 @@ BatchIndex Batch::make_batch_index(int x, int y, int p, int l)
 // TODO: should skip baches which are full
 void Batch::increment(BatchIndex &index)
 {
-	index.offset_x += batch_width;
-	if (index.offset_x >= width) {
-		index.offset_x = 0;
-		index.offset_y += batch_height;
-	}
+	int iterations = 0;
+	while (iterations < batches_x * batches_y) {
+		index.offset_x += batch_width;
+		if (index.offset_x >= width) {
+			index.offset_x = 0;
+			index.offset_y += batch_height;
+		}
 
-	if (index.offset_y >= height)
-		index.offset_y = 0;
+		if (index.offset_y >= height)
+			index.offset_y = 0;
+
+		// Get corresponding index
+		int x = index.offset_x / batch_width;
+		int y = index.offset_y / batch_height;
+
+		// Break if not full
+		if (sample_count[x][y] < max_samples)
+			break;
+
+		iterations++;
+	}
 }
 
 // Increment sample count
@@ -94,7 +107,23 @@ void Batch::increment_sample_count(const BatchIndex &index)
 	int y = index.offset_y / batch_height;
 
 	// Increment sample count
-	sample_count[x][y]++;
+	sample_count[x][y] += index.pixel_samples;
+}
+
+// Get sample count
+int Batch::samples(const BatchIndex &index) const
+{
+	// Get corresponding index
+	int x = index.offset_x / batch_width;
+	int y = index.offset_y / batch_height;
+
+	return sample_count[x][y];
+}
+
+// Get max samples
+int Batch::total_samples() const
+{
+	return max_samples;
 }
 
 // Check if batch is fully completed

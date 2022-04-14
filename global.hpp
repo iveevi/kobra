@@ -269,7 +269,7 @@ public:
 		rt_layer.add_scene(scene);
 
 		// Initialize batch and batch index
-		batch = rt::Batch(1000, 1000, 50, 50, 1);
+		batch = rt::Batch(1000, 1000, 100, 100, 1);
 		batch_index = batch.make_batch_index(0, 0);
 
 		// TODO: m8 gotta really fix auto channels
@@ -375,8 +375,11 @@ public:
 				modified = false;
 			}
 
-			rt_layer.render(cmd, framebuffer, batch_index);
+			rt_layer.render(cmd, framebuffer, batch, batch_index);
+
 			batch.increment(batch_index);
+			if (batch.completed())
+				batch.reset();
 		}
 
 		// Render GUI

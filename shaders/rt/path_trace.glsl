@@ -411,6 +411,25 @@ vec2 jitter2d(in vec2 xy, float strata, float i)
 	return vec2(x, y);
 }
 
+// Sample environment map wih blur
+vec3 sample_environment_blur(Ray ray)
+{
+	int samples = 4;
+
+	vec3 color = vec3(0.0);
+	for (int i = 0; i < samples; i++) {
+		vec2 uv = vec2(0.0);
+		uv.x = atan(ray.direction.x, ray.direction.z) / (2.0 * PI) + 0.5;
+		uv.y = asin(ray.direction.y) / PI + 0.5;
+
+		vec2 j = jitter2d(ray.origin.xy, samples, i);
+		vec3 tex = texture(s2_environment, uv + 0.01 * j).rgb;
+		color += tex;
+	}
+
+	return color / float(samples);
+}
+
 // Sample random point in triangle
 float u = 0.0;
 float v = 0.0;
@@ -491,7 +510,7 @@ vec3 point_light_full(Hit hit, Ray ray, vec3 pos)
 				|| h.time > light_contr.y) {
 			// Hit object counts as light
 			color += r.contr * light_contr.x * hit.mat.albedo;
-		} else if (h.mat.shading == SHADING_TYPE_REFLECTION) {
+		} /* else if (h.mat.shading == SHADING_TYPE_REFLECTION) {
 			// TODO: is reflectivity even needed here?
 			// Reflection doesnt preserve much light
 			float contr = 0.85;
@@ -506,7 +525,7 @@ vec3 point_light_full(Hit hit, Ray ray, vec3 pos)
 			old_hit = h;
 			rays[depth] = nray;
 			depth++;
-		} else if (h.mat.shading == SHADING_TYPE_REFRACTION) {
+		} */ else if (h.mat.shading == SHADING_TYPE_REFRACTION) {
 			// Refraction preserves more light
 			float contr = 0.9;
 
@@ -580,27 +599,22 @@ vec3 light_contr(Hit hit, Ray ray)
 	for (int i = 0; i < pc.lights; i++)
 		contr += single_area_light_contr(hit, ray, i);
 
-	return contr/float(pc.lights);
+	// return contr/float(pc.lights);
 
 	///////////////////////////////////
 	// Sample light from environment //
 	///////////////////////////////////
 
-	/* TODO: note, this is not complete
 	// First, get the reflected ray
 	vec3 r = reflect(ray.direction, hit.normal);
 	Ray refl = Ray(hit.point + hit.normal * 0.001, r, 1.0, 1.0);
 
-	If the environment is not occlude, add it
+	// If the environment is not occlude, add it
 	Hit env_hit = closest_object(refl);
-	if (env_hit.object == -1) {
-		vec3 color = env_hit.mat.albedo;
-		float value = dot(color, hit.normal);
-		float luminance = 0.3 * color.x + 0.59 * color.y + 0.11 * color.z;
-		contr += value * luminance * hit.mat.albedo;
-	}
+	if (env_hit.object == -1)
+		contr += sample_environment_blur(refl);
 
-	return contr/float(pc.lights + 1); */
+	return contr/float(pc.lights + 1);
 }
 
 vec3 color_at(Ray ray)
@@ -705,7 +719,8 @@ void main()
 		// Random offset
 		vec2 offset = jitter2d(
 			vec2(x0, y0),
-			sqrt(pc.samples_per_pixel), i
+			sqrt(pc.total),
+			i + pc.present
 		);
 
 		// Create the ray
@@ -725,8 +740,16 @@ void main()
 		color += color_at(ray);
 	}
 
-	color /= float(pc.samples_per_pixel);
-	color = pow(color, vec3(1/2.2));
+	if (pc.accumulate > 0) {
+		vec3 pcolor = cast_color(frame.pixels[index]);
+		pcolor = pow(pcolor, vec3(2.2));
+		color += pcolor * pc.present;
+		color /= float(pc.present + pc.samples_per_pixel);
+		color = pow(color, vec3(1/2.2));
+	} else {
+		color /= float(pc.samples_per_pixel);
+		color = pow(color, vec3(1/2.2));
+	}
 
 	frame.pixels[index] = cast_color(color);
 }

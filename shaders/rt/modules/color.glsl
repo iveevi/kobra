@@ -2,9 +2,9 @@
 vec3 cast_color(uint c)
 {
 	return vec3(
-		float(c & 0xFF) / 255.0,
+		float((c >> 16) & 0xFF) / 255.0,
 		float((c >> 8) & 0xFF) / 255.0,
-		float((c >> 16) & 0xFF) / 255.0
+		float(c & 0xFF) / 255.0
 	);
 }
 

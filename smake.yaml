@@ -47,12 +47,12 @@ builds:
     - flags: '-O3 -std=c++17'
     - libraries: libs
   - kobra_debug:
-    - sources: main.cpp, kobra_source
+    - sources: main.cpp, kobra_source, tinyfd_source
     - idirs: includes
     - libraries: libs
     - flags: '-std=c++17 -g'
   - kobra_wall:
-    - sources: main.cpp, kobra_source
+    - sources: main.cpp, kobra_source, tinyfd_source
     - idirs: includes
     - libraries: libs
     - flags: '-std=c++17 -Wall -Werror'

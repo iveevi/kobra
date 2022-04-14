@@ -3,6 +3,7 @@
 
 // Standard headers
 #include <cmath>
+#include <mutex>
 #include <queue>
 #include <stack>
 #include <string>
@@ -41,6 +42,9 @@ private:
 	std::stack <Frame>	_stack;
 
 	Timer::time_point	_start;
+
+	// Mutex
+	std::mutex		_mutex;
 public:
 	// Constructor
 	Profiler() {
@@ -57,7 +61,9 @@ public:
 		Frame frame {name, _timer.now()};
 
 		// Add frame to stack
+		_mutex.lock();
 		_stack.push(frame);
+		_mutex.unlock();
 	}
 
 	// End current frame
@@ -69,6 +75,7 @@ public:
 		frame.time = _timer.elapsed(frame.start);
 
 		// Pop frame from stack
+		_mutex.lock();
 		_stack.pop();
 
 		// If frame has no parent, add to queue
@@ -76,12 +83,17 @@ public:
 			_frames.push(frame);
 		else
 			_stack.top().children.push_back(frame);
+
+		_mutex.unlock();
 	}
 
 	// Return front of queue
 	Frame pop() {
 		Frame frame = _frames.front();
+		
+		_mutex.lock();
 		_frames.pop();
+		_mutex.unlock();
 
 		return frame;
 	}

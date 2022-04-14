@@ -96,11 +96,18 @@ int main()
 {
 	// auto str = tinyfd_openFileDialog("Open scene", "resources", 0, 0, 0, 0);
 	// KOBRA_LOG_FILE(notify) << "Selected file: " << str << std::endl;
+		
+	// Construct camera
+	Camera camera = Camera {
+		Transform { {0, 6, 16}, {-0.2, 0, 0} },
+		Tunings { 45.0f, 800, 800 }
+	};
 
 	Vulkan *vulkan = new Vulkan();
 
 	// GUIApp gui_app {vulkan};
 	RTApp main_app {vulkan};
+	// engine::RTCapture main_app {vulkan, "scene.kobra", camera};
 
 	std::thread t1 {
 		[&]() {
@@ -253,8 +260,8 @@ void RTApp::keyboard_handler(void *user, const io::KeyboardEvent &event)
 void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 {
 	// TODO: refactor to pan
-	static const int drag_button = GLFW_MOUSE_BUTTON_MIDDLE;
-	static const int select_button = GLFW_MOUSE_BUTTON_LEFT;
+	static const int drag_button = GLFW_MOUSE_BUTTON_LEFT; // TODO: change back
+	static const int select_button = GLFW_MOUSE_BUTTON_RIGHT;
 
 	static const float sensitivity = 0.001f;
 
@@ -279,6 +286,7 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 	glm::vec2 dir {dx, dy};
 
 	// Dragging only with the drag button
+	// TODO: alt left dragging as ewll
 	bool is_drag_button = (event.button == drag_button);
 	if (event.action == GLFW_PRESS && is_drag_button)
 		dragging = true;

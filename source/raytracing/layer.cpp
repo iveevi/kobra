@@ -434,7 +434,7 @@ void Layer::_init_pipelines(const Vulkan::Swapchain &swapchain)
 	_init_mesh_compute_pipeline();
 	_init_postproc_pipeline(swapchain);
 }
-	
+
 // Update descriptor sets for samplers
 void Layer::_update_samplers(const ImageDescriptors &ids, uint binding)
 {
@@ -454,7 +454,7 @@ void Layer::_update_samplers(const ImageDescriptors &ids, uint binding)
 		0, nullptr
 	);
 }
-	
+
 // Get list of bboxes for each triangle
 std::vector <BoundingBox> Layer::_get_bboxes() const
 {
@@ -788,6 +788,7 @@ const BufferManager <uint> &Layer::pixels()
 // Render a batch
 void Layer::render(const VkCommandBuffer &cmd,
 		const VkFramebuffer &framebuffer,
+		const Batch &batch,
 		const BatchIndex &bi)
 {
 	// Handle null pipeline
@@ -826,6 +827,10 @@ void Layer::render(const VkCommandBuffer &cmd,
 		// TODO: still unable to do large number of samples
 		.samples_per_pixel = bi.pixel_samples,
 		.samples_per_light = bi.light_samples,
+
+		.accumulate = (bi.accumulate) ? 1u : 0u,
+		.present = (uint) batch.samples(bi),
+		.total = (uint) batch.total_samples(),
 
 		.camera_position = _active_camera->transform.position,
 		.camera_forward = _active_camera->transform.forward(),

@@ -27,6 +27,8 @@ public:
 	uint pixel_samples;
 	uint light_samples;
 
+	bool accumulate = false;
+
 	// Default constructor
 	BatchIndex() = default;
 
@@ -65,8 +67,13 @@ public:
 
 	// Methods
 	BatchIndex make_batch_index(int x, int y, int p = 1, int l = 1);
+	
 	void increment(BatchIndex &index);
 	void increment_sample_count(const BatchIndex &);
+
+	int samples(const BatchIndex &) const;
+	int total_samples() const;
+	
 	bool completed() const;
 	void reset();
 	float progress() const;

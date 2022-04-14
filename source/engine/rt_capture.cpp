@@ -27,8 +27,9 @@ RTCapture::RTCapture(Vulkan *vk, const std::string &scene_file, const Camera &ca
 	// Create batch
 	// TODO: a method to generate optimal batch sizes (eg 50x50 is
 	// faster than 10x10)
-	batch = rt::Batch(800, 800, 50, 50, 1);
-	index = batch.make_batch_index(0, 0, 4, 4);
+	batch = rt::Batch(800, 800, 50, 50, 100);
+	index = batch.make_batch_index(0, 0, 1, 100);
+	index.accumulate = true;
 
 	// Create GUI
 	gui_layer = gui::Layer(window, VK_ATTACHMENT_LOAD_OP_LOAD);
@@ -56,7 +57,7 @@ void RTCapture::record(const VkCommandBuffer &cmd, const VkFramebuffer &framebuf
 	Vulkan::begin(cmd);
 
 	// Render scene
-	layer.render(cmd, framebuffer, index);
+	layer.render(cmd, framebuffer, batch, index);
 
 	// Track progress
 	time += frame_time;

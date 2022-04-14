@@ -145,6 +145,7 @@ public:
 	// Render
 	void render(const VkCommandBuffer &,
 			const VkFramebuffer &,
+			const Batch &,
 			const BatchIndex &);
 };
 

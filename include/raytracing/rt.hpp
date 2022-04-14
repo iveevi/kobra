@@ -28,6 +28,10 @@ struct PushConstants {
 	uint samples_per_pixel;
 	uint samples_per_light;
 
+	uint accumulate;
+	uint present;
+	uint total;
+
 	aligned_vec4 camera_position;
 	aligned_vec4 camera_forward;
 	aligned_vec4 camera_up;
