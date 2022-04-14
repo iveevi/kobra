@@ -14,6 +14,9 @@ glslc -fshader-stage=fragment rt/postproc/postproc.frag -o bin/generic/postproc_
 glslc -fshader-stage=vertex gui/basic.vert -o bin/gui/basic_vert.spv
 glslc -fshader-stage=fragment gui/basic.frag -o bin/gui/basic_frag.spv
 
+glslc -fshader-stage=vertex gui/sprite.vert -o bin/gui/sprite_vert.spv
+glslc -fshader-stage=fragment gui/sprite.frag -o bin/gui/sprite_frag.spv
+
 glslc -fshader-stage=vertex gui/glyph.vert -o bin/gui/glyph_vert.spv
 glslc -fshader-stage=fragment gui/glyph.frag -o bin/gui/glyph_frag.spv
 
