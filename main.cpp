@@ -187,6 +187,31 @@ void RTApp::keyboard_handler(void *user, const io::KeyboardEvent &event)
 			app->gizmo_handle->deselect();
 		}
 
+		// Importing scenes with Ctrl+O
+		if (event.key == GLFW_KEY_O &&
+			event.mods == GLFW_MOD_CONTROL) {
+			KOBRA_LOG_FILE(notify) << "Importing scene...\n";
+			// app->scene.load(scene_path);
+
+			// Load an object
+			std::string str = tinyfd_openFileDialog(
+				"Open scene", scene_path.c_str(),
+				0, 0, 0, 0
+			);
+
+			std::cout << "Selected file: " << str << std::endl;
+			app->add_mesh(str);
+		}
+
+		// Duplicating objects with Ctrl+P
+		if (event.key == GLFW_KEY_P &&
+			event.mods == GLFW_MOD_CONTROL) {
+
+			// Get currently selected object
+			auto eptr = app->gizmo_handle->get_object();
+			app->duplicate_object(eptr->name());
+		}
+
 		// Refresh rasterization
 		if (event.key == GLFW_KEY_R &&
 			event.mods == GLFW_MOD_CONTROL) {

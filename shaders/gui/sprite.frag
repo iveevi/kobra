@@ -11,5 +11,5 @@ layout (location = 0) out vec4 fragment;
 // Main function
 void main()
 {
-	fragment = vec4(texture(sprite, in_tex_coord).rgb, 1.0);
+	fragment = texture(sprite, in_tex_coord);
 }

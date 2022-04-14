@@ -76,9 +76,11 @@ class RTApp :  public BaseApp {
 	// TODO: gui window abstraction (uses screen info returns as well)
 	struct {
 		// Statistics
-		gui::Text	*text_frame_rate;
-		gui::Text	*layer_info;
-		gui::Rect	*stats_bg;
+		struct {
+			gui::Text	*frame_rate;
+			gui::Text	*counts;
+			gui::Rect	*bg;
+		} stats;
 
 		// Help
 		gui::Text	*text_help;
@@ -90,6 +92,62 @@ class RTApp :  public BaseApp {
 		gui::Text	*text_scale;
 		gui::Rect	*edit_bg;
 	} gui;
+
+	// Add a mesh object
+	void add_mesh(const std::string &path) {
+		// Load model, then all its meshes
+		auto model = Model::load(path);
+
+		for (int i = 0; i < model.mesh_count(); i++) {
+			auto mesh = model[i];
+
+			// Add to raster and scene
+			raster_layer.add(new raster::Mesh(context, mesh));
+			scene.add(ObjectPtr(new Mesh(mesh)));
+		}
+	}
+
+	// Duplicate an object
+	void duplicate_object(const std::string &name) {
+		// TODO: better naming scheme
+		static int count = 1;
+
+		// Do for both raster and scene
+		auto raster_obj = scene[name];
+
+		// For now, just these types are allowed to be duplicated
+		std::string type = raster_obj->type();
+
+		auto new_name = name + "_" + std::to_string(count++);
+
+		KOBRA_LOG_FILE(notify) << "Duplicating " << name << " as " << new_name << " (type = " << type << ")\n";
+		if (type == Mesh::object_type) {
+			auto ptr_mesh = std::dynamic_pointer_cast <Mesh> (raster_obj);
+
+			auto scene_mesh = new Mesh(*ptr_mesh);
+			auto raster_mesh = new raster::Mesh(context, *ptr_mesh);
+
+			scene_mesh->set_name(new_name);
+			raster_mesh->set_name(new_name);
+
+			scene.add(ObjectPtr(scene_mesh));
+			raster_layer.add(raster_mesh);
+		} else if (type == Sphere::object_type) {
+			auto ptr_sphere = std::dynamic_pointer_cast <Sphere> (raster_obj);
+			auto scene_sphere = new Sphere(*ptr_sphere);
+
+			auto sphere_mesh = Mesh::make_sphere(ptr_sphere->center(), ptr_sphere->radius());
+			auto raster_sphere = new raster::Mesh(context, sphere_mesh);
+
+			scene_sphere->set_name(new_name);
+			raster_sphere->set_name(new_name);
+
+			scene.add(ObjectPtr(scene_sphere));
+			raster_layer.add(raster_sphere);
+		} else {
+			KOBRA_LOG_FILE(warn) << "Cannot duplicate object of type " << type << "\n";
+		}
+	}
 
 	// Initialize GUI elements
 	void initialize_gui() {
@@ -103,155 +161,27 @@ class RTApp :  public BaseApp {
 		gui_layer.load_font("default", "resources/fonts/noto_sans.ttf");
 
 		// Statistics
-		gui.text_frame_rate = gui_layer.text_render("default")->text(
-			"fps",
+		gui.stats.frame_rate = gui_layer.text_render("default")->text(
+			"",
 			window.coordinates(10, 10),
 			{1, 1, 1, 1}
 		);
 
-		gui.layer_info = gui_layer.text_render("default")->text(
-			"",
-			window.coordinates(10, 60),
-			{1, 1, 1, 1}
-		);
-
-		gui.stats_bg = new gui::Rect(context,
-			window.coordinates(0, 0),
-			window.coordinates(0, 0),
-			{0.4, 0.4, 0.4}
-		);
-
-		// TODO: direct method to add gui elements
-		gui.stats_bg->children.push_back(gui::Element(gui.text_frame_rate));
-		gui.stats_bg->children.push_back(gui::Element(gui.layer_info));
-
-		glm::vec4 bounds = gui::get_bounding_box(gui.stats_bg->children);
-		bounds += 0.01f * glm::vec4 {-1, -1, 1, 1};
-		gui.stats_bg->set_bounds(bounds);
-
-		gui_layer.add(gui.stats_bg);
-
-		// Help
-		gui.text_help = gui_layer.text_render("default")->text(
-			"[h] Help, [c] Capture, [g] Edit objects, [tab] Toggle RT preview",
-			window.coordinates(10, 750),
-			{1, 1, 1, 1}, 0.5
-		);
-
-		gui.help_bg = new gui::Rect(context,
-			window.coordinates(0, 0),
-			window.coordinates(0, 0),
-			{0.4, 0.4, 0.4}
-		);
-
-		gui.help_bg->children.push_back(gui::Element(gui.text_help));
-		bounds = gui::get_bounding_box(gui.help_bg->children);
-		// bounds += 0.01f * glm::vec4 {1, 1, -1, -1};
-		gui.help_bg->set_bounds(bounds);
-
-		gui_layer.add(gui.help_bg);
-
-		// Editing
-		gui.text_position = gui_layer.text_render("default")->text(
-			"Position: (0, 0, 0)",
-			window.coordinates(450, 630),
-			{1, 1, 1, 1}, 0.5
-		);
-
-		gui.text_rotation = gui_layer.text_render("default")->text(
-			"Rotation: (0, 0, 0)",
-			window.coordinates(450, 650),
-			{1, 1, 1, 1}, 0.5
-		);
-
-		gui.text_scale = gui_layer.text_render("default")->text(
-			"Scale: (1, 1, 1)",
-			window.coordinates(450, 670),
-			{1, 1, 1, 1}, 0.5
-		);
-
-		gui.edit_bg = new gui::Rect(context,
-			window.coordinates(0, 0),
-			window.coordinates(0, 0),
-			{0.4, 0.4, 0.4}
-		);
-
-		gui.edit_bg->children.push_back(gui::Element(gui.text_position));
-		gui.edit_bg->children.push_back(gui::Element(gui.text_rotation));
-		gui.edit_bg->children.push_back(gui::Element(gui.text_scale));
-
-		bounds = gui::get_bounding_box(gui.edit_bg->children);
-		bounds += 0.01f * glm::vec4 {-1, -1, 1, 1};
-		gui.edit_bg->set_bounds(bounds);
-
-		gui_layer.add(gui.edit_bg);
-
-		auto sprite = new gui::Sprite(context,
-			window.command_pool,
-			window.coordinates(250, 250),
-			window.coordinates(500, 500),
-			"resources/icons/mesh.png"
-		);
-
-		gui_layer.add(sprite);
+		gui_layer.add(gui.stats.frame_rate);
 	}
 
 	// Update GUI elements
 	void update_gui() {
 		static char buffer[1024];
 
-		// Overlay statistics
+		// Statistics
 		// TODO: statistics should be made a standalone layer
 		std::sprintf(buffer, "time: %.2f ms, fps: %.2f",
 			1000 * frame_time,
 			1.0f/frame_time
 		);
 
-		gui.text_frame_rate->str = buffer;
-
-		// RT layer statistics
-		gui.layer_info->str = std::to_string(rt_layer.triangle_count()) + " triangles";
-
-		// Update bounds
-		glm::vec4 bounds = gui::get_bounding_box(gui.stats_bg->children);
-		bounds += 0.01f * glm::vec4 {-1, -1, 1, 1};
-		gui.stats_bg->set_bounds(bounds);
-
-		// Edit mode
-		if (edit_mode) {
-			auto eptr = raster_layer[highlight];
-			auto transform = eptr->transform();
-
-			// Update text
-			std::sprintf(buffer, "Position: (%.2f, %.2f, %.2f)",
-				transform.position.x,
-				transform.position.y,
-				transform.position.z
-			);
-
-			gui.text_position->str = buffer;
-
-			std::sprintf(buffer, "Rotation: (%.2f, %.2f, %.2f)",
-				transform.rotation.x,
-				transform.rotation.y,
-				transform.rotation.z
-			);
-
-			gui.text_rotation->str = buffer;
-
-			std::sprintf(buffer, "Scale: (%.2f, %.2f, %.2f)",
-				transform.scale.x,
-				transform.scale.y,
-				transform.scale.z
-			);
-
-			gui.text_scale->str = buffer;
-
-			// Update bounds
-			bounds = gui::get_bounding_box(gui.edit_bg->children);
-			bounds += 0.01f * glm::vec4 {-1, -1, 1, 1};
-			gui.edit_bg->set_bounds(bounds);
-		}
+		gui.stats.frame_rate->str = buffer;
 	}
 
 	// Input handling for edit mode
