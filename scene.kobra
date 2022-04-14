@@ -294,7 +294,7 @@ normal_source=resources/brickwall_normal.jpg
 [OBJECT]
 name=Object 9
 [TRANSFORM]
-position=2.8 1.78 -3.21
+position=2.8 -2.15693 -3.21
 rotation=0 0 0
 scale=1 1 1
 [MESH]

@@ -83,9 +83,9 @@ public:
 					rb.pos.x, rb.pos.y,
 					rb.size.x, rb.size.y
 				)),
-				Rect(rb.pos, rb.size, rb.idle),
-				Rect(rb.pos, rb.size, rb.hover),
-				Rect(rb.pos, rb.size, rb.active),
+				Rect(wctx.context, rb.pos, rb.size, rb.idle),
+				Rect(wctx.context, rb.pos, rb.size, rb.hover),
+				Rect(wctx.context, rb.pos, rb.size, rb.active),
 				rb.button) {}
 
 	// Virtual methods
@@ -106,6 +106,9 @@ public:
 
 		return get_bounding_box(elements);
 	}
+
+	// Latching onto a layer
+	void latch(LatchingPacket &lp) override {}
 
 	// Render
 	void render(RenderPacket &rp) override {

@@ -11,11 +11,14 @@
 // Engine headers
 #include "../backend.hpp"
 #include "../buffer_manager.hpp"
+#include "../object.hpp"
 
 namespace kobra {
 
-// Core definitions for GUI
 namespace gui {
+
+// Forward declarations
+class Layer;
 
 // Vertex data
 struct Vertex {
@@ -35,33 +38,44 @@ using IndexBuffer = BufferManager <uint32_t>;
 // 	the data needed to render all
 // 	the GUI elements in a Layer object
 struct RenderPacket {
-	// Rectangles
-	struct {
-		VertexBuffer *vb;
-		IndexBuffer *ib;
-	} rects;
+	VkCommandBuffer		cmd = VK_NULL_HANDLE;
 
-	// TODO: text renders so that text can become an object
+	VkPipelineLayout	sprite_layout = VK_NULL_HANDLE;
+};
 
-	// Methods
-	void reset();
-	void sync();
+// Latching packet
+struct LatchingPacket {
+	Layer *layer;
 };
 
 // Abstract GUI element type
-struct _element {
+struct _element : virtual public Object {
 	// Virtual destructor
 	virtual ~_element() {}
 
 	// Child elements
 	std::vector <std::shared_ptr <_element>> children;
 
-	// Pure virtual function to render
+	// Pure virtual functions
+	virtual void latch(LatchingPacket &packet) = 0;
 	virtual void render(RenderPacket &) = 0;
 
 	// Position and bounding box
 	virtual glm::vec2 position() const = 0;
 	virtual glm::vec4 bounding_box() const = 0;
+
+	// Override object virtual methods for now
+	virtual float intersect(const Ray &) const {
+		return -1.0f;
+	}
+
+	virtual glm::vec3 center() const {
+		return glm::vec3(0.0f);
+	}
+
+	virtual void save(std::ofstream &) const {
+		// Do nothing
+	}
 
 	// Wrapper function to render
 	void render_element(RenderPacket &);

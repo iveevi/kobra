@@ -7,6 +7,7 @@
 
 // Engine headers
 #include "../app.hpp"
+#include "../layer.hpp"
 #include "gui.hpp"
 #include "text.hpp"
 
@@ -17,9 +18,13 @@ namespace gui {
 // Contains a set of
 //	GUI elements to render
 // TODO: derive from element?
-class Layer {
-	// All elements to render
-	std::vector <Element>		_elements;
+class Layer : public kobra::Layer <_element> {
+	// Private aliases
+	template <class T>
+	using str_map = std::map <std::string, T>;
+
+	// Element arranged by pipeline
+	str_map <std::vector <ptr>>	_pipeline_map;
 
 	// Set of Text Render objects
 	// for each font
@@ -27,7 +32,7 @@ class Layer {
 
 	// Map of font names/aliases to
 	//	their respective TextRender indices
-	std::map <std::string, int>	_font_map;
+	str_map <int>			_font_map;
 
 	// Application context
 	App::Window			_wctx;
@@ -36,8 +41,16 @@ class Layer {
 	VkRenderPass			_render_pass;
 
 	// Pipelines
-	// TODO: struct
-	Vulkan::Pipeline			_grp_shapes;
+	struct {
+		Vulkan::Pipeline	shapes;
+		Vulkan::Pipeline	sprites;
+	} _pipelines;
+
+	// Descriptor set layouts
+	Vulkan::DSL			_dsl_sprites;
+
+	// Descriptor set layout bindings
+	static const std::vector <Vulkan::DSLB>	_sprites_bindings;
 
 	// Allocation methods
 	void _init_vulkan_structures(VkAttachmentLoadOp load) {
@@ -80,69 +93,19 @@ public:
 
 	// Constructor
 	// TODO: _layer base class
-	Layer(const App::Window &wctx, const VkAttachmentLoadOp &load = VK_ATTACHMENT_LOAD_OP_LOAD)
-			: _wctx(wctx) {
-		// Initialize all Vulkan objects
-		_init_vulkan_structures(load);
+	Layer(const App::Window &, const VkAttachmentLoadOp & = VK_ATTACHMENT_LOAD_OP_LOAD);
 
-		// Allocate RenderPacket data
-		_alloc_rects();
+	// Add action
+	void add_do(const ptr &) override;
 
-		// Load all shaders
-		auto shaders = _wctx.context.make_shaders({
-			"shaders/bin/gui/basic_vert.spv",
-			"shaders/bin/gui/basic_frag.spv"
-		});
-
-		// Create pipelines
-		Vulkan::PipelineInfo grp_info {
-			.swapchain = wctx.swapchain,
-			.render_pass = _render_pass,
-
-			.vert = shaders[0],
-			.frag = shaders[1],
-
-			.dsls = {},
-
-			.vertex_binding = Vertex::vertex_binding(),
-			.vertex_attributes = Vertex::vertex_attributes(),
-
-			.depth_test = true,
-
-			.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-
-			.viewport {
-				.width = (int) wctx.width,
-				.height = (int) wctx.height,
-				.x = 0,
-				.y = 0
-			}
-		};
-
-		_grp_shapes = wctx.context.make_pipeline(grp_info);
+	// Serve descriptor sets
+	Vulkan::DS serve_sprite_ds() {
+		return _wctx.context.make_ds(_wctx.descriptor_pool, _dsl_sprites);
 	}
 
-	// Add elements
-	void add(const Element &element) {
-		_elements.push_back(element);
-	}
-
-	void add(_element *ptr) {
-		_elements.push_back(Element(ptr));
-	}
-
-	// Add multiple elements
-	void add(const std::vector <Element> &elements) {
-		_elements.insert(
-			_elements.end(),
-			elements.begin(),
-			elements.end()
-		);
-	}
-
-	void add(const std::vector <_element *> &elements) {
-		for (auto &e : elements)
-			_elements.push_back(Element(e));
+	// Adding a scene
+	void add_scene(const Scene &scene) override {
+		KOBRA_LOG_FUNC(warn) << "Not implemented\n";
 	}
 
 	// Load fonts
@@ -184,38 +147,30 @@ public:
 
 		vkCmdBeginRenderPass(cmd_buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
 
-		// Bind graphics pipeline
-		vkCmdBindPipeline(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _grp_shapes.pipeline);
 
 		// Initialize render packet
 		RenderPacket rp {
-			.rects {
-				.vb = &rects.vb,
-				.ib = &rects.ib
-			}
+			.cmd = cmd_buffer,
+			.sprite_layout = _pipelines.sprites.layout,
 		};
 
-		// Reset RenderPacket
-		rp.reset();
+		// Render all plain shapes
+		vkCmdBindPipeline(cmd_buffer,
+			VK_PIPELINE_BIND_POINT_GRAPHICS,
+			_pipelines.shapes.pipeline
+		);
 
-		// Render all elements onto the RenderPacket
-		for (auto &elem : _elements)
-			elem->render_element(rp);
+		for (auto &e : _pipeline_map["shapes"])
+			e->render_element(rp);
 
-		// Sync RenderPacket
-		rp.sync();
+		// Render all sprites
+		vkCmdBindPipeline(cmd_buffer,
+			VK_PIPELINE_BIND_POINT_GRAPHICS,
+			_pipelines.sprites.pipeline
+		);
 
-		// Render all parts of the RenderPacket
-		// TODO: separate method
-
-		// Draw rectangles
-		VkBuffer	vbuffers[] = {rects.vb.vk_buffer()};
-		VkDeviceSize	offsets[] = {0};
-
-		vkCmdBindVertexBuffers(cmd_buffer, 0, 1, vbuffers, offsets);
-		vkCmdBindIndexBuffer(cmd_buffer, rects.ib.vk_buffer(), 0, VK_INDEX_TYPE_UINT32);
-
-		vkCmdDrawIndexed(cmd_buffer, rects.ib.push_size(), 1, 0, 0, 0);
+		for (auto &e : _pipeline_map["sprites"])
+			e->render_element(rp);
 
 		// Render all the text renders
 		for (auto &tr : _text_renders)

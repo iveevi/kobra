@@ -27,6 +27,10 @@ public:
 	Object() = default;
 
 	// Constructor
+	Object(const std::string &type) : _type(type) {
+		_name = _generate_name();
+	}
+
 	Object(const std::string &type, const Transform &transform)
 			: _type(type), _transform(transform) {
 		_name = _generate_name();

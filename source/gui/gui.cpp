@@ -7,7 +7,7 @@ namespace gui {
 ///////////////////////////
 // Vertex static methods //
 ///////////////////////////
-	
+
 // Get vertex binding description
 Vulkan::VB Vertex::vertex_binding()
 {
@@ -36,29 +36,6 @@ std::vector <Vulkan::VA> Vertex::vertex_attributes()
 			.offset = offsetof(Vertex, color)
 		}
 	};
-}
-
-//////////////////////////
-// RenderPacket methods //
-//////////////////////////
-
-// Reset the render packet
-void RenderPacket::reset()
-{
-	rects.vb->reset_push_back();
-	rects.ib->reset_push_back();
-}
-
-// Sync the render packet
-void RenderPacket::sync()
-{
-	// Sync sizes
-	rects.vb->sync_size();
-	rects.ib->sync_size();
-
-	// Upload
-	rects.vb->upload();
-	rects.ib->upload();
 }
 
 ///////////////////////////////////

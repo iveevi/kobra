@@ -64,6 +64,9 @@ public:
 		return _bounds.w - _bounds.y;
 	}
 
+	// Latching onto a layer
+	void latch(LatchingPacket &lp) override {}
+
 	// Render
 	void render(RenderPacket &rp) override {
 		// Check if the text has changed

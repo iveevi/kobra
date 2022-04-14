@@ -150,12 +150,12 @@ public:
 			{1, 1, 1, 1}
 		);
 
-		wborder = new gui::Rect(
+		wborder = new gui::Rect(context,
 			t->bounding_box(),
 			{0.5, 0.5, 0.5}
 		);
 
-		content = new gui::Rect(
+		content = new gui::Rect(context,
 			window.coordinates(300, 100),
 			window.coordinates(100, 100),
 			{0.8, 0.8, 0.8}
@@ -206,7 +206,7 @@ public:
 			// Add border boxes for each child
 			std::vector <Profiler::Frame> fchildren = frame.children;
 			for (size_t i = 0; i < fchildren.size(); i++) {
-				gui::Rect *border = new gui::Rect(
+				gui::Rect *border = new gui::Rect(context,
 					glm::vec4 {0, 0, 0, 0},
 					{0.5, 0.5, 0.5}
 				);

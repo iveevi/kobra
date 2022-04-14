@@ -1,4 +1,5 @@
 #include "global.hpp"
+#include "tinyfiledialogs.h"
 
 // Scene path
 std::string scene_path = "scene.kobra";
@@ -93,6 +94,9 @@ public:
 
 int main()
 {
+	// auto str = tinyfd_openFileDialog("Open scene", "resources", 0, 0, 0, 0);
+	// KOBRA_LOG_FILE(notify) << "Selected file: " << str << std::endl;
+
 	Vulkan *vulkan = new Vulkan();
 
 	// GUIApp gui_app {vulkan};

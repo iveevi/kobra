@@ -21,6 +21,7 @@
 #include "include/gui/gui.hpp"
 #include "include/gui/layer.hpp"
 #include "include/gui/rect.hpp"
+#include "include/gui/sprite.hpp"
 #include "include/io/event.hpp"
 #include "include/model.hpp"
 #include "include/profiler.hpp"
@@ -114,7 +115,7 @@ class RTApp :  public BaseApp {
 			{1, 1, 1, 1}
 		);
 
-		gui.stats_bg = new gui::Rect(
+		gui.stats_bg = new gui::Rect(context,
 			window.coordinates(0, 0),
 			window.coordinates(0, 0),
 			{0.4, 0.4, 0.4}
@@ -137,7 +138,7 @@ class RTApp :  public BaseApp {
 			{1, 1, 1, 1}, 0.5
 		);
 
-		gui.help_bg = new gui::Rect(
+		gui.help_bg = new gui::Rect(context,
 			window.coordinates(0, 0),
 			window.coordinates(0, 0),
 			{0.4, 0.4, 0.4}
@@ -169,7 +170,7 @@ class RTApp :  public BaseApp {
 			{1, 1, 1, 1}, 0.5
 		);
 
-		gui.edit_bg = new gui::Rect(
+		gui.edit_bg = new gui::Rect(context,
 			window.coordinates(0, 0),
 			window.coordinates(0, 0),
 			{0.4, 0.4, 0.4}
@@ -184,6 +185,15 @@ class RTApp :  public BaseApp {
 		gui.edit_bg->set_bounds(bounds);
 
 		gui_layer.add(gui.edit_bg);
+
+		auto sprite = new gui::Sprite(context,
+			window.command_pool,
+			window.coordinates(250, 250),
+			window.coordinates(500, 500),
+			"resources/icons/mesh.png"
+		);
+
+		gui_layer.add(sprite);
 	}
 
 	// Update GUI elements
@@ -440,8 +450,8 @@ public:
 		}
 
 		// Render GUI
-		// update_gui();
-		// gui_layer.render(cmd, framebuffer);
+		update_gui();
+		gui_layer.render(cmd, framebuffer);
 
 		// Render gizmo
 		if (gizmo_handle->get_object() != nullptr)
