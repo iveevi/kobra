@@ -93,6 +93,14 @@ class RTApp :  public BaseApp {
 		gui::Rect	*edit_bg;
 	} gui;
 
+	// Update the scene with the raster_layer's current state
+	void update_scene() {
+		for (auto &obj : raster_layer) {
+			std::string name = obj->name();
+			scene[name]->transform() = obj->transform();
+		}
+	}
+
 	// Add a mesh object
 	void add_mesh(const std::string &path) {
 		// Load model, then all its meshes
@@ -108,7 +116,7 @@ class RTApp :  public BaseApp {
 	}
 
 	// Duplicate an object
-	void duplicate_object(const std::string &name) {
+	std::string duplicate_object(const std::string &name) {
 		// TODO: better naming scheme
 		static int count = 1;
 
@@ -147,6 +155,8 @@ class RTApp :  public BaseApp {
 		} else {
 			KOBRA_LOG_FILE(warn) << "Cannot duplicate object of type " << type << "\n";
 		}
+
+		return new_name;
 	}
 
 	// Initialize GUI elements

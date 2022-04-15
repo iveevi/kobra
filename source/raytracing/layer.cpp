@@ -162,16 +162,17 @@ void Layer::_init_mesh_compute_pipeline()
 
 	VkPipeline mesh_pp;
 
-	VkShaderModule mesh_shader_module = _context.make_shader(
-		"shaders/bin/generic/path_trace.spv"
-	);
+	auto shaders = _context.make_shaders({
+		"shaders/bin/generic/fast_path_trace.spv",
+		"shaders/bin/generic/normal.spv"
+	});
 
 	VkComputePipelineCreateInfo mesh_pp_ci = {
 		.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
 		.stage = {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 			.stage = VK_SHADER_STAGE_COMPUTE_BIT,
-			.module = mesh_shader_module,
+			.module = shaders[0],
 			.pName = "main"
 		},
 		.layout = mesh_ppl,

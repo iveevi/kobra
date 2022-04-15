@@ -213,10 +213,21 @@ void RTApp::keyboard_handler(void *user, const io::KeyboardEvent &event)
 		// Duplicating objects with Ctrl+P
 		if (event.key == GLFW_KEY_P &&
 			event.mods == GLFW_MOD_CONTROL) {
+			// First update the scene
+			app->update_scene();
 
 			// Get currently selected object
 			auto eptr = app->gizmo_handle->get_object();
-			app->duplicate_object(eptr->name());
+			auto name = app->duplicate_object(eptr->name());
+			
+			app->raster_layer.clear_highlight();
+
+			auto ptr = app->raster_layer[name];
+			ptr->highlight = true;
+
+			glm::vec3 position = ptr->center();
+			app->gizmo_handle->set_position(position);
+			app->gizmo_handle->bind(ptr);
 		}
 
 		// Refresh rasterization
@@ -260,8 +271,8 @@ void RTApp::keyboard_handler(void *user, const io::KeyboardEvent &event)
 void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 {
 	// TODO: refactor to pan
-	static const int drag_button = GLFW_MOUSE_BUTTON_LEFT; // TODO: change back
-	static const int select_button = GLFW_MOUSE_BUTTON_RIGHT;
+	static const int drag_button = GLFW_MOUSE_BUTTON_MIDDLE;
+	static const int select_button = GLFW_MOUSE_BUTTON_LEFT;
 
 	static const float sensitivity = 0.001f;
 
