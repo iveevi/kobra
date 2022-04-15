@@ -2,7 +2,7 @@
 #include "tinyfiledialogs.h"
 
 // Scene path
-std::string scene_path = "scene.kobra";
+std::string scene_path = "../assets/ruins/scene.kobra";
 
 // Experimental GUI app
 class GUIApp : public BaseApp {
@@ -264,6 +264,13 @@ void RTApp::keyboard_handler(void *user, const io::KeyboardEvent &event)
 				app->capturer->run();
 			});
 		}
+
+		// R and T to switch gizmo type
+		if (event.key == GLFW_KEY_T)
+			app->edit.gizmo_mode = 1;
+
+		if (event.key == GLFW_KEY_R)
+			app->edit.gizmo_mode = 2;
 	}
 }
 
@@ -357,11 +364,14 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 				glm::vec3 position = ptr->center();
 				app->gizmo_handle->set_position(position);
 				app->gizmo_handle->bind(ptr);
+				app->edit.selected = ptr;
 			} else {
 				auto ptr = app->gizmo_handle->get_object();
 				if (ptr != nullptr) {
 					app->raster_layer[ptr->name()]->highlight = false;
 					app->gizmo_handle->deselect();
+					app->edit.gizmo_mode = 0;
+					app->edit.selected = nullptr;
 				}
 			}
 		}
@@ -376,6 +386,12 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 			dx, -dy,
 			app->window.width, app->window.height
 		);
+	}
+
+	// Rotation mode
+	if (app->edit.gizmo_mode == 2) {
+		glm::vec3 euler = glm::vec3(0.1 * dy, 0.1 * dx, 0.0f);
+		app->edit.selected->transform().rotation += euler;
 	}
 
 	// Only if dragging

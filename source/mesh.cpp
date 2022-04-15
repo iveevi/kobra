@@ -170,6 +170,119 @@ Mesh Mesh::make_sphere(const glm::vec3 &center, float radius, int slices, int st
 	return Mesh {vertices, indices};
 }
 
+// Create a ring
+// TODO: allow a normal to be specified
+Mesh Mesh::make_ring(const glm::vec3 &center, float radius, float width, float height, int slices)
+{
+	// Vertices and indices
+	VertexList vertices;
+	IndexList indices;
+
+	// Add vertices
+	for (int i = 0; i < slices; i++) {
+		float theta = 2.0f * glm::pi <float> () * double(i) / slices;
+		float iradius = radius - width / 2.0f;
+		float oradius = radius + width / 2.0f;
+
+		// Upper-inner ring
+		Vertex u_inner {
+			{
+				center.x + iradius * glm::sin(theta),
+				center.y + height / 2.0f,
+				center.z + iradius * glm::cos(theta)
+			},
+			{0.0f, 1.0f, 0.0f},
+			{double(i) / slices, 0.0f}
+		};
+
+		// Upper-outer ring
+		Vertex u_outer {
+			{
+				center.x + oradius * glm::sin(theta),
+				center.y + height / 2.0f,
+				center.z + oradius * glm::cos(theta)
+			},
+			{0.0f, 1.0f, 0.0f},
+			{double(i) / slices, 1.0f}
+		};
+
+		// Lower-inner ring
+		Vertex l_inner {
+			{
+				center.x + iradius * glm::sin(theta),
+				center.y - height / 2.0f,
+				center.z + iradius * glm::cos(theta)
+			},
+			{0.0f, -1.0f, 0.0f},
+			{double(i) / slices, 0.0f}
+		};
+
+		// Lower-outer ring
+		Vertex l_outer {
+			{
+				center.x + oradius * glm::sin(theta),
+				center.y - height / 2.0f,
+				center.z + oradius * glm::cos(theta)
+			},
+			{0.0f, -1.0f, 0.0f},
+			{double(i) / slices, 1.0f}
+		};
+
+		// Add vertices
+		vertices.push_back(u_inner);
+		vertices.push_back(u_outer);
+		vertices.push_back(l_inner);
+		vertices.push_back(l_outer);
+	}
+
+	// Add indices
+	for (int i = 0; i < slices; i++) {
+		// Next index
+		int n = (i + 1) % slices;
+
+		// Relevant indices
+		uint i0 = 4 * i;
+		uint i1 = i0 + 1;
+		uint i2 = i0 + 2;
+		uint i3 = i0 + 3;
+
+		uint i4 = 4 * n;
+		uint i5 = i4 + 1;
+		uint i6 = i4 + 2;
+		uint i7 = i4 + 3;
+
+		// Group indices
+		std::vector <uint> upper_quad {
+			i0, i4, i5,
+			i0, i5, i1
+		};
+
+		std::vector <uint> lower_quad {
+			i2, i6, i7,
+			i2, i7, i3
+		};
+
+		std::vector <uint> outer_mid {
+			i1, i5, i3,
+			i3, i7, i5
+		};
+
+		std::vector <uint> inner_mid {
+			i0, i4, i2,
+			i2, i6, i4
+		};
+
+		// Add indices
+		indices.insert(indices.end(), upper_quad.begin(), upper_quad.end());
+		indices.insert(indices.end(), lower_quad.begin(), lower_quad.end());
+		indices.insert(indices.end(), outer_mid.begin(), outer_mid.end());
+		indices.insert(indices.end(), inner_mid.begin(), inner_mid.end());
+	}
+
+	// Construct and return the mesh
+	return Mesh {vertices, indices};
+}
+
 //////////////////
 // Mesh methods //
 //////////////////

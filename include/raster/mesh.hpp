@@ -61,6 +61,15 @@ public:
 	// Latch to layer
 	void latch(const LatchingPacket &) override;
 
+	// Add lighting info
+	void light(const LightingPacket &lp) override {
+		if (_material.shading_type == SHADING_TYPE_EMISSIVE) {
+			glm::vec3 pos = center();
+			lp.ubo_point_lights->positions
+				[lp.ubo_point_lights->number++] = pos;
+		}
+	}
+
 	// Get local descriptor set
 	VkDescriptorSet get_local_ds() const override {
 		return _ds;
@@ -130,7 +139,7 @@ public:
 		// Draw
 		vkCmdDrawIndexed(rp.cmd, _ib.push_size(), 1, 0, 0, 0);
 	}
-	
+
 	// Draw without descriptor set
 	void draw(RenderPacket &rp) {
 		// Get the MVP

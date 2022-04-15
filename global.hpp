@@ -68,6 +68,17 @@ class RTApp :  public BaseApp {
 	int			highlight = -1;
 	bool			edit_mode = false;
 
+	// Editting state
+	struct {
+		// 1 = translate, 2 = rotate, 3 = scale
+		int			gizmo_mode = 0;
+		raster::Layer::ptr	selected = nullptr;
+
+		raster::Mesh *gizmo_x = nullptr;
+		raster::Mesh *gizmo_y = nullptr;
+		raster::Mesh *gizmo_z = nullptr;
+	} edit;
+
 	// Raytracing state
 	rt::Batch		batch;
 	rt::BatchIndex		batch_index;
@@ -248,6 +259,62 @@ class RTApp :  public BaseApp {
 	// Gizmo things
 	engine::Gizmo::Handle		gizmo_handle;
 	engine::Gizmo			gizmo_set;
+
+	// Gizmo pipeline
+	VkRenderPass			gizmo_render_pass;
+	Vulkan::Pipeline		gizmo_pipeline;
+
+	void init_gizmo() {
+		// Create render pass
+		gizmo_render_pass = context.make_render_pass(swapchain,
+			VK_ATTACHMENT_LOAD_OP_LOAD,
+			VK_ATTACHMENT_STORE_OP_STORE
+		);
+
+		// Load shaders
+		auto shaders = context.make_shaders({
+			"shaders/bin/raster/vertex.spv",
+			"shaders/bin/raster/plain_color_frag.spv"
+		});
+
+		// Push constants
+		VkPushConstantRange pcr {
+			.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+			.offset = 0,
+			.size = sizeof(typename raster::Mesh::MVP)
+		};
+
+		// Creation info
+		Vulkan::PipelineInfo info {
+			.swapchain = swapchain,
+			.render_pass = render_pass,
+
+			.vert = shaders[0],
+			.frag = shaders[1],
+
+			.dsls = {},
+
+			.vertex_binding = Vertex::vertex_binding(),
+			.vertex_attributes = Vertex::vertex_attributes(),
+
+			.push_consts = 1,
+			.push_consts_range = &pcr,
+
+			.depth_test = false,
+
+			.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+
+			// TODO: make a swapchain method to get viewport
+			.viewport {
+				.width = (int) swapchain.extent.width,
+				.height = (int) swapchain.extent.height,
+				.x = 0,
+				.y = 0
+			}
+		};
+
+		gizmo_pipeline = context.make_pipeline(info);
+	}
 public:
 	// TODO: just remove the option of no depth buffer (always use depth buffer)
 	RTApp(Vulkan *vk) : BaseApp({
@@ -291,6 +358,24 @@ public:
 		raster_layer = raster::Layer(window, VK_ATTACHMENT_LOAD_OP_CLEAR);
 		raster_layer.set_mode(raster::Layer::Mode::BLINN_PHONG);
 		raster_layer.add_scene(scene);
+
+		// Rotation gizmo
+		auto ring_x = Mesh::make_ring({0, 0, 0}, 1, 0.05, 0.05);
+		auto ring_y = Mesh::make_ring({0, 0, 0}, 1, 0.05, 0.05);
+		auto ring_z = Mesh::make_ring({0, 0, 0}, 1, 0.05, 0.05);
+
+		ring_x.transform().rotation = {90, 0, 0};
+		ring_z.transform().rotation = {0, 0, 90};
+
+		ring_x.material().albedo = {1, 0, 0};
+		ring_y.material().albedo = {0, 1, 0};
+		ring_z.material().albedo = {0, 0, 1};
+
+		edit.gizmo_x = new raster::Mesh(context, ring_x);
+		edit.gizmo_y = new raster::Mesh(context, ring_y);
+		edit.gizmo_z = new raster::Mesh(context, ring_z);
+
+		init_gizmo();
 
 		// GUI layer
 		// TODO: be able to load gui elements from scene
@@ -399,6 +484,51 @@ public:
 		// Render gizmo
 		if (gizmo_handle->get_object() != nullptr)
 			gizmo_set.render(cmd, framebuffer);
+		
+		// Start gizmo render pass
+		VkRect2D render_area {
+			.offset = {0, 0},
+			.extent = swapchain.extent
+		};
+
+		std::vector <VkClearValue> clear_colors {
+			{.color = {0.0f, 0.0f, 0.0f, 1.0f}},
+			{.depthStencil = {1.0f, 0}}
+		};
+		
+		Vulkan::begin_render_pass(cmd,
+			gizmo_render_pass,
+			framebuffer,
+			render_area,
+			clear_colors
+		);
+
+		// Bind pipeline
+		vkCmdBindPipeline(cmd,
+			VK_PIPELINE_BIND_POINT_GRAPHICS,
+			gizmo_pipeline.pipeline
+		);
+
+		// Initialize render packet
+		raster::RenderPacket packet {
+			.cmd = cmd,
+
+			.pipeline_layout = gizmo_pipeline.layout,
+
+			// TODO: warn on null camera
+			.view = camera.view(),
+			.proj = camera.perspective()
+		};
+
+		// Render gizmos
+		if (edit.gizmo_mode == 2) {
+			edit.gizmo_x->draw(packet);
+			edit.gizmo_y->draw(packet);
+			edit.gizmo_z->draw(packet);
+		}
+
+		// End render pass
+		Vulkan::end_render_pass(cmd);
 
 		// End recording command buffer
 		Vulkan::end(cmd);

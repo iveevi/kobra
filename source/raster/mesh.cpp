@@ -16,14 +16,6 @@ void Mesh::latch(const LatchingPacket &lp)
 		RASTER_BINDING_ALBEDO_MAP,
 		RASTER_BINDING_NORMAL_MAP
 	);
-
-	// Only do stuff if the mesh is emissive
-	if (_material.shading_type != SHADING_TYPE_EMISSIVE)
-		return;
-
-	glm::vec3 pos = center();
-	lp.ubo_point_lights->positions
-		[lp.ubo_point_lights->number++] = pos;
 }
 
 }

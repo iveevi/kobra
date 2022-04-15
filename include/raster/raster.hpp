@@ -46,8 +46,12 @@ struct UBO_PointLights {
 struct LatchingPacket {
 	Vulkan::Context *context;
 	VkCommandPool	*command_pool;
-	UBO_PointLights	*ubo_point_lights;
 	Layer		*layer;
+};
+
+// Lighting packet
+struct LightingPacket {
+	UBO_PointLights *ubo_point_lights;
 };
 
 // Rasterization elements
@@ -61,6 +65,7 @@ struct _element : virtual public Object {
 	// Virtual methods
 	virtual VkDescriptorSet get_local_ds() const = 0;
 	virtual void latch(const LatchingPacket &) = 0;
+	virtual void light(const LightingPacket &) = 0;
 	virtual void render(RenderPacket &) = 0;
 };
 

@@ -176,6 +176,7 @@ public:
 // Base app, includes some more
 //	setup upon construction
 class BaseApp : public App {
+protected:
 	// Vulkan structures
 	VkRenderPass			render_pass;	// TODO: is this even necessary?
 	VkCommandPool			command_pool;

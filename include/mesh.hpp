@@ -119,7 +119,7 @@ public:
 		}
 
 		// Divide by the number of triangles
-		return s / (3.0f * triangle_count()) + _transform.position;
+		return _transform.apply(s / (3.0f * triangle_count()));
 	}
 
 	// Get data
@@ -190,8 +190,12 @@ public:
 	void save(std::ofstream &) const override;
 
 	// Mesh factories
+	// TODO: should formaat with struct arguments and overloads instead:
+	// Mesh make(Box{...});
+	// Mesh make(Sphere{...}); ...
 	static Mesh make_box(const glm::vec3 &, const glm::vec3 &);
 	static Mesh make_sphere(const glm::vec3 &, float, int = 16, int = 16);
+	static Mesh make_ring(const glm::vec3 &, float, float, float, int = 32);
 
 	// Read from file
 	static std::optional <Mesh> from_file(const Vulkan::Context &,

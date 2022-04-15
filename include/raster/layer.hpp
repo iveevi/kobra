@@ -115,24 +115,11 @@ public:
 		LatchingPacket lp {
 			.context = &_wctx.context,
 			.command_pool = &_wctx.command_pool,
-			.ubo_point_lights = &_ubo_point_lights,
 			.layer = this
 		};
 
 		// Add element
 		e->latch(lp);
-
-		// Refresh lights for all elements
-		for (int i = 0; i < _elements.size(); i++) {
-			// Update once for all element, bind once for all
-			_refresh(_ubo_point_lights_buffer,
-				(const uint8_t *) &_ubo_point_lights,
-				sizeof(_ubo_point_lights),
-
-				_elements[i]->get_local_ds(),
-				RASTER_BINDING_POINT_LIGHTS
-			);
-		}
 	}
 
 	// Import scene objects
@@ -219,6 +206,25 @@ public:
 			KOBRA_LOG_FUNC(warn) << "calling ::render() on"
 				" raster::Layer (" << this << ") which has not"
 				" been yet been initialized\n";
+		}
+
+		// First update the lighting
+		_ubo_point_lights.number = 0;
+		LightingPacket lp {
+			.ubo_point_lights = &_ubo_point_lights,
+		};
+
+		for (auto &e : _elements)
+			e->light(lp);
+
+		// Refresh for all elements
+		for (auto &e : _elements) {
+			_refresh(_ubo_point_lights_buffer,
+				(const uint8_t *) &_ubo_point_lights,
+				sizeof(_ubo_point_lights),
+				e->get_local_ds(),
+				RASTER_BINDING_POINT_LIGHTS
+			);
 		}
 
 		// Start render pass (clear both color and depth)
