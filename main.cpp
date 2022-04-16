@@ -2,7 +2,7 @@
 #include "tinyfiledialogs.h"
 
 // Scene path
-std::string scene_path = "../assets/ruins/scene.kobra";
+std::string scene_path = "scene.kobra";
 
 // Experimental GUI app
 class GUIApp : public BaseApp {
@@ -331,9 +331,35 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 			x, y, app->window.width,
 			app->window.height
 		);
+		
+		// Rotation gizmo
+		float _x = event.xpos / (float) app->window.width;
+		float _y = event.ypos / (float) app->window.height;
+		Ray ray = app->camera.generate_ray(_x, _y);
 
-		if (app->gizmo_handle->get_object() != nullptr && activated) {
+		auto d_x = closest_distance(*app->edit.gizmo_x, ray);
+		auto d_y = closest_distance(*app->edit.gizmo_y, ray);
+		auto d_z = closest_distance(*app->edit.gizmo_z, ray);
+
+		int min_axis = -1;
+		float min_distance = -1.0f;
+
+		if (d_x.distance < d_y.distance && d_x.distance < d_z.distance) {
+			min_axis = 2;
+			min_distance = d_x.distance;
+		} else if (d_y.distance < d_z.distance && d_y.distance < d_x.distance) {
+			min_axis = 1;
+			min_distance = d_y.distance;
+		} else if (d_z.distance < d_x.distance && d_z.distance < d_y.distance) {
+			min_axis = 0;
+			min_distance = d_z.distance;
+		}
+
+		if (app->edit.gizmo_mode == 1 && app->gizmo_handle->get_object() != nullptr && activated) {
 			gizmo_dragging = true;
+		} else if (app->edit.gizmo_mode == 2 && app->edit.selected != nullptr && min_distance < 0.1f) {
+			gizmo_dragging = true;
+			app->edit.rot_axis = min_axis;
 		} else {
 			// Select an object instead
 			float x = event.xpos / (float) app->window.width;
@@ -370,7 +396,6 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 				if (ptr != nullptr) {
 					app->raster_layer[ptr->name()]->highlight = false;
 					app->gizmo_handle->deselect();
-					app->edit.gizmo_mode = 0;
 					app->edit.selected = nullptr;
 				}
 			}
@@ -379,19 +404,73 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 		gizmo_dragging = false;
 	}
 
-	// Dragging in gizmo
-	if (dragging_select && gizmo_dragging && app->gizmo_handle->get_object() != nullptr) {
+	// Dragging in gizmo for translation
+	if (dragging_select && gizmo_dragging && app->gizmo_handle->get_object() != nullptr
+			&& app->edit.gizmo_mode == 1) {
 		glm::mat4 proj = app->camera.projection();
 		app->gizmo_handle->handle_drag(proj,
 			dx, -dy,
 			app->window.width, app->window.height
 		);
 	}
+	
+	// Dragging in gizmo for rotation
+	if (dragging_select && gizmo_dragging
+			&& app->gizmo_handle->get_object() != nullptr
+			&& app->edit.gizmo_mode == 2) {
+		std::cout << "\nDragging rotation: " << app->edit.rot_axis << std::endl;
+		float x = event.xpos / (float) app->window.width;
+		float y = event.ypos / (float) app->window.height;
 
-	// Rotation mode
-	if (app->edit.gizmo_mode == 2) {
-		glm::vec3 euler = glm::vec3(0.1 * dy, 0.1 * dx, 0.0f);
-		app->edit.selected->transform().rotation += euler;
+		Ray ray0 = app->camera.generate_ray(x - dx, y - dy);
+		Ray ray1 = app->camera.generate_ray(x, y);
+
+		float degrees = 0;
+		if (app->edit.rot_axis == 0) {
+			auto d0 = closest_distance(*app->edit.gizmo_x, ray0);
+			auto d1 = closest_distance(*app->edit.gizmo_x, ray1);
+
+			auto v0 = d0.objp - app->edit.gizmo_x->transform().position;
+			auto v1 = d1.objp - app->edit.gizmo_x->transform().position;
+
+			if (glm::dot(v0, v1) <= 1) {
+				degrees = glm::degrees(glm::acos(glm::dot(v0, v1)
+					/ (glm::length(v0) * glm::length(v1))));
+				degrees *= (v0.x * v1.y - v0.y * v1.x) > 0 ? 1 : -1;
+			}
+		} else if (app->edit.rot_axis == 1) {
+			auto d0 = closest_distance(*app->edit.gizmo_y, ray0);
+			auto d1 = closest_distance(*app->edit.gizmo_y, ray1);
+
+			auto v0 = d0.objp - app->edit.gizmo_y->transform().position;
+			auto v1 = d1.objp - app->edit.gizmo_y->transform().position;
+
+			if (glm::dot(v0, v1) <= 1) {
+				degrees = glm::degrees(glm::acos(glm::dot(v0, v1)
+					/ (glm::length(v0) * glm::length(v1))));
+				degrees *= (v0.x * v1.y - v0.y * v1.x) > 0 ? 1 : -1;
+			}
+		} else if (app->edit.rot_axis == 2) {
+			auto d0 = closest_distance(*app->edit.gizmo_z, ray0);
+			auto d1 = closest_distance(*app->edit.gizmo_z, ray1);
+
+			auto v0 = d0.objp - app->edit.gizmo_z->transform().position;
+			auto v1 = d1.objp - app->edit.gizmo_z->transform().position;
+
+			if (glm::dot(v0, v1) <= 1) {
+				degrees = glm::degrees(glm::acos(glm::dot(v0, v1)
+					/ (glm::length(v0) * glm::length(v1))));
+				degrees *= (v0.x * v1.y - v0.y * v1.x) > 0 ? 1 : -1;
+			}
+		}
+
+		std::cout << "\tdx = " << dx << ", dy = " << dy << std::endl;
+		std::cout << "\tdegrees: " << degrees << std::endl;
+
+		if (dx != 0 || dy != 0) {
+			app->edit.selected->transform()
+				.rotation[app->edit.rot_axis] += 0.05 * degrees;
+		}
 	}
 
 	// Only if dragging

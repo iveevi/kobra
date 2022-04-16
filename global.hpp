@@ -71,9 +71,10 @@ class RTApp :  public BaseApp {
 	// Editting state
 	struct {
 		// 1 = translate, 2 = rotate, 3 = scale
-		int			gizmo_mode = 0;
+		int			gizmo_mode = 1;
 		raster::Layer::ptr	selected = nullptr;
 
+		int			rot_axis = -1;
 		raster::Mesh *gizmo_x = nullptr;
 		raster::Mesh *gizmo_y = nullptr;
 		raster::Mesh *gizmo_z = nullptr;
@@ -482,7 +483,7 @@ public:
 		gui_layer.render(cmd, framebuffer);
 
 		// Render gizmo
-		if (gizmo_handle->get_object() != nullptr)
+		if (gizmo_handle->get_object() != nullptr && edit.gizmo_mode == 1)
 			gizmo_set.render(cmd, framebuffer);
 		
 		// Start gizmo render pass
@@ -521,7 +522,15 @@ public:
 		};
 
 		// Render gizmos
-		if (edit.gizmo_mode == 2) {
+		if (edit.gizmo_mode == 2 && edit.selected != nullptr) {
+			auto name = edit.selected->name();
+			auto ptr = raster_layer[name];
+			auto pos = ptr->transform().position;
+
+			edit.gizmo_x->transform().position = pos;
+			edit.gizmo_y->transform().position = pos;
+			edit.gizmo_z->transform().position = pos;
+
 			edit.gizmo_x->draw(packet);
 			edit.gizmo_y->draw(packet);
 			edit.gizmo_z->draw(packet);

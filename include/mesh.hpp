@@ -205,6 +205,37 @@ public:
 	friend class Model;
 };
 
+// Get closest distance between ray and mesh
+// TODO: move out of here
+struct cd_value {
+	float		distance;
+	glm::vec3	rayp;
+	glm::vec3	objp;
+};
+
+inline cd_value closest_distance(const Mesh &mesh, const Ray &ray)
+{
+	const VertexList &vs = mesh.vertices();
+
+	float min = std::numeric_limits <float> ::max();
+
+	glm::vec3 rp;
+	glm::vec3 op;
+
+	for (auto &v : vs) {
+		glm::vec3 p = mesh.transform().apply(v.position);
+
+		float d = glm::length(glm::cross(ray.direction, p - ray.origin));
+		if (d < min) {
+			min = d;
+			rp = ray.origin + ray.direction * glm::dot(ray.direction, p - ray.origin);
+			op = p;
+		}
+	}
+
+	return {min, rp, op};
+}
+
 }
 
 #endif
