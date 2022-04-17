@@ -93,6 +93,15 @@ struct Ray {
 	glm::vec3 direction;
 };
 
+// Closest point between ray and point
+inline glm::vec3 closest_point(const Ray &ray, const glm::vec3 &point)
+{
+	glm::vec3 ab = ray.direction;
+	glm::vec3 ap = point - ray.origin;
+	float t = glm::dot(ap, ab) / glm::dot(ab, ab);
+	return ray.origin + t * ab;
+}
+
 }
 
 #endif

@@ -78,6 +78,9 @@ class RTApp :  public BaseApp {
 		raster::Mesh *gizmo_x = nullptr;
 		raster::Mesh *gizmo_y = nullptr;
 		raster::Mesh *gizmo_z = nullptr;
+
+		raster::Mesh *p0 = nullptr;
+		raster::Mesh *p1 = nullptr;
 	} edit;
 
 	// Raytracing state
@@ -375,6 +378,14 @@ public:
 		edit.gizmo_x = new raster::Mesh(context, ring_x);
 		edit.gizmo_y = new raster::Mesh(context, ring_y);
 		edit.gizmo_z = new raster::Mesh(context, ring_z);
+
+		auto s0 = Mesh::make_sphere({0, 0, 0}, 0.05);
+
+		edit.p0 = new raster::Mesh(context, s0);
+		edit.p0->material().albedo = {0, 0, 0};
+		
+		edit.p1 = new raster::Mesh(context, s0);
+		edit.p1->material().albedo = {1, 1, 1};
 
 		init_gizmo();
 

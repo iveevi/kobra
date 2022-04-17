@@ -419,58 +419,67 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 			&& app->gizmo_handle->get_object() != nullptr
 			&& app->edit.gizmo_mode == 2) {
 		std::cout << "\nDragging rotation: " << app->edit.rot_axis << std::endl;
+
+		glm::vec3 pos = app->edit.selected->transform().position;
+
+		float xp = (event.xpos - dx) / (float) app->window.width;
+		float yp = (event.ypos - dy) / (float) app->window.height;
+
 		float x = event.xpos / (float) app->window.width;
 		float y = event.ypos / (float) app->window.height;
 
-		Ray ray0 = app->camera.generate_ray(x - dx, y - dy);
+		Ray ray0 = app->camera.generate_ray(xp, yp);
 		Ray ray1 = app->camera.generate_ray(x, y);
 
+		// Closest points to pos
+		glm::vec3 oc0 = closest_point(ray0, pos);
+		glm::vec3 oc1 = closest_point(ray1, pos);
+
+		glm::vec3 c0 = closest_point(ray0, pos) - pos;
+		glm::vec3 c1 = closest_point(ray1, pos) - pos;
+
 		float degrees = 0;
+
+		// TODO: fix duplicate code
 		if (app->edit.rot_axis == 0) {
-			auto d0 = closest_distance(*app->edit.gizmo_x, ray0);
-			auto d1 = closest_distance(*app->edit.gizmo_x, ray1);
+			// Project onto yz plane
+			glm::vec3 pc0 = glm::normalize(glm::vec3(0, c0.y, c0.z));
+			glm::vec3 pc1 = glm::normalize(glm::vec3(0, c1.y, c1.z));
 
-			auto v0 = d0.objp - app->edit.gizmo_x->transform().position;
-			auto v1 = d1.objp - app->edit.gizmo_x->transform().position;
+			float dot = glm::dot(pc0, pc1);
 
-			if (glm::dot(v0, v1) <= 1) {
-				degrees = glm::degrees(glm::acos(glm::dot(v0, v1)
-					/ (glm::length(v0) * glm::length(v1))));
-				degrees *= (v0.x * v1.y - v0.y * v1.x) > 0 ? 1 : -1;
+			if (std::fabs(dot - 1.0f) > 1e-6) {
+				degrees = glm::acos(dot);
+				degrees *= (glm::cross(pc0, pc1).x < 0 ? -1 : 1);
+				degrees = degrees * 180.0f / glm::pi<float>();
 			}
 		} else if (app->edit.rot_axis == 1) {
-			auto d0 = closest_distance(*app->edit.gizmo_y, ray0);
-			auto d1 = closest_distance(*app->edit.gizmo_y, ray1);
+			// Project onto xz plane
+			glm::vec3 pc0 = glm::normalize(glm::vec3(c0.x, 0, c0.z));
+			glm::vec3 pc1 = glm::normalize(glm::vec3(c1.x, 0, c1.z));
 
-			auto v0 = d0.objp - app->edit.gizmo_y->transform().position;
-			auto v1 = d1.objp - app->edit.gizmo_y->transform().position;
-
-			if (glm::dot(v0, v1) <= 1) {
-				degrees = glm::degrees(glm::acos(glm::dot(v0, v1)
-					/ (glm::length(v0) * glm::length(v1))));
-				degrees *= (v0.x * v1.y - v0.y * v1.x) > 0 ? 1 : -1;
+			float dot = glm::dot(pc0, pc1);
+			if (std::fabs(dot - 1.0f) > 1e-6) {
+				degrees = glm::acos(dot);
+				degrees *= (glm::cross(pc0, pc1).y < 0 ? -1 : 1);
+				degrees *= 180.0f / glm::pi<float>();
 			}
 		} else if (app->edit.rot_axis == 2) {
-			auto d0 = closest_distance(*app->edit.gizmo_z, ray0);
-			auto d1 = closest_distance(*app->edit.gizmo_z, ray1);
+			// Project onto xy plane
+			glm::vec3 pc0 = glm::normalize(glm::vec3(c0.x, c0.y, 0));
+			glm::vec3 pc1 = glm::normalize(glm::vec3(c1.x, c1.y, 0));
 
-			auto v0 = d0.objp - app->edit.gizmo_z->transform().position;
-			auto v1 = d1.objp - app->edit.gizmo_z->transform().position;
+			float dot = glm::dot(pc0, pc1);
 
-			if (glm::dot(v0, v1) <= 1) {
-				degrees = glm::degrees(glm::acos(glm::dot(v0, v1)
-					/ (glm::length(v0) * glm::length(v1))));
-				degrees *= (v0.x * v1.y - v0.y * v1.x) > 0 ? 1 : -1;
+			if (std::fabs(dot - 1.0f) > 1e-6) {
+				degrees = glm::acos(dot);
+				degrees *= (glm::cross(pc0, pc1).z < 0 ? -1 : 1);
+				degrees = degrees * 180.0f / glm::pi<float>();
 			}
 		}
 
-		std::cout << "\tdx = " << dx << ", dy = " << dy << std::endl;
-		std::cout << "\tdegrees: " << degrees << std::endl;
-
-		if (dx != 0 || dy != 0) {
-			app->edit.selected->transform()
-				.rotation[app->edit.rot_axis] += 0.05 * degrees;
-		}
+		app->edit.selected->transform()
+			.rotation[app->edit.rot_axis] += degrees;
 	}
 
 	// Only if dragging
