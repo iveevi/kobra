@@ -74,8 +74,8 @@ f 23 24 21
 albedo=0.7 0.7 0.7
 shading_type=1098907648
 ior=1
-albedo_source=0
-normal_source=0
+albedo_source=resources/wood_floor_albedo.jpg
+normal_source=resources/wood_floor_normal.jpg
 [OBJECT]
 name=Monkey
 [TRANSFORM]
@@ -289,8 +289,8 @@ f 23 24 21
 albedo=0.7 0.7 0.7
 shading_type=1098907648
 ior=1
-albedo_source=0
-normal_source=0
+albedo_source=resources/brickwall.jpg
+normal_source=resources/brickwall_normal.jpg
 [OBJECT]
 name=Object 9
 [TRANSFORM]

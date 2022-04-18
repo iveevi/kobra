@@ -30,7 +30,7 @@ vec3 sample_triangle(vec3 v1, vec3 v2, vec3 v3, float strata, float i)
 		return (v1 + v2 + v3) / 3.0;
 
 	// Get random point in triangle
-	vec2 uv = jitter2d(vec2(i), strata, i);
+	vec2 uv = jitter2d(strata, i);
 	if (uv.x + uv.y > 1.0)
 		uv = vec2(1.0 - uv.x, 1.0 - uv.y);
 
@@ -39,9 +39,6 @@ vec3 sample_triangle(vec3 v1, vec3 v2, vec3 v3, float strata, float i)
 	vec3 e2 = v3 - v1;
 
 	vec3 p = v1 + uv.x * e1 + uv.y * e2;
-
-	// Update seed
-	ray_seed = fract((ray_seed + 1.0) * PHI);
 
 	return p;
 }
@@ -77,9 +74,6 @@ vec3 point_light_contr(Hit hit, Ray ray, vec3 lpos)
 // Area light contribution
 vec3 area_light_contr(Hit hit, Ray ray, uint li)
 {
-	// Unique (but same) seed for each light
-	ray_seed = fract(sin(li * 4325874.3423) * 4398.4324);
-
 	// Get light position
 	float a = lights.data[li + 1].x;
 	float b = lights.data[li + 1].y;
@@ -168,7 +162,6 @@ vec3 color_at(Ray ray)
 	vec3 indirect_contr = vec3(0.0);
 	for (int i = 0; i < N; i++) {
 		// Random vector in hemisphere
-		ray_seed = fract(sin(i * 4325874.3423) * 4398.4324);
 		vec3 r = random_hemi(hit.normal);
 
 		// Create new ray
@@ -204,7 +197,9 @@ void main()
 	// Set seed
 	float rx = fract(sin(x0 * 1234.56789 + y0) * PHI);
 	float ry = fract(sin(y0 * 9876.54321 + x0));
-	ray_seed = rx + ry;
+
+	// Initialiize the random seed
+	random_seed = vec3(rx, ry, pc.time);
 
 	// Accumulate color
 	vec3 color = vec3(0.0);
@@ -213,7 +208,6 @@ void main()
 	for (int i = 0; i < pc.samples_per_pixel; i++) {
 		// Random offset
 		vec2 offset = jitter2d(
-			vec2(x0, y0),
 			sqrt(pc.total),
 			i + pc.present
 		);

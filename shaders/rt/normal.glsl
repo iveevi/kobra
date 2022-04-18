@@ -40,7 +40,6 @@ void main()
 	// Set seed
 	float rx = fract(sin(x0 * 1234.56789 + y0) * PHI);
 	float ry = fract(sin(y0 * 9876.54321 + x0));
-	ray_seed = rx + ry;
 
 	// Accumulate color
 	vec3 color = vec3(0.0);
@@ -49,7 +48,6 @@ void main()
 	for (int i = 0; i < pc.samples_per_pixel; i++) {
 		// Random offset
 		vec2 offset = jitter2d(
-			vec2(x0, y0),
 			sqrt(pc.total),
 			i + pc.present
 		);

@@ -23,7 +23,7 @@ vec3 sample_environment_blur(Ray ray)
 		uv.x = atan(ray.direction.x, ray.direction.z) / (2.0 * PI) + 0.5;
 		uv.y = asin(ray.direction.y) / PI + 0.5;
 
-		vec2 j = jitter2d(ray.origin.xy, samples, i);
+		vec2 j = jitter2d(samples, i);
 		vec3 tex = texture(s2_environment, uv + 0.025 * j).rgb;
 		color += tex;
 	}
