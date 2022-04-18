@@ -350,8 +350,9 @@ public:
 		rt_layer.add_scene(scene);
 
 		// Initialize batch and batch index
-		batch = rt::Batch(1000, 1000, 100, 100, 1);
+		batch = rt::Batch(1000, 1000, 100, 100, 16);
 		batch_index = batch.make_batch_index(0, 0);
+		batch_index.light_samples = 1;
 
 		// TODO: m8 gotta really fix auto channels
 		rt_layer.set_environment_map(

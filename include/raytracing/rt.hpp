@@ -32,6 +32,8 @@ struct PushConstants {
 	uint present;
 	uint total;
 
+	float time;
+
 	aligned_vec4 camera_position;
 	aligned_vec4 camera_forward;
 	aligned_vec4 camera_up;

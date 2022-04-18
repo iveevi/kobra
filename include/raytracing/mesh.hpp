@@ -110,7 +110,7 @@ public:
 					*(reinterpret_cast <float *> (&ia)),
 					*(reinterpret_cast <float *> (&ib)),
 					*(reinterpret_cast <float *> (&ic)),
-					0
+					*(reinterpret_cast <float *> (&obj_id))
 				};
 
 				lp.lights->push_back(header);

@@ -163,7 +163,9 @@ void Layer::_init_mesh_compute_pipeline()
 	VkPipeline mesh_pp;
 
 	auto shaders = _context.make_shaders({
-		"shaders/bin/generic/fast_path_trace.spv",
+		"shaders/bin/generic/fast_path_tracer.spv",
+		"shaders/bin/generic/pbr_path_tracer.spv",
+		"shaders/bin/generic/bidirectional_path_tracer.spv",
 		"shaders/bin/generic/normal.spv"
 	});
 
@@ -172,7 +174,7 @@ void Layer::_init_mesh_compute_pipeline()
 		.stage = {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 			.stage = VK_SHADER_STAGE_COMPUTE_BIT,
-			.module = shaders[0],
+			.module = shaders[1],
 			.pName = "main"
 		},
 		.layout = mesh_ppl,
@@ -814,6 +816,12 @@ void Layer::render(const VkCommandBuffer &cmd,
 		_pipelines.mesh.pipeline
 	);
 
+	// Time as float
+	unsigned int time = static_cast <unsigned int>
+		(std::chrono::duration_cast
+			<std::chrono::milliseconds>
+			(std::chrono::system_clock::now().time_since_epoch()).count());
+
 	// Prepare push constants
 	PushConstants pc {
 		.width = _extent.width,
@@ -832,6 +840,9 @@ void Layer::render(const VkCommandBuffer &cmd,
 		.accumulate = (bi.accumulate) ? 1u : 0u,
 		.present = (uint) batch.samples(bi),
 		.total = (uint) batch.total_samples(),
+
+		// Pass current time (as float)
+		.time = (float) time,
 
 		.camera_position = _active_camera->transform.position,
 		.camera_forward = _active_camera->transform.forward(),

@@ -12,7 +12,6 @@
 #include "modules/random.glsl"
 #include "modules/material.glsl"
 #include "modules/primitives.glsl"
-#include "modules/constants.glsl"
 #include "modules/environment.glsl"
 #include "modules/intersect.glsl"
 #include "modules/bvh.glsl"
@@ -74,13 +73,10 @@ void main()
 
 	if (pc.accumulate > 0) {
 		vec3 pcolor = cast_color(frame.pixels[index]);
-		pcolor = pow(pcolor, vec3(2.2));
 		color += pcolor * pc.present;
 		color /= float(pc.present + pc.samples_per_pixel);
-		color = pow(color, vec3(1/2.2));
 	} else {
 		color /= float(pc.samples_per_pixel);
-		color = pow(color, vec3(1/2.2));
 	}
 
 	frame.pixels[index] = cast_color(color);

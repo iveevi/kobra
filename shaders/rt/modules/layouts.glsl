@@ -74,6 +74,9 @@ layout (push_constant) uniform PushConstants
 	uint	present;
 	uint	total;
 
+	// Other variables
+	float	time;
+
 	// Camera
 	vec3	camera_position;
 	vec3	camera_forward;

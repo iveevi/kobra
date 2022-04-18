@@ -418,8 +418,6 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 	if (dragging_select && gizmo_dragging
 			&& app->gizmo_handle->get_object() != nullptr
 			&& app->edit.gizmo_mode == 2) {
-		std::cout << "\nDragging rotation: " << app->edit.rot_axis << std::endl;
-
 		glm::vec3 pos = app->edit.selected->transform().position;
 
 		float xp = (event.xpos - dx) / (float) app->window.width;

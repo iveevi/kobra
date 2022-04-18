@@ -155,7 +155,6 @@ Intersection ray_intersect(Ray ray, uint index)
 		it.mat = mat_at(d, tex_coord);
 
 		// Transfer normal
-		// TODO: method to account for normal mapping
 		if (it.mat.has_normal < 0.5) {
 			vec3 n = texture(s2_normals[d], tex_coord).rgb;
 			n = 2 * n - 1.0;

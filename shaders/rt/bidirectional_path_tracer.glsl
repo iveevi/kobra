@@ -12,7 +12,6 @@
 #include "modules/random.glsl"
 #include "modules/material.glsl"
 #include "modules/primitives.glsl"
-#include "modules/constants.glsl"
 #include "modules/environment.glsl"
 #include "modules/intersect.glsl"
 #include "modules/bvh.glsl"
