@@ -68,7 +68,9 @@ vec3 point_light_contr(Hit hit, Ray ray, vec3 lpos)
 	if (shadow_hit.mat.shading != SHADING_TYPE_EMISSIVE)
 		lcolor = vec3(0.0);
 
-	return lcolor * intensity * max(0.0, dot(hit.normal, ldir));
+	return lcolor * intensity
+		* max(0.0, dot(hit.normal, ldir))
+		* hit.mat.albedo;
 }
 
 // Area light contribution
@@ -129,7 +131,7 @@ vec3 indirect_illumination(Ray ray)
 	vec3 indirect_contr = vec3(0.0);
 
 	Ray r = ray;
-	float k = 0.02;
+	float k = 0.75;
 
 	for (int i = 0; i < MAX_DEPTH && k > 1e-5; i++) {
 		Hit hit = closest_object(r);
@@ -160,6 +162,8 @@ vec3 color_at(Ray ray)
 	int N = 16;
 
 	vec3 indirect_contr = vec3(0.0);
+
+	float pdf = 1/(2 * PI);
 	for (int i = 0; i < N; i++) {
 		// Random vector in hemisphere
 		vec3 r = random_hemi(hit.normal);
@@ -171,13 +175,15 @@ vec3 color_at(Ray ray)
 			1.0, 1.0
 		);
 
-		indirect_contr += indirect_illumination(new_ray);
+		// Lambert's cosine law
+		float cos_theta = dot(hit.normal, r);
+		indirect_contr += indirect_illumination(new_ray) * pdf;
 	}
 
 	indirect_contr /= float(N);
 
 	// Final color
-	vec3 color = hit.mat.albedo * (direct_contr + indirect_contr);
+	vec3 color = hit.mat.albedo * (direct_contr/PI + 2 * indirect_contr);
 	return clamp(color, 0.0, 1.0);
 }
 
