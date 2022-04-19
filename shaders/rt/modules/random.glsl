@@ -24,9 +24,10 @@ vec3 random3(vec3 f)
 	return uintBitsToFloat((pcg3d(floatBitsToUint(f)) & 0x007FFFFFu) | 0x3F800000u) - 1.0;
 }
 
-float random(vec2 xy, float z) 
+float random() 
 {
-	return random3(vec3(xy, z)).x;
+	random_seed = random3(random_seed);
+	return fract(random_seed.x + random_seed.y + random_seed.z);
 }
 
 // 2D Jittering

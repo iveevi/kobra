@@ -163,20 +163,16 @@ vec3 color_at(Ray ray)
 		} else if (hit.mat.shading == SHADING_TYPE_REFLECTION) {
 			// (Perfect) Specular BSDF
 			vec3 r_dir = reflect(r.direction, hit.normal);
-			r = Ray(
-				hit.point + hit.normal * 0.001,
-				r_dir, 1.0, 1.0
-			);
+			r.direction = r_dir;
+			r.origin = hit.point + hit.normal * 0.001;
 
 			// Update beta
 			beta *= dot(hit.normal, r_dir);
 		} else if (hit.mat.shading == SHADING_TYPE_REFRACTION) {
 			// (Perfect) Transmissive BSDF
 			vec3 r_dir = refract(r.direction, hit.normal, ior/hit.mat.ior);
-			r = Ray(
-				hit.point - hit.normal * 0.001,
-				r_dir, 1.0, 1.0
-			);
+			r.direction = r_dir;
+			r.origin = hit.point - hit.normal * 0.001;
 
 			// Update beta
 			beta *= dot(hit.normal, r_dir);
@@ -184,6 +180,14 @@ vec3 color_at(Ray ray)
 		} else {
 			// Assume no interaction
 			break;
+		}
+
+		// Russian roulette
+		if (i > 2) {
+			float q = max(1.0 - beta, 0.05);
+			if (random() < q)
+				break;
+			beta /= (1.0 - q);
 		}
 	}
 
