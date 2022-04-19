@@ -124,67 +124,70 @@ vec3 direct_illumination(Hit hit, Ray ray)
 	return direct_contr;
 }
 
-// Indirect illumination along a (reflected) ray
-vec3 indirect_illumination(Ray ray)
-{
-	// Indirect light contribution
-	vec3 indirect_contr = vec3(0.0);
-
-	Ray r = ray;
-	float k = 0.75;
-
-	for (int i = 0; i < MAX_DEPTH && k > 1e-5; i++) {
-		Hit hit = closest_object(r);
-		indirect_contr += k * direct_illumination(hit, r);
-		r.direction = reflect(r.direction, hit.normal);
-		r.origin = hit.point + hit.normal * 0.001;
-		k *= k;
-	}
-
-	return indirect_contr;
-}
-
-
 // Color value at from a ray
 vec3 color_at(Ray ray)
 {
-	// Find closest object
-	Hit hit = closest_object(ray);
+	vec3 contribution = vec3(0.0);
+	float beta = 1.0;
+	float ior = 1.0;
 
-	// Special case intersection
-	if (hit.object == -1 || hit.mat.shading == SHADING_TYPE_EMISSIVE)
-		return hit.mat.albedo;
+	Ray r = ray;
+	for (int i = 0; i < MAX_DEPTH; i++) {
+		// Find closest object
+		Hit hit = closest_object(r);
 
-	// Total light contribution
-	vec3 direct_contr = direct_illumination(hit, ray);
+		// Special case intersection
+		if (hit.object == -1 || hit.mat.shading == SHADING_TYPE_EMISSIVE) {
+			contribution += hit.mat.albedo;
+			break;
+		}
 
-	// Indirect illumination
-	int N = 16;
+		// Direct illumination
+		vec3 direct_contr = direct_illumination(hit, r)/PI;
+		contribution += beta * direct_contr;
 
-	vec3 indirect_contr = vec3(0.0);
+		// Generating the new ray according to BSDF
+		if (hit.mat.shading == SHADING_TYPE_DIFFUSE) {
+			// Lambertian BSDF
+			vec3 r_dir = random_hemi(hit.normal);
+			r = Ray(
+				hit.point + hit.normal * 0.001,
+				r_dir, 1.0, 1.0
+			);
 
-	float pdf = 1/(2 * PI);
-	for (int i = 0; i < N; i++) {
-		// Random vector in hemisphere
-		vec3 r = random_hemi(hit.normal);
+			// Update beta
+			beta *= dot(hit.normal, r_dir);
 
-		// Create new ray
-		Ray new_ray = Ray(
-			hit.point + hit.normal * 0.001,
-			r,
-			1.0, 1.0
-		);
+		// TODO: recdesign material interface (reflection | transmission
+		// and specular class)
+		} else if (hit.mat.shading == SHADING_TYPE_REFLECTION) {
+			// (Perfect) Specular BSDF
+			vec3 r_dir = reflect(r.direction, hit.normal);
+			r = Ray(
+				hit.point + hit.normal * 0.001,
+				r_dir, 1.0, 1.0
+			);
 
-		// Lambert's cosine law
-		float cos_theta = dot(hit.normal, r);
-		indirect_contr += indirect_illumination(new_ray) * pdf;
+			// Update beta
+			beta *= dot(hit.normal, r_dir);
+		} else if (hit.mat.shading == SHADING_TYPE_REFRACTION) {
+			// (Perfect) Transmissive BSDF
+			vec3 r_dir = refract(r.direction, hit.normal, ior/hit.mat.ior);
+			r = Ray(
+				hit.point - hit.normal * 0.001,
+				r_dir, 1.0, 1.0
+			);
+
+			// Update beta
+			beta *= dot(hit.normal, r_dir);
+			ior = hit.mat.ior;
+		} else {
+			// Assume no interaction
+			break;
+		}
 	}
 
-	indirect_contr /= float(N);
-
-	// Final color
-	vec3 color = hit.mat.albedo * (direct_contr/PI + 2 * indirect_contr);
-	return clamp(color, 0.0, 1.0);
+	return clamp(contribution, 0.0, 1.0);
 }
 
 void main()
