@@ -1,21 +1,21 @@
 [OBJECT]
 name=Sphere A
 [TRANSFORM]
-position=-0.265365 4.34741 1.93597
+position=3.67414 4.06271 -1.04725
 rotation=0 0 0
 scale=1 1 1
 [SPHERE]
 radius=1
 [MATERIAL]
 albedo=1 1 1
-shading_type=1124073472
+shading_type=1098907648
 ior=1.5
 albedo_source=0
 normal_source=0
 [OBJECT]
 name=Sphere B
 [TRANSFORM]
-position=-1.74507 3.6408 -3.15253
+position=-1.74507 2.80311 -3.15253
 rotation=0 0 0
 scale=1 1 1
 [SPHERE]
@@ -294,7 +294,7 @@ normal_source=resources/brickwall_normal.jpg
 [OBJECT]
 name=Object 9
 [TRANSFORM]
-position=0.19269 7.7353 4.91787
+position=0.19269 7.7353 1.75177
 rotation=178.593 0 0.0390242
 scale=2 2 2
 [MESH]

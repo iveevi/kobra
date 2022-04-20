@@ -96,7 +96,7 @@ int main()
 {
 	// auto str = tinyfd_openFileDialog("Open scene", "resources", 0, 0, 0, 0);
 	// KOBRA_LOG_FILE(notify) << "Selected file: " << str << std::endl;
-		
+
 	// Construct camera
 	Camera camera = Camera {
 		Transform { {0, 6, 16}, {-0.2, 0, 0} },
@@ -219,7 +219,7 @@ void RTApp::keyboard_handler(void *user, const io::KeyboardEvent &event)
 			// Get currently selected object
 			auto eptr = app->gizmo_handle->get_object();
 			auto name = app->duplicate_object(eptr->name());
-			
+
 			app->raster_layer.clear_highlight();
 
 			auto ptr = app->raster_layer[name];
@@ -228,6 +228,18 @@ void RTApp::keyboard_handler(void *user, const io::KeyboardEvent &event)
 			glm::vec3 position = ptr->center();
 			app->gizmo_handle->set_position(position);
 			app->gizmo_handle->bind(ptr);
+		}
+
+		// Delete objects with X
+		if (event.key == GLFW_KEY_X && app->edit.selected != nullptr) {
+			auto name = app->edit.selected->name();
+
+			std::cout << "Deleting object: " << name << std::endl;
+			app->raster_layer.erase(name);
+			app->scene.erase(name);
+
+			app->edit.selected = nullptr;
+			app->gizmo_handle->deselect();
 		}
 
 		// Refresh rasterization
@@ -331,7 +343,7 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 			x, y, app->window.width,
 			app->window.height
 		);
-		
+
 		// Rotation gizmo
 		float _x = event.xpos / (float) app->window.width;
 		float _y = event.ypos / (float) app->window.height;
@@ -413,7 +425,7 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 			app->window.width, app->window.height
 		);
 	}
-	
+
 	// Dragging in gizmo for rotation
 	if (dragging_select && gizmo_dragging
 			&& app->gizmo_handle->get_object() != nullptr

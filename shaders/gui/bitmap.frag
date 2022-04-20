@@ -14,5 +14,4 @@ void main()
 {
 	float t = texture(tex, fpos).r;
 	color = vec4(fcolor, 1.0) * t;
-	// color = mix(color, vec4(1.0, 0.0, 0.0, 1.0), 0.5);
 }

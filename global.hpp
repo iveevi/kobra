@@ -328,7 +328,7 @@ public:
 	}) {
 		// Construct camera
 		camera = Camera {
-			Transform { {0, 6, 16}, {-0.2, 0, 0} },
+			Transform { {0, 6, 18}, {-0.2, 0, 0} },
 			Tunings { 45.0f, 800, 800 }
 		};
 
@@ -356,7 +356,7 @@ public:
 
 		// TODO: m8 gotta really fix auto channels
 		rt_layer.set_environment_map(
-			load_image_texture("resources/skies/background_3.jpg", 4)
+			load_image_texture("resources/skies/background_2.jpg", 4)
 		);
 
 		// Rasterization layer

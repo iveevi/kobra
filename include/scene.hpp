@@ -45,6 +45,9 @@ public:
 	// Retrieve object by name
 	ObjectPtr operator[](const std::string &) const;
 
+	// Delete object by name
+	void erase(const std::string &);
+
 	// Save objects to file
 	void save(const std::string &) const;
 };

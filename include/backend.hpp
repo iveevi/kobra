@@ -13,15 +13,12 @@
 #include <vector>
 #include <vulkan/vulkan_core.h>
 
-// TODO: remove the glad diretcory/deps
 // GLFW and Vulkan
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-// ImGui headers
-#include <imgui.h>
-#include <backends/imgui_impl_glfw.h>
-#include <backends/imgui_impl_vulkan.h>
+// Vulkan C++ wrapper
+#include <vulkan/vulkan.hpp>
 
 // Engine headers
 #include "logger.hpp"
@@ -711,6 +708,7 @@ private:
 
 		std::vector <const char *> extensions(glfw_exts, glfw_exts + glfw_ext_count);
 		extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
+		extensions.push_back("VK_KHR_get_physical_device_properties2");
 
 		if (enable_validation_layers)
 			extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -911,13 +909,6 @@ public:
 		cleanup();
 	}
 
-	// Extra initialization
-	void init_imgui() {
-		// TODO: init on need basis?
-		// variable imgui_init = false...
-		ImGui::CreateContext();
-	}
-
 	// TODO: move to global scope
 
 	// ImGui window context variables
@@ -929,155 +920,6 @@ public:
 		VkSemaphore		semaphore;
 		VkFence			fence;
 	};
-
-	ImGuiContext init_imgui_glfw(const VkPhysicalDevice &phdev, const Device &device, const Surface &surface, const Swapchain &swapchain) {
-		// Context to return
-		ImGuiContext context;
-
-		// Create descriptor pool
-		VkDescriptorPoolSize pool_sizes[] {
-			{ VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
-			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
-			{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
-			{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
-			{ VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
-			{ VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
-			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
-			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
-			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
-			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
-			{ VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 }
-		};
-
-		VkDescriptorPoolCreateInfo pool_info = {};
-		pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-		pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-		pool_info.maxSets = 1000;
-		pool_info.poolSizeCount = std::size(pool_sizes);
-		pool_info.pPoolSizes = pool_sizes;
-
-		VkResult result = vkCreateDescriptorPool(
-			device.device, &pool_info,
-			nullptr, &context.descriptor_pool
-		);
-
-		if (result != VK_SUCCESS) {
-			Logger::error("[Vulkan-ImGui] Failed to create descriptor pool");
-			throw (-1);
-		}
-
-		// Create render pass
-		context.render_pass = make_render_pass(
-			phdev, device, swapchain,
-			VK_ATTACHMENT_LOAD_OP_LOAD,
-			VK_ATTACHMENT_STORE_OP_STORE
-		);
-
-		// Initialize the ImGui context
-		ImGui::CreateContext();
-
-		// Initialize the ImGui for Vulkan renderer
-		ImGui_ImplGlfw_InitForVulkan(surface.window, true);
-
-		//this initializes imgui for Vulkan
-		ImGui_ImplVulkan_InitInfo init_info = {};
-		init_info.Instance = instance;
-		init_info.PhysicalDevice = phdev;
-		init_info.Device = device.device;
-		init_info.Queue = device.graphics_queue;
-		init_info.DescriptorPool = context.descriptor_pool;
-		init_info.MinImageCount = 2;
-		init_info.ImageCount = 2;
-		init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-
-		ImGui_ImplVulkan_Init(&init_info, context.render_pass);
-
-		// Create command pool
-		context.command_pool = make_command_pool(
-			phdev, surface, device,
-			VK_COMMAND_POOL_CREATE_TRANSIENT_BIT
-			| VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
-		);
-
-		// Start a new, single use command buffer
-		// TODO: make a method for immediate command buffers
-		VkCommandBufferAllocateInfo alloc_info = {
-			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-			.commandPool = context.command_pool,
-			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-			.commandBufferCount = 1
-		};
-
-		VkCommandBuffer tmp_cmd_buffer;
-		result = vkAllocateCommandBuffers(
-			device.device, &alloc_info, &tmp_cmd_buffer
-		);
-
-		if (result != VK_SUCCESS) {
-			Logger::error("[Vulkan-ImGui] Failed to allocate command buffer");
-			throw (-1);
-		}
-
-		// Start recording the command buffer
-		VkCommandBufferBeginInfo begin_info = {
-			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-			.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
-		};
-
-		result = vkBeginCommandBuffer(tmp_cmd_buffer, &begin_info);
-		if (result != VK_SUCCESS) {
-			Logger::error("[Vulkan-ImGui] Failed to begin command buffer");
-			throw (-1);
-		}
-
-		// Create font textures
-		ImGui_ImplVulkan_CreateFontsTexture(tmp_cmd_buffer);
-
-		// End recording the command buffer
-		result = vkEndCommandBuffer(tmp_cmd_buffer);
-		if (result != VK_SUCCESS) {
-			Logger::error("[Vulkan-ImGui] Failed to end command buffer");
-			throw (-1);
-		}
-
-		// Submit the command buffer
-		VkSubmitInfo submit_info = {
-			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-			.commandBufferCount = 1,
-			.pCommandBuffers = &tmp_cmd_buffer
-		};
-
-		result = vkQueueSubmit(device.graphics_queue, 1, &submit_info, VK_NULL_HANDLE);
-		if (result != VK_SUCCESS) {
-			Logger::error("[Vulkan-ImGui] Failed to submit command buffer");
-			throw (-1);
-		}
-
-		// Wait for the command buffer to finish
-		vkQueueWaitIdle(device.graphics_queue);
-
-		// Destroy the command buffer
-		// TODO: deletion queue function
-		vkFreeCommandBuffers(device.device, context.command_pool, 1, &tmp_cmd_buffer);
-
-		//clear font textures from cpu data
-		ImGui_ImplVulkan_DestroyFontUploadObjects();
-
-		// Create command buffer and render pass
-		context.command_buffer = make_command_buffer(device, context.command_pool);
-		context.semaphore = make_semaphore(device);
-		context.fence = make_fence(device);
-
-		// Log the ImGui context creation
-		Logger::ok() << "[Vulkan-ImGui] ImGui context created (Surface=" << &surface << ")\n";
-		return context;
-	}
-
-	// TODO: another overload
-	/* void init_imgui() {
-		_init_imgui();
-		Logger::ok("[Vulkan] ImGui initialized");
-	} */
 
 	// Destructor tasks
 	void push_deletion_task(const DeletionTask &task) {
@@ -1537,8 +1379,8 @@ public:
 		VkDescriptorPoolCreateInfo pool_info = {
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
 			.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
-			.maxSets = 1000 * IM_ARRAYSIZE(pool_sizes),
-			.poolSizeCount = (uint32_t) IM_ARRAYSIZE(pool_sizes),
+			.maxSets = 1000 * sizeof(pool_sizes) / sizeof(VkDescriptorPoolSize),
+			.poolSizeCount = (uint32_t) sizeof(pool_sizes) / sizeof(VkDescriptorPoolSize),
 			.pPoolSizes = pool_sizes
 		};
 

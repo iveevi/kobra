@@ -66,7 +66,7 @@ vec3 point_light_contr(Hit hit, Ray ray, vec3 lpos)
 	// TODO: use the actual object id
 	vec3 lcolor = vec3(1.0);
 	if (shadow_hit.mat.shading != SHADING_TYPE_EMISSIVE)
-		lcolor = vec3(0.0);
+		return vec3(0.0);
 
 	return lcolor * intensity
 		* max(0.0, dot(hit.normal, ldir))
@@ -91,8 +91,6 @@ vec3 area_light_contr(Hit hit, Ray ray, uint li)
 	vec3 v2 = vertices.data[2 * ib].xyz;
 	vec3 v3 = vertices.data[2 * ic].xyz;
 
-	vec3 lpos = (v1 + v2 + v3) / 3.0;
-
 	// Sample points from triangle
 	vec3 total_color = vec3(0.0);
 
@@ -108,6 +106,38 @@ vec3 area_light_contr(Hit hit, Ray ray, uint li)
 
 	return total_color/float(pc.samples_per_light);
 }
+
+/* Environment light contribution
+vec3 environment_illumination(Hit hit, Ray ray)
+{
+	// Depending on the material
+	// 	sample BSDFs into environment
+	vec3 env_color = vec3(0.0);
+
+	Ray r = ray;
+
+	// TODO: use integer constants for shading type... (less casting)
+	if (hit.mat.shading == SHADING_TYPE_DIFFUSE) {
+		for (int i = 0; i < pc.samples_per_light; i++) {
+			// Random hemisphere sample
+			vec3 dir = random_hemi(hit.normal);
+			r.direction = dir;
+			r.origin = hit.point + hit.normal * 0.001;
+
+			// Trace ray
+			// TODO: refactor
+			Hit env_hit = closest_object(r);
+
+			// Add contribution if no hit
+			if (env_hit.object == -1)
+				env_color += sample_environment_blur(r);
+		}
+
+		env_color /= float(pc.samples_per_light);
+	}
+
+	return env_color;
+} */
 
 // Direct illumination
 vec3 direct_illumination(Hit hit, Ray ray)

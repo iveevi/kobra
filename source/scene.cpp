@@ -181,6 +181,17 @@ ObjectPtr Scene::operator[](const std::string &name) const
 	return nullptr;
 }
 
+// Erase object
+void Scene::erase(const std::string &name)
+{
+	for (auto it = _objects.begin(); it != _objects.end(); ++it) {
+		if ((*it)->name() == name) {
+			_objects.erase(it);
+			return;
+		}
+	}
+}
+
 // Saving
 void Scene::save(const std::string &filename) const
 {

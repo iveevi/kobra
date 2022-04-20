@@ -21,14 +21,14 @@ RTCapture::RTCapture(Vulkan *vk, const std::string &scene_file, const Camera &ca
 	layer.add_scene(scene);
 	layer.set_active_camera(camera);
 	layer.set_environment_map(
-		load_image_texture("resources/skies/background_3.jpg", 4)
+		load_image_texture("resources/skies/background_2.jpg", 4)
 	);
 
 	// Create batch
 	// TODO: a method to generate optimal batch sizes (eg 50x50 is
 	// faster than 10x10)
 	batch = rt::Batch(800, 800, 50, 50, 1024);
-	index = batch.make_batch_index(0, 0, 8, 16);
+	index = batch.make_batch_index(0, 0, 4, 16);
 	index.accumulate = true;
 
 	// Create GUI
@@ -41,7 +41,7 @@ RTCapture::RTCapture(Vulkan *vk, const std::string &scene_file, const Camera &ca
 	text_progress = gui_layer.text_render("default")->text(
 		"Progress: ",
 		window.coordinates(0, window.height - 10),
-		{1, 1, 1, 1}, 0.3
+		{0, 1, 0, 1}, 0.3
 	);
 
 	gui_layer.add(text_progress);
@@ -62,11 +62,24 @@ void RTCapture::record(const VkCommandBuffer &cmd, const VkFramebuffer &framebuf
 	// Track progress
 	time += frame_time;
 	float progress = batch.progress();
-	float eta = time * (1.0f - progress) / progress;
+
+	float eta_s = time * (1.0f - progress) / progress;
+	float eta_m = 0;
+	float eta_h = 0;
+
+	if (eta_s > 60.0f) {
+		eta_m = int(eta_s / 60.0f);
+		eta_s = fmod(eta_s, 60.0f);
+	}
+
+	if (eta_m > 60.0f) {
+		eta_h = int(eta_m / 60.0f);
+		eta_m = fmod(eta_m, 60.0f);
+	}
 
 	std::sprintf(buffer,
-		"Progress: %.2f%%, Total time: %.2fs (+%.2fs), ETA: %.2fs\n",
-		progress * 100.0f, time, frame_time, eta
+		"Progress: %.2f%%, Total time: %.2fs (+%.2fs), ETA: %.2fh %.2fm %.2fs",
+		progress * 100.0f, time, frame_time, eta_h, eta_m, eta_s
 	);
 
 	// Update and render GUI

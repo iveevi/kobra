@@ -174,7 +174,7 @@ void Layer::_init_mesh_compute_pipeline()
 		.stage = {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 			.stage = VK_SHADER_STAGE_COMPUTE_BIT,
-			.module = shaders[1],
+			.module = shaders[2],
 			.pName = "main"
 		},
 		.layout = mesh_ppl,

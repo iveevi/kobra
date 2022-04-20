@@ -1,11 +1,12 @@
 #version 450
 
 // Vertex inputs
-layout(location = 0) in vec4 bounds;
+layout (location = 0) in vec4 bounds;
+layout (location = 1) in vec3 color;
 
 // Outputs
-layout (location = 0) out vec3 fcolor;
-layout (location = 1) out vec2 fpos;
+layout (location = 0) out vec3 out_color;
+layout (location = 1) out vec2 out_pos;
 
 // Normalized vertex positions
 vec2 nvecs[6] = vec2[6] (
@@ -40,6 +41,6 @@ void main()
 	gl_Position = vec4(pos[gl_VertexIndex % 6], 0.0, 1.0);
 	
 	// Fragment shader outputs
-	fcolor = vec3(1.0, 1.0, 1.0);
-	fpos = nvecs[gl_VertexIndex % 6];
+	out_color = color;
+	out_pos = nvecs[gl_VertexIndex % 6];
 }

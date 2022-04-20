@@ -57,14 +57,8 @@ builds:
     - libraries: libs
     - flags: '-std=c++17 -Wall -Werror'
   - experimental_normal:
-    - sources: 'experimental/kobra.cpp,
-      experimental/render.cpp,
-      kobra_source'
-    - idirs: 'thirdparty,
-      thirdparty/freetype/include,
-      thirdparty/glm,
-      thirdparty/imgui,
-      thirdparty/assimp/include'
+    - sources: experimental/main.cpp, kobra_source
+    - idirs: includes
     - flags: '-O3 -std=c++17'
     - libraries: 'glfw,
       vulkan,

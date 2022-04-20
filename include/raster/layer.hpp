@@ -125,6 +125,16 @@ public:
 	// Import scene objects
 	void add_scene(const Scene &) override;
 
+	// Erase by name
+	void erase(const std::string &name) {
+		for (auto itr = _elements.begin(); itr != _elements.end(); ++itr) {
+			if ((*itr)->name() == name) {
+				_elements.erase(itr);
+				return;
+			}
+		}
+	}
+
 	// Number of cameras
 	size_t camera_count() const {
 		return _cameras.size();

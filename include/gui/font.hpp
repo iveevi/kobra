@@ -33,6 +33,7 @@ public:
 	// Vertex and buffer type
 	struct Vertex {
 		glm::vec4 bounds;
+		glm::vec3 color;
 
 		// Get vertex binding description
 		static Vulkan::VB vertex_binding() {
@@ -52,6 +53,13 @@ public:
 					.format = VK_FORMAT_R32G32B32A32_SFLOAT,
 					.offset = offsetof(Vertex, bounds)
 				},
+
+				Vulkan::VA {
+					.location = 1,
+					.binding = 0,
+					.format = VK_FORMAT_R32G32B32_SFLOAT,
+					.offset = offsetof(Vertex, color)
+				}
 			};
 		}
 	};
@@ -87,12 +95,12 @@ public:
 	// TODO: render method or upload method (instacing)?
 	void upload(VertexBuffer &vb) const {
 		std::array <Vertex, 6> vertices {
-			Vertex {_bounds},
-			Vertex {_bounds},
-			Vertex {_bounds},
-			Vertex {_bounds},
-			Vertex {_bounds},
-			Vertex {_bounds}
+			Vertex {_bounds, _color},
+			Vertex {_bounds, _color},
+			Vertex {_bounds, _color},
+			Vertex {_bounds, _color},
+			Vertex {_bounds, _color},
+			Vertex {_bounds, _color}
 		};
 
 		vb.push_back(vertices);
