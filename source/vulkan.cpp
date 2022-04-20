@@ -1,6 +1,8 @@
 #include "../include/backend.hpp"
 #include <vulkan/vulkan_core.h>
 
+namespace kobra {
+
 // Static member variables
 const std::vector <const char *> Vulkan::device_extensions = {
 	VK_KHR_SWAPCHAIN_EXTENSION_NAME
@@ -524,4 +526,6 @@ VkPhysicalDeviceProperties Vulkan::phdev_props(const VkPhysicalDevice &phdev) co
 void Vulkan::idle(const Device &device) const
 {
 	vkDeviceWaitIdle(device.device);
+}
+
 }

@@ -1,5 +1,8 @@
 #include "global.hpp"
+#include "include/backend.hpp"
 #include "tinyfiledialogs.h"
+#include <vulkan/vulkan_core.h>
+#include <vulkan/vulkan_raii.hpp>
 
 // Scene path
 std::string scene_path = "scene.kobra";
@@ -94,10 +97,29 @@ public:
 
 int main()
 {
-	// auto str = tinyfd_openFileDialog("Open scene", "resources", 0, 0, 0, 0);
-	// KOBRA_LOG_FILE(notify) << "Selected file: " << str << std::endl;
+	auto window = Window("Vulkan RT", {200, 200});
+	vk::raii::SurfaceKHR surface = make_surface(window);
 
-	// Construct camera
+	auto extensions = {
+		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+		"VK_KHR_ray_tracing_pipeline"
+	};
+
+	auto predicate = [&extensions](const vk::raii::PhysicalDevice &dev) {
+		return physical_device_able(dev, extensions);
+	};
+
+	auto phdev = pick_physical_device(predicate);
+
+	std::cout << "Chosen device: " << phdev.getProperties().deviceName << std::endl;
+	std::cout << "\tgraphics queue family: " << find_graphics_queue_family(phdev) << std::endl;
+
+	auto queue_family = find_queue_families(phdev, *surface);
+
+	std::cout << "\tqueue family (G): " << queue_family.graphics << std::endl;
+	std::cout << "\tqueue family (P): " << queue_family.present << std::endl;
+
+	/* Construct camera
 	Camera camera = Camera {
 		Transform { {0, 6, 16}, {-0.2, 0, 0} },
 		Tunings { 45.0f, 800, 800 }
@@ -117,7 +139,7 @@ int main()
 
 	t1.join();
 
-	delete vulkan;
+	delete vulkan; */
 }
 
 ////////////////////

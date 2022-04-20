@@ -11,14 +11,15 @@
 #include <optional>
 #include <string>
 #include <vector>
-#include <vulkan/vulkan_core.h>
 
-// GLFW and Vulkan
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
-// Vulkan C++ wrapper
+// Vulkan and GLFW
 #include <vulkan/vulkan.hpp>
+#include <vulkan/vulkan_core.h>
+#include <vulkan/vulkan_enums.hpp>
+#include <vulkan/vulkan_handles.hpp>
+#include <vulkan/vulkan_raii.hpp>
+#include <vulkan/vulkan_structs.hpp>
+#include <GLFW/glfw3.h>
 
 // Engine headers
 #include "logger.hpp"
@@ -27,6 +28,8 @@ const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
+
+namespace kobra {
 
 // TODO: aux class which stores device and physcial device
 // (and other per device objects)
@@ -554,14 +557,6 @@ private:
 	}
 
 	VkPresentModeKHR _choose_swch_present_mode(const std::vector <VkPresentModeKHR> &pmodes) {
-		// TODO: make customizable
-		/* for (const auto& availablePresentMode : availablePresentModes) {
-			if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
-				return availablePresentMode;
-			}
-		}
-
-		return VK_PRESENT_MODE_FIFO_KHR; */
 		return VK_PRESENT_MODE_IMMEDIATE_KHR;
 	}
 
@@ -1623,5 +1618,197 @@ public:
 	static const std::vector <const char *> device_extensions;
 	static const std::vector <const char *> validation_layers;
 };
+
+//////////////////////
+// Object factories //
+//////////////////////
+
+// Get (or create) the singleton context
+inline const vk::raii::Context &get_vulkan_context()
+{
+	// Global context
+	static vk::raii::Context context;
+	return context;
+}
+
+
+// Get (or create) the singleton instance
+inline const vk::raii::Instance &get_vulkan_instance()
+{
+	static vk::ApplicationInfo app_info {
+		"Kobra",
+		VK_MAKE_VERSION(1, 0, 0),
+		"Kobra",
+		VK_MAKE_VERSION(1, 0, 0),
+		VK_API_VERSION_1_0
+	};
+
+	static vk::InstanceCreateInfo instance_info {
+		vk::InstanceCreateFlags(),
+		&app_info,
+		0, nullptr,
+		0, nullptr
+	};
+
+	static vk::raii::Instance instance {
+		get_vulkan_context(),
+		instance_info
+	};
+
+	return instance;
+}
+
+// Initialize GLFW statically
+inline void _initialize_glfw()
+{
+	static bool initialized = false;
+
+	if (!initialized) {
+		glfwInit();
+		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+		initialized = true;
+	}
+}
+
+// Window type
+struct Window {
+	GLFWwindow	*handle;
+	std::string	title;
+	vk::Extent2D	extent;
+
+	Window() = default;
+
+	Window(const std::string &title, const vk::Extent2D &extent)
+			: title(title), extent(extent) {
+		_initialize_glfw();
+		handle = glfwCreateWindow(
+			extent.width, extent.height,
+			title.c_str(),
+			nullptr, nullptr
+		);
+	}
+
+	~Window() {
+		glfwDestroyWindow(handle);
+	}
+};
+
+// Create a surface given a window
+inline vk::raii::SurfaceKHR make_surface(const Window &window)
+{
+	// Create the surface
+	VkSurfaceKHR surface;
+	glfwCreateWindowSurface(
+		*get_vulkan_instance(),
+		window.handle,
+		nullptr, &surface
+	);
+
+	return vk::raii::SurfaceKHR {
+		get_vulkan_instance(),
+		surface
+	};
+}
+
+// Get all available physical devices
+inline vk::raii::PhysicalDevices get_physical_devices()
+{
+	return vk::raii::PhysicalDevices {
+		get_vulkan_instance()
+	};
+}
+
+// Check if a physical device supports a set of extensions
+inline bool physical_device_able(const vk::raii::PhysicalDevice &phdev,
+		const std::vector <const char *> &extensions)
+{
+	// Get the device extensions
+	std::vector <vk::ExtensionProperties> device_extensions =
+			phdev.enumerateDeviceExtensionProperties();
+
+	// Check if all the extensions are supported
+	for (const char *extension : extensions) {
+		if (std::find_if(device_extensions.begin(), device_extensions.end(),
+				[&extension](const vk::ExtensionProperties &prop) {
+					return !strcmp(prop.extensionName, extension);
+				}) == device_extensions.end()) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+// Pick physical device according to some criteria
+inline vk::raii::PhysicalDevice pick_physical_device
+	(const std::function <bool (const vk::raii::PhysicalDevice &)> &predicate)
+{
+	// Get all the physical devices
+	vk::raii::PhysicalDevices devices = get_physical_devices();
+
+	// Find the first one that satisfies the predicate
+	for (const vk::raii::PhysicalDevice &device : devices) {
+		if (predicate(device))
+			return device;
+	}
+
+	// If none found, throw an error
+	KOBRA_LOG_FUNC(error) << "No physical device found\n";
+	throw std::runtime_error("[Vulkan] No physical device found");
+}
+
+// Find graphics queue family
+inline uint32_t find_graphics_queue_family(const vk::raii::PhysicalDevice &phdev)
+{
+	// Get the queue families
+	std::vector <vk::QueueFamilyProperties> queue_families =
+			phdev.getQueueFamilyProperties();
+
+	// Find the first one that supports graphics
+	for (uint32_t i = 0; i < queue_families.size(); i++) {
+		if (queue_families[i].queueFlags & vk::QueueFlagBits::eGraphics)
+			return i;
+	}
+
+	// If none found, throw an error
+	KOBRA_LOG_FUNC(error) << "No graphics queue family found\n";
+	throw std::runtime_error("[Vulkan] No graphics queue family found");
+}
+
+// Coupling graphics and present queue families
+struct QueueFamilyIndices {
+	uint32_t graphics;
+	uint32_t present;
+};
+
+// Find both graphics and present queue families
+inline QueueFamilyIndices find_queue_families(const vk::raii::PhysicalDevice &phdev,
+		const vk::SurfaceKHR &surface)
+{
+	// Get the queue families
+	std::vector <vk::QueueFamilyProperties> queue_families =
+			phdev.getQueueFamilyProperties();
+
+	// Find the first one that supports graphics and present
+	QueueFamilyIndices indices;
+	for (uint32_t i = 0; i < queue_families.size(); i++) {
+		if (queue_families[i].queueFlags & vk::QueueFlagBits::eGraphics) {
+			indices.graphics = i;
+			if (phdev.getSurfaceSupportKHR(i, surface)) {
+				indices.present = i;
+				return indices;
+			}
+		}
+	}
+
+	// If none found, throw an error
+	KOBRA_LOG_FUNC(error) << "No graphics and present queue families found\n";
+	throw std::runtime_error("[Vulkan] No graphics and present queue families found");
+}
+
+// TODO: compiling GLSL into SPIRV in runtime
+
+}
 
 #endif

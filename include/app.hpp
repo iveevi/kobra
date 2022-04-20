@@ -19,8 +19,8 @@ public:
 	struct Info {
 		Vulkan *ctx;
 
-		size_t width;
-		size_t height;
+		uint32_t width;
+		uint32_t height;
 
 		size_t max_frames_in_flight;
 
@@ -67,12 +67,13 @@ protected:
 	// Unrolling window context for convenience
 	Vulkan::Context		context;
 	Vulkan::Surface		surface;
+
 	Vulkan::Swapchain	swapchain;
 	io::Input		input;
 
 	// Dimensions
-	size_t			width;
-	size_t			height;
+	uint32_t		width;
+	uint32_t		height;
 
 	// Frame information
 	Timer			frame_timer;

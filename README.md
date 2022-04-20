@@ -27,3 +27,8 @@ Below are a few scenes that Kobra can currently render.
 
 Path traced with 16 samples per pixel and 1000 shadow samples in around 30
 minutes.
+
+![](media/capture_4.png)
+
+Path traced with 1024 samples per pixel and 16 shadow samples in around 2 hours
+and 30 minutes.

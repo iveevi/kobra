@@ -1,20 +1,33 @@
-// GLFW and Vulkan
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+// Standard headers
+#include <iostream>
 
-// Vulkan for C++
-#include <vulkan/vulkan.hpp>
+// Engine headers
+#include "../include/backend.hpp"
+
+using namespace kobra;
 
 int main()
 {
-	// Initialize GLFW
-	glfwInit();
-	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+	auto window = Window("Vulkan RT", {200, 200});
+	vk::raii::SurfaceKHR surface = make_surface(window);
 
-	// Create a window
-	GLFWwindow* window = glfwCreateWindow(800, 600, "Vulkan RT", nullptr, nullptr);
+	auto extensions = {
+		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+		"VK_KHR_surface",
+		"VK_KHR_ray_tracing_pipeline"
+	};
 
-	// Destroy the window
-	glfwDestroyWindow(window);
+	auto predicate = [&extensions](const vk::raii::PhysicalDevice &dev) {
+		return physical_device_able(dev, extensions);
+	};
+
+	auto phdev = pick_physical_device(predicate);
+
+	std::cout << "Chosen device: " << phdev.getProperties().deviceName << std::endl;
+	std::cout << "\tgraphics queue family: " << find_graphics_queue_family(phdev) << std::endl;
+
+	auto queue_family = find_queue_families(phdev, *surface);
+
+	std::cout << "\tqueue family (G): " << queue_family.graphics << std::endl;
+	std::cout << "\tqueue family (P): " << queue_family.present << std::endl;
 }
