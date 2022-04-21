@@ -938,7 +938,7 @@ void Layer::render(const VkCommandBuffer &cmd,
 		}
 	};
 
-	_final_texture.transition_manual(_context, _command_pool,
+	_final_texture.transition_manual(cmd,
 		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
@@ -952,7 +952,7 @@ void Layer::render(const VkCommandBuffer &cmd,
 		1, &region
 	);
 
-	_final_texture.transition_manual(_context, _command_pool,
+	_final_texture.transition_manual(cmd,
 		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
@@ -966,18 +966,6 @@ void Layer::render(const VkCommandBuffer &cmd,
 		0, 1, &_postproc_ds,
 		0, nullptr
 	);
-
-	/* Push constants
-	PC_Viewport pc_vp {
-		.width = _extent.width,
-		.height = _extent.height
-	};
-
-	vkCmdPushConstants(cmd,
-		_pipelines.postproc.layout,
-		VK_SHADER_STAGE_FRAGMENT_BIT,
-		0, sizeof(PC_Viewport), &pc_vp
-	); */
 
 	// Clear colors
 	VkClearValue clear_values[2] = {

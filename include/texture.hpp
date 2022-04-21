@@ -181,6 +181,37 @@ struct TexturePacket {
 
 		Vulkan::submit_single_time_commands(ctx, cpool, cmd_buffer);
 	}
+	
+	inline void transition_manual(const VkCommandBuffer &cmd,
+			const VkImageLayout &old_layout,
+			const VkImageLayout &new_layout,
+			VkPipelineStageFlags src_stage,
+			VkPipelineStageFlags dst_stage) const
+	{
+		VkImageMemoryBarrier barrier {
+			.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+			.srcAccessMask = 0,
+			.dstAccessMask = 0,
+			.oldLayout = old_layout,
+			.newLayout = new_layout,
+			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+			.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+			.image = image,
+			.subresourceRange = {
+				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+				.baseMipLevel = 0,
+				.levelCount = 1,
+				.baseArrayLayer = 0,
+				.layerCount = 1
+			}
+		};
+
+		vkCmdPipelineBarrier(cmd,
+			src_stage, dst_stage, 0,
+			0, nullptr, 0, nullptr,
+			1, &barrier
+		);
+	}
 };
 
 // Create Vulkan image
