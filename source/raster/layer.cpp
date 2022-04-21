@@ -50,6 +50,11 @@ void Layer::_initialize_vulkan_structures(const VkAttachmentLoadOp &load)
 
 	// Create descriptor set and layout
 	_full_dsl = _wctx.context.make_dsl(_full_dsl_bindings);
+	/* _full_dsl = _wctx.context.vk->make_descriptor_set_layout(
+		_wctx.context.device,
+		_full_dsl_bindings,
+		VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT
+	); */
 
 	// Load necessary shader modules
 	// TODO: create a map of names to shaders (for fragment, since

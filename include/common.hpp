@@ -5,9 +5,13 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <vector>
 
 // GLM header
 #include <glm/glm.hpp>
+
+// Engine headers
+#include "logger.hpp"
 
 namespace kobra {
 
@@ -18,6 +22,28 @@ inline bool file_exists(const std::string &file)
 {
 	std::ifstream f(file);
 	return f.good();
+}
+
+// Read file glob
+inline std::vector <unsigned int> read_glob(const std::string &path)
+{
+	std::ifstream file(path, std::ios::ate | std::ios::binary);
+
+	// Check that the file exists
+	KOBRA_ASSERT(file.is_open(), "Failed to open file: " + path);
+
+	// Get the file size
+	size_t fsize = file.tellg();
+	file.seekg(0);
+
+	// Allocate memory for the file
+	std::vector <unsigned int> buffer(fsize/sizeof(unsigned int));
+
+	// Read the file
+	file.read((char *) buffer.data(), fsize);
+	file.close();
+
+	return buffer;
 }
 
 // Get directory

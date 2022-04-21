@@ -93,6 +93,10 @@ class Layer : public kobra::Layer <rt::_element> {
 	// Environment sampler
 	Sampler			_env_sampler;
 
+	// Final image and sampler
+	TexturePacket		_final_texture;
+	Sampler			_final_sampler;
+
 	// Vector of image descriptors
 	ImageDescriptors	_albedo_image_descriptors;
 	ImageDescriptors	_normal_image_descriptors;

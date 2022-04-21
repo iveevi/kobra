@@ -22,6 +22,7 @@
 #include <GLFW/glfw3.h>
 
 // Engine headers
+#include "common.hpp"
 #include "logger.hpp"
 
 const uint32_t WIDTH = 800;
@@ -1373,7 +1374,8 @@ public:
 		// Creation info
 		VkDescriptorPoolCreateInfo pool_info = {
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-			.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
+			.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT
+				| VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
 			.maxSets = 1000 * sizeof(pool_sizes) / sizeof(VkDescriptorPoolSize),
 			.poolSizeCount = (uint32_t) sizeof(pool_sizes) / sizeof(VkDescriptorPoolSize),
 			.pPoolSizes = pool_sizes
@@ -1398,6 +1400,7 @@ public:
 	// Create a descriptor set layout
 	VkDescriptorSetLayout make_descriptor_set_layout(const Device &device,
 			const std::vector <VkDescriptorSetLayoutBinding> &bindings,
+			const VkDescriptorSetLayoutCreateFlags &flags = 0,
 			VkAllocationCallbacks *allocator = nullptr) const {
 		// Descriptor set layout to return
 		VkDescriptorSetLayout new_descriptor_set_layout = VK_NULL_HANDLE;
@@ -1405,6 +1408,7 @@ public:
 		// Create info
 		VkDescriptorSetLayoutCreateInfo layout_info {
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+			.flags = flags,
 			.bindingCount = (uint32_t) bindings.size(),
 			.pBindings = bindings.data()
 		};
@@ -1653,6 +1657,98 @@ inline const std::vector <const char *> &get_required_extensions()
 	return extensions;
 }
 
+// Create debug messenger
+static bool check_validation_layer_support(const std::vector <const char *> &validation_layers)
+{
+	// TODO: remove this initial part?
+	uint32_t layer_count;
+	vkEnumerateInstanceLayerProperties(&layer_count, nullptr);
+
+	std::vector <VkLayerProperties> available_layers(layer_count);
+
+	vkEnumerateInstanceLayerProperties(&layer_count, available_layers.data());
+	for (const char *layer : validation_layers) {
+		bool layerFound = false;
+
+		for (const auto &properties : available_layers) {
+			if (strcmp(layer, properties.layerName) == 0) {
+				layerFound = true;
+				break;
+			}
+		}
+
+		if (!layerFound)
+			return false;
+	}
+
+	return true;
+}
+
+static VkResult make_debug_messenger(VkInstance instance,
+		const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,
+		const VkAllocationCallbacks* pAllocator,
+		VkDebugUtilsMessengerEXT* pCallback)
+{
+	auto func = (PFN_vkCreateDebugUtilsMessengerEXT)
+		vkGetInstanceProcAddr(
+			instance,
+			"vkCreateDebugUtilsMessengerEXT"
+		);
+
+	std::cout << "func: " << func << std::endl;
+
+	if (func != nullptr)
+		return func(instance, pCreateInfo, pAllocator, pCallback);
+	else
+		return VK_ERROR_EXTENSION_NOT_PRESENT;
+}
+
+static VKAPI_ATTR VkBool32 VKAPI_CALL debug_logger
+		(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+		VkDebugUtilsMessageTypeFlagsEXT messageType,
+		const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
+		void *pUserData)
+{
+	// Errors
+	if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+		Logger::error() << "[Vulkan Validation Layer] "
+			<< pCallbackData->pMessage << std::endl;
+
+#ifdef KOBRA_THROW_ERROR
+
+		throw std::runtime_error("[Vulkan Validation Layer] "
+			"An error occured in the validation layer");
+
+#endif
+
+#ifndef KOBRA_VALIDATION_ERROR_ONLY
+
+	// Warnings
+	} else if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+		Logger::warn() << "[Vulkan Validation Layer] "
+			<< pCallbackData->pMessage << std::endl;
+
+
+#ifdef KOBRA_THROW_WARNING
+
+		throw std::runtime_error("[Vulkan Validation Layer] "
+			"An warning occured in the validation layer");
+
+#endif
+
+	// Info
+	} else {
+
+		Logger::notify() << "[Vulkan Validation Layer] "
+			<< pCallbackData->pMessage << std::endl;
+
+#endif
+
+	}
+
+	return VK_FALSE;
+}
+
 // Get (or create) the singleton instance
 inline const vk::raii::Instance &get_vulkan_instance()
 {
@@ -1664,18 +1760,71 @@ inline const vk::raii::Instance &get_vulkan_instance()
 		VK_API_VERSION_1_0
 	};
 
+#ifdef KOBRA_VALIDATION_LAYERS
+
+	static const std::vector <const char *> validation_layers = {
+		"VK_LAYER_KHRONOS_validation"
+	};
+
+	// Check if validation layers are available
+	KOBRA_ASSERT(
+		check_validation_layer_support(validation_layers),
+		"Validation layers are not available"
+	);
+
+#endif
 	static vk::InstanceCreateInfo instance_info {
 		vk::InstanceCreateFlags(),
 		&app_info,
+
+#ifdef KOBRA_VALIDATION_LAYERS
+
+		static_cast <uint32_t> (validation_layers.size()),
+		validation_layers.data(),
+#else
+
 		0, nullptr,
+
+#endif
+
 		(uint32_t) get_required_extensions().size(),
 		get_required_extensions().data()
 	};
 
+	static VkDebugUtilsMessengerEXT debug_messenger;
+
 	static vk::raii::Instance instance {
 		get_vulkan_context(),
-		instance_info
+		instance_info,
 	};
+
+#ifdef KOBRA_VALIDATION_LAYERS
+
+	// Create debug messenger
+	static VkDebugUtilsMessengerCreateInfoEXT debug_messenger_info {
+		.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+		.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT
+			| VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
+			| VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT,
+		.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
+			| VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
+			| VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+		.pfnUserCallback = debug_logger
+	};
+
+	VkResult result = make_debug_messenger(
+		*instance,
+		&debug_messenger_info,
+		nullptr,
+		&debug_messenger
+	);
+
+	KOBRA_ASSERT(
+		result == VK_SUCCESS,
+		"Failed to create debug messenger"
+	);
+
+#endif
 
 	return instance;
 }
@@ -2220,6 +2369,173 @@ struct BufferData {
 		memory.unmapMemory();
 	}
 };
+
+// Create a render pass
+inline vk::raii::RenderPass make_render_pass(const vk::raii::Device &device,
+		const vk::Format &format,
+		const vk::Format &depth_format,
+		const vk::AttachmentLoadOp &load_op = vk::AttachmentLoadOp::eClear,
+		const vk::ImageLayout &initial_layout = vk::ImageLayout::ePresentSrcKHR)
+{
+	// List of attachments
+	std::vector <vk::AttachmentDescription> attachments;
+
+	// Make sure at least a valid color attachment is present
+	KOBRA_ASSERT(
+		format != vk::Format::eUndefined,
+		"Color attachment format is undefined"
+	);
+
+	// Create color attachment
+	vk::AttachmentDescription color_attachment {
+		{}, format,
+		vk::SampleCountFlagBits::e1,
+		vk::AttachmentLoadOp::eClear,
+		vk::AttachmentStoreOp::eStore,
+		vk::AttachmentLoadOp::eDontCare,
+		vk::AttachmentStoreOp::eDontCare,
+		vk::ImageLayout::eUndefined,
+		vk::ImageLayout::ePresentSrcKHR
+	};
+
+	// Add color attachment to list
+	attachments.push_back(color_attachment);
+
+	// Create depth attachment
+	if (depth_format != vk::Format::eUndefined) {
+		vk::AttachmentDescription depth_attachment {
+			{}, depth_format,
+			vk::SampleCountFlagBits::e1,
+			vk::AttachmentLoadOp::eClear,
+			vk::AttachmentStoreOp::eDontCare,
+			vk::AttachmentLoadOp::eDontCare,
+			vk::AttachmentStoreOp::eDontCare,
+			vk::ImageLayout::eUndefined,
+			vk::ImageLayout::eDepthStencilAttachmentOptimal
+		};
+
+		// Add depth attachment to list
+		attachments.push_back(depth_attachment);
+	}
+
+	// Reference to attachments
+	vk::AttachmentReference color_attachment_ref {
+		0, vk::ImageLayout::eColorAttachmentOptimal
+	};
+
+	vk::AttachmentReference depth_attachment_ref {
+		1, vk::ImageLayout::eDepthStencilAttachmentOptimal
+	};
+
+	// Subpasses
+	vk::SubpassDescription subpass {
+		{}, vk::PipelineBindPoint::eGraphics,
+		{}, color_attachment_ref,
+		{},
+		(depth_format == vk::Format::eUndefined) ? nullptr : &depth_attachment_ref
+	};
+
+	// Creation info
+	vk::RenderPassCreateInfo render_pass_info {
+		{}, attachments,
+		subpass
+	};
+
+	// Create render pass
+	return vk::raii::RenderPass(device, render_pass_info);
+}
+
+// Create framebuffers
+inline std::vector <vk::raii::Framebuffer> make_framebuffers
+		(const vk::raii::Device &device,
+		const vk::raii::RenderPass &render_pass,
+		const std::vector <vk::raii::ImageView> &image_views,
+		const vk::raii::ImageView *depth_image_view,
+		const vk::Extent2D &extent)
+{
+	// Create attachments
+	vk::ImageView attachments[2] {};
+	attachments[1] = (depth_image_view == nullptr) ?
+			vk::ImageView {} : **depth_image_view;
+
+	// Create framebuffers
+	vk::FramebufferCreateInfo framebuffer_info {
+		{}, *render_pass,
+		(depth_image_view == nullptr) ? 1u : 2u,
+		attachments,
+		extent.width, extent.height, 1
+	};
+
+	std::vector <vk::raii::Framebuffer> framebuffers;
+
+	framebuffers.reserve(image_views.size());
+	for (const auto &image_view : image_views) {
+		attachments[0] = *image_view;
+		framebuffers.emplace_back(device, framebuffer_info);
+	}
+
+	return framebuffers;
+}
+
+// Create a shader module
+inline vk::raii::ShaderModule make_shader_module(const vk::raii::Device &device,
+		const std::string &path)
+{
+	// Read shader file
+	auto spv = common::read_glob(path);
+
+	// Create shader module
+	return vk::raii::ShaderModule(device,
+		vk::ShaderModuleCreateInfo {
+			{}, spv
+		}
+	);
+}
+
+// Create a descriptor set layout
+using DSLB = std::tuple <vk::DescriptorType, uint32_t, vk::ShaderStageFlagBits>;
+
+inline vk::raii::DescriptorSetLayout make_descriptor_set_layout
+		(const vk::raii::Device &device,
+		const std::vector <DSLB> &bindings)
+{
+	std::vector <vk::DescriptorSetLayoutBinding> layout_bindings(bindings.size());
+	for (size_t i = 0; i < bindings.size(); ++i) {
+		layout_bindings[i] = {
+			(uint32_t) i,
+			std::get <0> (bindings[i]),
+			std::get <1> (bindings[i]),
+			std::get <2> (bindings[i])
+		};
+	}
+
+	// Create descriptor set layout
+	return vk::raii::DescriptorSetLayout(device,
+		vk::DescriptorSetLayoutCreateInfo {
+			{}, layout_bindings
+		}
+	);
+}
+
+// Create a graphics pipeline
+struct GraphicsPipelineInfo {
+	const vk::raii::Device &device;
+	const vk::raii::RenderPass &render_pass;
+	const vk::raii::ShaderModule &vertex_shader;
+	const vk::SpecializationInfo &vertex_specialization;
+	const vk::raii::ShaderModule &fragment_shader;
+	const vk::SpecializationInfo &fragment_specialization;
+	const vk::VertexInputBindingDescription &vertex_binding;
+	const std::vector <vk::VertexInputAttributeDescription> &vertex_attributes;
+
+	bool depth_test;
+	bool depth_write;
+};
+
+inline vk::raii::Pipeline make_graphics_pipeline(const GraphicsPipelineInfo &info)
+{
+	// Shader stages
+}
 
 // TODO: compiling GLSL into SPIRV in runtime
 

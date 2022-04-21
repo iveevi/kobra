@@ -2,18 +2,18 @@
 vec3 cast_color(uint c)
 {
 	return vec3(
-		float((c >> 16) & 0xFF) / 255.0,
+		float(c & 0xFF) / 255.0,
 		float((c >> 8) & 0xFF) / 255.0,
-		float(c & 0xFF) / 255.0
+		float((c >> 16) & 0xFF) / 255.0
 	);
 }
 
 // Vec3 color to uint color
 uint cast_color(vec3 c)
 {
-	return uint(c.z * 255.0)
+	return uint(c.x * 255.0)
 		| (uint(c.y * 255.0) << 8)
-		| (uint(c.x * 255.0) << 16);
+		| (uint(c.z * 255.0) << 16);
 }
 
 // Discretize and grey scale

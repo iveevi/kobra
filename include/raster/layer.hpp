@@ -4,6 +4,9 @@
 // Standard headers
 #include <vector>
 
+// Vulkan headers
+#include <vulkan/vulkan_core.h>
+
 // Engine headers
 #include "../../shaders/raster/bindings.h"
 #include "../app.hpp"
@@ -60,8 +63,13 @@ protected:
 	BufferManager <uint8_t>		_ubo_point_lights_buffer;
 
 	// Refresh a buffer with its data
-	static void _refresh(BufferManager <uint8_t> &buffer, const uint8_t *data, size_t size,
-			const VkDescriptorSet &ds, size_t binding) {
+	static void _refresh(const VkCommandBuffer &cmd,
+			const VkPipelineLayout &layout,
+			BufferManager <uint8_t> &buffer,
+			const uint8_t *data,
+			size_t size,
+			const VkDescriptorSet &ds,
+			size_t binding) {
 		buffer.write(data, size);
 		buffer.sync_upload();
 		buffer.bind(ds, binding);
@@ -227,16 +235,6 @@ public:
 		for (auto &e : _elements)
 			e->light(lp);
 
-		// Refresh for all elements
-		for (auto &e : _elements) {
-			_refresh(_ubo_point_lights_buffer,
-				(const uint8_t *) &_ubo_point_lights,
-				sizeof(_ubo_point_lights),
-				e->get_local_ds(),
-				RASTER_BINDING_POINT_LIGHTS
-			);
-		}
-
 		// Start render pass (clear both color and depth)
 		VkClearValue clear_colors[] = {
 			{.color = {0.0f, 0.0f, 0.0f, 1.0f}},
@@ -267,6 +265,18 @@ public:
 			VK_PIPELINE_BIND_POINT_GRAPHICS,
 			_get_pipeline()->pipeline
 		);
+
+		// Refresh for all elements
+		for (auto &e : _elements) {
+			_refresh(cmd_buffer,
+				_get_pipeline()->layout,
+				_ubo_point_lights_buffer,
+				(const uint8_t *) &_ubo_point_lights,
+				sizeof(_ubo_point_lights),
+				e->get_local_ds(),
+				RASTER_BINDING_POINT_LIGHTS
+			);
+		}
 
 		// Initialize render packet
 		RenderPacket packet {

@@ -1,3 +1,6 @@
+// Vulkan headers
+#include <vulkan/vulkan_core.h>
+
 // Engine headers
 #include "../../include/raytracing/layer.hpp"
 #include "../../include/raytracing/sphere.hpp"
@@ -108,19 +111,19 @@ const Layer::DSLBindings Layer::_mesh_compute_bindings {
 const Layer::DSLBindings Layer::_postproc_bindings = {
 	VkDescriptorSetLayoutBinding {
 		.binding = 0,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 		.descriptorCount = 1,
 		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
 		.pImmutableSamplers = nullptr
 	},
 
-	VkDescriptorSetLayoutBinding {
+	/* VkDescriptorSetLayoutBinding {
 		.binding = 1,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 		.descriptorCount = 1,
 		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
 		.pImmutableSamplers = nullptr
-	},
+	}, */
 };
 
 //////////////////////////////
@@ -573,7 +576,7 @@ Layer::Layer(const App::Window &wctx)
 
 	// Bind to descriptor sets
 	_pixels.bind(_mesh_ds, MESH_BINDING_PIXELS);
-	_pixels.bind(_postproc_ds, MESH_BINDING_PIXELS);
+	// _pixels.bind(_postproc_ds, MESH_BINDING_PIXELS);
 
 	/////////////////////////////////////////////
 	// Fill sampler arrays with blank samplers //
@@ -582,6 +585,30 @@ Layer::Layer(const App::Window &wctx)
 	// Initialize samplers
 	_empty_sampler = Sampler::blank_sampler(_context, _command_pool);
 	_env_sampler = Sampler::blank_sampler(_context, _command_pool);
+
+	// Output image and sampler
+	auto texture = Texture {
+		.width = _extent.width,
+		.height = _extent.height,
+		.channels = 4,
+	};
+
+	_final_texture = make_texture(_context, _command_pool,
+		texture,
+		VK_FORMAT_R8G8B8A8_UNORM,
+		VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+	);
+
+	_final_texture.transition_manual(_context, _command_pool,
+		VK_IMAGE_LAYOUT_UNDEFINED,
+		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+	);
+
+	_final_sampler = Sampler(_context, _final_texture);
+	_final_sampler.bind(_postproc_ds, MESH_BINDING_PIXELS);
 
 	// Binding environment sampler
 	_env_sampler.bind(_mesh_ds, MESH_BINDING_ENVIRONMENT);
@@ -887,6 +914,51 @@ void Layer::render(const VkCommandBuffer &cmd,
 		_pipelines.postproc.pipeline
 	);
 
+	/////////////////////////////////
+	// Copy buffer to output image //
+	/////////////////////////////////
+	
+	VkBufferImageCopy region {
+		.bufferOffset = 0,
+		.bufferRowLength = 0,
+		.bufferImageHeight = 0,
+
+		.imageSubresource = {
+			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.mipLevel = 0,
+			.baseArrayLayer = 0,
+			.layerCount = 1
+		},
+
+		.imageOffset = { 0, 0, 0 },
+		.imageExtent = {
+			.width = _final_texture.width,
+			.height = _final_texture.height,
+			.depth = 1
+		}
+	};
+
+	_final_texture.transition_manual(_context, _command_pool,
+		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+	);
+
+	vkCmdCopyBufferToImage(cmd,
+		_pixels.vk_buffer(),
+		_final_texture.image,
+		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		1, &region
+	);
+
+	_final_texture.transition_manual(_context, _command_pool,
+		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+	);
+
 	// Bind descriptor set
 	vkCmdBindDescriptorSets(cmd,
 		VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -895,7 +967,7 @@ void Layer::render(const VkCommandBuffer &cmd,
 		0, nullptr
 	);
 
-	// Push constants
+	/* Push constants
 	PC_Viewport pc_vp {
 		.width = _extent.width,
 		.height = _extent.height
@@ -905,7 +977,7 @@ void Layer::render(const VkCommandBuffer &cmd,
 		_pipelines.postproc.layout,
 		VK_SHADER_STAGE_FRAGMENT_BIT,
 		0, sizeof(PC_Viewport), &pc_vp
-	);
+	); */
 
 	// Clear colors
 	VkClearValue clear_values[2] = {
