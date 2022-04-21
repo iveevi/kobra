@@ -2108,8 +2108,8 @@ struct ImageData {
 			vk::MemoryPropertyFlags memory_properties,
 			vk::ImageAspectFlags aspect_mask)
 			: format { fmt },
-			
-			image {device,
+
+			image { device,
 				  {
 					  vk::ImageCreateFlags(),
 					  vk::ImageType::e2D,
@@ -2160,6 +2160,65 @@ struct DepthBuffer : public ImageData {
 				vk::ImageLayout::eUndefined,
 				vk::MemoryPropertyFlagBits::eDeviceLocal,
 				vk::ImageAspectFlagBits::eDepth) {}
+};
+
+// Buffer data wrapper
+struct BufferData {
+	vk::DeviceSize		size;
+	vk::BufferUsageFlags	flags;
+	vk::MemoryPropertyFlags	memory_properties;
+
+	vk::raii::Buffer	buffer = nullptr;
+	vk::raii::DeviceMemory	memory = nullptr;
+
+	// Constructors
+	BufferData(const vk::raii::PhysicalDevice &phdev,
+			const vk::raii::Device &device,
+			const vk::DeviceSize &size,
+			vk::BufferUsageFlags usage,
+			vk::MemoryPropertyFlags memory_properties)
+			: size { size },
+			flags { usage },
+			memory_properties { memory_properties },
+
+			buffer { device,
+				vk::BufferCreateInfo {
+					{}, size, usage,
+				}
+			},
+
+			memory {
+				allocate_device_memory(
+					device, phdev.getMemoryProperties(),
+					buffer.getMemoryRequirements(),
+					memory_properties
+				)
+			} {
+		buffer.bindMemory(*memory, 0);
+	}
+
+	BufferData(std::nullptr_t) {}
+
+	// Upload data to buffer
+	template <class T>
+	void upload(const std::vector <T> &data) const {
+		// Assertions
+		KOBRA_ASSERT(
+			(memory_properties & vk::MemoryPropertyFlagBits::eHostCoherent)
+				&& (memory_properties & vk::MemoryPropertyFlagBits::eHostVisible),
+			"Buffer data must be host coherent and host visible"
+		);
+
+		KOBRA_ASSERT(
+			data.size() * sizeof(T) <= size,
+			"Buffer size is smaller than data size"
+		);
+
+		// Upload data
+		void *ptr = memory.mapMemory(0, size);
+		memcpy(ptr, data.data(), data.size() * sizeof(T));
+		memory.unmapMemory();
+	}
 };
 
 // TODO: compiling GLSL into SPIRV in runtime

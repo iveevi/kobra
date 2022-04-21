@@ -5,7 +5,7 @@
 #include <vulkan/vulkan_raii.hpp>
 
 // Scene path
-std::string scene_path = "../assets/statue.kobra";
+std::string scene_path = "scene.kobra";
 
 // Experimental GUI app
 class GUIApp : public BaseApp {

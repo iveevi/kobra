@@ -46,20 +46,11 @@ vec3 sample_triangle(vec3 v1, vec3 v2, vec3 v3, float strata, float i)
 // Sample a light position from an area light
 vec3 sample_light_position(uint li, int sample_i)
 {
-	// Get light position
-	float a = lights.data[li + 1].x;
-	float b = lights.data[li + 1].y;
-	float c = lights.data[li + 1].z;
-	float d = lights.data[li + 1].w;
+	uvec4 i = 2 * floatBitsToUint(lights.data[li + 1]);
 
-	uint ia = floatBitsToUint(a);
-	uint ib = floatBitsToUint(b);
-	uint ic = floatBitsToUint(c);
-	uint id = floatBitsToUint(d);
-
-	vec3 v1 = vertices.data[2 * ia].xyz;
-	vec3 v2 = vertices.data[2 * ib].xyz;
-	vec3 v3 = vertices.data[2 * ic].xyz;
+	vec3 v1 = vertices.data[i.x].xyz;
+	vec3 v2 = vertices.data[i.y].xyz;
+	vec3 v3 = vertices.data[i.z].xyz;
 
 	// Sample point from triangle
 	return sample_triangle(
@@ -109,11 +100,6 @@ bool apply_bsdf(inout Ray r, Hit hit, inout float beta, inout float ior)
 // Color value at from a ray
 vec3 color_at(Ray ray)
 {
-	/* Eliminate special cases immediately
-	Hit h = closest_object(ray);
-	if (h.object == -1 || h.mat.shading == SHADING_TYPE_EMISSIVE)
-		return h.mat.albedo; */
-
 	// Light and camera paths
 	vec3 light_contrs[MAX_DEPTH];
 	vec3 camera_contr[MAX_DEPTH];
@@ -200,13 +186,15 @@ vec3 color_at(Ray ray)
 
 			// Trace a light path
 			vec3 dir = random_sphere();
-			Ray l = Ray(light_position + dir * 0.001, dir, 1.0, 1.0);
+			// Ray l = Ray(light_position + dir * 0.001, dir, 1.0, 1.0);
+			r.origin = light_position + dir * 0.001;
+			r.direction = dir;
 
 			// Generate path
 			int k = 1;
 			for (; k < MAX_DEPTH; k++) {
 				// Find closest object
-				Hit hit = closest_object(l);
+				Hit hit = closest_object(r);
 
 				// Value and position
 				light_contrs[k] = beta * hit.mat.albedo;
@@ -218,7 +206,7 @@ vec3 color_at(Ray ray)
 					break;
 
 				// Generating the new ray according to BSDF
-				if (apply_bsdf(l, hit, beta, ior))
+				if (apply_bsdf(r, hit, beta, ior))
 					break;
 			}
 
@@ -245,14 +233,15 @@ vec3 color_at(Ray ray)
 					if (hit.mat.shading == SHADING_TYPE_EMISSIVE
 							|| hit.object == light_objects[y]) {
 						float d = distance(light_vertices[y], camera_vertices[x]);
-						path_contr += light_contrs[0] *
-							camera_contr[x] * (5.0/d);
+						path_contr += light_contrs[y]
+							* camera_contr[x]
+							* (5.0/d) * (INV_PI * INV_PI);
 					}
 				}
 			}
 
 			// Update total light contribution
-			light_contr += path_contr/(PI * PI);
+			light_contr += path_contr;
 		}
 
 		// Update total contribution
@@ -261,6 +250,10 @@ vec3 color_at(Ray ray)
 
 	return clamp(total_contr, 0.0, 1.0);
 }
+
+// Gamma correction coefficients
+const vec3 gamma = vec3(2.2);
+const vec3 inv_gamma = vec3(1.0/2.2);
 
 void main()
 {
@@ -276,11 +269,11 @@ void main()
 	uint index = y0 * pc.width + x0;
 
 	// Set seed
-	float rx = fract(sin(x0 * 1234.56789 + y0) * PHI);
-	float ry = fract(sin(y0 * 9876.54321 + x0));
+	float rx = fract(sin(x0 * 12 + y0) * PHI);
+	float ry = fract(sin(y0 * 98 + x0));
 
 	// Initialiize the random seed
-	random_seed = vec3(rx, ry, pc.time);
+	random_seed = vec3(rx, ry, fract((rx + ry)/pc.time));
 
 	// Accumulate color
 	vec3 color = vec3(0.0);
@@ -312,13 +305,13 @@ void main()
 
 	if (pc.accumulate > 0) {
 		vec3 pcolor = cast_color(frame.pixels[index]);
-		pcolor = pow(pcolor, vec3(2.2));
+		pcolor = pow(pcolor, gamma);
 		color += pcolor * pc.present;
 		color /= float(pc.present + pc.samples_per_pixel);
-		color = pow(color, vec3(1/2.2));
+		color = pow(color, inv_gamma);
 	} else {
 		color /= float(pc.samples_per_pixel);
-		color = pow(color, vec3(1/2.2));
+		color = pow(color, inv_gamma);
 	}
 
 	frame.pixels[index] = cast_color(color);

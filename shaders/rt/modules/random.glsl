@@ -1,6 +1,7 @@
 // Constants
-float PI = 3.14159265358979323846;
-float PHI = 1.61803398874989484820;
+const float PI = 3.14159265358979323846;
+const float INV_PI = 0.31830988618379067154;
+const float PHI = 1.61803398874989484820;
 
 // Random seed
 vec3 random_seed = vec3(0.0, 0.0, 0.0);
@@ -37,23 +38,14 @@ vec2 jitter2d(float strata, float i)
 	random_seed = random3(random_seed);
 
 	// Get into the range [-0.5, 0.5]
-	float rx = 0.5 * random_seed.x;
-	float ry = 0.5 * random_seed.y;
-
-	// Size of each square
-	float inv = 1.0 / strata;
-	float ix = floor(i/strata);
-	float iy = i - ix * strata;
-
-	// Center of the ith square
-	float cx = ix * inv + 0.5;
-	float cy = iy * inv + 0.5;
-
-	// Jitter from the center of the ith square
-	float x = rx * inv + cx;
-	float y = ry * inv + cy;
-
-	return vec2(x, y);
+	vec2 r = 0.5 * random_seed.xy;
+	
+	float inv_strata = 1.0/strata;
+	float ix = floor(i * inv_strata);
+	
+	vec2 ir = vec2(ix, i - ix * strata);
+	vec2 center = ir * inv_strata + 0.5;
+	return r * inv_strata + center;
 }
 
 // Random point in unit sphere

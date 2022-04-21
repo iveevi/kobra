@@ -248,4 +248,10 @@ public:
 
 #define KOBRA_LOG_FILE(type) Logger::type##_from(__FILE__ ": " LINE_TO_STRING2(__LINE__))
 
+#define KOBRA_ASSERT(cond, msg)					\
+	if (!(cond)) {						\
+		KOBRA_LOG_FUNC(error) << msg << std::endl;	\
+		throw std::runtime_error(msg);			\
+	}
+
 #endif

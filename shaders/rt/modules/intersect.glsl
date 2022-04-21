@@ -115,24 +115,16 @@ Intersection ray_sphere_intersect(Ray ray, uint a, uint d)
 
 Intersection ray_intersect(Ray ray, uint index)
 {
-	float ia = triangles.data[index].x;
-	float ib = triangles.data[index].y;
-	float ic = triangles.data[index].z;
-	float id = triangles.data[index].w;
-
-	uint a = floatBitsToUint(ia);
-	uint b = floatBitsToUint(ib);
-	uint c = floatBitsToUint(ic);
-	uint d = floatBitsToUint(id);
+	uvec4 i = floatBitsToUint(triangles.data[index]);
 
 	// TODO: if a == b == c, then its a sphere with vertex at a and radius d
-	if (a == b && b == c)
-		return ray_sphere_intersect(ray, a, d);
+	if (i.x == i.y && i.y == i.z)
+		return ray_sphere_intersect(ray, i.x, i.w);
 
 	// TODO: macro for fixed width vertices
-	vec3 v1 = vertices.data[2 * a].xyz;
-	vec3 v2 = vertices.data[2 * b].xyz;
-	vec3 v3 = vertices.data[2 * c].xyz;
+	vec3 v1 = vertices.data[2 * i.x].xyz;
+	vec3 v2 = vertices.data[2 * i.y].xyz;
+	vec3 v3 = vertices.data[2 * i.z].xyz;
 
 	Triangle triangle = Triangle(v1, v2, v3);
 
@@ -142,20 +134,20 @@ Intersection ray_intersect(Ray ray, uint index)
 	// If intersection is valid, compute material
 	if (it.time > 0.0) {
 		// Get texture coordinates
-		vec2 t1 = vertices.data[2 * a + 1].xy;
-		vec2 t2 = vertices.data[2 * b + 1].xy;
-		vec2 t3 = vertices.data[2 * c + 1].xy;
+		vec2 t1 = vertices.data[2 * i.x + 1].xy;
+		vec2 t2 = vertices.data[2 * i.y + 1].xy;
+		vec2 t3 = vertices.data[2 * i.z + 1].xy;
 
 		// Interpolate texture coordinates
 		vec2 tex_coord = t1 * (1 - b1 - b2) + t2 * b1 + t3 * b2;
 		tex_coord.y = 1.0 - tex_coord.y;
 
 		// Transfer albedo
-		it.mat = mat_at(d, tex_coord);
+		it.mat = mat_at(i.w, tex_coord);
 
 		// Transfer normal
 		if (it.mat.has_normal < 0.5) {
-			vec3 n = texture(s2_normals[d], tex_coord).rgb;
+			vec3 n = texture(s2_normals[i.w], tex_coord).rgb;
 			n = 2 * n - 1.0;
 
 			vec3 world_normal = normalize(it.normal);
