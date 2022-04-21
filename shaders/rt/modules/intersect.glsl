@@ -104,7 +104,6 @@ Intersection ray_sphere_intersect(Ray ray, uint a, uint d)
 		uv.y = asin(ray.direction.y) / PI + 0.5;
 
 		// Get the color
-		// TODO: reuse from mesh
 		it.mat.albedo = texture(s2_albedo[0], uv).rgb;
 
 		// Get material index at the second element

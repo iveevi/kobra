@@ -1631,6 +1631,27 @@ inline const vk::raii::Context &get_vulkan_context()
 	return context;
 }
 
+// Get (or generate) the required extensions
+inline const std::vector <const char *> &get_required_extensions()
+{
+	// Vector to return
+	static std::vector <const char *> extensions;
+
+	// Add if empty
+	if (extensions.empty()) {
+		// Add glfw extensions
+		uint32_t glfw_extension_count;
+		const char **glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
+		extensions.insert(extensions.end(), glfw_extensions, glfw_extensions + glfw_extension_count);
+
+		// Additional extensions
+		// TODO: debugging extension if debuggin enabled
+		extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
+		extensions.push_back("VK_KHR_get_physical_device_properties2");
+	}
+
+	return extensions;
+}
 
 // Get (or create) the singleton instance
 inline const vk::raii::Instance &get_vulkan_instance()
@@ -1647,7 +1668,8 @@ inline const vk::raii::Instance &get_vulkan_instance()
 		vk::InstanceCreateFlags(),
 		&app_info,
 		0, nullptr,
-		0, nullptr
+		(uint32_t) get_required_extensions().size(),
+		get_required_extensions().data()
 	};
 
 	static vk::raii::Instance instance {
@@ -1776,36 +1798,369 @@ inline uint32_t find_graphics_queue_family(const vk::raii::PhysicalDevice &phdev
 	throw std::runtime_error("[Vulkan] No graphics queue family found");
 }
 
+// Find present queue family
+inline uint32_t find_present_queue_family(const vk::raii::PhysicalDevice &phdev,
+		const vk::raii::SurfaceKHR &surface)
+{
+	// Get the queue families
+	std::vector <vk::QueueFamilyProperties> queue_families =
+			phdev.getQueueFamilyProperties();
+
+	// Find the first one that supports presentation
+	for (uint32_t i = 0; i < queue_families.size(); i++) {
+		if (phdev.getSurfaceSupportKHR(i, *surface))
+			return i;
+	}
+
+	// If none found, throw an error
+	KOBRA_LOG_FUNC(error) << "No presentation queue family found\n";
+	throw std::runtime_error("[Vulkan] No presentation queue family found");
+}
+
 // Coupling graphics and present queue families
 struct QueueFamilyIndices {
 	uint32_t graphics;
 	uint32_t present;
 };
 
-// Find both graphics and present queue families
+// Get both graphics and present queue families
 inline QueueFamilyIndices find_queue_families(const vk::raii::PhysicalDevice &phdev,
-		const vk::SurfaceKHR &surface)
+		const vk::raii::SurfaceKHR &surface)
 {
-	// Get the queue families
-	std::vector <vk::QueueFamilyProperties> queue_families =
-			phdev.getQueueFamilyProperties();
+	return {
+		find_graphics_queue_family(phdev),
+		find_present_queue_family(phdev, surface)
+	};
+}
 
-	// Find the first one that supports graphics and present
-	QueueFamilyIndices indices;
-	for (uint32_t i = 0; i < queue_families.size(); i++) {
-		if (queue_families[i].queueFlags & vk::QueueFlagBits::eGraphics) {
-			indices.graphics = i;
-			if (phdev.getSurfaceSupportKHR(i, surface)) {
-				indices.present = i;
-				return indices;
-			}
+// Create a logical device
+inline vk::raii::Device make_device(const vk::raii::PhysicalDevice &phdev,
+		const QueueFamilyIndices &indices,
+		const std::vector <const char *> &extensions)
+{
+	float queue_priority = 0.0f;
+
+	// Create the device info
+	vk::DeviceQueueCreateInfo queue_info {
+		vk::DeviceQueueCreateFlags(),
+		indices.graphics, 1, &queue_priority
+	};
+
+	// Create the device
+	vk::DeviceCreateInfo device_info {
+		vk::DeviceCreateFlags(),
+		queue_info,
+		{}, extensions,
+		nullptr, nullptr
+	};
+
+	return vk::raii::Device {
+		phdev, device_info
+	};
+}
+
+// Find memory type
+inline uint32_t find_memory_type(const vk::PhysicalDeviceMemoryProperties &mem_props,
+		uint32_t type_filter,
+		vk::MemoryPropertyFlags properties)
+{
+	uint32_t type_index = uint32_t(~0);
+	for (uint32_t i = 0; i < mem_props.memoryTypeCount; i++) {
+		if ((type_filter & 1) && (mem_props.memoryTypes[i].propertyFlags & properties) == properties) {
+			type_index = i;
+			break;
+		}
+
+		type_filter >>= 1;
+	}
+
+	if (type_index == uint32_t(~0)) {
+		KOBRA_LOG_FUNC(error) << "No memory type found\n";
+		throw std::runtime_error("[Vulkan] No memory type found");
+	}
+
+	return type_index;
+}
+
+// Allocate device memory
+inline vk::raii::DeviceMemory allocate_device_memory(const vk::raii::Device &device,
+		const vk::PhysicalDeviceMemoryProperties &memory_properties,
+		const vk::MemoryRequirements &memory_requirements,
+		const vk::MemoryPropertyFlags &properties)
+{
+	uint32_t type_index = find_memory_type(memory_properties,
+			memory_requirements.memoryTypeBits, properties);
+
+	vk::MemoryAllocateInfo alloc_info {
+		memory_requirements.size, type_index
+	};
+
+	return vk::raii::DeviceMemory {
+		device, alloc_info
+	};
+}
+
+// Create a command buffer
+inline vk::raii::CommandBuffer make_command_buffer(const vk::raii::Device &device,
+		const vk::raii::CommandPool &command_pool)
+{
+	vk::CommandBufferAllocateInfo alloc_info {
+		*command_pool, vk::CommandBufferLevel::ePrimary, 1
+	};
+
+	return std::move(device.allocateCommandBuffers(alloc_info)[0]);
+}
+
+// Pick a surface format
+inline vk::SurfaceFormatKHR pick_surface_format(const vk::raii::PhysicalDevice &phdev,
+		const vk::raii::SurfaceKHR &surface)
+{
+	// Constant formats
+	static const std::vector <vk::SurfaceFormatKHR> target_formats = {
+		{ vk::Format::eB8G8R8A8Unorm, vk::ColorSpaceKHR::eSrgbNonlinear },
+	};
+
+	// Get the surface formats
+	std::vector <vk::SurfaceFormatKHR> formats =
+			phdev.getSurfaceFormatsKHR(*surface);
+
+	// If there is only one format, return it
+	if (formats.size() == 1 && formats[0].format == vk::Format::eUndefined) {
+		return {
+			vk::Format::eB8G8R8A8Unorm,
+			vk::ColorSpaceKHR::eSrgbNonlinear
+		};
+	}
+
+	// Find the first one that is supported
+	for (const vk::SurfaceFormatKHR &format : formats) {
+		if (std::find_if(target_formats.begin(), target_formats.end(),
+				[&format](const vk::SurfaceFormatKHR &target) {
+					return format.format == target.format &&
+							format.colorSpace == target.colorSpace;
+				}) != target_formats.end()) {
+			return format;
 		}
 	}
 
 	// If none found, throw an error
-	KOBRA_LOG_FUNC(error) << "No graphics and present queue families found\n";
-	throw std::runtime_error("[Vulkan] No graphics and present queue families found");
+	KOBRA_LOG_FUNC(error) << "No supported surface format found\n";
+	throw std::runtime_error("[Vulkan] No supported surface format found");
 }
+
+// Pick a present mode
+inline vk::PresentModeKHR pick_present_mode(const vk::raii::PhysicalDevice &phdev,
+		const vk::raii::SurfaceKHR &surface)
+{
+	// Constant modes
+	static const std::vector <vk::PresentModeKHR> target_modes = {
+		vk::PresentModeKHR::eMailbox,
+		vk::PresentModeKHR::eImmediate,
+		vk::PresentModeKHR::eFifo
+	};
+
+	// Get the present modes
+	std::vector <vk::PresentModeKHR> modes =
+			phdev.getSurfacePresentModesKHR(*surface);
+
+	// Prioritize mailbox mode
+	if (std::find(modes.begin(), modes.end(), vk::PresentModeKHR::eMailbox) !=
+			modes.end()) {
+		return vk::PresentModeKHR::eMailbox;
+	}
+
+	// Find the first one that is supported
+	for (const vk::PresentModeKHR &mode : modes) {
+		if (std::find(target_modes.begin(), target_modes.end(), mode) !=
+				target_modes.end()) {
+			return mode;
+		}
+	}
+
+	// If none found, throw an error
+	KOBRA_LOG_FUNC(error) << "No supported present mode found\n";
+	throw std::runtime_error("[Vulkan] No supported present mode found");
+}
+
+// Swapchain structure
+struct Swapchain {
+	vk::Format				format;
+	vk::raii::SwapchainKHR			swapchain = nullptr;
+	std::vector <VkImage>			images;
+	std::vector <vk::raii::ImageView>	image_views;
+
+	// Constructing a swapchain
+	Swapchain(const vk::raii::PhysicalDevice &phdev,
+			const vk::raii::Device &device,
+			const vk::raii::SurfaceKHR &surface,
+			const vk::Extent2D &extent,
+			const QueueFamilyIndices &indices,
+			const vk::raii::SwapchainKHR *old_swapchain = nullptr) {
+		// Pick a surface format
+		auto surface_format = pick_surface_format(phdev, surface);
+		format = surface_format.format;
+
+		// Surface capabilities and extent
+		vk::SurfaceCapabilitiesKHR capabilities =
+				phdev.getSurfaceCapabilitiesKHR(*surface);
+
+		// Set the surface extent
+		vk::Extent2D swapchain_extent = extent;
+		if (capabilities.currentExtent.width == std::numeric_limits <uint32_t>::max()) {
+			swapchain_extent.width = std::clamp(
+				swapchain_extent.width,
+				capabilities.minImageExtent.width,
+				capabilities.maxImageExtent.width
+			);
+
+			swapchain_extent.height = std::clamp(
+				swapchain_extent.height,
+				capabilities.minImageExtent.height,
+				capabilities.maxImageExtent.height
+			);
+		} else {
+			swapchain_extent = capabilities.currentExtent;
+		}
+
+		// Transform, etc
+		vk::SurfaceTransformFlagBitsKHR transform =
+			(capabilities.supportedTransforms &
+			vk::SurfaceTransformFlagBitsKHR::eIdentity) ?
+			vk::SurfaceTransformFlagBitsKHR::eIdentity :
+			capabilities.currentTransform;
+
+		// Composite alpha
+		vk::CompositeAlphaFlagBitsKHR composite_alpha =
+			(capabilities.supportedCompositeAlpha &
+			vk::CompositeAlphaFlagBitsKHR::eOpaque) ?
+			vk::CompositeAlphaFlagBitsKHR::eOpaque :
+			vk::CompositeAlphaFlagBitsKHR::ePreMultiplied;
+
+		// Present mode
+		vk::PresentModeKHR present_mode = pick_present_mode(phdev, surface);
+
+		// Creation info
+		vk::SwapchainCreateInfoKHR create_info {
+			{},
+			*surface,
+			capabilities.minImageCount,
+			format,
+			surface_format.colorSpace,
+			swapchain_extent,
+			1,
+			vk::ImageUsageFlagBits::eColorAttachment,
+			vk::SharingMode::eExclusive,
+			{},
+			transform,
+			composite_alpha,
+			present_mode,
+			true,
+			(old_swapchain ? **old_swapchain : nullptr)
+		};
+
+		// In case graphics and present queues are different
+		if (indices.graphics != indices.present) {
+			create_info.imageSharingMode = vk::SharingMode::eConcurrent;
+			create_info.queueFamilyIndexCount = 2;
+			create_info.pQueueFamilyIndices = &indices.graphics;
+		}
+
+		// Create the swapchain
+		swapchain = vk::raii::SwapchainKHR(device, create_info);
+
+		// Get the swapchain images
+		images = swapchain.getImages();
+
+		// Create image views
+		vk::ImageViewCreateInfo create_view_info {
+			{}, {},
+			vk::ImageViewType::e2D,
+			format,
+			{},
+			vk::ImageSubresourceRange(
+				vk::ImageAspectFlagBits::eColor,
+				0, 1, 0, 1
+			)
+		};
+
+		for (size_t i = 0; i < images.size(); i++) {
+			create_view_info.image = images[i];
+			image_views.emplace_back(device, create_view_info);
+		}
+	}
+};
+
+// Image data wrapper
+struct ImageData {
+	vk::Format format;
+	vk::raii::Image		image = nullptr;
+	vk::raii::DeviceMemory	memory = nullptr;
+	vk::raii::ImageView	view = nullptr;
+
+	// Constructors
+	ImageData(const vk::raii::PhysicalDevice &phdev,
+			const vk::raii::Device &device,
+			const vk::Format &fmt,
+			const vk::Extent2D &extent,
+			vk::ImageTiling tiling,
+			vk::ImageUsageFlags usage,
+			vk::ImageLayout initial_layout,
+			vk::MemoryPropertyFlags memory_properties,
+			vk::ImageAspectFlags aspect_mask)
+			: format { fmt },
+			
+			image {device,
+				  {
+					  vk::ImageCreateFlags(),
+					  vk::ImageType::e2D,
+					  format,
+					  vk::Extent3D( extent, 1 ),
+					  1,
+					  1,
+					  vk::SampleCountFlagBits::e1,
+					  tiling,
+					  usage | vk::ImageUsageFlagBits::eSampled,
+					  vk::SharingMode::eExclusive,
+					  {},
+					  initial_layout
+				  }
+			},
+
+			memory {
+				allocate_device_memory(
+					device, phdev.getMemoryProperties(),
+					image.getMemoryRequirements(),
+					memory_properties
+				)
+			} {
+		image.bindMemory(*memory, 0);
+		view = vk::raii::ImageView {
+			device,
+			vk::ImageViewCreateInfo {
+				{}, *image, vk::ImageViewType::e2D,
+				format, {}, { aspect_mask, 0, 1, 0, 1 }
+			}
+		};
+	}
+
+	ImageData(std::nullptr_t) {}
+};
+
+// Depth buffer data wrapper
+struct DepthBuffer : public ImageData {
+	// Constructors
+	DepthBuffer(const vk::raii::PhysicalDevice &phdev,
+			const vk::raii::Device &device,
+			const vk::Format &fmt,
+			const vk::Extent2D &extent)
+			: ImageData(phdev, device,
+				fmt, extent,
+				vk::ImageTiling::eOptimal,
+				vk::ImageUsageFlagBits::eDepthStencilAttachment,
+				vk::ImageLayout::eUndefined,
+				vk::MemoryPropertyFlagBits::eDeviceLocal,
+				vk::ImageAspectFlagBits::eDepth) {}
+};
 
 // TODO: compiling GLSL into SPIRV in runtime
 

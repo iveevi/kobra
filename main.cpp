@@ -5,7 +5,7 @@
 #include <vulkan/vulkan_raii.hpp>
 
 // Scene path
-std::string scene_path = "scene.kobra";
+std::string scene_path = "../assets/statue.kobra";
 
 // Experimental GUI app
 class GUIApp : public BaseApp {
@@ -97,34 +97,6 @@ public:
 
 int main()
 {
-	auto window = Window("Vulkan RT", {200, 200});
-	vk::raii::SurfaceKHR surface = make_surface(window);
-
-	auto extensions = {
-		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-		"VK_KHR_ray_tracing_pipeline"
-	};
-
-	auto predicate = [&extensions](const vk::raii::PhysicalDevice &dev) {
-		return physical_device_able(dev, extensions);
-	};
-
-	auto phdev = pick_physical_device(predicate);
-
-	std::cout << "Chosen device: " << phdev.getProperties().deviceName << std::endl;
-	std::cout << "\tgraphics queue family: " << find_graphics_queue_family(phdev) << std::endl;
-
-	auto queue_family = find_queue_families(phdev, *surface);
-
-	std::cout << "\tqueue family (G): " << queue_family.graphics << std::endl;
-	std::cout << "\tqueue family (P): " << queue_family.present << std::endl;
-
-	/* Construct camera
-	Camera camera = Camera {
-		Transform { {0, 6, 16}, {-0.2, 0, 0} },
-		Tunings { 45.0f, 800, 800 }
-	};
-
 	Vulkan *vulkan = new Vulkan();
 
 	// GUIApp gui_app {vulkan};
@@ -139,7 +111,7 @@ int main()
 
 	t1.join();
 
-	delete vulkan; */
+	delete vulkan;
 }
 
 ////////////////////

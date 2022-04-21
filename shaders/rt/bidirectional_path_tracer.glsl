@@ -17,7 +17,7 @@
 #include "modules/bvh.glsl"
 
 // Maximum ray depth
-#define MAX_DEPTH 10
+#define MAX_DEPTH 5
 
 // Sample random point in triangle
 float u = 0.0;
@@ -43,92 +43,8 @@ vec3 sample_triangle(vec3 v1, vec3 v2, vec3 v3, float strata, float i)
 	return p;
 }
 
-// Point light contribution
-vec3 point_light_contr(Hit hit, Ray ray, vec3 lpos)
-{
-	// Shadow ray
-	vec3 origin = hit.point + hit.normal * 0.001;
-	Ray shadow_ray = Ray(
-		origin,
-		normalize(lpos - origin),
-		1.0, 1.0
-	);
-
-	Hit shadow_hit = closest_object(shadow_ray);
-
-	// Light contribution
-	vec3 ldir = normalize(lpos - hit.point);
-
-	// Light intensity
-	float d = distance(lpos, hit.point);
-	float intensity = 5.0/d;
-
-	// TODO: use the actual object id
-	vec3 lcolor = vec3(1.0);
-	if (shadow_hit.mat.shading != SHADING_TYPE_EMISSIVE)
-		return vec3(0.0);
-
-	return lcolor * intensity
-		* max(0.0, dot(hit.normal, ldir))
-		* hit.mat.albedo;
-}
-
-// Light lighting from a bidirectional light path
-vec3 path_light_contr(Hit hit, Ray ray, vec3 pos)
-{
-	// Total contribution and "energy" fraction
-	vec3 total_contr = vec3(0.0);
-	vec3 light_contr = vec3(1.0);
-	float beta = 1.0;
-
-	// Sample a light path
-	vec3 dir = random_sphere();
-	Ray l = Ray(pos + dir * 0.001, dir, 1.0, 1.0);
-
-	int count = 0;
-	for (int i = 0; i < 10; i++) {
-		count++;
-
-		// Add light contribution from current position
-		// TODO: account for original light color
-		total_contr += light_contr * beta
-			* point_light_contr(hit, ray, l.origin);
-
-		// Sample next light path
-		Hit lhit = closest_object(l);
-		// TODO: what if the ray hit the light again?
-
-		// Update fraction, light contribution, and ray
-		beta *= dot(l.direction, lhit.normal)/PI;
-		// light_contr *= lhit.mat.albedo;
-
-		l.origin = lhit.point + lhit.normal * 0.001;
-
-		// Next direction from material BSDF
-		if (lhit.mat.shading == SHADING_TYPE_DIFFUSE) {
-			l.direction = random_hemi(lhit.normal);
-		} else if (lhit.mat.shading == SHADING_TYPE_REFLECTION) {
-			l.direction = reflect(l.direction, lhit.normal);
-		} else {
-			// TODO: refraction, etc
-			// No interaction, stop
-			break;
-		}
-
-		// Russian roulette
-		if (i > 2) {
-			float q = max(1.0 - beta, 0.05);
-			if (random() < q)
-				break;
-			beta /= (1.0 - q);
-		}
-	}
-
-	return total_contr;
-}
-
-// Area light contribution
-vec3 area_light_contr(Hit hit, Ray ray, uint li)
+// Sample a light position from an area light
+vec3 sample_light_position(uint li, int sample_i)
 {
 	// Get light position
 	float a = lights.data[li + 1].x;
@@ -145,99 +61,109 @@ vec3 area_light_contr(Hit hit, Ray ray, uint li)
 	vec3 v2 = vertices.data[2 * ib].xyz;
 	vec3 v3 = vertices.data[2 * ic].xyz;
 
-	// Sample points from triangle
-	vec3 total_color = vec3(0.0);
-
-	for (int i = 0; i < pc.samples_per_light; i++) {
-		// Sample point from triangle
-		vec3 light_position = sample_triangle(
-			v1, v2, v3,
-			sqrt(pc.samples_per_light), i
-		);
-
-		total_color += path_light_contr(hit, ray, light_position);
-		// total_color += point_light_contr(hit, ray, light_position);
-	}
-
-	return total_color/float(pc.samples_per_light);
+	// Sample point from triangle
+	return sample_triangle(
+		v1, v2, v3,
+		sqrt(pc.samples_per_light),
+		sample_i
+	);
 }
 
-// Direct illumination
-vec3 direct_illumination(Hit hit, Ray ray)
+// Reflect according to material and incoming ray
+bool apply_bsdf(inout Ray r, Hit hit, inout float beta, inout float ior)
 {
-	// Direct light contribution
-	vec3 direct_contr = vec3(0.0);
+	// TODO: use int shading types for easy switching
+	if (hit.mat.shading == SHADING_TYPE_DIFFUSE) {
+		// Lambertian BSDF
+		vec3 r_dir = random_hemi(hit.normal);
+		r.direction = r_dir;
+		r.origin = hit.point + hit.normal * 0.001;
 
-	// Direct illumination
-	for (int i = 0; i < pc.lights; i++) {
-		uint light_index = floatBitsToUint(light_indices.data[i]);
-		direct_contr += area_light_contr(hit, ray, light_index);
+		// Update beta
+		beta *= dot(hit.normal, r_dir);
+	} else if (hit.mat.shading == SHADING_TYPE_REFLECTION) {
+		// (Perfect) Specular BSDF
+		vec3 r_dir = reflect(r.direction, hit.normal);
+		r.direction = r_dir;
+		r.origin = hit.point + hit.normal * 0.001;
+
+		// Update beta
+		beta *= dot(hit.normal, r_dir);
+	} else if (hit.mat.shading == SHADING_TYPE_REFRACTION) {
+		// (Perfect) Transmissive BSDF
+		vec3 r_dir = refract(r.direction, hit.normal, ior/hit.mat.ior);
+		r.direction = r_dir;
+		r.origin = hit.point - hit.normal * 0.001;
+
+		// Update beta
+		beta *= dot(hit.normal, r_dir);
+		ior = hit.mat.ior;
+	} else {
+		// Invalid shading type
+		return true;
 	}
 
-	return direct_contr;
+	return false;
 }
 
 // Color value at from a ray
 vec3 color_at(Ray ray)
 {
-	vec3 contribution = vec3(0.0);
+	/* Eliminate special cases immediately
+	Hit h = closest_object(ray);
+	if (h.object == -1 || h.mat.shading == SHADING_TYPE_EMISSIVE)
+		return h.mat.albedo; */
+
+	// Light and camera paths
+	vec3 light_contrs[MAX_DEPTH];
+	vec3 camera_contr[MAX_DEPTH];
+
+	vec3 light_vertices[MAX_DEPTH];
+	vec3 camera_vertices[MAX_DEPTH];
+
+	int light_objects[MAX_DEPTH];
+	int camera_objects[MAX_DEPTH];
+
+	// Initialize
+	for (int i = 0; i < MAX_DEPTH; i++) {
+		light_contrs[i] = vec3(0.0);
+		camera_contr[i] = vec3(0.0);
+
+		light_vertices[i] = vec3(0.0);
+		camera_vertices[i] = vec3(0.0);
+
+		light_objects[i] = -1;
+		camera_objects[i] = -1;
+	}
+
+	// Generate camera path
+	Ray r = ray;
+
 	float beta = 1.0;
 	float ior = 1.0;
 
-	Ray r = ray;
-	// return clamp(direct_illumination(closest_object(r), r), 0.0, 1.0);
-	for (int i = 0; i < MAX_DEPTH; i++) {
+	int bounces = 0;
+	for (; bounces < MAX_DEPTH; bounces++) {
 		// Find closest object
 		Hit hit = closest_object(r);
 
+		// Value and position
+		camera_contr[bounces] = beta * hit.mat.albedo;
+		camera_vertices[bounces] = hit.point + hit.normal * 0.001;
+		camera_objects[bounces] = hit.object;
+
 		// Special case intersection
 		if (hit.object == -1 || hit.mat.shading == SHADING_TYPE_EMISSIVE) {
-			contribution += hit.mat.albedo;
+			camera_objects[bounces] = -1;
 			break;
 		}
-
-		// Direct illumination
-		vec3 direct_contr = direct_illumination(hit, r)/PI;
-		contribution += beta * direct_contr;
 
 		// Generating the new ray according to BSDF
-		if (hit.mat.shading == SHADING_TYPE_DIFFUSE) {
-			// Lambertian BSDF
-			vec3 r_dir = random_hemi(hit.normal);
-			r = Ray(
-				hit.point + hit.normal * 0.001,
-				r_dir, 1.0, 1.0
-			);
-
-			// Update beta
-			beta *= dot(hit.normal, r_dir);
-
-		// TODO: recdesign material interface (reflection | transmission
-		// and specular class)
-		} else if (hit.mat.shading == SHADING_TYPE_REFLECTION) {
-			// (Perfect) Specular BSDF
-			vec3 r_dir = reflect(r.direction, hit.normal);
-			r.direction = r_dir;
-			r.origin = hit.point + hit.normal * 0.001;
-
-			// Update beta
-			beta *= dot(hit.normal, r_dir);
-		} else if (hit.mat.shading == SHADING_TYPE_REFRACTION) {
-			// (Perfect) Transmissive BSDF
-			vec3 r_dir = refract(r.direction, hit.normal, ior/hit.mat.ior);
-			r.direction = r_dir;
-			r.origin = hit.point - hit.normal * 0.001;
-
-			// Update beta
-			beta *= dot(hit.normal, r_dir);
-			ior = hit.mat.ior;
-		} else {
-			// Assume no interaction
+		if (apply_bsdf(r, hit, beta, ior))
 			break;
-		}
 
 		// Russian roulette
-		if (i > 2) {
+		if (bounces > 2) {
 			float q = max(1.0 - beta, 0.05);
 			if (random() < q)
 				break;
@@ -245,7 +171,95 @@ vec3 color_at(Ray ray)
 		}
 	}
 
-	return clamp(contribution, 0.0, 1.0);
+	// Total contribution
+	vec3 total_contr = vec3(0.0);
+
+	// Iterate over all lights
+	for (int i = 0; i < pc.lights; i++) {
+		// Iterate over requested # of shadow samples
+		uint light_index = floatBitsToUint(light_indices.data[i]);
+
+		vec3 light_contr = vec3(0.0);
+		for (int j = 0; j < pc.samples_per_light; j++) {
+			float beta = 1.0;
+			float ior = 1.0;
+
+			vec3 light_position = sample_light_position(light_index, j);
+
+			// Reset light arrays
+			for (int k = 0; k < MAX_DEPTH; k++) {
+				light_contrs[k] = vec3(0.0);
+				light_vertices[k] = vec3(0.0);
+				light_objects[k] = -1;
+			}
+
+			// Always a first vertex
+			light_contrs[0] = vec3(1.0);
+			light_vertices[0] = light_position;
+			light_objects[0] = -1;
+
+			// Trace a light path
+			vec3 dir = random_sphere();
+			Ray l = Ray(light_position + dir * 0.001, dir, 1.0, 1.0);
+
+			// Generate path
+			int k = 1;
+			for (; k < MAX_DEPTH; k++) {
+				// Find closest object
+				Hit hit = closest_object(l);
+
+				// Value and position
+				light_contrs[k] = beta * hit.mat.albedo;
+				light_vertices[k] = hit.point + hit.normal * 0.001;
+				light_objects[k] = hit.object;
+
+				// Special case intersection
+				if (hit.object == -1 || hit.mat.shading == SHADING_TYPE_EMISSIVE)
+					break;
+
+				// Generating the new ray according to BSDF
+				if (apply_bsdf(l, hit, beta, ior))
+					break;
+			}
+
+			// Calculate path contribution
+			vec3 path_contr = vec3(0.0);
+
+			for (int x = 0; x <= bounces; x++) {
+				for (int y = 0; y <= k; y++) {
+					// Special case
+					if (camera_objects[x] == -1)  {
+						path_contr += camera_contr[x];
+						break;
+					}
+
+					Ray visibility = Ray(
+						camera_vertices[x],
+						light_vertices[y] - camera_vertices[x],
+						1.0, 1.0
+					);
+
+					Hit hit = closest_object(visibility);
+
+					// TODO: use actual object id...
+					if (hit.mat.shading == SHADING_TYPE_EMISSIVE
+							|| hit.object == light_objects[y]) {
+						float d = distance(light_vertices[y], camera_vertices[x]);
+						path_contr += light_contrs[0] *
+							camera_contr[x] * (5.0/d);
+					}
+				}
+			}
+
+			// Update total light contribution
+			light_contr += path_contr/(PI * PI);
+		}
+
+		// Update total contribution
+		total_contr += light_contr/float(pc.samples_per_light);
+	}
+
+	return clamp(total_contr, 0.0, 1.0);
 }
 
 void main()
