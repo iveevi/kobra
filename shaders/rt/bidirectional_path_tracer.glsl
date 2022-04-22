@@ -106,6 +106,7 @@ vec3 color_at(Ray ray)
 
 	vec3 light_vertices[MAX_DEPTH];
 	vec3 camera_vertices[MAX_DEPTH];
+	vec3 camera_normals[MAX_DEPTH];
 
 	int light_objects[MAX_DEPTH];
 	int camera_objects[MAX_DEPTH];
@@ -117,6 +118,7 @@ vec3 color_at(Ray ray)
 
 		light_vertices[i] = vec3(0.0);
 		camera_vertices[i] = vec3(0.0);
+		camera_normals[i] = vec3(0.0);
 
 		light_objects[i] = -1;
 		camera_objects[i] = -1;
@@ -136,6 +138,7 @@ vec3 color_at(Ray ray)
 		// Value and position
 		camera_contr[bounces] = beta * hit.mat.albedo;
 		camera_vertices[bounces] = hit.point + hit.normal * 0.001;
+		camera_normals[bounces] = hit.normal;
 		camera_objects[bounces] = hit.object;
 
 		// Special case intersection
@@ -221,9 +224,10 @@ vec3 color_at(Ray ray)
 						break;
 					}
 
+					vec3 ldir = normalize(light_vertices[y] - camera_vertices[x]);
 					Ray visibility = Ray(
 						camera_vertices[x],
-						light_vertices[y] - camera_vertices[x],
+						ldir,
 						1.0, 1.0
 					);
 
@@ -233,8 +237,10 @@ vec3 color_at(Ray ray)
 					if (hit.mat.shading == SHADING_TYPE_EMISSIVE
 							|| hit.object == light_objects[y]) {
 						float d = distance(light_vertices[y], camera_vertices[x]);
+						float cos_theta = max(dot(ldir, camera_normals[x]), 0.0);
 						path_contr += light_contrs[y]
 							* camera_contr[x]
+							* cos_theta
 							* (5.0/d) * (INV_PI * INV_PI);
 					}
 				}

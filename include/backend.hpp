@@ -1628,12 +1628,7 @@ public:
 //////////////////////
 
 // Get (or create) the singleton context
-inline const vk::raii::Context &get_vulkan_context()
-{
-	// Global context
-	static vk::raii::Context context;
-	return context;
-}
+const vk::raii::Context &get_vulkan_context();
 
 // Get (or generate) the required extensions
 inline const std::vector <const char *> &get_required_extensions()
@@ -1750,7 +1745,62 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_logger
 }
 
 // Get (or create) the singleton instance
-const vk::raii::Instance &get_vulkan_instance();
+inline const vk::raii::Instance &get_vulkan_instance()
+{
+	static vk::ApplicationInfo app_info {
+		"Kobra",
+		VK_MAKE_VERSION(1, 0, 0),
+		"Kobra",
+		VK_MAKE_VERSION(1, 0, 0),
+		VK_API_VERSION_1_0
+	};
+
+#ifdef KOBRA_VALIDATION_LAYERS
+
+	static const std::vector <const char *> validation_layers = {
+		"VK_LAYER_KHRONOS_validation"
+	};
+
+	// Check if validation layers are available
+	KOBRA_ASSERT(
+		check_validation_layer_support(validation_layers),
+		"Validation layers are not available"
+	);
+
+#endif
+	static vk::InstanceCreateInfo instance_info {
+		vk::InstanceCreateFlags(),
+		&app_info,
+
+#ifdef KOBRA_VALIDATION_LAYERS
+
+		static_cast <uint32_t> (validation_layers.size()),
+		validation_layers.data(),
+#else
+
+		0, nullptr,
+
+#endif
+
+		(uint32_t) get_required_extensions().size(),
+		get_required_extensions().data()
+	};
+
+	static vk::raii::DebugUtilsMessengerEXT debug_messenger = nullptr;
+
+	static vk::raii::Instance instance {
+		get_vulkan_context(),
+		instance_info,
+	};
+
+#ifdef KOBRA_VALIDATION_LAYERS
+
+
+#endif
+
+	return instance;
+}
+
 
 // Initialize GLFW statically
 inline void _initialize_glfw()

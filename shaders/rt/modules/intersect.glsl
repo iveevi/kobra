@@ -175,7 +175,11 @@ Intersection ray_intersect(Ray ray, uint index)
 			vec3 b = bit1 * (1 - b1 - b2) + bit2 * b1 + bit3 * b2;
 
 			// TBN matrix
-			mat3 tbn = mat3(t, b, it.normal);
+			mat3 tbn = mat3(
+				normalize(t),
+				normalize(b),
+				normalize(it.normal)
+			);
 
 			// Transform normal
 			it.normal = normalize(tbn * n);

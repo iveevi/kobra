@@ -90,7 +90,7 @@ albedo=0.5 1 0.5
 shading_type=1098907648
 ior=1
 albedo_source=0
-normal_source=../assets/plaster_paint/vhogcjc_8K_Normal.jpg
+normal_source=0
 [OBJECT]
 name=Object 5
 [TRANSFORM]
