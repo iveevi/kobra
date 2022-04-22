@@ -2,6 +2,7 @@
 #define KOBRA_GUI_SPRITE_H_
 
 // Engine headers
+#include "../include/coords.hpp"
 #include "../sampler.hpp"
 #include "gui.hpp"
 
@@ -29,14 +30,14 @@ public:
 		static std::vector <Vulkan::VA> vertex_attributes() {
 			return {
 				{
-					.binding = 0,
 					.location = 0,
+					.binding = 0,
 					.format = VK_FORMAT_R32G32_SFLOAT,
 					.offset = offsetof(Vertex, pos)
 				},
 				{
-					.binding = 0,
 					.location = 1,
+					.binding = 0,
 					.format = VK_FORMAT_R32G32_SFLOAT,
 					.offset = offsetof(Vertex, tex)
 				}
@@ -96,14 +97,14 @@ protected:
 		// Settings
 		BFM_Settings vb_settings {
 			.size = 4,
-			.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-			.usage_type = BFM_WRITE_ONLY
+			.usage_type = BFM_WRITE_ONLY,
+			.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
 		};
 
 		BFM_Settings ib_settings {
 			.size = 6,
-			.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-			.usage_type = BFM_WRITE_ONLY
+			.usage_type = BFM_WRITE_ONLY,
+			.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT
 		};
 
 		// Initialize buffers
@@ -176,11 +177,7 @@ public:
 	}
 
 	// Latch onto a layer
-	void latch(LatchingPacket &lp) override {
-		_ds = lp.layer->serve_sprite_ds();
-		if (_sampler)
-			_sampler->bind(_ds, 0);
-	}
+	void latch(LatchingPacket &) override;
 
 	// Render
 	void render(RenderPacket &packet) override {

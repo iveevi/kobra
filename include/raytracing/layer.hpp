@@ -25,6 +25,15 @@ namespace rt {
 
 // Layer class
 class Layer : public kobra::Layer <rt::_element> {
+public:
+	// Current mode
+	enum Mode {
+		NORMALS,
+		FAST_PATH_TRACER,
+		PATH_TRACER,
+		BIDIRECTIONAL_PATH_TRACE
+	};
+protected:
 	// Private aliases
 	using DSLBinding = VkDescriptorSetLayoutBinding;
 	using DSLBindings = std::vector <DSLBinding>;
@@ -52,9 +61,33 @@ class Layer : public kobra::Layer <rt::_element> {
 
 	// Pipelines
 	struct {
-		Vulkan::Pipeline mesh;
+		Vulkan::Pipeline normals;
+		Vulkan::Pipeline fast_path_tracer;
+		Vulkan::Pipeline path_tracer;
+		Vulkan::Pipeline bidirectional_path_tracer;
 		Vulkan::Pipeline postproc;
 	} _pipelines;
+
+	// Current mode
+	Mode _mode = PATH_TRACER;
+
+	// Get active pipeline
+	Vulkan::Pipeline *_active_pipeline() {
+		switch (_mode) {
+		case NORMALS:
+			return &_pipelines.normals;
+		case FAST_PATH_TRACER:
+			return &_pipelines.fast_path_tracer;
+		case PATH_TRACER:
+			return &_pipelines.path_tracer;
+		case BIDIRECTIONAL_PATH_TRACE:
+			return &_pipelines.bidirectional_path_tracer;
+		default:
+			break;
+		}
+
+		return nullptr;
+	}
 
 	// Descriptor set bindings
 	static const DSLBindings _mesh_compute_bindings;
@@ -68,7 +101,7 @@ class Layer : public kobra::Layer <rt::_element> {
 	VkDescriptorSet		_postproc_ds;
 
 	// Initialize pipelines
-	void _init_mesh_compute_pipeline();
+	void _init_compute_pipelines();
 	void _init_postproc_pipeline(const Vulkan::Swapchain &);
 	void _init_pipelines(const Vulkan::Swapchain &);
 
@@ -127,6 +160,11 @@ public:
 	void add_do(const ptr &) override;
 	void add_scene(const Scene &) override;
 
+	// Set current mode
+	void set_mode(Mode mode) {
+		_mode = mode;
+	}
+
 	// Set environment map
 	void set_environment_map(const Texture &);
 
@@ -136,7 +174,7 @@ public:
 	// Count methods
 	size_t triangle_count() const;
 	size_t camera_count() const;
-	
+
 	// Camera things
 	void add_camera(const Camera &);
 	Camera *active_camera();

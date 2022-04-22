@@ -1,3 +1,5 @@
+#include "../../../include/types.hpp"
+
 // Intersection
 struct Intersection {
 	float	time;
@@ -87,8 +89,8 @@ Intersection intersect_shape(Ray r, Sphere s)
 
 Intersection ray_sphere_intersect(Ray ray, uint a, uint d)
 {
-	vec3 c = vertices.data[2 * a].xyz;
-	float r = vertices.data[2 * a].w;
+	vec3 c = vertices.data[VERTEX_STRIDE * a].xyz;
+	float r = vertices.data[VERTEX_STRIDE * a].w;
 
 	Sphere s = Sphere(c, r);
 
@@ -121,10 +123,9 @@ Intersection ray_intersect(Ray ray, uint index)
 	if (i.x == i.y && i.y == i.z)
 		return ray_sphere_intersect(ray, i.x, i.w);
 
-	// TODO: macro for fixed width vertices
-	vec3 v1 = vertices.data[2 * i.x].xyz;
-	vec3 v2 = vertices.data[2 * i.y].xyz;
-	vec3 v3 = vertices.data[2 * i.z].xyz;
+	vec3 v1 = vertices.data[VERTEX_STRIDE * i.x].xyz;
+	vec3 v2 = vertices.data[VERTEX_STRIDE * i.y].xyz;
+	vec3 v3 = vertices.data[VERTEX_STRIDE * i.z].xyz;
 
 	Triangle triangle = Triangle(v1, v2, v3);
 
@@ -134,9 +135,9 @@ Intersection ray_intersect(Ray ray, uint index)
 	// If intersection is valid, compute material
 	if (it.time > 0.0) {
 		// Get texture coordinates
-		vec2 t1 = vertices.data[2 * i.x + 1].xy;
-		vec2 t2 = vertices.data[2 * i.y + 1].xy;
-		vec2 t3 = vertices.data[2 * i.z + 1].xy;
+		vec2 t1 = vertices.data[VERTEX_STRIDE * i.x + 1].xy;
+		vec2 t2 = vertices.data[VERTEX_STRIDE * i.y + 1].xy;
+		vec2 t3 = vertices.data[VERTEX_STRIDE * i.z + 1].xy;
 
 		// Interpolate texture coordinates
 		vec2 tex_coord = t1 * (1 - b1 - b2) + t2 * b1 + t3 * b2;
@@ -146,24 +147,37 @@ Intersection ray_intersect(Ray ray, uint index)
 		it.mat = mat_at(i.w, tex_coord);
 
 		// Transfer normal
+		vec3 n1 = vertices.data[VERTEX_STRIDE * i.x + 2].xyz;
+		vec3 n2 = vertices.data[VERTEX_STRIDE * i.y + 2].xyz;
+		vec3 n3 = vertices.data[VERTEX_STRIDE * i.z + 2].xyz;
+
+		// Interpolate vertex normal
+		vec3 n = n1 * (1 - b1 - b2) + n2 * b1 + n3 * b2;
+
+		it.normal = normalize(n);
+
+		// Transfer normal
 		if (it.mat.has_normal < 0.5) {
-			vec3 n = texture(s2_normals[i.w], tex_coord).rgb;
-			n = 2 * n - 1.0;
+			vec3 n = texture(s2_normals[i.w], tex_coord).xyz;
+			n = 2 * n - 1;
 
-			vec3 world_normal = normalize(it.normal);
+			// Get (interpolated) tangent and bitangent
+			vec3 t1 = vertices.data[VERTEX_STRIDE * i.x + 3].xyz;
+			vec3 t2 = vertices.data[VERTEX_STRIDE * i.y + 3].xyz;
+			vec3 t3 = vertices.data[VERTEX_STRIDE * i.z + 3].xyz;
 
-			vec3 e1 = v2 - v1;
-			vec3 e2 = v3 - v1;
+			vec3 t = t1 * (1 - b1 - b2) + t2 * b1 + t3 * b2;
 
-			vec2 uv1 = t2 - t1;
-			vec2 uv2 = t3 - t1;
+			vec3 bit1 = vertices.data[VERTEX_STRIDE * i.x + 4].xyz;
+			vec3 bit2 = vertices.data[VERTEX_STRIDE * i.y + 4].xyz;
+			vec3 bit3 = vertices.data[VERTEX_STRIDE * i.z + 4].xyz;
 
-			float r = 1.0 / (uv1.x * uv2.y - uv2.x * uv1.y);
-			vec3 tangent = normalize(e1 * uv2.y - e2 * uv1.y) * r;
-			vec3 bitangent = normalize(e2 * uv1.x - e1 * uv2.x) * r;
+			vec3 b = bit1 * (1 - b1 - b2) + bit2 * b1 + bit3 * b2;
 
-			mat3 tbn = mat3(tangent, bitangent, world_normal);
+			// TBN matrix
+			mat3 tbn = mat3(t, b, it.normal);
 
+			// Transform normal
 			it.normal = normalize(tbn * n);
 		}
 	}

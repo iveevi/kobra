@@ -3,7 +3,8 @@ default_standard: c++17
 
 definitions:
   - tinyfd_source: 'thirdparty/tinyfiledialogs/tinyfiledialogs.c'
-  - kobra_source: 'source/capture.cpp,
+  - kobra_source: 'source/backend.cpp,
+    source/capture.cpp,
     source/logger.cpp,
     source/material.cpp,
     source/mesh.cpp,
@@ -19,6 +20,7 @@ definitions:
     source/engine/rt_capture.cpp,
     source/gui/gui.cpp,
     source/gui/layer.cpp,
+    source/gui/sprite.cpp,
     source/gui/text.cpp,
     source/io/event.cpp,
     source/raster/layer.cpp,
@@ -60,14 +62,12 @@ builds:
     - sources: experimental/main.cpp, kobra_source
     - idirs: includes
     - flags: '-O3 -std=c++17'
-    - libraries: 'glfw,
-      vulkan,
-      assimp,
-      pthread,
-      avcodec,
-      avformat,
-      avutil,
-      freetype'
+    - libraries: libs
+  - experimental_debug:
+    - sources: experimental/main.cpp, kobra_source
+    - idirs: includes
+    - flags: '-std=c++17 -g'
+    - libraries: libs
 
 targets:
   - kobra:
@@ -81,7 +81,10 @@ targets:
       - gdb: 'gdb {}'
       - wall: '{}'
   - experimental:
+    - modes: 'gdb'
     - builds:
       - default: experimental_normal
+      - gdb: experimental_debug
     - postbuilds:
       - default: '{}'
+      - gdb: 'gdb {}'

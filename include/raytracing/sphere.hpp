@@ -30,10 +30,13 @@ public:
 	// Latching to layer
 	void latch(const LatchingPacket &lp, size_t id) override {
 		// Offset for triangle indices
-		uint offset = lp.vertices->push_size()/2;
+		uint offset = lp.vertices->push_size()/VERTEX_STRIDE;
 
 		// Add vertex data
 		lp.vertices->push_back(glm::vec4 {_transform.position, _radius});
+		lp.vertices->push_back(glm::vec4 {0.0});
+		lp.vertices->push_back(glm::vec4 {0.0});
+		lp.vertices->push_back(glm::vec4 {0.0});
 		lp.vertices->push_back(glm::vec4 {0.0});
 
 		// Add as an object

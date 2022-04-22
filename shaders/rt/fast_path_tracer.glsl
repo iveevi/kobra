@@ -165,9 +165,9 @@ vec3 single_area_light_contr(Hit hit, Ray ray, int i)
 	uint ib = floatBitsToUint(b);
 	uint ic = floatBitsToUint(c);
 
-	vec3 v1 = vertices.data[2 * ia].xyz;
-	vec3 v2 = vertices.data[2 * ib].xyz;
-	vec3 v3 = vertices.data[2 * ic].xyz;
+	vec3 v1 = vertices.data[VERTEX_STRIDE * ia].xyz;
+	vec3 v2 = vertices.data[VERTEX_STRIDE * ib].xyz;
+	vec3 v3 = vertices.data[VERTEX_STRIDE * ic].xyz;
 
 	return single_area_light_contr(hit, ray, v1, v2, v3);
 }

@@ -87,9 +87,9 @@ vec3 area_light_contr(Hit hit, Ray ray, uint li)
 	uint ic = floatBitsToUint(c);
 	uint id = floatBitsToUint(d);
 
-	vec3 v1 = vertices.data[2 * ia].xyz;
-	vec3 v2 = vertices.data[2 * ib].xyz;
-	vec3 v3 = vertices.data[2 * ic].xyz;
+	vec3 v1 = vertices.data[VERTEX_STRIDE * ia].xyz;
+	vec3 v2 = vertices.data[VERTEX_STRIDE * ib].xyz;
+	vec3 v3 = vertices.data[VERTEX_STRIDE * ic].xyz;
 
 	// Sample points from triangle
 	vec3 total_color = vec3(0.0);

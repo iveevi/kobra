@@ -46,7 +46,7 @@ vec3 sample_triangle(vec3 v1, vec3 v2, vec3 v3, float strata, float i)
 // Sample a light position from an area light
 vec3 sample_light_position(uint li, int sample_i)
 {
-	uvec4 i = 2 * floatBitsToUint(lights.data[li + 1]);
+	uvec4 i = VERTEX_STRIDE * floatBitsToUint(lights.data[li + 1]);
 
 	vec3 v1 = vertices.data[i.x].xyz;
 	vec3 v2 = vertices.data[i.y].xyz;

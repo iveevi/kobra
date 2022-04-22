@@ -41,10 +41,17 @@ struct Transform {
 		return pmat * rmat * smat;
 	}
 
-	// Apply transform on a vector
+	// Apply transform on a point
+	// TODO: refactor
 	glm::vec3 apply(const glm::vec3 &v) const {
 		glm::mat4 m = matrix();
 		return glm::vec3(m * glm::vec4(v, 1.0f));
+	}
+
+	// Apply transform on a vector
+	glm::vec3 apply_vector(const glm::vec3 &v) const {
+		glm::mat4 m = matrix();
+		return glm::vec3(m * glm::vec4(v, 0.0f));
 	}
 
 	// Move the transform

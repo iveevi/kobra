@@ -29,7 +29,7 @@ public:
 	// Latch to layer
 	void latch(const LatchingPacket &lp, size_t id) override {
 		// Offset for triangle indices
-		uint offset = lp.vertices->push_size()/2;
+		uint offset = lp.vertices->push_size()/VERTEX_STRIDE;
 
 		// Vertices
 		// TODO: figure out how to use transform matrices in the shader
@@ -40,12 +40,21 @@ public:
 			// No need to push normals, they are computed
 			//	in the shader
 			glm::vec3 position = _vertices[i].position;
+			glm::vec3 normal = _vertices[i].normal;
+			glm::vec3 tangent = _vertices[i].tangent;
+			glm::vec3 bitangent = _vertices[i].bitangent;
 			glm::vec2 uv = _vertices[i].tex_coords;
 
 			position = _transform.apply(position);
+			normal = _transform.apply_vector(normal);
+			tangent = _transform.apply_vector(tangent);
+			bitangent = _transform.apply_vector(bitangent);
 
 			lp.vertices->push_back(position);
 			lp.vertices->push_back(glm::vec4 {uv, 0.0f, 0.0f});
+			lp.vertices->push_back(normal);
+			lp.vertices->push_back(tangent);
+			lp.vertices->push_back(bitangent);
 		}
 
 		// Triangles

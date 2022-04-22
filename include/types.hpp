@@ -1,6 +1,8 @@
 #ifndef TYPES_H_
 #define TYPES_H_
 
+// TODO: refactor this header
+
 // All possible shading types
 const float SHADING_TYPE_NONE		= 0x00000000;
 const float SHADING_TYPE_FLAT		= 0x00000001;
@@ -30,5 +32,8 @@ const float LIGHT_TYPE_NONE		= 0x00000000;
 const float LIGHT_TYPE_POINT		= 0x00000001;
 const float LIGHT_TYPE_DIRECTIONAL	= 0x00000002;
 const float LIGHT_TYPE_AREA		= 0x00000003;
+
+// Constants
+const int VERTEX_STRIDE			= 5;
 
 #endif

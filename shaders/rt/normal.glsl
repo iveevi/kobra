@@ -42,6 +42,7 @@ void main()
 	float ry = fract(sin(y0 * 9876.54321 + x0));
 
 	// Accumulate color
+	// TODO: skip this for normals...
 	vec3 color = vec3(0.0);
 
 	vec2 dimensions = vec2(pc.width, pc.height);

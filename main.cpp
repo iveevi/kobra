@@ -5,7 +5,7 @@
 #include <vulkan/vulkan_raii.hpp>
 
 // Scene path
-std::string scene_path = "scene.kobra";
+std::string scene_path = "../assets/scene.kobra";
 
 // Experimental GUI app
 class GUIApp : public BaseApp {
@@ -129,12 +129,40 @@ void RTApp::keyboard_handler(void *user, const io::KeyboardEvent &event)
 			app->raster = !app->raster;
 
 		// 1, 2, 3 to switch rasterization mode
-		if (event.key == GLFW_KEY_1)
+		if (event.key == GLFW_KEY_1) {
 			app->raster_layer.set_mode(raster::Layer::Mode::ALBEDO);
-		if (event.key == GLFW_KEY_2)
+			app->raster = true;
+		}
+
+		if (event.key == GLFW_KEY_2) {
 			app->raster_layer.set_mode(raster::Layer::Mode::NORMAL);
-		if (event.key == GLFW_KEY_3)
+			app->raster = true;
+		}
+
+		if (event.key == GLFW_KEY_3) {
 			app->raster_layer.set_mode(raster::Layer::Mode::BLINN_PHONG);
+			app->raster = true;
+		}
+
+		if (event.key == GLFW_KEY_4) {
+			app->rt_layer.set_mode(rt::Layer::NORMALS);
+			app->raster = false;
+		}
+
+		if (event.key == GLFW_KEY_5) {
+			app->rt_layer.set_mode(rt::Layer::FAST_PATH_TRACER);
+			app->raster = false;
+		}
+
+		if (event.key == GLFW_KEY_6) {
+			app->rt_layer.set_mode(rt::Layer::PATH_TRACER);
+			app->raster = false;
+		}
+
+		if (event.key == GLFW_KEY_7) {
+			app->rt_layer.set_mode(rt::Layer::BIDIRECTIONAL_PATH_TRACE);
+			app->raster = false;
+		}
 
 		// Editting mode
 		if (event.key == GLFW_KEY_G)

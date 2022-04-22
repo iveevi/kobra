@@ -130,7 +130,7 @@ const Layer::DSLBindings Layer::_postproc_bindings = {
 // Private helper functions //
 //////////////////////////////
 
-void Layer::_init_mesh_compute_pipeline()
+void Layer::_init_compute_pipelines()
 {
 	// Push constants
 	VkPushConstantRange push_constants = {
@@ -139,8 +139,8 @@ void Layer::_init_mesh_compute_pipeline()
 		.size = sizeof(PushConstants)
 	};
 
-	// TODO: context method to create layout
-	VkPipelineLayoutCreateInfo mesh_ppl_ci = {
+	// Common pipeline layout
+	VkPipelineLayoutCreateInfo compute_ppl_info = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 		.setLayoutCount = 1,
 		.pSetLayouts = &_mesh_dsl,
@@ -148,62 +148,99 @@ void Layer::_init_mesh_compute_pipeline()
 		.pPushConstantRanges = &push_constants
 	};
 
-	VkPipelineLayout mesh_ppl;
+	VkPipelineLayout compute_ppl;
 
 	VkResult result;
 	result = vkCreatePipelineLayout(
 		_context.vk_device(),
-		&mesh_ppl_ci,
+		&compute_ppl_info,
 		nullptr,
-		&mesh_ppl
+		&compute_ppl
 	);
 
-	if (result != VK_SUCCESS) {
-		KOBRA_LOG_FUNC(warn) << "Failed to create MESH pipeline layout\n";
-		return;
-	}
+	KOBRA_ASSERT(
+		result == VK_SUCCESS,
+		"Failed to create pipeline layout for common compute pipeline"
+	);
 
 	VkPipeline mesh_pp;
 
+	// Get all the shaders
 	auto shaders = _context.make_shaders({
+		"shaders/bin/generic/normal.spv",
 		"shaders/bin/generic/fast_path_tracer.spv",
 		"shaders/bin/generic/pbr_path_tracer.spv",
-		"shaders/bin/generic/bidirectional_path_tracer.spv",
-		"shaders/bin/generic/normal.spv"
+		"shaders/bin/generic/bidirectional_path_tracer.spv"
 	});
 
-	VkComputePipelineCreateInfo mesh_pp_ci = {
-		.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-		.stage = {
+	// Shader stage
+	VkPipelineShaderStageCreateInfo shader_stages[] = {
+		{	// Normals
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+			.stage = VK_SHADER_STAGE_COMPUTE_BIT,
+			.module = shaders[0],
+			.pName = "main"
+		},
+		{	// Fast path tracer
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+			.stage = VK_SHADER_STAGE_COMPUTE_BIT,
+			.module = shaders[1],
+			.pName = "main"
+		},
+		{	// PBR path tracer
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 			.stage = VK_SHADER_STAGE_COMPUTE_BIT,
 			.module = shaders[2],
 			.pName = "main"
 		},
-		.layout = mesh_ppl,
+		{
+			// Bidirectional path tracer
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+			.stage = VK_SHADER_STAGE_COMPUTE_BIT,
+			.module = shaders[3],
+			.pName = "main"
+		}
+	};
+
+	VkComputePipelineCreateInfo ppl_info = {
+		.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+		.layout = compute_ppl,
 		.basePipelineHandle = VK_NULL_HANDLE,
 		.basePipelineIndex = -1
 	};
 
-	result = vkCreateComputePipelines(
-		_context.vk_device(),
-		VK_NULL_HANDLE,
-		1,
-		&mesh_pp_ci,
-		nullptr,
-		&mesh_pp
-	);
+	// Lambda to create the pipeline
+	auto ppl_maker = [&](const VkPipelineShaderStageCreateInfo &shader_stage) {
+		// Set the shader stage
+		ppl_info.stage = shader_stage;
 
-	if (result != VK_SUCCESS) {
-		KOBRA_LOG_FUNC(warn) << "Failed to create MESH pipeline\n";
-		return;
-	}
+		// Pipeline to return
+		Vulkan::Pipeline pipeline;
 
-	// Set the pipeline
-	_pipelines.mesh = {
-		.pipeline = mesh_pp,
-		.layout = mesh_ppl
+		VkResult result = vkCreateComputePipelines(
+			_context.vk_device(),
+			VK_NULL_HANDLE,
+			1,
+			&ppl_info,
+			nullptr,
+			&pipeline.pipeline
+		);
+
+		KOBRA_ASSERT(
+			result == VK_SUCCESS,
+			"Failed to create compute pipeline"
+		);
+
+		// Transfer the layout and return
+		pipeline.layout = compute_ppl;
+		return pipeline;
 	};
+
+	// Create the pipelines
+	_pipelines.normals = ppl_maker(shader_stages[0]);
+	_pipelines.fast_path_tracer = ppl_maker(shader_stages[1]);
+	_pipelines.path_tracer = ppl_maker(shader_stages[2]);
+	_pipelines.bidirectional_path_tracer = ppl_maker(shader_stages[3]);
 }
 
 void Layer::_init_postproc_pipeline(const Vulkan::Swapchain &swapchain)
@@ -437,7 +474,7 @@ void Layer::_init_pipelines(const Vulkan::Swapchain &swapchain)
 	);
 
 	// All pipelines
-	_init_mesh_compute_pipeline();
+	_init_compute_pipelines();
 	_init_postproc_pipeline(swapchain);
 }
 
@@ -485,7 +522,7 @@ std::vector <BoundingBox> Layer::_get_bboxes() const
 
 		// If a == b == c, its a sphere
 		if (a == b && b == c) {
-			glm::vec4 center = vertices[2 * a].data;
+			glm::vec4 center = vertices[VERTEX_STRIDE * a].data;
 			float radius = center.w;
 
 			glm::vec4 min = center - glm::vec4(radius);
@@ -493,9 +530,9 @@ std::vector <BoundingBox> Layer::_get_bboxes() const
 
 			bboxes.push_back(BoundingBox {min, max});
 		} else {
-			glm::vec4 va = vertices[2 * a].data;
-			glm::vec4 vb = vertices[2 * b].data;
-			glm::vec4 vc = vertices[2 * c].data;
+			glm::vec4 va = vertices[VERTEX_STRIDE * a].data;
+			glm::vec4 vb = vertices[VERTEX_STRIDE * b].data;
+			glm::vec4 vc = vertices[VERTEX_STRIDE * c].data;
 
 			glm::vec4 min = glm::min(va, glm::min(vb, vc));
 			glm::vec4 max = glm::max(va, glm::max(vb, vc));
@@ -629,7 +666,7 @@ Layer::Layer(const App::Window &wctx)
 // Adding elements
 void Layer::add_do(const ptr &e)
 {
-	if (_pipelines.mesh.pipeline == VK_NULL_HANDLE) {
+	if (_pipelines.path_tracer.pipeline == VK_NULL_HANDLE) {
 		KOBRA_LOG_FUNC(warn) << "rt::Layer is not yet initialized\n";
 		return;
 	}
@@ -712,7 +749,7 @@ void Layer::add_scene(const Scene &scene)
 		}
 	}
 }
-	
+
 // Set environment map
 void Layer::set_environment_map(const Texture &env)
 {
@@ -822,7 +859,7 @@ void Layer::render(const VkCommandBuffer &cmd,
 		const BatchIndex &bi)
 {
 	// Handle null pipeline
-	if (_pipelines.mesh.pipeline == VK_NULL_HANDLE) {
+	if (_active_pipeline()->pipeline == VK_NULL_HANDLE) {
 		KOBRA_LOG_FUNC(warn) << "rt::Layer is not yet initialized\n";
 		return;
 	}
@@ -840,7 +877,7 @@ void Layer::render(const VkCommandBuffer &cmd,
 	// TODO: context method
 	vkCmdBindPipeline(cmd,
 		VK_PIPELINE_BIND_POINT_COMPUTE,
-		_pipelines.mesh.pipeline
+		_active_pipeline()->pipeline
 	);
 
 	// Time as float
@@ -886,14 +923,14 @@ void Layer::render(const VkCommandBuffer &cmd,
 	// Bind descriptor set
 	vkCmdBindDescriptorSets(cmd,
 		VK_PIPELINE_BIND_POINT_COMPUTE,
-		_pipelines.mesh.layout,
+		_active_pipeline()->layout,
 		0, 1, &_mesh_ds,
 		0, nullptr
 	);
 
 	// Push constants
 	vkCmdPushConstants(cmd,
-		_pipelines.mesh.layout,
+		_active_pipeline()->layout,
 		VK_SHADER_STAGE_COMPUTE_BIT,
 		0, sizeof(PushConstants), &pc
 	);
@@ -917,7 +954,7 @@ void Layer::render(const VkCommandBuffer &cmd,
 	/////////////////////////////////
 	// Copy buffer to output image //
 	/////////////////////////////////
-	
+
 	VkBufferImageCopy region {
 		.bufferOffset = 0,
 		.bufferRowLength = 0,
