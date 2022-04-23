@@ -17,252 +17,176 @@
 #include "modules/bvh.glsl"
 
 // Maximum ray depth
-#define MAX_DEPTH 10
+#define MAX_DEPTH 3
 
-// Sample random point in triangle
-float u = 0.0;
-float v = 0.0;
+// One sample per pixel and one shadow ray per pixel
 
-vec3 sample_triangle(vec3 v1, vec3 v2, vec3 v3, float strata, float i)
+// Point light contribution
+vec3 point_light_contr(Hit hit, Ray ray, vec3 lpos)
 {
-	// Ignore random-ness if only 1 sample
-	if (pc.samples_per_light == 1)
-		return (v1 + v2 + v3) / 3.0;
-
-	// Get random point in triangle
-	vec2 uv = jitter2d(strata, i);
-	if (uv.x + uv.y > 1.0)
-		uv = vec2(1.0 - uv.x, 1.0 - uv.y);
-
-	// Edge vectors
-	vec3 e1 = v2 - v1;
-	vec3 e2 = v3 - v1;
-
-	vec3 p = v1 + uv.x * e1 + uv.y * e2;
-
-	return p;
-}
-
-vec2 point_light_contr(Hit hit, vec3 pos)
-{
-	// Light intensity
-	float d = distance(pos, hit.point);
-	float intensity = 5.0/d;
-
-	// Lambertian
-	vec3 light_direction = normalize(pos - hit.point);
-	float diffuse = max(dot(light_direction, hit.normal), 0.0);
-
-	return vec2(intensity * diffuse, d);
-}
-
-vec3 point_light_full(Hit hit, Ray ray, vec3 pos)
-{
-	// Sum of colors
-	vec3 color = vec3(0.0);
-
-	// Create shadow ray
+	// Shadow ray
+	vec3 origin = hit.point + hit.normal * 0.001;
 	Ray shadow_ray = Ray(
-		hit.point + hit.normal * 0.001,
-		normalize(pos - hit.point),
+		origin,
+		normalize(lpos - origin),
 		1.0, 1.0
 	);
 
-	// Array of rays
-	Ray rays[MAX_DEPTH];
-	rays[0] = shadow_ray;
-
-	int index = 0;
-	int depth = 1;
+	Hit shadow_hit = closest_object(shadow_ray);
 
 	// Light contribution
-	vec2 light_contr = point_light_contr(hit, pos);
+	vec3 ldir = normalize(lpos - hit.point);
 
-	// Oldest hit
-	Hit old_hit = hit;
+	// Light intensity
+	float d = distance(lpos, hit.point);
+	float intensity = 5.0/d;
 
-	// Loop until no more light
-	while (index < MAX_DEPTH && index < depth) {
-		// Get ray and hit
-		Ray r = rays[index];
-		Hit h = closest_object(r);
+	// TODO: use the actual object id
+	vec3 lcolor = vec3(1.0);
+	if (shadow_hit.mat.shading != SHADING_TYPE_EMISSIVE)
+		return vec3(0.0);
 
-		if (h.object == -1) {
-			// No hit, full contribution
-			color += r.contr * light_contr.x * hit.mat.albedo;
-		} else if (h.mat.shading == SHADING_TYPE_EMISSIVE
-				|| h.time > light_contr.y) {
-			// Hit object counts as light
-			color += r.contr * light_contr.x * hit.mat.albedo;
-		} /* else if (h.mat.shading == SHADING_TYPE_REFLECTION) {
-			// TODO: is reflectivity even needed here?
-			// Reflection doesnt preserve much light
-			float contr = 0.85;
-
-			// Possibly a little bit of light from reflection
-			Ray nray = Ray(
-				h.point + h.normal * 0.001,
-				reflect(r.direction, h.normal),
-				1.0, contr * r.contr
-			);
-
-			old_hit = h;
-			rays[depth] = nray;
-			depth++;
-		} */ else if (h.mat.shading == SHADING_TYPE_REFRACTION) {
-			// Refraction preserves more light
-			float contr = 0.9;
-
-			// Possibly a little bit of light from refraction
-			// TODO: preserve color of the object (tint)
-			// TODO: use the correct ior?
-			Ray nray = Ray(
-				h.point - h.normal * 0.001,
-				refract(r.direction, h.normal, 1.0),
-				h.mat.ior, contr * r.contr
-			);
-
-			old_hit = h;
-			rays[depth] = nray;
-			depth++;
-
-			// return vec3(h.mat.ior - 1);
-		}
-
-		index++;
-	}
-
-	return color;
+	return lcolor * intensity
+		* max(0.0, dot(hit.normal, ldir))
+		* hit.mat.albedo;
 }
 
-vec3 single_area_light_contr(Hit hit, Ray ray, vec3 v1, vec3 v2, vec3 v3)
+// Area light contribution
+vec3 area_light_contr(Hit hit, Ray ray, uint li)
 {
-	vec3 color = vec3(0.0);
-	for (int i = 0; i < pc.samples_per_light; i++) {
-		// Sample point from triangle
-		vec3 light_position = sample_triangle(
-			v1, v2, v3,
-			sqrt(pc.samples_per_light), i
-		);
-
-		color += point_light_full(hit, ray, light_position);
-	}
-
-	return color/float(pc.samples_per_light);
-}
-
-vec3 single_area_light_contr(Hit hit, Ray ray, int i)
-{
-	// Unique (but same) seed for each light
-	// TODO: samlpe method for each light
-	uint light_index = floatBitsToUint(light_indices.data[i]);
-
-	float a = lights.data[light_index + 1].x;
-	float b = lights.data[light_index + 1].y;
-	float c = lights.data[light_index + 1].z;
+	// Get light position
+	float a = lights.data[li + 1].x;
+	float b = lights.data[li + 1].y;
+	float c = lights.data[li + 1].z;
+	float d = lights.data[li + 1].w;
 
 	uint ia = floatBitsToUint(a);
 	uint ib = floatBitsToUint(b);
 	uint ic = floatBitsToUint(c);
+	uint id = floatBitsToUint(d);
 
 	vec3 v1 = vertices.data[VERTEX_STRIDE * ia].xyz;
 	vec3 v2 = vertices.data[VERTEX_STRIDE * ib].xyz;
 	vec3 v3 = vertices.data[VERTEX_STRIDE * ic].xyz;
 
-	return single_area_light_contr(hit, ray, v1, v2, v3);
+	// Sample point from triangle
+	vec3 light_position = (v1 + v2 + v3) / 3.0;
+	return point_light_contr(hit, ray, light_position);
 }
 
-vec3 light_contr(Hit hit, Ray ray)
+// Environment light contribution
+vec3 environment_illumination(Hit hit, Ray ray)
 {
-	vec3 contr = vec3(0.0);
+	// Depending on the material
+	// 	sample BSDFs into environment
+	vec3 env_color = vec3(0.0);
 
-	// Iterate over all lights
-	for (int i = 0; i < pc.lights; i++)
-		contr += single_area_light_contr(hit, ray, i);
+	Ray r = ray;
 
-	///////////////////////////////////
-	// Sample light from environment //
-	///////////////////////////////////
+	// TODO: use integer constants for shading type... (less casting)
+	if (hit.mat.shading == SHADING_TYPE_DIFFUSE) {
+		// Random hemisphere sample
+		vec3 dir = random_hemi(hit.normal);
+		r.direction = dir;
+		r.origin = hit.point + hit.normal * 0.001;
 
-	// First, get the reflected ray
-	vec3 r = reflect(ray.direction, hit.normal);
-	Ray refl = Ray(hit.point + hit.normal * 0.001, r, 1.0, 1.0);
+		// Trace ray
+		// TODO: refactor
+		Hit env_hit = closest_object(r);
 
-	// If the environment is not occlude, add it
-	Hit env_hit = closest_object(refl);
-	if (env_hit.object != -1)
-		return contr/float(pc.lights);
-
-	contr += sample_environment_blur(refl);
-	return contr/float(pc.lights + 1);
-}
-
-vec3 color_at(Ray ray)
-{
-	// Array of rays
-	Ray rays[MAX_DEPTH];
-	rays[0] = ray;
-
-	int index = 0;
-	int depth = 1;
-
-	// Total color
-	vec3 color = vec3(0.0);
-
-	// Iterate over all rays
-	while (index < MAX_DEPTH && index < depth) {
-		Ray r = rays[index];
-		Hit hit = closest_object(r);
-
-		if (hit.object == -1) {
-			// No hit
-			color += hit.mat.albedo;
-		} else if (hit.mat.shading == SHADING_TYPE_EMISSIVE) {
-			// Emissive
-			color += hit.mat.albedo;
-		} else {
-			// Hit
-			color += r.contr * light_contr(hit, r);
-
-			// Reflection
-			if (hit.mat.shading == SHADING_TYPE_REFLECTION
-					&& depth < MAX_DEPTH) {
-				// Reflection ray
-				vec3 r_dir = reflect(r.direction, hit.normal);
-				Ray r_ray = Ray(
-					hit.point + hit.normal * 0.001,
-					r_dir, 1.0, 0.8 * r.contr
-				);
-
-				rays[depth] = r_ray;
-				depth++;
-			}
-
-			// Refraction
-			if (hit.mat.shading == SHADING_TYPE_REFRACTION
-					&& depth < MAX_DEPTH) {
-				// Refraction ray
-				vec3 r_dir = refract(
-					r.direction,
-					hit.normal,
-					r.ior/hit.mat.ior
-				);
-
-				Ray r_ray = Ray(
-					hit.point - hit.normal * 0.001,
-					r_dir, 1.0, 0.8 * r.contr
-				);
-
-				rays[depth] = r_ray;
-				depth++;
-			}
-		}
-
-		index++;
+		// Add contribution if no hit
+		if (env_hit.object == -1)
+			env_color += hit.mat.albedo * sample_environment_blur(r);
 	}
 
-	// return vec3(sin(0.1 * index));
-	return clamp(color, 0.0, 1.0);
+	return env_color;
+}
+
+// Direct illumination
+vec3 direct_illumination(Hit hit, Ray ray)
+{
+	// Direct light contribution
+	vec3 direct_contr = vec3(0.0);
+
+	// Direct illumination
+	for (int i = 0; i < pc.lights; i++) {
+		uint light_index = floatBitsToUint(light_indices.data[i]);
+		direct_contr += area_light_contr(hit, ray, light_index);
+	}
+
+	// Environment illumination
+	vec3 env_contr = environment_illumination(hit, ray);
+
+	return direct_contr + env_contr;
+}
+
+// Color value at from a ray
+vec3 color_at(Ray ray)
+{
+	vec3 contribution = vec3(0.0);
+	float beta = 1.0;
+	float ior = 1.0;
+
+	Ray r = ray;
+	for (int i = 0; i < MAX_DEPTH; i++) {
+		// Find closest object
+		Hit hit = closest_object(r);
+
+		// Special case intersection
+		if (hit.object == -1 || hit.mat.shading == SHADING_TYPE_EMISSIVE) {
+			contribution += hit.mat.albedo;
+			break;
+		}
+
+		// Direct illumination
+		vec3 direct_contr = direct_illumination(hit, r)/PI;
+		contribution += beta * direct_contr;
+
+		// Generating the new ray according to BSDF
+		if (hit.mat.shading == SHADING_TYPE_DIFFUSE) {
+			// Lambertian BSDF
+			vec3 r_dir = random_hemi(hit.normal);
+			r = Ray(
+				hit.point + hit.normal * 0.001,
+				r_dir, 1.0, 1.0
+			);
+
+			// Update beta
+			beta *= dot(hit.normal, r_dir);
+
+		// TODO: recdesign material interface (reflection | transmission
+		// and specular class)
+		} else if (hit.mat.shading == SHADING_TYPE_REFLECTION) {
+			// (Perfect) Specular BSDF
+			vec3 r_dir = reflect(r.direction, hit.normal);
+			r.direction = r_dir;
+			r.origin = hit.point + hit.normal * 0.001;
+
+			// Update beta
+			beta *= dot(hit.normal, r_dir);
+		} else if (hit.mat.shading == SHADING_TYPE_REFRACTION) {
+			// (Perfect) Transmissive BSDF
+			vec3 r_dir = refract(r.direction, hit.normal, ior/hit.mat.ior);
+			r.direction = r_dir;
+			r.origin = hit.point - hit.normal * 0.001;
+
+			// Update beta
+			ior = hit.mat.ior;
+		} else {
+			// Assume no interaction
+			break;
+		}
+
+		// Russian roulette
+		if (i > 0) {
+			float q = max(1.0 - beta, 0.05);
+			if (random() < q)
+				break;
+			beta /= (1.0 - q);
+		}
+	}
+
+	return clamp(contribution, 0.0, 1.0);
 }
 
 void main()
@@ -279,47 +203,34 @@ void main()
 	uint index = y0 * pc.width + x0;
 
 	// Set seed
-	float rx = fract(sin(x0 * 1234.56789 + y0) * PHI);
-	float ry = fract(sin(y0 * 9876.54321 + x0));
+	float rx = fract(sin(x0 * 12 + y0) * PHI);
+	float ry = fract(sin(y0 * 98 + x0));
 
-	// Accumulate color
-	vec3 color = vec3(0.0);
+	// Initialiize the random seed
+	random_seed = vec3(rx, ry, fract((rx + ry)/pc.time));
 
+	// Dimension
 	vec2 dimensions = vec2(pc.width, pc.height);
-	for (int i = 0; i < pc.samples_per_pixel; i++) {
-		// Random offset
-		vec2 offset = jitter2d(
-			sqrt(pc.total),
-			i + pc.present
-		);
 
-		// Create the ray
-		vec2 pixel = vec2(x0, y0) + offset;
-		vec2 uv = pixel / dimensions;
+	// Random offset
+	vec2 offset = 0.1 * random_sphere().xy/dimensions;
 
-		Ray ray = make_ray(uv,
-			pc.camera_position,
-			pc.camera_forward,
-			pc.camera_up,
-			pc.camera_right,
-			pc.properties.x,
-			pc.properties.y
-		);
+	// Create the ray
+	vec2 pixel = vec2(x0, y0) + offset;
+	vec2 uv = pixel / dimensions;
 
-		// Light transport
-		color += color_at(ray);
-	}
+	Ray ray = make_ray(uv,
+		pc.camera_position,
+		pc.camera_forward,
+		pc.camera_up,
+		pc.camera_right,
+		pc.properties.x,
+		pc.properties.y
+	);
 
-	if (pc.accumulate > 0) {
-		vec3 pcolor = cast_color(frame.pixels[index]);
-		pcolor = pow(pcolor, vec3(2.2));
-		color += pcolor * pc.present;
-		color /= float(pc.present + pc.samples_per_pixel);
-		color = pow(color, vec3(1/2.2));
-	} else {
-		color /= float(pc.samples_per_pixel);
-		color = pow(color, vec3(1/2.2));
-	}
+	// Light transport
+	vec3 color = pow(color_at(ray), vec3(1/2.2));
 
+	// Write to image buffer
 	frame.pixels[index] = cast_color(color);
 }

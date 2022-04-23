@@ -87,7 +87,6 @@ bool apply_bsdf(inout Ray r, Hit hit, inout float beta, inout float ior)
 		r.origin = hit.point - hit.normal * 0.001;
 
 		// Update beta
-		beta *= dot(hit.normal, r_dir);
 		ior = hit.mat.ior;
 	} else {
 		// Invalid shading type
@@ -241,7 +240,52 @@ vec3 color_at(Ray ray)
 						path_contr += light_contrs[y]
 							* camera_contr[x]
 							* cos_theta
-							* (5.0/d) * (INV_PI * INV_PI);
+							* (5.0/d) * (2 * INV_PI * INV_PI);
+					}
+
+					// TODO: special case for transmissive materials
+					if (hit.object != -1
+							&& hit.mat.shading == SHADING_TYPE_REFRACTION) {
+						// Trace ray from light vertex
+						//	to camera vertex (to hit the object)
+						Ray light_to_camera = Ray(
+							light_vertices[y],
+							-ldir,
+							1.0, 1.0
+						);
+
+						Hit light_hit_0 = closest_object(light_to_camera);
+
+						if (light_hit_0.object == hit.object) {
+							// Then connect to form caustics
+							// after one more bounce
+							// TODO: get accurate
+							// iors
+							float ior = 1.0;
+							float beta = 1.0;
+
+							apply_bsdf(visibility,
+									hit,
+									beta, ior);
+							apply_bsdf(light_to_camera,
+									light_hit_0,
+									beta, ior);
+
+							// Hit again (inside the object)
+							Hit visibility_1 = closest_object(visibility);
+							Hit light_hit_1 = closest_object(light_to_camera);
+
+							// Connect each other
+							// TODO: will need
+							// additional cos_theta
+							// factors
+							float d = distance(light_vertices[y], camera_vertices[x]);
+							float cos_theta = max(dot(ldir, camera_normals[x]), 0.0);
+							path_contr += light_contrs[y]
+								* camera_contr[x]
+								* cos_theta
+								* (5.0/d) * (2 * INV_PI * INV_PI);
+						}
 					}
 				}
 			}

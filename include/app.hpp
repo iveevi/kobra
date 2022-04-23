@@ -355,7 +355,9 @@ public:
 
 		if (result != VK_SUCCESS) {
 			Logger::error("[main] Failed to submit draw command buffer!");
-			throw (-1);
+			vk::Result res = vk::Result(result);
+			std::cout << "Error type = " << vk::to_string(res) << std::endl;
+			// throw (-1);
 		}
 
 		// Present the image to the swap chain
@@ -375,13 +377,6 @@ public:
 			context.device.present_queue,
 			&present_info
 		);
-
-		/* if (result == VK_ERROR_OUT_OF_DATE_KHR
-				|| result == VK_SUBOPTIMAL_KHR
-				|| framebuffer_resized) {
-			framebuffer_resized = false;
-			_remk_swapchain();
-		} else*/
 
 		// TODO: check resizing (in app)
 		if (result != VK_SUCCESS) {

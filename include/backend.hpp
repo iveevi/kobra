@@ -706,8 +706,10 @@ private:
 		extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
 		extensions.push_back("VK_KHR_get_physical_device_properties2");
 
-		if (enable_validation_layers)
+		if (enable_validation_layers) {
 			extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+			extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+		}
 
 		return extensions;
 	}
@@ -1647,6 +1649,15 @@ inline const std::vector <const char *> &get_required_extensions()
 		// TODO: debugging extension if debuggin enabled
 		extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
 		extensions.push_back("VK_KHR_get_physical_device_properties2");
+
+#ifdef KOBRA_VALIDATION_LAYERS
+
+		// Add validation layers
+		extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+		extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+
+#endif
+
 	}
 
 	return extensions;
@@ -1679,10 +1690,10 @@ static bool check_validation_layer_support(const std::vector <const char *> &val
 	return true;
 }
 
-static VkResult make_debug_messenger(VkInstance instance,
-		const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,
-		const VkAllocationCallbacks* pAllocator,
-		VkDebugUtilsMessengerEXT* pCallback)
+static VkResult make_debug_messenger(const VkInstance &instance,
+		const VkDebugUtilsMessengerCreateInfoEXT *create_info,
+		const VkAllocationCallbacks *allocator,
+		VkDebugUtilsMessengerEXT *debug_messenger)
 {
 	auto func = (PFN_vkCreateDebugUtilsMessengerEXT)
 		vkGetInstanceProcAddr(
@@ -1690,12 +1701,33 @@ static VkResult make_debug_messenger(VkInstance instance,
 			"vkCreateDebugUtilsMessengerEXT"
 		);
 
-	std::cout << "func: " << func << std::endl;
+	if (func != nullptr) {
+		return func(instance,
+			create_info,
+			allocator,
+			debug_messenger
+		);
+	}
 
-	if (func != nullptr)
-		return func(instance, pCreateInfo, pAllocator, pCallback);
-	else
-		return VK_ERROR_EXTENSION_NOT_PRESENT;
+	return VK_ERROR_EXTENSION_NOT_PRESENT;
+}
+
+static void destroy_debug_messenger(const VkInstance &instance,
+		const VkDebugUtilsMessengerEXT &debug_messenger,
+		const VkAllocationCallbacks *allocator)
+{
+	auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)
+		vkGetInstanceProcAddr(
+			instance,
+			"vkDestroyDebugUtilsMessengerEXT"
+		);
+
+	if (func != nullptr) {
+		func(instance,
+			debug_messenger,
+			allocator
+		);
+	}
 }
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debug_logger
@@ -1744,6 +1776,26 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_logger
 	return VK_FALSE;
 }
 
+#ifdef KOBRA_VALIDATION_LAYERS
+
+// RAII handle for debug messenger
+struct DebugMessenger {
+	VkInstance			instance = nullptr;
+	VkDebugUtilsMessengerEXT	messenger = nullptr;
+
+	// Destructor
+	~DebugMessenger() {
+		std::cout << "Destroying debug messenger" << std::endl;
+		destroy_debug_messenger(instance, messenger, nullptr);
+	}
+
+	operator bool() const {
+		return messenger != nullptr;
+	}
+};
+
+#endif
+
 // Get (or create) the singleton instance
 inline const vk::raii::Instance &get_vulkan_instance()
 {
@@ -1786,15 +1838,49 @@ inline const vk::raii::Instance &get_vulkan_instance()
 		get_required_extensions().data()
 	};
 
-	static vk::raii::DebugUtilsMessengerEXT debug_messenger = nullptr;
+#ifdef KOBRA_VALIDATION_LAYERS
+
+	static VkDebugUtilsMessengerEXT debug_messenger {};
+	static bool debug_messenger_created = false;
+
+	VkDebugUtilsMessengerCreateInfoEXT debug_messenger_info {
+		.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+		.messageSeverity =
+			VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT
+			| VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
+			| VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+		.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
+			| VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
+			| VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+		.pfnUserCallback = debug_logger
+	};
+
+	instance_info.pNext = &debug_messenger_info;
+
+#endif
 
 	static vk::raii::Instance instance {
 		get_vulkan_context(),
-		instance_info,
+		instance_info
 	};
 
 #ifdef KOBRA_VALIDATION_LAYERS
 
+	if (!debug_messenger_created) {
+		VkResult result = make_debug_messenger(
+			*instance,
+			&debug_messenger_info,
+			nullptr,
+			&debug_messenger
+		);
+
+		KOBRA_ASSERT(
+			result == VK_SUCCESS,
+			"Failed to create debug messenger"
+		);
+
+		debug_messenger_created = true;
+	}
 
 #endif
 
@@ -1877,6 +1963,8 @@ inline bool physical_device_able(const vk::raii::PhysicalDevice &phdev,
 				[&extension](const vk::ExtensionProperties &prop) {
 					return !strcmp(prop.extensionName, extension);
 				}) == device_extensions.end()) {
+			KOBRA_LOG_FUNC(warn) << "Extension \"" << extension
+					<< "\" is not supported\n";
 			return false;
 		}
 	}
@@ -2494,12 +2582,18 @@ inline vk::raii::DescriptorSetLayout make_descriptor_set_layout
 struct GraphicsPipelineInfo {
 	const vk::raii::Device &device;
 	const vk::raii::RenderPass &render_pass;
+
 	const vk::raii::ShaderModule &vertex_shader;
-	const vk::SpecializationInfo &vertex_specialization;
+	const vk::SpecializationInfo *vertex_specialization = nullptr;
+
 	const vk::raii::ShaderModule &fragment_shader;
-	const vk::SpecializationInfo &fragment_specialization;
+	const vk::SpecializationInfo *fragment_specialization = nullptr;
+
 	const vk::VertexInputBindingDescription &vertex_binding;
 	const std::vector <vk::VertexInputAttributeDescription> &vertex_attributes;
+
+	const vk::raii::PipelineLayout &pipeline_layout;
+	const vk::raii::PipelineCache &pipeline_cache;
 
 	bool depth_test;
 	bool depth_write;
@@ -2508,6 +2602,105 @@ struct GraphicsPipelineInfo {
 inline vk::raii::Pipeline make_graphics_pipeline(const GraphicsPipelineInfo &info)
 {
 	// Shader stages
+	std::array <vk::PipelineShaderStageCreateInfo, 2> shader_stages {
+		vk::PipelineShaderStageCreateInfo {
+			{}, vk::ShaderStageFlagBits::eVertex,
+			*info.vertex_shader, "main",
+			info.vertex_specialization
+		},
+		vk::PipelineShaderStageCreateInfo {
+			{}, vk::ShaderStageFlagBits::eFragment,
+			*info.fragment_shader, "main",
+			info.fragment_specialization
+		}
+	};
+
+	// Vertex input state
+	vk::PipelineVertexInputStateCreateInfo vertex_input_info {
+		{}, 1, &info.vertex_binding,
+		(uint32_t) info.vertex_attributes.size(),
+		info.vertex_attributes.data()
+	};
+
+	// Input assembly state
+	vk::PipelineInputAssemblyStateCreateInfo input_assembly_info {
+		{}, vk::PrimitiveTopology::eTriangleList, VK_FALSE
+	};
+
+	// Viewport state
+	vk::PipelineViewportStateCreateInfo viewport_state_info {
+		{}, 1, nullptr, 1, nullptr
+	};
+
+	// Rasterization state
+	vk::PipelineRasterizationStateCreateInfo rasterization_info {
+		{}, VK_FALSE, VK_FALSE, vk::PolygonMode::eFill,
+		vk::CullModeFlagBits::eBack, vk::FrontFace::eCounterClockwise,
+		VK_FALSE, 0.0f, 0.0f, 0.0f, 1.0f
+	};
+
+	// Multisample state
+	vk::PipelineMultisampleStateCreateInfo multisample_info {
+		{}, vk::SampleCountFlagBits::e1, VK_FALSE, 0.0f, nullptr,
+		VK_FALSE, VK_FALSE
+	};
+
+	// Depth stencil state
+	vk::StencilOpState stencil_info {
+		vk::StencilOp::eKeep, vk::StencilOp::eKeep, vk::StencilOp::eKeep,
+		vk::CompareOp::eAlways, 0, 0, 0
+	};
+
+	vk::PipelineDepthStencilStateCreateInfo depth_stencil_info {
+		{}, info.depth_test, info.depth_write,
+		vk::CompareOp::eLess, false, false,
+		stencil_info, stencil_info
+	};
+
+	// Color blend state
+	vk::PipelineColorBlendAttachmentState color_blend_attachment {
+		VK_FALSE, vk::BlendFactor::eZero, vk::BlendFactor::eZero,
+		vk::BlendOp::eAdd, vk::BlendFactor::eZero, vk::BlendFactor::eZero,
+		vk::BlendOp::eAdd, vk::ColorComponentFlagBits::eR |
+			vk::ColorComponentFlagBits::eG |
+			vk::ColorComponentFlagBits::eB |
+			vk::ColorComponentFlagBits::eA
+	};
+
+	vk::PipelineColorBlendStateCreateInfo color_blend_info {
+		{}, VK_FALSE, vk::LogicOp::eCopy, 1, &color_blend_attachment,
+		{ 0.0f, 0.0f, 0.0f, 0.0f }
+	};
+
+	// Dynamic state
+	std::array <vk::DynamicState, 2> dynamic_states {
+		vk::DynamicState::eViewport,
+		vk::DynamicState::eScissor
+	};
+
+	vk::PipelineDynamicStateCreateInfo dynamic_state_info {
+		{}, (uint32_t) dynamic_states.size(), dynamic_states.data()
+	};
+
+	// Pipeline
+	return vk::raii::Pipeline {
+		info.device,
+		info.pipeline_cache,
+		vk::GraphicsPipelineCreateInfo {
+			{}, shader_stages,
+			&vertex_input_info,
+			&input_assembly_info,
+			nullptr,
+			&viewport_state_info,
+			&rasterization_info,
+			&multisample_info,
+			&depth_stencil_info,
+			&color_blend_info,
+			&dynamic_state_info,
+			*info.pipeline_layout,
+			*info.render_pass
+		}
+	};
 }
 
 // TODO: compiling GLSL into SPIRV in runtime

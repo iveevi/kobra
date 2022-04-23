@@ -575,7 +575,8 @@ Layer::Layer(const App::Window &wctx)
 	BFM_Settings pixel_settings {
 		.size = pixels,
 		.usage_type = BFM_READ_ONLY,
-		.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+		.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
+			| VK_BUFFER_USAGE_TRANSFER_SRC_BIT
 	};
 
 	BFM_Settings viewport_settings {
@@ -633,7 +634,7 @@ Layer::Layer(const App::Window &wctx)
 	_final_texture = make_texture(_context, _command_pool,
 		texture,
 		VK_FORMAT_R8G8B8A8_UNORM,
-		VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
 		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 	);
 
@@ -940,6 +941,29 @@ void Layer::render(const VkCommandBuffer &cmd,
 		bi.width,
 		bi.height,
 		1
+	);
+
+	// Buffer memory barrier
+	VkBufferMemoryBarrier buffer_barrier {
+		.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+		.pNext = nullptr,
+		.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+		.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
+		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		.buffer = _pixels.vk_buffer(),
+		.offset = 0,
+		.size = VK_WHOLE_SIZE
+	};
+
+	// Wait for the compute shader to finish
+	vkCmdPipelineBarrier(cmd,
+		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+		VK_PIPELINE_STAGE_TRANSFER_BIT,
+		0,
+		0, nullptr,
+		1, &buffer_barrier,
+		0, nullptr
 	);
 
 	//////////////////////////////

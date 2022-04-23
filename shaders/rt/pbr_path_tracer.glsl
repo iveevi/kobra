@@ -205,7 +205,6 @@ vec3 color_at(Ray ray)
 			r.origin = hit.point - hit.normal * 0.001;
 
 			// Update beta
-			beta *= dot(hit.normal, r_dir);
 			ior = hit.mat.ior;
 		} else {
 			// Assume no interaction
