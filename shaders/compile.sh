@@ -3,9 +3,12 @@ mkdir -p bin bin/gui bin/generic bin/raster
 
 # Compile GENERIC mode shaders
 glslc -fshader-stage=compute rt/normal.glsl -o bin/generic/normal.spv
+glslc -fshader-stage=compute rt/heatmap.glsl -o bin/generic/heatmap.spv
 glslc -fshader-stage=compute rt/fast_path_tracer.glsl -o bin/generic/fast_path_tracer.spv
 glslc -fshader-stage=compute rt/pbr_path_tracer.glsl -o bin/generic/pbr_path_tracer.spv
+glslc -fshader-stage=compute rt/mis_path_tracer.glsl -o bin/generic/mis_path_tracer.spv
 glslc -fshader-stage=compute rt/bidirectional_path_tracer.glsl -o bin/generic/bidirectional_path_tracer.spv
+
 glslc -fshader-stage=vertex rt/postproc/postproc.vert -o bin/generic/postproc_vert.spv
 glslc -fshader-stage=fragment rt/postproc/postproc.frag -o bin/generic/postproc_frag.spv
 

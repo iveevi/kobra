@@ -241,6 +241,7 @@ vec3 color_at(Ray ray)
 							* camera_contr[x]
 							* cos_theta
 							* (5.0/d) * (2 * INV_PI * INV_PI);
+						continue;
 					}
 
 					// TODO: special case for transmissive materials
@@ -254,6 +255,7 @@ vec3 color_at(Ray ray)
 							1.0, 1.0
 						);
 
+						// TODO: biaS!!
 						Hit light_hit_0 = closest_object(light_to_camera);
 
 						if (light_hit_0.object == hit.object) {
@@ -261,24 +263,35 @@ vec3 color_at(Ray ray)
 							// after one more bounce
 							// TODO: get accurate
 							// iors
-							float ior = 1.0;
-							float beta = 1.0;
+							float ior_ = 1.0;
+							float beta_ = 1.0;
 
 							apply_bsdf(visibility,
 									hit,
-									beta, ior);
+									beta_,
+									ior_);
+
+							ior_ = 1.0;
 							apply_bsdf(light_to_camera,
 									light_hit_0,
-									beta, ior);
+									beta_,
+									ior_);
 
 							// Hit again (inside the object)
 							Hit visibility_1 = closest_object(visibility);
 							Hit light_hit_1 = closest_object(light_to_camera);
 
+							// Distance is now a sum
+							// of three distances
+							float d1 = distance(light_vertices[y], light_hit_0.point);
+							float d2 = distance(camera_vertices[x], hit.point);
+							float d3 = distance(visibility_1.point, light_hit_1.point);
+
 							// Connect each other
 							// TODO: will need
 							// additional cos_theta
 							// factors
+							// float d = d1 + d2 + d3;
 							float d = distance(light_vertices[y], camera_vertices[x]);
 							float cos_theta = max(dot(ldir, camera_normals[x]), 0.0);
 							path_contr += light_contrs[y]

@@ -106,6 +106,14 @@ const Layer::DSLBindings Layer::_mesh_compute_bindings {
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 		.pImmutableSamplers = nullptr
 	},
+	
+	DSLBinding {
+		.binding = MESH_BINDING_OUTPUT,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.pImmutableSamplers = nullptr
+	},
 };
 
 const Layer::DSLBindings Layer::_postproc_bindings = {
@@ -168,8 +176,10 @@ void Layer::_init_compute_pipelines()
 	// Get all the shaders
 	auto shaders = _context.make_shaders({
 		"shaders/bin/generic/normal.spv",
+		"shaders/bin/generic/heatmap.spv",
 		"shaders/bin/generic/fast_path_tracer.spv",
 		"shaders/bin/generic/pbr_path_tracer.spv",
+		"shaders/bin/generic/mis_path_tracer.spv",
 		"shaders/bin/generic/bidirectional_path_tracer.spv"
 	});
 
@@ -181,23 +191,37 @@ void Layer::_init_compute_pipelines()
 			.module = shaders[0],
 			.pName = "main"
 		},
-		{	// Fast path tracer
+		{
+			// Heatmap
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 			.stage = VK_SHADER_STAGE_COMPUTE_BIT,
 			.module = shaders[1],
 			.pName = "main"
 		},
-		{	// PBR path tracer
+		{	// Fast path tracer
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 			.stage = VK_SHADER_STAGE_COMPUTE_BIT,
 			.module = shaders[2],
+			.pName = "main"
+		},
+		{	// PBR path tracer
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+			.stage = VK_SHADER_STAGE_COMPUTE_BIT,
+			.module = shaders[3],
+			.pName = "main"
+		},
+		{
+			// MIS path tracer
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+			.stage = VK_SHADER_STAGE_COMPUTE_BIT,
+			.module = shaders[4],
 			.pName = "main"
 		},
 		{
 			// Bidirectional path tracer
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 			.stage = VK_SHADER_STAGE_COMPUTE_BIT,
-			.module = shaders[3],
+			.module = shaders[5],
 			.pName = "main"
 		}
 	};
@@ -238,9 +262,11 @@ void Layer::_init_compute_pipelines()
 
 	// Create the pipelines
 	_pipelines.normals = ppl_maker(shader_stages[0]);
-	_pipelines.fast_path_tracer = ppl_maker(shader_stages[1]);
-	_pipelines.path_tracer = ppl_maker(shader_stages[2]);
-	_pipelines.bidirectional_path_tracer = ppl_maker(shader_stages[3]);
+	_pipelines.heatmap = ppl_maker(shader_stages[1]);
+	_pipelines.fast_path_tracer = ppl_maker(shader_stages[2]);
+	_pipelines.path_tracer = ppl_maker(shader_stages[3]);
+	_pipelines.mis_path_tracer = ppl_maker(shader_stages[4]);
+	_pipelines.bidirectional_path_tracer = ppl_maker(shader_stages[5]);
 }
 
 void Layer::_init_postproc_pipeline(const Vulkan::Swapchain &swapchain)
@@ -578,7 +604,16 @@ Layer::Layer(const App::Window &wctx)
 		.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
 			| VK_BUFFER_USAGE_TRANSFER_SRC_BIT
 	};
+	
+	// Debug output settings
+	BFM_Settings debug_settings {
+		.size = pixels,
+		.usage_type = BFM_READ_WRITE,
+		.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
+			| VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+	};
 
+	// TODO: remove this
 	BFM_Settings viewport_settings {
 		.size = 2,
 		.usage_type = BFM_WRITE_ONLY,
@@ -614,7 +649,6 @@ Layer::Layer(const App::Window &wctx)
 
 	// Bind to descriptor sets
 	_pixels.bind(_mesh_ds, MESH_BINDING_PIXELS);
-	// _pixels.bind(_postproc_ds, MESH_BINDING_PIXELS);
 
 	/////////////////////////////////////////////
 	// Fill sampler arrays with blank samplers //
@@ -966,6 +1000,8 @@ void Layer::render(const VkCommandBuffer &cmd,
 		0, nullptr
 	);
 
+	// KOBRA_LOG_FILE(notify) << "rt::Layer::render()\n";
+
 	//////////////////////////////
 	// Post-processing pipeline //
 	//////////////////////////////
@@ -1019,6 +1055,28 @@ void Layer::render(const VkCommandBuffer &cmd,
 		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
 	);
+
+	// Image memory barrier
+	VkImageMemoryBarrier image_barrier {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+		.pNext = nullptr,
+		.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+		.dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+		.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		.image = _final_texture.image,
+		.subresourceRange = {
+			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.baseMipLevel = 0,
+			.levelCount = 1,
+			.baseArrayLayer = 0,
+			.layerCount = 1
+		}
+	};
+
+	// Wait for the copy to finish
 
 	// Bind descriptor set
 	vkCmdBindDescriptorSets(cmd,

@@ -21,6 +21,9 @@ const int MESH_BINDING_ALBEDOS		= 8;
 const int MESH_BINDING_NORMAL_MAPS	= 9;
 const int MESH_BINDING_ENVIRONMENT	= 10;
 
+// Output
+const int MESH_BINDING_OUTPUT		= 11;
+
 // TODO: mesh roughness/bump map
 
 #endif

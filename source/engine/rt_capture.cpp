@@ -24,12 +24,12 @@ RTCapture::RTCapture(Vulkan *vk, const std::string &scene_file, const Camera &ca
 		load_image_texture("resources/skies/background_2.jpg", 4)
 	);
 
-	layer.set_mode(rt::Layer::Mode::BIDIRECTIONAL_PATH_TRACE);
+	layer.set_mode(rt::Layer::Mode::MIS_PATH_TRACER);
 
 	// Create batch
 	// TODO: a method to generate optimal batch sizes (eg 50x50 is
 	// faster than 10x10)
-	batch = rt::Batch(800, 800, 50, 50, 32);
+	batch = rt::Batch(800, 800, 50, 50, 100);
 	index = batch.make_batch_index(0, 0, 4, 32);
 	index.accumulate = true;
 

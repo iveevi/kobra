@@ -1,27 +1,27 @@
 [OBJECT]
 name=Sphere A
 [TRANSFORM]
-position=3.67414 4.06271 -1.04725
+position=-0.796966 1.38884 1.81332
 rotation=0 0 0
 scale=1 1 1
 [SPHERE]
-radius=1
+radius=0.5
 [MATERIAL]
-albedo=1 1 1
-shading_type=1098907648
+albedo=0 0 0
+shading_type=1124073472
 ior=1.5
 albedo_source=0
 normal_source=0
 [OBJECT]
 name=Sphere B
 [TRANSFORM]
-position=-1.74507 2.80311 -3.15253
+position=-0.230044 0.811069 -0.696417
 rotation=0 0 0
 scale=1 1 1
 [SPHERE]
-radius=1
+radius=0.3
 [MATERIAL]
-albedo=0 0 1
+albedo=0 0 0
 shading_type=1115684864
 ior=1
 albedo_source=0
@@ -79,8 +79,8 @@ normal_source=resources/wood_floor_normal.jpg
 [OBJECT]
 name=Monkey
 [TRANSFORM]
-position=-2.79085 5.03262 -1.18355
-rotation=0 -30 0
+position=0.906492 1.231 0.760946
+rotation=-10.0699 -33.8042 -23.8786
 scale=1 1 1
 [MESH]
 source=resources/benchmark/suzanne.obj
@@ -242,56 +242,6 @@ ior=1
 albedo_source=0
 normal_source=0
 [OBJECT]
-name=Object 8
-[TRANSFORM]
-position=0 0 0
-rotation=0 0 0
-scale=1 1 1
-[MESH]
-source=0
-v -5 -2 -4.9 0 0 1 0 0
-v 5 -2 -4.9 0 0 1 1 0
-v 5 8 -4.9 0 0 1 1 1
-v -5 8 -4.9 0 0 1 0 1
-v -5 -2 -5.1 0 0 -1 0 0
-v 5 -2 -5.1 0 0 -1 1 0
-v 5 8 -5.1 0 0 -1 1 1
-v -5 8 -5.1 0 0 -1 0 1
-v -5 -2 -4.9 -1 0 0 0 0
-v -5 -2 -5.1 -1 0 0 1 0
-v -5 8 -5.1 -1 0 0 1 1
-v -5 8 -4.9 -1 0 0 0 1
-v 5 -2 -4.9 1 0 0 0 0
-v 5 -2 -5.1 1 0 0 1 0
-v 5 8 -5.1 1 0 0 1 1
-v 5 8 -4.9 1 0 0 0 1
-v -5 8 -4.9 0 1 0 0 0
-v 5 8 -4.9 0 1 0 1 0
-v 5 8 -5.1 0 1 0 1 1
-v -5 8 -5.1 0 1 0 0 1
-v -5 -2 -4.9 0 -1 0 0 0
-v 5 -2 -4.9 0 -1 0 1 0
-v 5 -2 -5.1 0 -1 0 1 1
-v -5 -2 -5.1 0 -1 0 0 1
-f 1 2 3
-f 3 4 1
-f 5 6 7
-f 7 8 5
-f 9 10 11
-f 11 12 9
-f 13 14 15
-f 15 16 13
-f 17 18 19
-f 19 20 17
-f 21 22 23
-f 23 24 21
-[MATERIAL]
-albedo=0.6 1 0.6
-shading_type=1098907648
-ior=1
-albedo_source=resources/brickwall.jpg
-normal_source=resources/brickwall_normal.jpg
-[OBJECT]
 name=Object 9
 [TRANSFORM]
 position=0.19269 7.7353 1.75177
@@ -308,6 +258,70 @@ f 1 3 4
 [MATERIAL]
 albedo=1 1 1
 shading_type=1084227584
+ior=1
+albedo_source=0
+normal_source=0
+[OBJECT]
+name=Object 4_1
+[TRANSFORM]
+position=0.00781733 -0.74535 0.209645
+rotation=0 -137.158 0
+scale=0.45 0.25 0.45
+[MESH]
+source=0
+v -5 -5 5 0 0 1 0 0
+v 5 -5 5 0 0 1 1 0
+v 5 5 5 0 0 1 1 1
+v -5 5 5 0 0 1 0 1
+v -5 -5 -5 0 0 -1 0 0
+v 5 -5 -5 0 0 -1 1 0
+v 5 5 -5 0 0 -1 1 1
+v -5 5 -5 0 0 -1 0 1
+v -5 -5 5 -1 0 0 0 0
+v -5 -5 -5 -1 0 0 1 0
+v -5 5 -5 -1 0 0 1 1
+v -5 5 5 -1 0 0 0 1
+v 5 -5 5 1 0 0 0 0
+v 5 -5 -5 1 0 0 1 0
+v 5 5 -5 1 0 0 1 1
+v 5 5 5 1 0 0 0 1
+v -5 5 5 0 1 0 0 0
+v 5 5 5 0 1 0 1 0
+v 5 5 -5 0 1 0 1 1
+v -5 5 -5 0 1 0 0 1
+v -5 -5 5 0 -1 0 0 0
+v 5 -5 5 0 -1 0 1 0
+v 5 -5 -5 0 -1 0 1 1
+v -5 -5 -5 0 -1 0 0 1
+f 1 2 3
+f 3 4 1
+f 5 6 7
+f 7 8 5
+f 9 10 11
+f 11 12 9
+f 13 14 15
+f 15 16 13
+f 17 18 19
+f 19 20 17
+f 21 22 23
+f 23 24 21
+[MATERIAL]
+albedo=1 0.9 0.5
+shading_type=1098907648
+ior=1
+albedo_source=0
+normal_source=0
+[OBJECT]
+name=Sphere B_1
+[TRANSFORM]
+position=-2.07492 0.856449 0
+rotation=0 0 0
+scale=1 1 1
+[SPHERE]
+radius=0.4
+[MATERIAL]
+albedo=1 0 0
+shading_type=1115684864
 ior=1
 albedo_source=0
 normal_source=0

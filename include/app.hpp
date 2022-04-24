@@ -357,7 +357,7 @@ public:
 			Logger::error("[main] Failed to submit draw command buffer!");
 			vk::Result res = vk::Result(result);
 			std::cout << "Error type = " << vk::to_string(res) << std::endl;
-			// throw (-1);
+			throw (-1);
 		}
 
 		// Present the image to the swap chain

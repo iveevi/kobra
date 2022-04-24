@@ -29,8 +29,10 @@ public:
 	// Current mode
 	enum Mode {
 		NORMALS,
+		HEATMAP,
 		FAST_PATH_TRACER,
 		PATH_TRACER,
+		MIS_PATH_TRACER,
 		BIDIRECTIONAL_PATH_TRACE
 	};
 protected:
@@ -62,8 +64,10 @@ protected:
 	// Pipelines
 	struct {
 		Vulkan::Pipeline normals;
+		Vulkan::Pipeline heatmap;
 		Vulkan::Pipeline fast_path_tracer;
 		Vulkan::Pipeline path_tracer;
+		Vulkan::Pipeline mis_path_tracer;
 		Vulkan::Pipeline bidirectional_path_tracer;
 		Vulkan::Pipeline postproc;
 	} _pipelines;
@@ -76,10 +80,14 @@ protected:
 		switch (_mode) {
 		case NORMALS:
 			return &_pipelines.normals;
+		case HEATMAP:
+			return &_pipelines.heatmap;
 		case FAST_PATH_TRACER:
 			return &_pipelines.fast_path_tracer;
 		case PATH_TRACER:
 			return &_pipelines.path_tracer;
+		case MIS_PATH_TRACER:
+			return &_pipelines.mis_path_tracer;
 		case BIDIRECTIONAL_PATH_TRACE:
 			return &_pipelines.bidirectional_path_tracer;
 		default:
@@ -107,6 +115,7 @@ protected:
 
 	// Data
 	BufferManager <uint>	_pixels;
+
 	Buffer4f		_vertices;
 	Buffer4f		_triangles;
 	Buffer4f		_materials;

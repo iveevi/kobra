@@ -5,7 +5,7 @@
 #include <vulkan/vulkan_raii.hpp>
 
 // Scene path
-std::string scene_path = "../assets/scene.kobra";
+std::string scene_path = "scene.kobra";
 
 // Experimental GUI app
 class GUIApp : public BaseApp {
@@ -148,6 +148,11 @@ void RTApp::keyboard_handler(void *user, const io::KeyboardEvent &event)
 			app->rt_layer.set_mode(rt::Layer::NORMALS);
 			app->raster = false;
 		}
+		
+		if (event.key == GLFW_KEY_0) {
+			app->rt_layer.set_mode(rt::Layer::HEATMAP);
+			app->raster = false;
+		}
 
 		if (event.key == GLFW_KEY_5) {
 			app->rt_layer.set_mode(rt::Layer::FAST_PATH_TRACER);
@@ -158,8 +163,13 @@ void RTApp::keyboard_handler(void *user, const io::KeyboardEvent &event)
 			app->rt_layer.set_mode(rt::Layer::PATH_TRACER);
 			app->raster = false;
 		}
-
+		
 		if (event.key == GLFW_KEY_7) {
+			app->rt_layer.set_mode(rt::Layer::MIS_PATH_TRACER);
+			app->raster = false;
+		}
+
+		if (event.key == GLFW_KEY_8) {
 			app->rt_layer.set_mode(rt::Layer::BIDIRECTIONAL_PATH_TRACE);
 			app->raster = false;
 		}

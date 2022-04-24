@@ -17,11 +17,8 @@ assets with affordable resources. Algorithms of interest are 3D scene
 reconstruction, material inference from images, and creating character
 animations from video samples.
 
-Below are a few scenes that Kobra can currently render.
-
-![](media/capture_1.png)
-
-![](media/capture_2.png)
+Below are a few scenes that Kobra can currently render. The hardware used is a
+GTX 1660 Ti.
 
 ![](media/capture_3.png)
 
@@ -32,3 +29,8 @@ minutes.
 
 Path traced with 1024 samples per pixel and 16 shadow samples in around 2 hours
 and 30 minutes.
+
+![](media/capture_5.png)
+
+Bidirectional path tracing with 100 samples per pixel and 32 shadow samples in
+around an hour.

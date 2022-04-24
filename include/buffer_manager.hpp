@@ -103,6 +103,29 @@ public:
 		return cpu_buffer.data();
 	}
 
+	// Read data from the GPU
+	std::vector <T> read() const {
+		_warn_null_buffer();
+		if (settings.usage_type == BFM_READ_ONLY) {
+			std::vector <T> data(settings.size);
+
+			void *data_ptr = context.vk->get_buffer_data(
+				context.device,
+				gpu_buffer
+			);
+
+			memcpy(
+				data.data(),
+				data_ptr,
+				settings.size * sizeof(T)
+			);
+
+			return data;
+		}
+
+		return cpu_buffer;
+	}
+
 	// Get underlying buffer
 	const Vulkan::Buffer &buffer() const {
 		return gpu_buffer;
