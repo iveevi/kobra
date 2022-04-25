@@ -26,6 +26,7 @@ struct PushConstants {
 	uint triangles;
 	uint lights;
 	uint samples_per_pixel;
+	uint samples_per_surface;
 	uint samples_per_light;
 
 	uint accumulate;

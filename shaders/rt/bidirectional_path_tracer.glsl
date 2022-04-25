@@ -69,7 +69,7 @@ bool apply_bsdf(inout Ray r, Hit hit, inout float beta, inout float ior)
 		vec3 r_dir = random_hemi(hit.normal);
 		r.direction = r_dir;
 		r.origin = hit.point + hit.normal * 0.001;
-
+		
 		// Update beta
 		beta *= dot(hit.normal, r_dir);
 	} else if (hit.mat.shading == SHADING_TYPE_REFLECTION) {
@@ -288,9 +288,6 @@ vec3 color_at(Ray ray)
 							float d3 = distance(visibility_1.point, light_hit_1.point);
 
 							// Connect each other
-							// TODO: will need
-							// additional cos_theta
-							// factors
 							// float d = d1 + d2 + d3;
 							float d = distance(light_vertices[y], camera_vertices[x]);
 							float cos_theta = max(dot(ldir, camera_normals[x]), 0.0);

@@ -55,19 +55,11 @@ vec3 point_light_contr(Hit hit, Ray ray, vec3 lpos)
 vec3 area_light_contr(Hit hit, Ray ray, uint li)
 {
 	// Get light position
-	float a = lights.data[li + 1].x;
-	float b = lights.data[li + 1].y;
-	float c = lights.data[li + 1].z;
-	float d = lights.data[li + 1].w;
+	uvec4 i = VERTEX_STRIDE * floatBitsToUint(lights.data[li + 1]);
 
-	uint ia = floatBitsToUint(a);
-	uint ib = floatBitsToUint(b);
-	uint ic = floatBitsToUint(c);
-	uint id = floatBitsToUint(d);
-
-	vec3 v1 = vertices.data[VERTEX_STRIDE * ia].xyz;
-	vec3 v2 = vertices.data[VERTEX_STRIDE * ib].xyz;
-	vec3 v3 = vertices.data[VERTEX_STRIDE * ic].xyz;
+	vec3 v1 = vertices.data[i.x].xyz;
+	vec3 v2 = vertices.data[i.y].xyz;
+	vec3 v3 = vertices.data[i.z].xyz;
 
 	// Sample point from triangle
 	vec3 light_position = (v1 + v2 + v3) / 3.0;

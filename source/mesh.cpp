@@ -66,7 +66,11 @@ Mesh Mesh::make_box(const glm::vec3 &center, const glm::vec3 &dim)
 	};
 
 	// TODO: should set source of the mesh to box, then dimensions
-	return Mesh { vertices, indices };
+	auto out = Mesh { vertices, indices };
+	out._source = "box";
+	out._source_index = 0;
+
+	return out;
 }
 
 // Create sphere
@@ -418,14 +422,19 @@ std::optional <Mesh> Mesh::from_file(const Vulkan::Context &ctx,
 			return std::nullopt;
 		}
 
-		// Load from file
-		source = common::get_path(
-			source,
-			common::get_directory(scene_file)
-		);
+		// Special source types
+		if (source == "box") {
+			mesh = make_box({0, 0, 0}, {1, 1, 1});
+		} else {
+			// Load from file
+			source = common::get_path(
+				source,
+				common::get_directory(scene_file)
+			);
 
-		const Model &model = Model::load(source);
-		mesh = model[source_index];
+			const Model &model = Model::load(source);
+			mesh = model[source_index];
+		}
 	}
 	Profiler::one().end();
 

@@ -934,6 +934,7 @@ void Layer::render(const VkCommandBuffer &cmd,
 
 		// TODO: still unable to do large number of samples
 		.samples_per_pixel = bi.pixel_samples,
+		.samples_per_surface = bi.surface_samples,
 		.samples_per_light = bi.light_samples,
 
 		.accumulate = (bi.accumulate) ? 1u : 0u,

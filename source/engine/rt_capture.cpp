@@ -21,7 +21,7 @@ RTCapture::RTCapture(Vulkan *vk, const std::string &scene_file, const Camera &ca
 	layer.add_scene(scene);
 	layer.set_active_camera(camera);
 	layer.set_environment_map(
-		load_image_texture("resources/skies/background_2.jpg", 4)
+		load_image_texture("resources/skies/background_1.jpg", 4)
 	);
 
 	layer.set_mode(rt::Layer::Mode::MIS_PATH_TRACER);
@@ -30,7 +30,9 @@ RTCapture::RTCapture(Vulkan *vk, const std::string &scene_file, const Camera &ca
 	// TODO: a method to generate optimal batch sizes (eg 50x50 is
 	// faster than 10x10)
 	batch = rt::Batch(800, 800, 50, 50, 100);
-	index = batch.make_batch_index(0, 0, 4, 32);
+
+	index = batch.make_batch_index(0, 0, 1, 32);
+	index.surface_samples = 32;
 	index.accumulate = true;
 
 	// Create GUI
@@ -42,8 +44,8 @@ RTCapture::RTCapture(Vulkan *vk, const std::string &scene_file, const Camera &ca
 	// Progress indicator
 	text_progress = gui_layer.text_render("default")->text(
 		"Progress: ",
-		window.coordinates(0, window.height - 10),
-		{0, 1, 0, 1}, 0.3
+		window.coordinates(0, window.height - 20),
+		{0, 1, 0, 1}, 0.5
 	);
 
 	gui_layer.add(text_progress);

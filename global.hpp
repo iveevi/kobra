@@ -356,7 +356,7 @@ public:
 
 		// TODO: m8 gotta really fix auto channels
 		rt_layer.set_environment_map(
-			load_image_texture("resources/skies/background_2.jpg", 4)
+			load_image_texture("resources/skies/background_1.jpg", 4)
 		);
 
 		// Rasterization layer

@@ -8,9 +8,9 @@ namespace rt {
 // BatchIndex constructor //
 ////////////////////////////
 
-BatchIndex::BatchIndex(int w, int h, int x, int y, int p, int l)
+BatchIndex::BatchIndex(int w, int h, int x, int y, int p, int s, int l)
 		: width(w), height(h), offset_x(x), offset_y(y),
-		pixel_samples(p), light_samples(l) {}
+		pixel_samples(p), surface_samples(s), light_samples(l) {}
 
 ////////////////////////
 // BatchIndex methods //
@@ -65,7 +65,7 @@ BatchIndex Batch::make_batch_index(int x, int y, int p, int l)
 		batch_height,
 		x * batch_width,
 		y * batch_height,
-		p, l
+		p, 1, l
 	};
 
 	bi.set_batch(this);

@@ -66,7 +66,11 @@ layout (push_constant) uniform PushConstants
 	// Size variables
 	uint	triangles;
 	uint	lights;
+
+	// Sample counts
+	// TODO: make floats
 	uint	samples_per_pixel;
+	uint	samples_per_surface;
 	uint	samples_per_light;
 
 	// Other options

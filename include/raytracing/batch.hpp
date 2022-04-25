@@ -25,6 +25,7 @@ public:
 	uint offset_y;
 
 	uint pixel_samples;
+	uint surface_samples;
 	uint light_samples;
 
 	bool accumulate = false;
@@ -33,7 +34,7 @@ public:
 	BatchIndex() = default;
 
 	// Constructor
-	BatchIndex(int, int, int, int, int, int);
+	BatchIndex(int, int, int, int, int, int, int);
 
 	// Methods
 	void set_batch(Batch *);

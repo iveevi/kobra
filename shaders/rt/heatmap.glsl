@@ -86,8 +86,6 @@ void main()
 
 	if (hits > 0)
 		color = mix(color, vec3(0, 1, 1), 0.2);
-	else
-		color = vec3(0, 0, 0);
 
 	frame.pixels[index] = cast_color(color);
 }
