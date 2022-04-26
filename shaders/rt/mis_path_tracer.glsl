@@ -29,16 +29,18 @@ vec3 sample_triangle(vec3 v1, vec3 v2, vec3 v3, float strata, float i)
 	if (pc.samples_per_light == 1)
 		return (v1 + v2 + v3) / 3.0;
 
-	// Get random point in triangle
-	vec2 uv = jitter2d(strata, i);
-	if (uv.x + uv.y > 1.0)
-		uv = vec2(1.0 - uv.x, 1.0 - uv.y);
+	// Get random vec in [0, 1]
+	vec2 r = jitter2d(strata, i);
+	float s = sqrt(r.x);
+
+	float u = 1.0 - s;
+	float v = r.y * s;
 
 	// Edge vectors
 	vec3 e1 = v2 - v1;
 	vec3 e2 = v3 - v1;
 
-	vec3 p = v1 + uv.x * e1 + uv.y * e2;
+	vec3 p = v1 + u * e1 + v * e2;
 
 	return p;
 }
@@ -91,8 +93,8 @@ void sample_bsdf(in Hit hit, inout Ray ray, inout float pdf)
 		pdf = 1.0;
 	} else {
 		// Assume diffuse
-		ray.direction = random_hemi(hit.normal);
-		pdf = 0.5 * INV_PI;
+		ray.direction = cosine_weighted_hemisphere(hit.normal);
+		pdf = INV_PI * dot(ray.direction, hit.normal);
 	}
 }
 
@@ -330,7 +332,7 @@ vec3 color_at(Ray ray)
 		// Generating the new ray according to BSDF
 		if (hit.mat.shading == SHADING_DIFFUSE) {
 			// Lambertian BSDF
-			vec3 r_dir = random_hemi(hit.normal);
+			vec3 r_dir = cosine_weighted_hemisphere(hit.normal);
 			r = Ray(
 				hit.point + hit.normal * 0.001,
 				r_dir, 1.0, 1.0

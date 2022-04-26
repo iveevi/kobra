@@ -73,3 +73,42 @@ vec3 random_hemi(vec3 normal)
 	vec3 v = random_sphere();
 	return v * sign(dot(v, normal));
 }
+
+// Concentric disk sampling
+vec2 concentric_disk()
+{
+	// Generate random numbers
+	random_seed = random3(random_seed);
+
+	// Get into the range [-1, 1]
+	vec2 r = 2.0 * random_seed.xy - 1.0;
+
+	// Degenerate case
+	if (r.x == 0.0 && r.y == 0.0)
+		return vec2(0.0, 0.0);
+
+	// Apply concentric mapping
+	float theta;
+	float radius;
+
+	if (abs(r.x) > abs(r.y)) {
+		radius = r.x;
+		theta = PI * 0.25 * r.y / r.x;
+	} else {
+		radius = r.y;
+		theta = PI * 0.5 - PI * 0.25 * r.x / r.y;
+	}
+
+	return vec2(cos(theta), sin(theta)) * radius;
+}
+
+// Cosine weighted hemisphere sampling
+vec3 cosine_weighted_hemisphere(vec3 normal)
+{
+	// Concentric disk
+	vec2 r = concentric_disk();
+
+	// Project onto hemisphere
+	float z = sqrt(1.0 - r.x * r.x - r.y * r.y);
+	return vec3(r.x, r.y, z) * sign(dot(normal, vec3(r.x, r.y, z)));
+}

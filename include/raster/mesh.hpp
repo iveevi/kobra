@@ -78,7 +78,7 @@ public:
 	// MVP structure
 	struct PC_Material {
 		glm::vec3	albedo;
-		float		shading_type;
+		int		type;
 		float		hightlight;
 		float		has_albedo;
 		float		has_normal;
@@ -105,7 +105,7 @@ public:
 			// TODO: Material method (also keep PC_Material there)
 			{
 				_material.albedo,
-				(float) _material.type, // TODO: ermove this casting
+				_material.type, // TODO: ermove this casting
 				(float) rp.highlight,
 				(float) _material.has_albedo(),
 				(float) _material.has_normal(),
@@ -152,7 +152,7 @@ public:
 			// TODO: Material method (also keep PC_Material there)
 			{
 				_material.albedo,
-				(float) _material.type,
+				_material.type,
 				(float) rp.highlight,
 				(float) _material.has_albedo(),
 				(float) _material.has_normal(),

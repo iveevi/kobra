@@ -2,7 +2,7 @@
 #define KOBRA_RT_MESH_BINDINGS_H_
 
 // Number of textures
-#define MAX_TEXTURES 10
+#define MAX_TEXTURES 100
 
 // Essential buffers
 const int MESH_BINDING_PIXELS		= 0;

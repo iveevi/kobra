@@ -427,6 +427,12 @@ public:
 	void record(const VkCommandBuffer &cmd, const VkFramebuffer &framebuffer) override {
 		static float time = 0.0f;
 
+		// Hide mouse cursor if alt
+		if (input.is_key_down(GLFW_KEY_LEFT_ALT))
+			window.cursor_mode(GLFW_CURSOR_DISABLED);
+		else
+			window.cursor_mode(GLFW_CURSOR_NORMAL);
+
 		// Start recording command buffer
 		Vulkan::begin(cmd);
 

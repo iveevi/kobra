@@ -5,7 +5,7 @@
 #include <vulkan/vulkan_raii.hpp>
 
 // Scene path
-std::string scene_path = "scene.kobra";
+std::string scene_path = "scenes/room.kobra";
 
 // Experimental GUI app
 class GUIApp : public BaseApp {
@@ -354,11 +354,9 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 	// Dragging only with the drag button
 	// TODO: alt left dragging as ewll
 	bool is_drag_button = (event.button == drag_button);
-	bool is_alt_drag_button = (event.button == alt_drag_button) && alt;
-
-	if (event.action == GLFW_PRESS && (is_drag_button || is_alt_drag_button))
+	if (event.action == GLFW_PRESS && is_drag_button)
 		dragging = true;
-	else if (event.action == GLFW_RELEASE && (is_drag_button || is_alt_drag_button))
+	else if (event.action == GLFW_RELEASE && is_drag_button)
 		dragging = false;
 
 	// Dragging select
@@ -531,7 +529,7 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 	}
 
 	// Only if dragging
-	if (dragging) {
+	if (dragging || alt) {
 		Camera &camera = app->camera;
 
 		yaw -= dx * sensitivity;

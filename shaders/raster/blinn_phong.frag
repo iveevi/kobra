@@ -43,7 +43,7 @@ void main()
 	}
 
 	// First check if the object is emissive
-	if (abs(material.shading_type - 5.0) < 0.01) {
+	if (is_type(material.type, SHADING_EMISSIVE)) {
 		fragment = vec4(albedo, 1.0);
 		HL_OUT();
 		return;

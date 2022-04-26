@@ -8,7 +8,7 @@ scale=1 1 1
 radius=0.5
 [MATERIAL]
 albedo=0 0 0
-shading_type=Transmission
+shading_type=Transmission 
 ior=1.5
 albedo_source=0
 normal_source=0
@@ -22,7 +22,7 @@ scale=1 1 1
 radius=0.3
 [MATERIAL]
 albedo=0 0 0
-shading_type=Reflection
+shading_type=Reflection 
 ior=1
 albedo_source=0
 normal_source=0
@@ -37,7 +37,7 @@ source=box
 index=0
 [MATERIAL]
 albedo=0.7 0.7 0.7
-shading_type=Diffuse
+shading_type=Diffuse 
 ior=1
 albedo_source=resources/wood_floor_albedo.jpg
 normal_source=resources/wood_floor_normal.jpg
@@ -52,7 +52,7 @@ source=resources/benchmark/teapot.obj
 index=0
 [MATERIAL]
 albedo=0.9 0.6 0.3
-shading_type=Diffuse
+shading_type=Diffuse 
 ior=1
 albedo_source=0
 normal_source=0
@@ -67,7 +67,7 @@ source=box
 index=0
 [MATERIAL]
 albedo=0.8 0.8 0.5
-shading_type=Diffuse
+shading_type=Diffuse 
 ior=1
 albedo_source=0
 normal_source=0
@@ -82,7 +82,7 @@ source=box
 index=0
 [MATERIAL]
 albedo=0.8 0.8 0.5
-shading_type=Diffuse
+shading_type=Diffuse 
 ior=1
 albedo_source=0
 normal_source=0
@@ -132,7 +132,7 @@ f 21 22 23
 f 23 24 21
 [MATERIAL]
 albedo=1 0.9 0.5
-shading_type=Diffuse
+shading_type=Diffuse 
 ior=1
 albedo_source=0
 normal_source=0
@@ -146,7 +146,7 @@ scale=1 1 1
 radius=0.4
 [MATERIAL]
 albedo=1 0 0
-shading_type=Reflection
+shading_type=Reflection 
 ior=1
 albedo_source=0
 normal_source=0
@@ -161,7 +161,7 @@ source=box
 index=0
 [MATERIAL]
 albedo=0.7 0.7 0.7
-shading_type=Diffuse
+shading_type=Diffuse 
 ior=1
 albedo_source=0
 normal_source=0
@@ -176,7 +176,7 @@ source=box
 index=0
 [MATERIAL]
 albedo=0.8 0.8 0.5
-shading_type=Diffuse
+shading_type=Diffuse 
 ior=1
 albedo_source=0
 normal_source=0
@@ -196,14 +196,14 @@ f 1 2 3
 f 3 4 1
 [MATERIAL]
 albedo=1 1 1
-shading_type=Emissive
+shading_type=Emissive 
 ior=1
 albedo_source=0
 normal_source=0
 [OBJECT]
 name=Glass Window
 [TRANSFORM]
-position=0 3 -10
+position=0 13.9247 -10
 rotation=0 0 0
 scale=4 5 0.1
 [MESH]
@@ -211,7 +211,7 @@ source=box
 index=0
 [MATERIAL]
 albedo=0 0 0
-shading_type=Transmission
+shading_type=Transmission 
 ior=1.5
 albedo_source=0
 normal_source=0
@@ -226,7 +226,7 @@ source=box
 index=0
 [MATERIAL]
 albedo=0.8 0.8 0.5
-shading_type=Diffuse
+shading_type=Diffuse 
 ior=1.5
 albedo_source=0
 normal_source=0
@@ -241,7 +241,7 @@ source=box
 index=0
 [MATERIAL]
 albedo=0.8 0.8 0.5
-shading_type=Diffuse
+shading_type=Diffuse 
 ior=1
 albedo_source=0
 normal_source=0
