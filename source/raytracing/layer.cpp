@@ -744,6 +744,11 @@ void Layer::add_do(const ptr &e)
 	// Update the BVH
 	_bvh = BVH(_context, _get_bboxes());
 
+	auto bvh = partition(_get_bboxes());
+	Logger::notify() << "BVH: " << bvh->node_count() << " nodes, "
+		<< bvh->primitive_count() << " primitives, "
+		<< bvh->bytes()/float(1024 * 1024) << " MB\n";
+
 	// Rebind to descriptor sets
 	_bvh.bind(_mesh_ds, MESH_BINDING_BVH);
 }

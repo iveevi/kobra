@@ -153,7 +153,8 @@ Intersection ray_intersect(Ray ray, uint index)
 
 		// Interpolate vertex normal
 		vec3 n = n1 * (1 - b1 - b2) + n2 * b1 + n3 * b2;
-
+		if (dot(n, it.normal) < 0.0)
+			n = -n;
 		it.normal = normalize(n);
 
 		// Transfer normal

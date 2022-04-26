@@ -323,6 +323,7 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 {
 	// TODO: refactor to pan
 	static const int drag_button = GLFW_MOUSE_BUTTON_MIDDLE;
+	static const int alt_drag_button = GLFW_MOUSE_BUTTON_LEFT;
 	static const int select_button = GLFW_MOUSE_BUTTON_LEFT;
 
 	static const float sensitivity = 0.001f;
@@ -347,23 +348,28 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 	float dy = event.ypos - py;
 	glm::vec2 dir {dx, dy};
 
+	// Is alt pressed?
+	bool alt = app->input.is_key_down(GLFW_KEY_LEFT_ALT);
+
 	// Dragging only with the drag button
 	// TODO: alt left dragging as ewll
 	bool is_drag_button = (event.button == drag_button);
-	if (event.action == GLFW_PRESS && is_drag_button)
+	bool is_alt_drag_button = (event.button == alt_drag_button) && alt;
+
+	if (event.action == GLFW_PRESS && (is_drag_button || is_alt_drag_button))
 		dragging = true;
-	else if (event.action == GLFW_RELEASE && is_drag_button)
+	else if (event.action == GLFW_RELEASE && (is_drag_button || is_alt_drag_button))
 		dragging = false;
 
 	// Dragging select
-	bool is_select_button = (event.button == select_button);
+	bool is_select_button = (event.button == select_button) && !alt;
 	if (event.action == GLFW_PRESS && is_select_button)
 		dragging_select = true;
 	else if (event.action == GLFW_RELEASE && is_select_button)
 		dragging_select = false;
 
 	// Clicking (shoots a ray)
-	if (event.action == GLFW_PRESS && event.button == select_button) {
+	if (event.action == GLFW_PRESS && event.button == select_button && !alt) {
 		// Convert to window coordinates
 		glm::mat4 proj = app->camera.projection();
 

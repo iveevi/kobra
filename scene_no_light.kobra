@@ -181,41 +181,6 @@ ior=1
 albedo_source=0
 normal_source=0
 [OBJECT]
-name=Object 4_1_1
-[TRANSFORM]
-position=0 16 -21.9503
-rotation=-38.6181 0 0
-scale=0.45 0.02 0.45
-[MESH]
-source=0
-v -5 0 5 0 0 1 0 0
-v -5 0 -5 0 0 1 1 0
-v 5 0 -5 0 0 1 1 1
-v 5 0 5 0 0 1 0 1
-f 1 2 3
-f 3 4 1
-[MATERIAL]
-albedo=1 1 1
-shading_type=1084227584
-ior=1
-albedo_source=0
-normal_source=0
-[OBJECT]
-name=Glass Window
-[TRANSFORM]
-position=0 3 -10
-rotation=0 0 0
-scale=4 5 0.1
-[MESH]
-source=box
-index=0
-[MATERIAL]
-albedo=0 0 0
-shading_type=1124073472
-ior=1.5
-albedo_source=0
-normal_source=0
-[OBJECT]
 name=Panel 1
 [TRANSFORM]
 position=7 3 -10
@@ -243,5 +208,20 @@ index=0
 albedo=0.8 0.8 0.5
 shading_type=1098907648
 ior=1
+albedo_source=0
+normal_source=0
+[OBJECT]
+name=Panel 1_1
+[TRANSFORM]
+position=0.115717 3 -10
+rotation=0 47.3619 0
+scale=3 5 0.1
+[MESH]
+source=box
+index=0
+[MATERIAL]
+albedo=0.8 0.8 0.5
+shading_type=1098907648
+ior=1.5
 albedo_source=0
 normal_source=0

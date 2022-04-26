@@ -17,6 +17,7 @@
 #include "../mesh.hpp"
 #include "../sphere.hpp"
 #include "batch.hpp"
+#include "bvh.hpp"
 #include "rt.hpp"
 
 namespace kobra {
@@ -123,7 +124,6 @@ protected:
 	BufferManager <uint>	_light_indices;
 
 	Buffer4m		_transforms;
-
 
 	//////////////
 	// Samplers //

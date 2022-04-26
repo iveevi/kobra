@@ -102,7 +102,7 @@ float pdf_bsdf(in Hit hit, in Ray ray, vec3 wi)
 	float shading = hit.mat.shading;
 	if (shading == SHADING_TYPE_REFLECTION) {
 		vec3 refl = reflect(ray.direction, hit.normal);
-		
+
 		if (length(refl - wi) < 0.001)
 			return 1.0;
 		else
@@ -129,7 +129,7 @@ vec3 direct_illumination(Hit hit, Ray ray)
 		//////////////////////////////////
 		// Multiple importance sampling //
 		//////////////////////////////////
-		
+
 		// Sampled on BSDF
 		float bsdf_samples = pc.samples_per_surface;
 		// if (hit.mat.shading == SHADING_TYPE_REFLECTION)
@@ -187,7 +187,9 @@ vec3 direct_illumination(Hit hit, Ray ray)
 					* cos_theta * (5/d)
 					* power_heuristic(float(pc.samples_per_light), 0.25 * INV_PI, bsdf_samples, pdf)
 					* inv_lsamples * (4 * PI);
-			} else if (shadow_hit.mat.shading == SHADING_TYPE_REFRACTION) {
+			}
+
+			/* else if (shadow_hit.mat.shading == SHADING_TYPE_REFRACTION) {
 				// Light contribution from refractive caustics
 
 				// Make sure that the light to vertex ray hits
@@ -213,7 +215,7 @@ vec3 direct_illumination(Hit hit, Ray ray)
 					* cos_theta * (5/d)
 					* power_heuristic(float(pc.samples_per_light), 0.25 * INV_PI, bsdf_samples, pdf)
 					* inv_lsamples * (4 * PI);
-			}
+			} */
 		}
 	}
 
@@ -257,8 +259,9 @@ vec3 direct_illumination(Hit hit, Ray ray)
 			// TODO: caustics from here
 		}
 
-		float inv_lsamples = 1.0/pc.samples_per_light;
-		for (int j = 0; j < pc.samples_per_light; j++) {
+		float samples = pc.samples_per_light;
+		float inv_lsamples = 1.0/samples;
+		for (int j = 0; j < samples; j++) {
 			// Fixed distance away
 			const float d = 100;
 
@@ -282,7 +285,7 @@ vec3 direct_illumination(Hit hit, Ray ray)
 				// TODO: get the pdf from anotehr function
 				direct_contr += lcolor * hit.mat.albedo
 					* cos_theta * (5/d)
-					* power_heuristic(float(pc.samples_per_light), 0.25 * INV_PI, bsdf_samples, pdf)
+					* power_heuristic(samples, 0.25 * INV_PI, bsdf_samples, pdf)
 					* inv_lsamples * (4 * PI);
 			}
 
@@ -294,6 +297,8 @@ vec3 direct_illumination(Hit hit, Ray ray)
 }
 
 // Color value at from a ray
+int bounce_count = 0;
+
 vec3 color_at(Ray ray)
 {
 	vec3 contribution = vec3(0.0);
@@ -301,7 +306,11 @@ vec3 color_at(Ray ray)
 	float ior = 1.0;
 
 	Ray r = ray;
+	
+	float count = 0;
 	for (int i = 0; i < MAX_DEPTH; i++) {
+		count++;
+
 		// Find closest object
 		Hit hit = closest_object(r);
 
@@ -310,6 +319,9 @@ vec3 color_at(Ray ray)
 			contribution += hit.mat.albedo;
 			break;
 		}
+
+		// Add bounce count
+		bounce_count++;
 
 		// Direct illumination
 		vec3 direct_contr = direct_illumination(hit, r)/PI;
@@ -411,6 +423,39 @@ void main()
 		color /= float(pc.samples_per_pixel);
 		color = pow(color, vec3(1/2.2));
 	}
+
+	///////////////////////////////
+	// Denoising post processing //
+	///////////////////////////////
+
+	/* Variation in neighboring pixels
+	vec3 variation = vec3(0.0);
+	float variance = 0.0;
+
+	int dx[8] = {-1, 0, 1, -1, 1, -1, 0, 1};
+	int dy[8] = {-1, -1, -1, 0, 0, 1, 1, 1};
+
+	for (int i = 0; i < 8; i++) {
+		int x = int(x0) + dx[i];
+		int y = int(y0) + dy[i];
+
+		if (x >= 0 && x < pc.width && y >= 0 && y < pc.height) {
+			uint index = y * pc.width + x;
+			vec3 pc = cast_color(frame.pixels[index]);
+			variation += (pc - color);
+			variance += length(pc - color);
+		}
+	}
+
+	variation /= float(8);
+	variance = (variance - length(variation)) / float(8);
+
+	// If variance is too high, leave it
+	// If variance is low, leave  it
+	// Sweet spot to add variance is in the middle
+	float s = smoothstep(0.0, 1.0, variance);
+	if (s > 0.1 && s < 0.4 && bounce_count > 0)
+		color += variation; */
 
 	frame.pixels[index] = cast_color(color);
 }

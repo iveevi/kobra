@@ -1,4 +1,17 @@
 // Sample environment map
+vec3 sample_environment(vec3 dir)
+{
+	// Get uv coordinates
+	vec2 uv = vec2(0.0);
+	uv.x = atan(dir.x, dir.z) / (2.0 * PI) + 0.5;
+	uv.y = asin(dir.y) / PI + 0.5;
+
+	// Get the color
+	vec3 tex = texture(s2_environment, uv).rgb;
+
+	return tex;
+}
+
 vec3 sample_environment(Ray ray)
 {
 	// Get uv coordinates

@@ -8,7 +8,7 @@
 #include <vulkan/vulkan_core.h>
 
 // Engine macros
-#define KOBRA_VALIDATION_LAYERS
+// #define KOBRA_VALIDATION_LAYERS
 // #define KOBRA_ERROR_ONLY
 // #define KOBRA_THROW_ERROR
 
