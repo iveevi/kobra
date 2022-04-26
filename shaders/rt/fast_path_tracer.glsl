@@ -43,7 +43,7 @@ vec3 point_light_contr(Hit hit, Ray ray, vec3 lpos)
 
 	// TODO: use the actual object id
 	vec3 lcolor = vec3(1.0);
-	if (shadow_hit.mat.shading != SHADING_TYPE_EMISSIVE)
+	if (shadow_hit.mat.shading != SHADING_EMISSIVE)
 		return vec3(0.0);
 
 	return lcolor * intensity
@@ -76,7 +76,7 @@ vec3 environment_illumination(Hit hit, Ray ray)
 	Ray r = ray;
 
 	// TODO: use integer constants for shading type... (less casting)
-	if (hit.mat.shading == SHADING_TYPE_DIFFUSE) {
+	if (hit.mat.shading == SHADING_DIFFUSE) {
 		// Random hemisphere sample
 		vec3 dir = random_hemi(hit.normal);
 		r.direction = dir;
@@ -125,7 +125,7 @@ vec3 color_at(Ray ray)
 		Hit hit = closest_object(r);
 
 		// Special case intersection
-		if (hit.object == -1 || hit.mat.shading == SHADING_TYPE_EMISSIVE) {
+		if (hit.object == -1 || hit.mat.shading == SHADING_EMISSIVE) {
 			contribution += hit.mat.albedo;
 			break;
 		}
@@ -135,7 +135,7 @@ vec3 color_at(Ray ray)
 		contribution += beta * direct_contr;
 
 		// Generating the new ray according to BSDF
-		if (hit.mat.shading == SHADING_TYPE_DIFFUSE) {
+		if (hit.mat.shading == SHADING_DIFFUSE) {
 			// Lambertian BSDF
 			vec3 r_dir = random_hemi(hit.normal);
 			r = Ray(
@@ -148,7 +148,7 @@ vec3 color_at(Ray ray)
 
 		// TODO: recdesign material interface (reflection | transmission
 		// and specular class)
-		} else if (hit.mat.shading == SHADING_TYPE_REFLECTION) {
+		} else if (hit.mat.shading == SHADING_REFLECTION) {
 			// (Perfect) Specular BSDF
 			vec3 r_dir = reflect(r.direction, hit.normal);
 			r.direction = r_dir;
@@ -156,7 +156,7 @@ vec3 color_at(Ray ray)
 
 			// Update beta
 			beta *= dot(hit.normal, r_dir);
-		} else if (hit.mat.shading == SHADING_TYPE_REFRACTION) {
+		} else if (hit.mat.shading == SHADING_TRANSMISSION) {
 			// (Perfect) Transmissive BSDF
 			vec3 r_dir = refract(r.direction, hit.normal, ior/hit.mat.ior);
 			r.direction = r_dir;

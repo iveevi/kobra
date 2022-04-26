@@ -181,7 +181,7 @@ struct TexturePacket {
 
 		Vulkan::submit_single_time_commands(ctx, cpool, cmd_buffer);
 	}
-	
+
 	inline void transition_manual(const VkCommandBuffer &cmd,
 			const VkImageLayout &old_layout,
 			const VkImageLayout &new_layout,

@@ -64,7 +64,7 @@ vec3 sample_light_position(uint li, int sample_i)
 bool apply_bsdf(inout Ray r, Hit hit, inout float beta, inout float ior)
 {
 	// TODO: use int shading types for easy switching
-	if (hit.mat.shading == SHADING_TYPE_DIFFUSE) {
+	if (hit.mat.shading == SHADING_DIFFUSE) {
 		// Lambertian BSDF
 		vec3 r_dir = random_hemi(hit.normal);
 		r.direction = r_dir;
@@ -72,7 +72,7 @@ bool apply_bsdf(inout Ray r, Hit hit, inout float beta, inout float ior)
 		
 		// Update beta
 		beta *= dot(hit.normal, r_dir);
-	} else if (hit.mat.shading == SHADING_TYPE_REFLECTION) {
+	} else if (hit.mat.shading == SHADING_REFLECTION) {
 		// (Perfect) Specular BSDF
 		vec3 r_dir = reflect(r.direction, hit.normal);
 		r.direction = r_dir;
@@ -80,7 +80,7 @@ bool apply_bsdf(inout Ray r, Hit hit, inout float beta, inout float ior)
 
 		// Update beta
 		beta *= dot(hit.normal, r_dir);
-	} else if (hit.mat.shading == SHADING_TYPE_REFRACTION) {
+	} else if (hit.mat.shading == SHADING_TRANSMISSION) {
 		// (Perfect) Transmissive BSDF
 		vec3 r_dir = refract(r.direction, hit.normal, ior/hit.mat.ior);
 		r.direction = r_dir;
@@ -141,7 +141,7 @@ vec3 color_at(Ray ray)
 		camera_objects[bounces] = hit.object;
 
 		// Special case intersection
-		if (hit.object == -1 || hit.mat.shading == SHADING_TYPE_EMISSIVE) {
+		if (hit.object == -1 || hit.mat.shading == SHADING_EMISSIVE) {
 			camera_objects[bounces] = -1;
 			break;
 		}
@@ -204,7 +204,7 @@ vec3 color_at(Ray ray)
 				light_objects[k] = hit.object;
 
 				// Special case intersection
-				if (hit.object == -1 || hit.mat.shading == SHADING_TYPE_EMISSIVE)
+				if (hit.object == -1 || hit.mat.shading == SHADING_EMISSIVE)
 					break;
 
 				// Generating the new ray according to BSDF
@@ -233,7 +233,7 @@ vec3 color_at(Ray ray)
 					Hit hit = closest_object(visibility);
 
 					// TODO: use actual object id...
-					if (hit.mat.shading == SHADING_TYPE_EMISSIVE
+					if (hit.mat.shading == SHADING_EMISSIVE
 							|| hit.object == light_objects[y]) {
 						float d = distance(light_vertices[y], camera_vertices[x]);
 						float cos_theta = max(dot(ldir, camera_normals[x]), 0.0);
@@ -246,7 +246,7 @@ vec3 color_at(Ray ray)
 
 					// TODO: special case for transmissive materials
 					if (hit.object != -1
-							&& hit.mat.shading == SHADING_TYPE_REFRACTION) {
+							&& hit.mat.shading == SHADING_TRANSMISSION) {
 						// Trace ray from light vertex
 						//	to camera vertex (to hit the object)
 						Ray light_to_camera = Ray(

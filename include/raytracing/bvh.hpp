@@ -3,10 +3,13 @@
 
 // Standard headers
 #include <memory>
+#include <string>
 #include <vector>
 
 // Engine headers
 #include "../bbox.hpp"
+#include "../core.hpp"
+#include "../logger.hpp"
 
 namespace kobra {
 

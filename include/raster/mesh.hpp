@@ -63,7 +63,7 @@ public:
 
 	// Add lighting info
 	void light(const LightingPacket &lp) override {
-		if (_material.shading_type == SHADING_TYPE_EMISSIVE) {
+		if (is_type(_material.type, eEmissive)) {
 			glm::vec3 pos = center();
 			lp.ubo_point_lights->positions
 				[lp.ubo_point_lights->number++] = pos;
@@ -105,7 +105,7 @@ public:
 			// TODO: Material method (also keep PC_Material there)
 			{
 				_material.albedo,
-				_material.shading_type,
+				(float) _material.type, // TODO: ermove this casting
 				(float) rp.highlight,
 				(float) _material.has_albedo(),
 				(float) _material.has_normal(),
@@ -152,7 +152,7 @@ public:
 			// TODO: Material method (also keep PC_Material there)
 			{
 				_material.albedo,
-				_material.shading_type,
+				(float) _material.type,
 				(float) rp.highlight,
 				(float) _material.has_albedo(),
 				(float) _material.has_normal(),

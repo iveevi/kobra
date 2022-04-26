@@ -9,14 +9,14 @@ namespace kobra {
 
 // Constructors
 Material::Material(const glm::vec3 &albedo,
-		float shading_type,
+		Shading shading,
 		float ior)
-		: albedo(albedo), shading_type(shading_type),
+		: albedo(albedo), type(shading),
 		ior(ior) {}
 
 // Copy constructor
 Material::Material(const Material &other)
-		: albedo(other.albedo), shading_type(other.shading_type),
+		: albedo(other.albedo), type(other.type),
 		ior(other.ior)
 {
 	if (other.albedo_sampler != nullptr) {
@@ -35,7 +35,7 @@ Material &Material::operator=(const Material &other)
 {
 	if (this != &other) {
 		albedo = other.albedo;
-		shading_type = other.shading_type;
+		type = other.type;
 		ior = other.ior;
 
 		if (other.albedo_sampler != nullptr) {
@@ -135,7 +135,10 @@ void Material::set_normal(const Vulkan::Context &ctx,
 // Serialize to GPU buffer
 void Material::serialize(Buffer4f *bf_mats) const
 {
-	bf_mats->push_back(aligned_vec4(albedo, shading_type));
+	int i_type = static_cast <int> (type);
+	float f_type = *reinterpret_cast <float *> (&i_type);
+
+	bf_mats->push_back(aligned_vec4(albedo, type));
 	bf_mats->push_back(aligned_vec4(
 		{ior, (!albedo_sampler), (!normal_sampler), 0}
 	));
@@ -145,7 +148,7 @@ void Material::serialize(Buffer4f *bf_mats) const
 void Material::save(std::ofstream &file) const
 {
 	char buf[1024];
-	sprintf(buf, "%d", *((int *) &shading_type));
+	sprintf(buf, "%s", shading_str(type).c_str());
 
 	file << "[MATERIAL]\n";
 	file << "albedo=" << albedo.x << " " << albedo.y << " " << albedo.z << std::endl;
@@ -172,27 +175,14 @@ std::optional <Material> Material::from_file
 
 	// Read shading type
 	char buf1[1024];
-	float shading_type;
-	int tmp;
 	std::getline(file, line);
 	std::sscanf(line.c_str(), "shading_type=%s", buf1);
 
-	// TODO: helper method
-	// Check if the shading type is literal
 	std::string stype = buf1;
-	if (stype == "DIFFUSE") {
-		shading_type = SHADING_TYPE_DIFFUSE;
-	} else if (stype == "EMISSIVE") {
-		shading_type = SHADING_TYPE_EMISSIVE;
-	} else if (stype == "REFLECTION") {
-		shading_type = SHADING_TYPE_REFLECTION;
-	} else if (stype == "REFRACTION") {
-		shading_type = SHADING_TYPE_REFRACTION;
-	} else {
-		std::sscanf(buf1, "%d", &tmp);
-		shading_type = tmp;
-		shading_type = *((float *) &tmp);
-	}
+	std::optional <Shading> type = shading_from_str(stype);
+	KOBRA_ASSERT(type.has_value(), "Invalid shading type \"" + stype + "\"");
+
+	Shading shading = type.value();
 
 	// Read ior
 	float ior;
@@ -216,7 +206,7 @@ std::optional <Material> Material::from_file
 	// Construct and return material
 	Material mat;
 	mat.albedo = albedo;
-	mat.shading_type = shading_type;
+	mat.type = shading;
 	mat.ior = ior;
 
 	// TODO: create a texture loader agent to handle multithreaded textures

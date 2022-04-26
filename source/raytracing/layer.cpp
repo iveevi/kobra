@@ -106,7 +106,7 @@ const Layer::DSLBindings Layer::_mesh_compute_bindings {
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 		.pImmutableSamplers = nullptr
 	},
-	
+
 	DSLBinding {
 		.binding = MESH_BINDING_OUTPUT,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -604,7 +604,7 @@ Layer::Layer(const App::Window &wctx)
 		.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
 			| VK_BUFFER_USAGE_TRANSFER_SRC_BIT
 	};
-	
+
 	// Debug output settings
 	BFM_Settings debug_settings {
 		.size = pixels,
@@ -743,11 +743,6 @@ void Layer::add_do(const ptr &e)
 
 	// Update the BVH
 	_bvh = BVH(_context, _get_bboxes());
-
-	auto bvh = partition(_get_bboxes());
-	Logger::notify() << "BVH: " << bvh->node_count() << " nodes, "
-		<< bvh->primitive_count() << " primitives, "
-		<< bvh->bytes()/float(1024 * 1024) << " MB\n";
 
 	// Rebind to descriptor sets
 	_bvh.bind(_mesh_ds, MESH_BINDING_BVH);
@@ -890,6 +885,64 @@ void Layer::set_active_camera(const Camera &camera)
 const BufferManager <uint> &Layer::pixels()
 {
 	return _pixels;
+}
+
+// Display memory footprint
+void Layer::display_memory_footprint() const
+{
+	auto bvh = partition(_get_bboxes());
+	Logger::notify() << "BVH: " << bvh->node_count() << " nodes, "
+		<< bvh->primitive_count() << " primitives\n";
+
+	// Display memory footprint
+	Logger::notify() << "Memory footprint of pixels = "
+		<< _pixels.bytes()/float(1024 * 1024) << " MiB\n";
+	Logger::notify() << "Memory footprint of bvh = "
+		<< bvh->bytes()/float(1024 * 1024) << " MiB\n";
+	Logger::notify() << "Memory footprint of vertices = "
+		<< _vertices.bytes()/float(1024 * 1024) << " MiB\n";
+	Logger::notify() << "Memory footprint of triangles = "
+		<< _triangles.bytes()/float(1024 * 1024) << " MiB\n";
+	Logger::notify() << "Memory footprint of materials = "
+		<< _materials.bytes()/float(1024 * 1024) << " MiB\n";
+	Logger::notify() << "Memory footprint of transforms = "
+		<< _transforms.bytes()/float(1024 * 1024) << " MiB\n";
+	Logger::notify() << "Memory footprint of lights = "
+		<< _lights.bytes()/float(1024 * 1024) << " MiB\n";
+	Logger::notify() << "Memory footprint of light indices = "
+		<< _light_indices.bytes()/float(1024 * 1024) << " MiB\n";
+
+	// For all the textures
+	Logger::notify() << "Memory footprint for albedo textures:\n";
+
+	size_t albedo_bytes = 0;
+	for (auto &as : _albedo_image_descriptors) {
+		auto sampler = as.sampler;
+		Logger::plain() << "\tsampler=" << sampler;
+		size_t bytes = Sampler::sampler_cache.at(sampler)->bytes();
+		Logger::plain() << ", data="
+			<< bytes/float(1024 * 1024) << " MiB\n";
+		albedo_bytes += bytes;
+	}
+	Logger::notify() << "Memory footprint of ALLalbedo textures = "
+		<< albedo_bytes/float(1024 * 1024) << " MiB\n";
+
+	Logger::notify() << "Memory footprint for normal textures:\n";
+
+	size_t normal_bytes = 0;
+	for (auto &ns : _normal_image_descriptors) {
+		auto sampler = ns.sampler;
+		Logger::plain() << "\tsampler=" << sampler;
+		size_t bytes = Sampler::sampler_cache.at(sampler)->bytes();
+		Logger::plain() << ", data="
+			<< bytes/float(1024 * 1024) << " MiB\n";
+		normal_bytes += bytes;
+	}
+
+	Logger::notify() << "Memory footprint of ALLnormal textures = "
+		<< normal_bytes/float(1024 * 1024) << " MiB\n";
+
+	Logger::plain() << "\n";
 }
 
 // Render a batch

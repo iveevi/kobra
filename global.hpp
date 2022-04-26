@@ -408,6 +408,8 @@ public:
 		// Show results of profiling
 		auto frame = Profiler::one().pop();
 		// std::cout << Profiler::pretty(frame);
+		
+		// rt_layer.display_memory_footprint();
 	}
 
 	// Destructor

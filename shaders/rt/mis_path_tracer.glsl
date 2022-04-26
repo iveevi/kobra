@@ -86,7 +86,7 @@ float power_heuristic(float nf, float fpdf, float ng, float gpdf)
 void sample_bsdf(in Hit hit, inout Ray ray, inout float pdf)
 {
 	float shading = hit.mat.shading;
-	if (shading == SHADING_TYPE_REFLECTION) {
+	if (shading == SHADING_REFLECTION) {
 		ray.direction = reflect(ray.direction, hit.normal);
 		pdf = 1.0;
 	} else {
@@ -100,7 +100,7 @@ void sample_bsdf(in Hit hit, inout Ray ray, inout float pdf)
 float pdf_bsdf(in Hit hit, in Ray ray, vec3 wi)
 {
 	float shading = hit.mat.shading;
-	if (shading == SHADING_TYPE_REFLECTION) {
+	if (shading == SHADING_REFLECTION) {
 		vec3 refl = reflect(ray.direction, hit.normal);
 
 		if (length(refl - wi) < 0.001)
@@ -132,7 +132,7 @@ vec3 direct_illumination(Hit hit, Ray ray)
 
 		// Sampled on BSDF
 		float bsdf_samples = pc.samples_per_surface;
-		// if (hit.mat.shading == SHADING_TYPE_REFLECTION)
+		// if (hit.mat.shading == SHADING_REFLECTION)
 		//	bsdf_samples = 1.0;
 
 		float pdf = 0.0;
@@ -147,7 +147,7 @@ vec3 direct_illumination(Hit hit, Ray ray)
 
 			// Assume success if emissive
 			vec3 bsdf_contr = vec3(1.0);
-			if (shadow_hit.mat.shading != SHADING_TYPE_EMISSIVE)
+			if (shadow_hit.mat.shading != SHADING_EMISSIVE)
 				continue;
 
 			float d = distance(shadow_hit.point, hit.point);
@@ -176,7 +176,7 @@ vec3 direct_illumination(Hit hit, Ray ray)
 			Ray shadow_ray = Ray(pos, dir, 1.0, 1.0);
 
 			Hit shadow_hit = closest_object(shadow_ray);
-			if (shadow_hit.mat.shading == SHADING_TYPE_EMISSIVE) {
+			if (shadow_hit.mat.shading == SHADING_EMISSIVE) {
 				// Light contribution directly
 				float d = distance(light_position, hit.point);
 				float cos_theta = max(0.0, dot(hit.normal, dir));
@@ -189,7 +189,7 @@ vec3 direct_illumination(Hit hit, Ray ray)
 					* inv_lsamples * (4 * PI);
 			}
 
-			/* else if (shadow_hit.mat.shading == SHADING_TYPE_REFRACTION) {
+			/* else if (shadow_hit.mat.shading == SHADING_TRANSMISSION) {
 				// Light contribution from refractive caustics
 
 				// Make sure that the light to vertex ray hits
@@ -231,7 +231,7 @@ vec3 direct_illumination(Hit hit, Ray ray)
 		
 		// Sampled on BSDF
 		float bsdf_samples = pc.samples_per_surface;
-		// if (hit.mat.shading == SHADING_TYPE_REFLECTION)
+		// if (hit.mat.shading == SHADING_REFLECTION)
 		//	bsdf_samples = 1.0;
 
 		float pdf = 0.0;
@@ -315,7 +315,7 @@ vec3 color_at(Ray ray)
 		Hit hit = closest_object(r);
 
 		// Special case intersection
-		if (hit.object == -1 || hit.mat.shading == SHADING_TYPE_EMISSIVE) {
+		if (hit.object == -1 || hit.mat.shading == SHADING_EMISSIVE) {
 			contribution += hit.mat.albedo;
 			break;
 		}
@@ -328,7 +328,7 @@ vec3 color_at(Ray ray)
 		contribution += beta * direct_contr;
 
 		// Generating the new ray according to BSDF
-		if (hit.mat.shading == SHADING_TYPE_DIFFUSE) {
+		if (hit.mat.shading == SHADING_DIFFUSE) {
 			// Lambertian BSDF
 			vec3 r_dir = random_hemi(hit.normal);
 			r = Ray(
@@ -338,7 +338,7 @@ vec3 color_at(Ray ray)
 
 			// Update beta
 			beta *= dot(hit.normal, r_dir);
-		} else if (hit.mat.shading == SHADING_TYPE_REFLECTION) {
+		} else if (hit.mat.shading == SHADING_REFLECTION) {
 			// (Perfect) Specular BSDF
 			vec3 r_dir = reflect(r.direction, hit.normal);
 			r.direction = r_dir;
@@ -346,7 +346,7 @@ vec3 color_at(Ray ray)
 
 			// Update beta
 			beta *= dot(hit.normal, r_dir);
-		} else if (hit.mat.shading == SHADING_TYPE_REFRACTION) {
+		} else if (hit.mat.shading == SHADING_TRANSMISSION) {
 			// (Perfect) Transmissive BSDF
 			vec3 r_dir = refract(r.direction, hit.normal, ior/hit.mat.ior);
 			r.direction = r_dir;

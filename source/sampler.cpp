@@ -1,7 +1,14 @@
 #include "../include/sampler.hpp"
 #include "../include/texture_manager.hpp"
+#include "../include/formats.hpp"
 
 namespace kobra {
+
+/////////////////////////////
+// Static member variables //
+/////////////////////////////
+
+std::map <VkSampler, const Sampler *> Sampler::sampler_cache;
 
 /////////////////////////////
 // Sampler private members //
@@ -22,6 +29,14 @@ void Sampler::_init(const TexturePacket &packet)
 		VK_FILTER_LINEAR,
 		VK_SAMPLER_ADDRESS_MODE_REPEAT
 	);
+
+	// Transfer image info
+	_width = packet.width;
+	_height = packet.height;
+	_format = packet.format;
+
+	// Add to cache
+	sampler_cache[_sampler] = this;
 }
 
 //////////////////////////
@@ -57,6 +72,11 @@ Sampler::Sampler(const Vulkan::Context &ctx,
 	);
 
 	_init(packet);
+}
+
+size_t Sampler::bytes() const
+{
+	return _width * _height * vk_format_table.at(_format).size;
 }
 
 }

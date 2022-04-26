@@ -5,6 +5,7 @@ definitions:
   - tinyfd_source: 'thirdparty/tinyfiledialogs/tinyfiledialogs.c'
   - kobra_source: 'source/backend.cpp,
     source/capture.cpp,
+    source/formats.cpp,
     source/logger.cpp,
     source/material.cpp,
     source/mesh.cpp,

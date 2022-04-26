@@ -193,6 +193,9 @@ public:
 	// Other getters
 	const BufferManager <uint> &pixels();
 
+	// Display memory footprint
+	void display_memory_footprint() const;
+
 	// Render
 	void render(const VkCommandBuffer &,
 			const VkFramebuffer &,

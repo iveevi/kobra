@@ -93,7 +93,7 @@ public:
 		lp.transforms->push_back(transform().matrix());
 
 		// If the material is emmisive, write as a light
-		if (_material.shading_type == SHADING_TYPE_EMISSIVE) {
+		if (is_type(_material.type, eEmissive)) {
 			for (size_t i = 0; i < triangle_count(); i++) {
 				// Write light index
 				uint index = lp.lights->push_size();

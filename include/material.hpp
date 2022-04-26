@@ -26,12 +26,12 @@ class Material {
 	std::string	normal_source = "";
 public:
 	glm::vec3	albedo;		// Albedo color
-	float		shading_type;	// Shading types, see types.h
+	Shading		type;		// Shading types, see types.h
 	float		ior;		// Index of refraction
 
 	// Constructors
 	Material(const glm::vec3 & = {1, 0, 1},
-			float = SHADING_TYPE_SIMPLE,
+			Shading = Shading::eDiffuse,
 			float = 1.0);
 
 	// Copy constructor
