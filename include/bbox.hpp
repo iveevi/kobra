@@ -10,11 +10,7 @@ namespace kobra {
 struct BoundingBox {
 	glm::vec3	min;
 	glm::vec3	max;
-
-	/* Constructor
-	BoundingBox() {}
-	BoundingBox(const glm::vec3 &a, const glm::vec3 &b)
-			: min(a), max(b) {} */
+	int		id = -1;
 	
 	// Get surface area of box
 	float surface_area() const {

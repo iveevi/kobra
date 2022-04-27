@@ -97,17 +97,35 @@ float fresnel_dielectric(float cosi, float etai, float etat)
 	return (r_parl * r_parl + r_perp * r_perp) / 2.0;
 }
 
-// Sample a direction from BSDF
+// Fresnel variables
+float ior = 1.0;
+float pior = 1.0;
+float Fr = 0.0;
+
+// Sample a ray from BSDF
 void sample_bsdf(in Hit hit, inout Ray ray, inout float pdf)
 {
 	int shading = hit.mat.shading;
 	if (is_type(shading, SHADING_REFLECTION)) {
 		ray.direction = reflect(ray.direction, hit.normal);
-		pdf = 1.0;
-	} else {
+		ray.origin = hit.point + hit.normal * 0.001;
+
+		float cos_theta = dot(ray.direction, hit.normal);
+		pdf = 1/cos_theta;
+	} else if (is_type(shading, SHADING_TRANSMISSION)) {
+		ray.direction = refract(ray.direction, hit.normal, pior/hit.mat.ior);
+		ray.origin = hit.point - hit.normal * 0.001;
+
+		float cos_theta = abs(dot(ray.direction, hit.normal));
+		float eta = hit.mat.ior / pior;
+		pdf = (eta * eta) * (1 - Fr) / (cos_theta);
+	} else if (is_type(shading, SHADING_DIFFUSE)) {
 		// Assume diffuse
 		ray.direction = cosine_weighted_hemisphere(hit.normal);
+		ray.origin = hit.point + hit.normal * 0.001;
 		pdf = INV_PI * dot(ray.direction, hit.normal);
+	} else {
+		pdf = 0.0;
 	}
 }
 
@@ -116,16 +134,15 @@ float pdf_bsdf(in Hit hit, in Ray ray, vec3 wi)
 {
 	int shading = hit.mat.shading;
 	if (is_type(shading, SHADING_REFLECTION)) {
-		vec3 refl = reflect(ray.direction, hit.normal);
-
-		if (length(refl - wi) < 0.001)
-			return 1.0;
-		else
-			return 0.0;
+		return 0;
+	} else if (is_type(shading, SHADING_TRANSMISSION)) {
+		return 0;
+	} else if (is_type(shading, SHADING_DIFFUSE)) {
+		// Assume diffuse
+		return INV_PI * dot(wi, hit.normal);
 	}
-
-	// Assume diffuse
-	return 0.5 * INV_PI;
+	
+	return 0.0;
 }
 
 // Direct illumination
@@ -137,6 +154,7 @@ vec3 direct_illumination(Hit hit, Ray ray)
 	// Direct illumination
 	for (int i = 0; i < pc.lights; i++) {
 		uint light_index = floatBitsToUint(light_indices.data[i]);
+		int light_object = int(floatBitsToUint(lights.data[light_index + 1].w));
 
 		// Ray to use
 		Ray r = ray;
@@ -162,7 +180,7 @@ vec3 direct_illumination(Hit hit, Ray ray)
 
 			// Assume success if emissive
 			vec3 bsdf_contr = vec3(1.0);
-			if (shadow_hit.mat.shading != SHADING_EMISSIVE)
+			if (shadow_hit.id != light_object)
 				continue;
 
 			float d = distance(shadow_hit.point, hit.point);
@@ -191,7 +209,7 @@ vec3 direct_illumination(Hit hit, Ray ray)
 			Ray shadow_ray = Ray(pos, dir, 1.0, 1.0);
 
 			Hit shadow_hit = closest_object(shadow_ray);
-			if (shadow_hit.mat.shading == SHADING_EMISSIVE) {
+			if (shadow_hit.id == light_object) {
 				// Light contribution directly
 				float d = distance(light_position, hit.point);
 				float cos_theta = max(0.0, dot(hit.normal, dir));
@@ -289,9 +307,7 @@ int bounce_count = 0;
 vec3 color_at(Ray ray)
 {
 	vec3 contribution = vec3(0.0);
-	float beta = 1.0;
-	float ior = 1.0;
-	float pior = 1.0;
+	vec3 beta = vec3(1.0);
 
 	Ray r = ray;
 	
@@ -318,8 +334,7 @@ vec3 color_at(Ray ray)
 			// 	randomly, in proportion to
 			// 	the fresnel reflectance
 			float cosi = abs(dot(hit.normal, r.direction));
-			// float Fr = fresnel_dielectric(cosi, pior, ior);
-			float Fr = 0.1;
+			Fr = fresnel_dielectric(cosi, pior, ior);
 
 			float rand = random();
 
@@ -336,42 +351,19 @@ vec3 color_at(Ray ray)
 		
 		// Copy previous IoR
 		pior = ior;
+		
+		// Sample BSDF
+		float pdf = 0.0;
+		sample_bsdf(hit, r, pdf);
 
-		// Generating the new ray according to BSDF
-		if (is_type(hit.mat.shading, SHADING_DIFFUSE)) {
-			// Lambertian BSDF
-			vec3 r_dir = cosine_weighted_hemisphere(hit.normal);
-			r = Ray(
-				hit.point + hit.normal * 0.001,
-				r_dir, 1.0, 1.0
-			);
-
-			// Update beta
-			beta *= dot(hit.normal, r_dir);
-		} else if (is_type(hit.mat.shading, SHADING_REFLECTION)) {
-			// (Perfect) Specular BSDF
-			vec3 r_dir = reflect(r.direction, hit.normal);
-			r.direction = r_dir;
-			r.origin = hit.point + hit.normal * 0.001;
-
-			// Update beta
-			beta *= dot(hit.normal, r_dir);
-		} else if (is_type(hit.mat.shading, SHADING_TRANSMISSION)) {
-			// (Perfect) Transmissive BSDF
-			vec3 r_dir = refract(r.direction, hit.normal, ior/hit.mat.ior);
-			r.direction = r_dir;
-			r.origin = hit.point - hit.normal * 0.001;
-
-			// Update beta
-			ior = hit.mat.ior;
-		} else {
-			// Assume no interaction
+		if (pdf == 0.0)
 			break;
-		}
+
+		beta *= (direct_contr * abs(dot(hit.normal, r.direction)) / pdf);
 
 		// Russian roulette
 		if (i > 2) {
-			float q = max(1.0 - beta, 0.05);
+			float q = max(1.0 - beta.y, 0.05);
 			if (random() < q)
 				break;
 			beta /= (1.0 - q);

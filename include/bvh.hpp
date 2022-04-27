@@ -75,7 +75,7 @@ struct BVHNode {
 
 		// Header vec4
 		aligned_vec4 header = glm::vec4 {
-			leaf,
+			*reinterpret_cast <float *> (&bbox.id),
 			*reinterpret_cast <float *> (&object),
 			*reinterpret_cast <float *> (&hit),
 			*reinterpret_cast <float *> (&miss)

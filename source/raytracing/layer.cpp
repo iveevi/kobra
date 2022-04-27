@@ -554,7 +554,7 @@ std::vector <BoundingBox> Layer::_get_bboxes() const
 			glm::vec4 min = center - glm::vec4(radius);
 			glm::vec4 max = center + glm::vec4(radius);
 
-			bboxes.push_back(BoundingBox {min, max});
+			bboxes.push_back(BoundingBox {min, max, int(d)});
 		} else {
 			glm::vec4 va = vertices[VERTEX_STRIDE * a].data;
 			glm::vec4 vb = vertices[VERTEX_STRIDE * b].data;
@@ -563,7 +563,7 @@ std::vector <BoundingBox> Layer::_get_bboxes() const
 			glm::vec4 min = glm::min(va, glm::min(vb, vc));
 			glm::vec4 max = glm::max(va, glm::max(vb, vc));
 
-			bboxes.push_back(BoundingBox {min, max});
+			bboxes.push_back(BoundingBox {min, max, int(d)});
 		}
 	}
 

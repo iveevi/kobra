@@ -17,6 +17,12 @@ int object(int node)
 	return floatBitsToInt(prop.y);
 }
 
+int id(int node)
+{
+	vec4 prop = bvh.data[node];
+	return floatBitsToInt(prop.x);
+}
+
 bool leaf(int node)
 {
 	vec4 prop = bvh.data[node];
@@ -33,6 +39,8 @@ BoundingBox bbox(int node)
 // Closest object information
 struct Hit {
 	int	object;
+	int	id;
+
 	float	time;
 	vec3	point;
 	vec3	normal;
@@ -44,6 +52,7 @@ struct Hit {
 Hit closest_object(Ray ray)
 {
 	int min_index = -1;
+	int min_id = -1;
 
 	// Starting intersection
 	Intersection mini = Intersection(
@@ -54,7 +63,7 @@ Hit closest_object(Ray ray)
 	// Traverse BVH as a threaded binary tree
 	int node = 0;
 	while (node != -1) {
-		if (leaf(node)) {
+		if (object(node) != -1) {
 			// Get object index
 			int index = object(node);
 
@@ -64,6 +73,7 @@ Hit closest_object(Ray ray)
 			// If intersection is valid, update minimum
 			if (it.time > 0.0 && it.time < mini.time) {
 				min_index = index;
+				min_id = id(node);
 				mini = it;
 			}
 
@@ -97,6 +107,7 @@ Hit closest_object(Ray ray)
 
 	return Hit(
 		min_index,
+		min_id,
 		mini.time,
 		point,
 		mini.normal,
