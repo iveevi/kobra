@@ -1,7 +1,7 @@
 // Material structure
 struct Material {
 	vec3	albedo;
-	float	shading;
+	int	shading;
 	float	ior;
 	float	has_normal;
 };
@@ -11,7 +11,7 @@ Material mat_default()
 {
 	return Material(
 		vec3(0.5f, 0.5f, 0.5f),
-		-1.0f, 1.0f, 1.0f
+		0, 1.0f, 1.0f
 	);
 }
 
@@ -31,7 +31,7 @@ Material mat_at(uint index, vec2 uv)
 
 	return Material(
 		color,
-		raw0.w,
+		floatBitsToInt(raw0.w),
 		raw1.x,
 		raw1.z
 	);

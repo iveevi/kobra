@@ -51,8 +51,8 @@ scale=0.5 0.5 0.5
 source=resources/benchmark/teapot.obj
 index=0
 [MATERIAL]
-albedo=0.9 0.6 0.3
-shading_type=Diffuse 
+albedo=1.0 0.55 0.3
+shading_type=Diffuse
 ior=1
 albedo_source=0
 normal_source=0
@@ -215,3 +215,18 @@ shading_type=Diffuse
 ior=1
 albedo_source=resources/plaster_albedo.jpg
 normal_source=resources/plaster_normal.jpg
+[OBJECT]
+name=Panel 2_1
+[TRANSFORM]
+position=0 3 -4.41796
+rotation=0 0 0
+scale=10 5 0.1
+[MESH]
+source=box
+index=0
+[MATERIAL]
+albedo=0 0 0
+shading_type=Reflection Transmission 
+ior=1.5
+albedo_source=0
+normal_source=0

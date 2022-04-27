@@ -138,7 +138,7 @@ void Material::serialize(Buffer4f *bf_mats) const
 	int i_type = static_cast <int> (type);
 	float f_type = *reinterpret_cast <float *> (&i_type);
 
-	bf_mats->push_back(aligned_vec4(albedo, type));
+	bf_mats->push_back(aligned_vec4(albedo, f_type));
 	bf_mats->push_back(aligned_vec4(
 		{ior, (!albedo_sampler), (!normal_sampler), 0}
 	));
@@ -174,11 +174,11 @@ std::optional <Material> Material::from_file
 	std::sscanf(line.c_str(), "albedo=%f %f %f", &albedo.x, &albedo.y, &albedo.z);
 
 	// Read shading type
-	char buf1[1024];
 	std::getline(file, line);
-	std::sscanf(line.c_str(), "shading_type=%s", buf1);
 
-	std::string stype = buf1;
+	// line = "shading_type=..."
+	// TODO: ensure the header is correct
+	std::string stype = line.substr(13);
 	std::optional <Shading> type = shading_from_str(stype);
 	KOBRA_ASSERT(type.has_value(), "Invalid shading type \"" + stype + "\"");
 
