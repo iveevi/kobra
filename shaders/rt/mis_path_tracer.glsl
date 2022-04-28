@@ -125,7 +125,7 @@ void sample_bsdf(in Hit hit, inout Ray ray, inout float pdf, inout vec3 beta)
 	// TODO: submethods for each case
 	if (is_type(shading, SHADING_REFLECTION)) {
 		float cosi = dot(ray.direction, hit.normal);
-		Fr = fresnel_dielectric(cosi, ior, hit.mat.ior);
+		Fr = fresnel_dielectric(cosi, hit.mat.ior, ior);
 
 		ray.direction = reflect(ray.direction, hit.normal);
 		ray.origin = hit.point + hit.normal * 0.001;
@@ -139,9 +139,10 @@ void sample_bsdf(in Hit hit, inout Ray ray, inout float pdf, inout vec3 beta)
 		beta *= hit.mat.albedo/abs(cos_theta);
 	} else if (is_type(shading, SHADING_TRANSMISSION)) {
 		float cosi = dot(ray.direction, hit.normal);
-		Fr = fresnel_dielectric(cosi, ior, hit.mat.ior);
+		Fr = fresnel_dielectric(cosi, hit.mat.ior, ior);
 
-		ray.direction = refract(ray.direction, hit.normal, 1/1.5);
+		float eta = ior/hit.mat.ior;
+		ray.direction = refract(ray.direction, hit.normal, eta);
 		ray.origin = hit.point - hit.normal * 0.001;
 
 		float cos_theta = abs(dot(ray.direction, hit.normal));
@@ -158,9 +159,6 @@ void sample_bsdf(in Hit hit, inout Ray ray, inout float pdf, inout vec3 beta)
 	} else {
 		pdf = 0.0;
 	}
-
-	// Update ior
-	ior = hit.mat.ior;
 }
 
 // Get pdf of a direction from BSDF
@@ -215,7 +213,7 @@ vec3 direct_illumination(Hit hit, Ray ray)
 			sample_bsdf(hit, r, pdf, beta);
 
 			// Get intersect
-			Hit shadow_hit = closest_object(r);
+			Hit shadow_hit = trace(r);
 
 			// Assume success if emissive
 			vec3 bsdf_contr = vec3(1.0);
@@ -247,7 +245,7 @@ vec3 direct_illumination(Hit hit, Ray ray)
 			// TODO: remove the extra arguments
 			Ray shadow_ray = Ray(pos, dir, 1.0, 1.0);
 
-			Hit shadow_hit = closest_object(shadow_ray);
+			Hit shadow_hit = trace(shadow_ray);
 			if (shadow_hit.id == light_object) {
 				// Light contribution directly
 				float d = distance(light_position, hit.point);
@@ -286,7 +284,7 @@ vec3 direct_illumination(Hit hit, Ray ray)
 			sample_bsdf(hit, r, pdf, beta);
 
 			// Get intersect
-			Hit shadow_hit = closest_object(r);
+			Hit shadow_hit = trace(r);
 
 			// Assume success if emissive
 			if (shadow_hit.object != -1)
@@ -320,7 +318,7 @@ vec3 direct_illumination(Hit hit, Ray ray)
 			// TODO: remove the extra arguments
 			Ray shadow_ray = Ray(pos, dir, 1.0, 1.0);
 
-			Hit shadow_hit = closest_object(shadow_ray);
+			Hit shadow_hit = trace(shadow_ray);
 			if (shadow_hit.object != -1) {
 				// Light contribution directly
 				float cos_theta = max(0.0, dot(hit.normal, dir));
@@ -352,7 +350,7 @@ vec3 color_at(Ray ray)
 	for (int i = 0; i < MAX_DEPTH; i++) {
 		// Find closest object
 		// TODO: refactor to trace
-		Hit hit = closest_object(r);
+		Hit hit = trace(r);
 
 		// Special case intersection
 		// TODO: deal with in the direct lighting function
@@ -375,12 +373,14 @@ vec3 color_at(Ray ray)
 		float pdf = 0.0;
 		sample_bsdf(hit, r, pdf, beta);
 
-		return r.direction * 0.5 + 0.5;
-
 		if (pdf == 0.0)
 			break;
 
+		// Update beta
 		beta *= abs(dot(hit.normal, r.direction)) / pdf;
+
+		// Update ior
+		ior = hit.mat.ior;
 
 		// Russian roulette
 		if (i > 2) {

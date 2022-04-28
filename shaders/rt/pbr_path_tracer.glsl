@@ -54,7 +54,7 @@ vec3 point_light_contr(Hit hit, Ray ray, vec3 lpos)
 		1.0, 1.0
 	);
 
-	Hit shadow_hit = closest_object(shadow_ray);
+	Hit shadow_hit = trace(shadow_ray);
 
 	// Light contribution
 	vec3 ldir = normalize(lpos - hit.point);
@@ -126,7 +126,7 @@ vec3 environment_illumination(Hit hit, Ray ray)
 
 			// Trace ray
 			// TODO: refactor
-			Hit env_hit = closest_object(r);
+			Hit env_hit = trace(r);
 
 			// Add contribution if no hit
 			if (env_hit.object == -1)
@@ -164,7 +164,7 @@ vec3 color_at(Ray ray)
 	Ray r = ray;
 	for (int i = 0; i < MAX_DEPTH; i++) {
 		// Find closest object
-		Hit hit = closest_object(r);
+		Hit hit = trace(r);
 
 		// Special case intersection
 		if (hit.object == -1 || hit.mat.shading == SHADING_EMISSIVE) {

@@ -18,7 +18,7 @@
 
 vec3 color_at(Ray ray)
 {
-	Hit hit = closest_object(ray);
+	Hit hit = trace(ray);
 	if (hit.object == -1)
 		return vec3(0.0);
 	return hit.normal * 0.5 + 0.5;

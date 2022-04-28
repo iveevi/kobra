@@ -132,7 +132,7 @@ vec3 color_at(Ray ray)
 	int bounces = 0;
 	for (; bounces < MAX_DEPTH; bounces++) {
 		// Find closest object
-		Hit hit = closest_object(r);
+		Hit hit = trace(r);
 
 		// Value and position
 		camera_contr[bounces] = beta * hit.mat.albedo;
@@ -196,7 +196,7 @@ vec3 color_at(Ray ray)
 			int k = 1;
 			for (; k < MAX_DEPTH; k++) {
 				// Find closest object
-				Hit hit = closest_object(r);
+				Hit hit = trace(r);
 
 				// Value and position
 				light_contrs[k] = beta * hit.mat.albedo;
@@ -230,7 +230,7 @@ vec3 color_at(Ray ray)
 						1.0, 1.0
 					);
 
-					Hit hit = closest_object(visibility);
+					Hit hit = trace(visibility);
 
 					// TODO: use actual object id...
 					if (hit.mat.shading == SHADING_EMISSIVE
@@ -256,7 +256,7 @@ vec3 color_at(Ray ray)
 						);
 
 						// TODO: biaS!!
-						Hit light_hit_0 = closest_object(light_to_camera);
+						Hit light_hit_0 = trace(light_to_camera);
 
 						if (light_hit_0.object == hit.object) {
 							// Then connect to form caustics
@@ -278,8 +278,8 @@ vec3 color_at(Ray ray)
 									ior_);
 
 							// Hit again (inside the object)
-							Hit visibility_1 = closest_object(visibility);
-							Hit light_hit_1 = closest_object(light_to_camera);
+							Hit visibility_1 = trace(visibility);
+							Hit light_hit_1 = trace(light_to_camera);
 
 							// Distance is now a sum
 							// of three distances

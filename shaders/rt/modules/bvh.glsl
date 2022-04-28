@@ -49,7 +49,7 @@ struct Hit {
 };
 
 // Get closest object
-Hit closest_object(Ray ray)
+Hit trace(Ray ray)
 {
 	int min_index = -1;
 	int min_id = -1;
