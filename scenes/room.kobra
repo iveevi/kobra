@@ -44,15 +44,15 @@ normal_source=resources/wood_floor_normal.jpg
 [OBJECT]
 name=Monkey
 [TRANSFORM]
-position=1.1812 0.466907 0.721303
+position=1.1812 0.460959 0.721303
 rotation=0 -126.578 0
 scale=0.5 0.5 0.5
 [MESH]
 source=resources/benchmark/teapot.obj
 index=0
 [MATERIAL]
-albedo=1.0 0.55 0.3
-shading_type=Diffuse
+albedo=1 0.55 0.3
+shading_type=Diffuse 
 ior=1
 albedo_source=0
 normal_source=0
@@ -226,7 +226,7 @@ source=box
 index=0
 [MATERIAL]
 albedo=1 1 1
-shading_type=Reflection Transmission 
+shading_type=Reflection 
 ior=1.5
 albedo_source=0
 normal_source=0

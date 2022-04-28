@@ -87,8 +87,22 @@ float power_heuristic(float nf, float fpdf, float ng, float gpdf)
 // Fresnel reflectance
 float fresnel_dielectric(float cosi, float etai, float etat)
 {
+	// Swap if necessary
+	cosi = clamp(cosi, -1.0, 1.0);
+	if (cosi < 0.0) {
+		cosi = -cosi;
+
+		float tmp = etai;
+		etai = etat;
+		etat = tmp;
+	}
+
 	float sini = sqrt(max(0.0, 1.0 - cosi * cosi));
+
 	float sint = etai / etat * sini;
+	if (sint >= 1.0)
+		return 1.0;
+
 	float cost = sqrt(max(0.0, 1.0 - sint * sint));
 
 	float r_parl = ((etat * cosi) - (etai * cost)) / ((etat * cosi) + (etai * cost));
@@ -99,34 +113,54 @@ float fresnel_dielectric(float cosi, float etai, float etat)
 
 // Fresnel variables
 float ior = 1.0;
-float pior = 1.0;
 float Fr = 0.0;
 
+// TODO: from light paramter (for transmissive materials)
+
 // Sample a ray from BSDF
-void sample_bsdf(in Hit hit, inout Ray ray, inout float pdf)
+void sample_bsdf(in Hit hit, inout Ray ray, inout float pdf, inout vec3 beta)
 {
 	int shading = hit.mat.shading;
+	
+	// TODO: submethods for each case
 	if (is_type(shading, SHADING_REFLECTION)) {
+		float cosi = dot(ray.direction, hit.normal);
+		Fr = fresnel_dielectric(cosi, ior, hit.mat.ior);
+
 		ray.direction = reflect(ray.direction, hit.normal);
 		ray.origin = hit.point + hit.normal * 0.001;
 
-		float cos_theta = dot(ray.direction, hit.normal);
-		pdf = 1/cos_theta;
+		float cos_theta = abs(dot(ray.direction, hit.normal));
+
+		pdf = 1;
+
+		// TODO: fresnel conductors: if ior = 1, then
+		// Fr is always equal to 0
+		beta *= hit.mat.albedo/abs(cos_theta);
 	} else if (is_type(shading, SHADING_TRANSMISSION)) {
-		ray.direction = refract(ray.direction, hit.normal, pior/hit.mat.ior);
+		float cosi = dot(ray.direction, hit.normal);
+		Fr = fresnel_dielectric(cosi, ior, hit.mat.ior);
+
+		ray.direction = refract(ray.direction, hit.normal, 1/1.5);
 		ray.origin = hit.point - hit.normal * 0.001;
 
 		float cos_theta = abs(dot(ray.direction, hit.normal));
-		float eta = hit.mat.ior / pior;
-		pdf = (eta * eta) * (1 - Fr) / (cos_theta);
+
+		pdf = 1;
+		beta *= (1 - Fr) * hit.mat.albedo / cos_theta;
 	} else if (is_type(shading, SHADING_DIFFUSE)) {
 		// Assume diffuse
 		ray.direction = cosine_weighted_hemisphere(hit.normal);
 		ray.origin = hit.point + hit.normal * 0.001;
+
 		pdf = INV_PI * dot(ray.direction, hit.normal);
+		beta *= hit.mat.albedo * INV_PI;
 	} else {
 		pdf = 0.0;
 	}
+
+	// Update ior
+	ior = hit.mat.ior;
 }
 
 // Get pdf of a direction from BSDF
@@ -139,6 +173,7 @@ float pdf_bsdf(in Hit hit, in Ray ray, vec3 wi)
 		return 0;
 	} else if (is_type(shading, SHADING_DIFFUSE)) {
 		// Assume diffuse
+		// TODO: check same hemisphere
 		return INV_PI * dot(wi, hit.normal);
 	}
 	
@@ -150,11 +185,15 @@ vec3 direct_illumination(Hit hit, Ray ray)
 {
 	// Direct light contribution
 	vec3 direct_contr = vec3(0.0);
+	vec3 beta = vec3(0.0);
 
 	// Direct illumination
 	for (int i = 0; i < pc.lights; i++) {
 		uint light_index = floatBitsToUint(light_indices.data[i]);
 		int light_object = int(floatBitsToUint(lights.data[light_index + 1].w));
+
+		// TODO: progressively use fewer light samples
+		// 	and sources as beta goes to 0
 
 		// Ray to use
 		Ray r = ray;
@@ -173,7 +212,7 @@ vec3 direct_illumination(Hit hit, Ray ray)
 		// Itetrate over samples
 		for (int j = 0; j < bsdf_samples; j++) {
 			// Sample BSDF
-			sample_bsdf(hit, r, pdf);
+			sample_bsdf(hit, r, pdf, beta);
 
 			// Get intersect
 			Hit shadow_hit = closest_object(r);
@@ -186,7 +225,7 @@ vec3 direct_illumination(Hit hit, Ray ray)
 			float d = distance(shadow_hit.point, hit.point);
 			float cos_theta = dot(hit.normal, r.direction);
 			direct_contr += bsdf_contr * hit.mat.albedo
-				* cos_theta * (5/d)
+				* cos_theta * (0.3/d)
 				* power_heuristic(bsdf_samples, pdf, float(pc.samples_per_light), 0.25 * INV_PI)
 				* (1/pdf);
 			
@@ -217,7 +256,7 @@ vec3 direct_illumination(Hit hit, Ray ray)
 
 				// TODO: get the pdf from anotehr function
 				direct_contr += lcolor * hit.mat.albedo
-					* cos_theta * (5/d)
+					* cos_theta * (0.3/d)
 					* power_heuristic(float(pc.samples_per_light), 0.25 * INV_PI, bsdf_samples, pdf)
 					* inv_lsamples * (4 * PI);
 			}
@@ -244,7 +283,7 @@ vec3 direct_illumination(Hit hit, Ray ray)
 		// Itetrate over samples
 		for (int j = 0; j < bsdf_samples; j++) {
 			// Sample BSDF
-			sample_bsdf(hit, r, pdf);
+			sample_bsdf(hit, r, pdf, beta);
 
 			// Get intersect
 			Hit shadow_hit = closest_object(r);
@@ -257,7 +296,7 @@ vec3 direct_illumination(Hit hit, Ray ray)
 			float d = distance(shadow_hit.point, hit.point);
 			float cos_theta = dot(hit.normal, r.direction);
 			direct_contr += bsdf_contr * hit.mat.albedo
-				* cos_theta * (5/d)
+				* cos_theta * (0.3/d)
 				* power_heuristic(bsdf_samples, pdf, float(pc.samples_per_light), 0.25 * INV_PI)
 				* (1/pdf);
 			
@@ -289,7 +328,7 @@ vec3 direct_illumination(Hit hit, Ray ray)
 
 				// TODO: get the pdf from anotehr function
 				direct_contr += lcolor * hit.mat.albedo
-					* cos_theta * (5/d)
+					* cos_theta * (0.3/d)
 					* power_heuristic(samples, 0.25 * INV_PI, bsdf_samples, pdf)
 					* inv_lsamples * (4 * PI);
 			}
@@ -310,15 +349,13 @@ vec3 color_at(Ray ray)
 	vec3 beta = vec3(1.0);
 
 	Ray r = ray;
-	
-	float count = 0;
 	for (int i = 0; i < MAX_DEPTH; i++) {
-		count++;
-
 		// Find closest object
+		// TODO: refactor to trace
 		Hit hit = closest_object(r);
 
 		// Special case intersection
+		// TODO: deal with in the direct lighting function
 		if (hit.object == -1 || hit.mat.shading == SHADING_EMISSIVE) {
 			contribution += hit.mat.albedo;
 			break;
@@ -326,40 +363,24 @@ vec3 color_at(Ray ray)
 
 		// Add bounce count
 		bounce_count++;
-
-		// Handle specular reflection and transmission simoultaneously
-		int shading = hit.mat.shading;
-		if (is_type(shading, SHADING_REFLECTION | SHADING_TRANSMISSION)) {
-			// Select one of the two
-			// 	randomly, in proportion to
-			// 	the fresnel reflectance
-			float cosi = abs(dot(hit.normal, r.direction));
-			Fr = fresnel_dielectric(cosi, pior, ior);
-
-			float rand = random();
-
-			// Toggle off
-			if (rand < Fr)
-				hit.mat.shading &= ~SHADING_TRANSMISSION;
-			else
-				hit.mat.shading &= ~SHADING_REFLECTION;
-		}
+		
+		if (is_type(hit.mat.shading, SHADING_REFLECTION | SHADING_TRANSMISSION))
+			return vec3(1, 0, 1);
 
 		// Direct illumination
-		vec3 direct_contr = direct_illumination(hit, r)/PI;
+		vec3 direct_contr = direct_illumination(hit, r);
 		contribution += beta * direct_contr;
-		
-		// Copy previous IoR
-		pior = ior;
 		
 		// Sample BSDF
 		float pdf = 0.0;
-		sample_bsdf(hit, r, pdf);
+		sample_bsdf(hit, r, pdf, beta);
+
+		return r.direction * 0.5 + 0.5;
 
 		if (pdf == 0.0)
 			break;
 
-		beta *= (direct_contr * abs(dot(hit.normal, r.direction)) / pdf);
+		beta *= abs(dot(hit.normal, r.direction)) / pdf;
 
 		// Russian roulette
 		if (i > 2) {

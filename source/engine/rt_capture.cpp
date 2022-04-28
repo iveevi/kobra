@@ -31,7 +31,7 @@ RTCapture::RTCapture(Vulkan *vk, const std::string &scene_file, const Camera &ca
 	// faster than 10x10)
 	batch = rt::Batch(800, 800, 50, 50, 100);
 
-	index = batch.make_batch_index(0, 0, 1, 32);
+	index = batch.make_batch_index(0, 0, 4, 1);
 	index.surface_samples = 32;
 	index.accumulate = true;
 
