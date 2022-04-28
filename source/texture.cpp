@@ -1,4 +1,3 @@
-#define STB_IMAGE_IMPLEMENTATION
 #include "../include/texture.hpp"
 #include "../include/texture_manager.hpp"
 

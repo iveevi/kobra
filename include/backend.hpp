@@ -2356,22 +2356,6 @@ struct ImageData {
 	ImageData(std::nullptr_t) {}
 };
 
-// Depth buffer data wrapper
-struct DepthBuffer : public ImageData {
-	// Constructors
-	DepthBuffer(const vk::raii::PhysicalDevice &phdev,
-			const vk::raii::Device &device,
-			const vk::Format &fmt,
-			const vk::Extent2D &extent)
-			: ImageData(phdev, device,
-				fmt, extent,
-				vk::ImageTiling::eOptimal,
-				vk::ImageUsageFlagBits::eDepthStencilAttachment,
-				vk::ImageLayout::eUndefined,
-				vk::MemoryPropertyFlagBits::eDeviceLocal,
-				vk::ImageAspectFlagBits::eDepth) {}
-};
-
 // Buffer data wrapper
 struct BufferData {
 	vk::DeviceSize		size;
@@ -2429,6 +2413,68 @@ struct BufferData {
 		memcpy(ptr, data.data(), data.size() * sizeof(T));
 		memory.unmapMemory();
 	}
+};
+
+// Copy data to an image
+inline void copy_data_to_image(
+	const vk::raii::Device &device,
+	const vk::raii::CommandPool &cmd_pool,
+	const vk::raii::CommandBuffer &cmd_buffer,
+	const BufferData &buffer,
+	const ImageData &image)
+{
+}
+
+// Create ImageData object from a file
+ImageData make_texture(const vk::raii::PhysicalDevice &,
+		const vk::raii::Device &,
+		const std::string &,
+		vk::ImageTiling,
+		vk::ImageUsageFlags,
+		vk::MemoryPropertyFlags,
+		vk::ImageAspectFlags);
+
+// Create a sampler from an ImageData object
+inline vk::raii::Sampler make_sampler(const vk::raii::Device &device,
+		const ImageData &image)
+{
+	return vk::raii::Sampler {
+		device,
+		vk::SamplerCreateInfo {
+			{},
+			vk::Filter::eLinear,
+			vk::Filter::eLinear,
+			vk::SamplerMipmapMode::eLinear,
+			vk::SamplerAddressMode::eRepeat,
+			vk::SamplerAddressMode::eRepeat,
+			vk::SamplerAddressMode::eRepeat,
+			0.0f,
+			VK_FALSE,
+			0.0f,
+			VK_FALSE,
+			vk::CompareOp::eNever,
+			0.0f,
+			0.0f,
+			vk::BorderColor::eIntOpaqueBlack,
+			VK_FALSE
+		}
+	};
+}
+
+// Depth buffer data wrapper
+struct DepthBuffer : public ImageData {
+	// Constructors
+	DepthBuffer(const vk::raii::PhysicalDevice &phdev,
+			const vk::raii::Device &device,
+			const vk::Format &fmt,
+			const vk::Extent2D &extent)
+			: ImageData(phdev, device,
+				fmt, extent,
+				vk::ImageTiling::eOptimal,
+				vk::ImageUsageFlagBits::eDepthStencilAttachment,
+				vk::ImageLayout::eUndefined,
+				vk::MemoryPropertyFlagBits::eDeviceLocal,
+				vk::ImageAspectFlagBits::eDepth) {}
 };
 
 // Create a render pass
@@ -2549,6 +2595,32 @@ inline vk::raii::ShaderModule make_shader_module(const vk::raii::Device &device,
 	return vk::raii::ShaderModule(device,
 		vk::ShaderModuleCreateInfo {
 			{}, spv
+		}
+	);
+}
+
+// Create descriptor pool from a vector of pool sizes
+inline vk::raii::DescriptorPool make_descriptor_pool(const vk::raii::Device &device,
+		const std::vector <vk::DescriptorPoolSize> &pool_sizes)
+{
+	KOBRA_ASSERT(
+		pool_sizes.size() > 0,
+		"Descriptor pool size vector is empty"
+	);
+
+	uint32_t max_sets = 0;
+	for (const auto &pool_size : pool_sizes)
+		max_sets += pool_size.descriptorCount;
+
+	KOBRA_ASSERT(
+		max_sets > 0,
+		"Descriptor pool size vector is empty"
+	);
+
+	// Create descriptor pool
+	return vk::raii::DescriptorPool(device,
+		vk::DescriptorPoolCreateInfo {
+			{}, max_sets, pool_sizes
 		}
 	);
 }

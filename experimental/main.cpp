@@ -26,6 +26,22 @@ Camera camera = Camera {
 	Tunings { 45.0f, 800, 800 }
 };
 
+// MVP structure
+struct PC_Material {
+	glm::vec3	albedo;
+	int		type;
+	float		hightlight;
+	float		has_albedo;
+	float		has_normal;
+};
+
+struct PC_Vertex {
+	glm::mat4 model;
+	glm::mat4 view;
+	glm::mat4 projection;
+
+	PC_Material material;
+};
 
 // Mouse movement
 void mouse_movement(GLFWwindow *, double xpos, double ypos)
@@ -243,12 +259,18 @@ int main()
 	auto fragment = make_shader_module(device, "shaders/bin/raster/color_frag.spv");
 
 	// Descriptor set layout
-	auto dsl = make_descriptor_set_layout(device, {});
+	auto dsl = make_descriptor_set_layout(device, {
+		{
+			vk::DescriptorType::eCombinedImageSampler,
+			0,
+			vk::ShaderStageFlagBits::eFragment
+		},
+	});
 
 	// Push constant (glm::mat4 MVP)
 	auto pcl = vk::PushConstantRange {
 		vk::ShaderStageFlagBits::eVertex,
-		0, sizeof(glm::mat4)
+		0, sizeof(PC_Vertex)
 	};
 
 	auto ppl = vk::raii::PipelineLayout {device, {{}, *dsl, pcl}};
@@ -302,6 +324,17 @@ int main()
 
 	auto pipeline = make_graphics_pipeline(grp_info);
 
+	// Descriptor pool and sets
+	auto descriptor_pool = make_descriptor_pool(
+		device,
+		{
+			{vk::DescriptorType::eCombinedImageSampler, 1}
+		}
+	);
+
+	auto descriptor_sets = vk::raii::DescriptorSets {device, {*descriptor_pool, *dsl}};
+	auto dset = std::move(descriptor_sets.front());
+
 	// Semaphores
 	vk::raii::Semaphore image_available[2] {
 		vk::raii::Semaphore {device, vk::SemaphoreCreateInfo {}},
@@ -316,6 +349,17 @@ int main()
 	// Other variables
 	vk::Result result;
 	uint32_t image_index;
+
+	// Load image texture
+	auto img = make_texture(phdev, device,
+		"resources/brickwall.jpg",
+		vk::ImageTiling::eOptimal,
+		vk::ImageUsageFlagBits::eSampled
+			| vk::ImageUsageFlagBits::eTransferDst
+			| vk::ImageUsageFlagBits::eTransferSrc,
+		vk::MemoryPropertyFlagBits::eDeviceLocal,
+		vk::ImageAspectFlagBits::eColor
+	);
 
 	// Record the command buffer
 	auto record = [&](const vk::raii::CommandBuffer &command_buffer) {
@@ -336,14 +380,22 @@ int main()
 		});
 
 		// Push constants
-		glm::mat4 model = glm::mat4(1.0f);
-		glm::mat4 view = camera.view();
-		glm::mat4 proj = camera.perspective();
+		PC_Material mat;
+		mat.albedo = glm::vec3 {1.0f, 0.0f, 0.0f};
+		mat.type = Shading::eDiffuse;
+		mat.hightlight = 0;
+		mat.has_albedo = false;
+		mat.has_normal = false;
 
-		std::array <glm::mat4, 1> mvp = {proj * view * model};
+		PC_Vertex pc;
+		pc.model = glm::mat4(1.0f);
+		pc.view = camera.view();
+		pc.projection = camera.perspective();
 
-		command_buffer.pushConstants <glm::mat4>
-			(*ppl, vk::ShaderStageFlagBits::eVertex, 0, mvp);
+		std::array <PC_Vertex, 1> pcs = {pc};
+
+		command_buffer.pushConstants <PC_Vertex>
+			(*ppl, vk::ShaderStageFlagBits::eVertex, 0, pcs);
 
 		// Start the render pass
 		std::array <vk::ClearValue, 2> clear_values = {
