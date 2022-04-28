@@ -372,9 +372,9 @@ public:
 		ring_x.transform().rotation = {90, 0, 0};
 		ring_z.transform().rotation = {0, 0, 90};
 
-		ring_x.material().albedo = {1, 0, 0};
-		ring_y.material().albedo = {0, 1, 0};
-		ring_z.material().albedo = {0, 0, 1};
+		ring_x.material().Kd = {1, 0, 0};
+		ring_y.material().Kd = {0, 1, 0};
+		ring_z.material().Kd = {0, 0, 1};
 
 		edit.gizmo_x = new raster::Mesh(context, ring_x);
 		edit.gizmo_y = new raster::Mesh(context, ring_y);
@@ -383,10 +383,10 @@ public:
 		auto s0 = Mesh::make_sphere({0, 0, 0}, 0.05);
 
 		edit.p0 = new raster::Mesh(context, s0);
-		edit.p0->material().albedo = {0, 0, 0};
+		edit.p0->material().Kd = {0, 0, 0};
 		
 		edit.p1 = new raster::Mesh(context, s0);
-		edit.p1->material().albedo = {1, 1, 1};
+		edit.p1->material().Kd = {1, 1, 1};
 
 		init_gizmo();
 

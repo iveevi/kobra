@@ -76,7 +76,8 @@ public:
 		// Read material header
 		std::getline(file, line);
 		if (line != "[MATERIAL]") {
-			KOBRA_LOG_FUNC(error) << "Invalid kobra scene file format\n";
+			KOBRA_LOG_FUNC(error) << "Invalid kobra scene file format"
+				<< " (missing [MATERIAL] header)\n";
 			return std::nullopt;
 		}
 
@@ -86,7 +87,7 @@ public:
 		);
 
 		if (!material) {
-			KOBRA_LOG_FUNC(error) << "Invalid kobra scene file format\n";
+			KOBRA_LOG_FUNC(error) << "Invalid kobra scene file format (bad material)\n";
 			return std::nullopt;
 		}
 

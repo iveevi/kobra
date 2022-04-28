@@ -7,17 +7,12 @@
 
 namespace kobra {
 
-// Constructors
-Material::Material(const glm::vec3 &albedo,
-		Shading shading,
-		float ior)
-		: albedo(albedo), type(shading),
-		ior(ior) {}
-
 // Copy constructor
 Material::Material(const Material &other)
-		: albedo(other.albedo), type(other.type),
-		ior(other.ior)
+		: Kd(other.Kd), Ks(other.Ks),
+		type(other.type),
+		refr_eta(other.refr_eta),
+		refr_k(other.refr_k)
 {
 	if (other.albedo_sampler != nullptr) {
 		albedo_sampler = new Sampler(*other.albedo_sampler);
@@ -34,9 +29,11 @@ Material::Material(const Material &other)
 Material &Material::operator=(const Material &other)
 {
 	if (this != &other) {
-		albedo = other.albedo;
+		Kd = other.Kd;
+		Ks = other.Ks;
 		type = other.type;
-		ior = other.ior;
+		refr_eta = other.refr_eta;
+		refr_k = other.refr_k;
 
 		if (other.albedo_sampler != nullptr) {
 			if (albedo_sampler != nullptr)
@@ -138,25 +135,24 @@ void Material::serialize(Buffer4f *bf_mats) const
 	int i_type = static_cast <int> (type);
 	float f_type = *reinterpret_cast <float *> (&i_type);
 
-	bf_mats->push_back(aligned_vec4(albedo, f_type));
+	bf_mats->push_back(aligned_vec4(Kd, f_type));
 	bf_mats->push_back(aligned_vec4(
-		{ior, (!albedo_sampler), (!normal_sampler), 0}
+		{refr_eta, (!albedo_sampler), (!normal_sampler), 0}
 	));
 }
 
 // Save material to file
 void Material::save(std::ofstream &file) const
 {
-	char buf[1024];
-	sprintf(buf, "%s", shading_str(type).c_str());
-
 	file << "[MATERIAL]\n";
-	file << "albedo=" << albedo.x << " " << albedo.y << " " << albedo.z << std::endl;
-	file << "shading_type=" << buf << std::endl;
-	file << "ior=" << ior << std::endl;
+	file << "Kd=" << Kd.x << " " << Kd.y << " " << Kd.z << std::endl;
+	file << "Ks=" << Ks.x << " " << Ks.y << " " << Ks.z << std::endl;
+	file << "shading_type=" << shading_str(type) << std::endl;
+	file << "index_of_refraction=" << refr_eta << std::endl;
+	file << "extinction_coefficient=" << refr_k << std::endl;
 
-	file << "albedo_source=" << (albedo_sampler ? albedo_source : "0") << std::endl;
-	file << "normal_source=" << (normal_sampler ? normal_source : "0") << std::endl;
+	file << "albedo_texture=" << (albedo_sampler ? albedo_source : "0") << std::endl;
+	file << "normal_texture=" << (normal_sampler ? normal_source : "0") << std::endl;
 }
 
 // Read material from file
@@ -166,12 +162,37 @@ std::optional <Material> Material::from_file
 		std::ifstream &file,
 		const std::string &scene_file)
 {
+	// TODO: field reader and writer class...
+	// 	template parameter, with a lambda to
+	// 	process and reutrn the value
 	std::string line;
 
-	// Read albedo
-	glm::vec3 albedo;
+	// Read Kd
+	glm::vec3 Kd;
 	std::getline(file, line);
-	std::sscanf(line.c_str(), "albedo=%f %f %f", &albedo.x, &albedo.y, &albedo.z);
+
+	// Ensure correct header ("Kd=")
+	if (line.substr(0, 3) != "Kd=") {
+		KOBRA_LOG_FUNC(error) << "Expected Kd= but got " << line << std::endl;
+		return std::nullopt;
+	}
+
+	std::sscanf(line.c_str(), "Kd=%f %f %f", &Kd.x, &Kd.y, &Kd.z);
+
+	// Read Ks
+	glm::vec3 Ks;
+	std::getline(file, line);
+
+	// Ensure correct header ("Ks=")
+	if (line.substr(0, 3) != "Ks=") {
+		KOBRA_LOG_FUNC(error) << "Expected Ks= but got " << line << std::endl;
+		return std::nullopt;
+	}
+
+	std::sscanf(line.c_str(), "Ks=%f %f %f", &Ks.x, &Ks.y, &Ks.z);
+
+	std::cout << "Kd: " << Kd.x << " " << Kd.y << " " << Kd.z << std::endl;
+	std::cout << "Ks: " << Ks.x << " " << Ks.y << " " << Ks.z << std::endl;
 
 	// Read shading type
 	std::getline(file, line);
@@ -184,30 +205,72 @@ std::optional <Material> Material::from_file
 
 	Shading shading = type.value();
 
-	// Read ior
-	float ior;
+	// Read refr_eta
+	float refr_eta;
 	std::getline(file, line);
-	std::sscanf(line.c_str(), "ior=%f", &ior);
+
+	// Ensure correct header ("index_of_refraction=")
+	if (line.substr(0, 20) != "index_of_refraction=") {
+		KOBRA_LOG_FUNC(error) << "Expected index_of_refraction= but got "
+			<< line.substr(0, 20) << std::endl;
+		return std::nullopt;
+	}
+
+	std::sscanf(line.c_str(), "index_of_refraction=%f", &refr_eta);
+
+	// Read refr_k
+	float refr_k;
+	std::getline(file, line);
+
+	// Ensure correct header ("extinction_coefficient=")
+	if (line.substr(0, 23) != "extinction_coefficient=") {
+		KOBRA_LOG_FUNC(error) << "Expected extinction_coefficient= but got " << line << std::endl;
+		return std::nullopt;
+	}
+
+	std::sscanf(line.c_str(), "extinction_coefficient=%f", &refr_k);
 
 	// Read albedo source
 	char buf2[1024];
 	std::string albedo_source;
 	std::getline(file, line);
-	std::sscanf(line.c_str(), "albedo_source=%s", buf2);
+
+	// Ensure correct header ("albedo_texture=")
+	if (line.substr(0, 15) != "albedo_texture=") {
+		KOBRA_LOG_FUNC(error) << "Expected albedo_texture= but got " << line << std::endl;
+		return std::nullopt;
+	}
+
+	std::sscanf(line.c_str(), "albedo_texture=%s", buf2);
 	albedo_source = buf2;
 
 	// Read normal source
 	char buf3[1024];
 	std::string normal_source;
 	std::getline(file, line);
-	std::sscanf(line.c_str(), "normal_source=%s", buf3);
+
+	// Ensure correct header ("normal_texture=")
+	if (line.substr(0, 15) != "normal_texture=") {
+		KOBRA_LOG_FUNC(error) << "Expected normal_texture= but got " << line << std::endl;
+		return std::nullopt;
+	}
+
+	std::sscanf(line.c_str(), "normal_texture=%s", buf3);
 	normal_source = buf3;
 
 	// Construct and return material
 	Material mat;
-	mat.albedo = albedo;
+
+	mat.Kd = Kd;
+	mat.Ks = Ks;
+
 	mat.type = shading;
-	mat.ior = ior;
+
+	mat.refr_eta = refr_eta;
+	mat.refr_k = refr_k;
+
+	std::cout << "refr_eta = " << refr_eta << std::endl;
+	std::cout << "refr_k = " << refr_k << std::endl;
 
 	// TODO: create a texture loader agent to handle multithreaded textures
 	std::thread *albdeo_loader = nullptr;
@@ -244,6 +307,8 @@ std::optional <Material> Material::from_file
 		albdeo_loader->join();
 		delete albdeo_loader;
 	}
+
+	std::cout << "Material loaded" << std::endl;
 
 	// Return material
 	return mat;

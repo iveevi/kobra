@@ -466,38 +466,5 @@ void main()
 		color = pow(color, vec3(1/2.2));
 	}
 
-	///////////////////////////////
-	// Denoising post processing //
-	///////////////////////////////
-
-	/* Variation in neighboring pixels
-	vec3 variation = vec3(0.0);
-	float variance = 0.0;
-
-	int dx[8] = {-1, 0, 1, -1, 1, -1, 0, 1};
-	int dy[8] = {-1, -1, -1, 0, 0, 1, 1, 1};
-
-	for (int i = 0; i < 8; i++) {
-		int x = int(x0) + dx[i];
-		int y = int(y0) + dy[i];
-
-		if (x >= 0 && x < pc.width && y >= 0 && y < pc.height) {
-			uint index = y * pc.width + x;
-			vec3 pc = cast_color(frame.pixels[index]);
-			variation += (pc - color);
-			variance += length(pc - color);
-		}
-	}
-
-	variation /= float(8);
-	variance = (variance - length(variation)) / float(8);
-
-	// If variance is too high, leave it
-	// If variance is low, leave  it
-	// Sweet spot to add variance is in the middle
-	float s = smoothstep(0.0, 1.0, variance);
-	if (s > 0.1 && s < 0.4 && bounce_count > 0)
-		color += variation; */
-
 	frame.pixels[index] = cast_color(color);
 }

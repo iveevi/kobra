@@ -22,17 +22,22 @@ class Material {
 	Sampler 	*normal_sampler = nullptr;
 
 	// Texture sources (for scene loading)
+	// TODO: Kd, Kd, normal
 	std::string	albedo_source = "";
 	std::string	normal_source = "";
 public:
-	glm::vec3	albedo;		// Albedo color
-	Shading		type;		// Shading types, see types.h
-	float		ior;		// Index of refraction
+	glm::vec3	Kd = glm::vec3(0.0f);
+	glm::vec3	Ks = glm::vec3(0.0f);
 
-	// Constructors
-	Material(const glm::vec3 & = {1, 0, 1},
-			Shading = Shading::eDiffuse,
-			float = 1.0);
+	// TODO: default should be purple, no shading
+	Shading		type = Shading::eDiffuse;
+
+	float		refr_eta = 1.0f;
+	float		refr_k = 0.0f;
+
+
+	// Defualt constructor
+	Material() = default;
 
 	// Copy constructor
 	Material(const Material &);
