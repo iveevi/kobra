@@ -7,7 +7,7 @@ scale=1 1 1
 [SPHERE]
 radius=0.5
 [MATERIAL]
-albedo=0 0 0
+albedo=1 1 1
 shading_type=Transmission 
 ior=1.5
 albedo_source=0
@@ -21,7 +21,7 @@ scale=1 1 1
 [SPHERE]
 radius=0.3
 [MATERIAL]
-albedo=0 0 0
+albedo=1 1 1
 shading_type=Reflection 
 ior=1
 albedo_source=0
@@ -145,7 +145,7 @@ scale=1 1 1
 [SPHERE]
 radius=0.4
 [MATERIAL]
-albedo=1 0 0
+albedo=1 0.5 0.5
 shading_type=Reflection 
 ior=1
 albedo_source=0
@@ -203,15 +203,15 @@ normal_source=0
 [OBJECT]
 name=Glass Window
 [TRANSFORM]
-position=0 13.9247 -10
+position=0 3 -10
 rotation=0 0 0
 scale=4 5 0.1
 [MESH]
 source=box
 index=0
 [MATERIAL]
-albedo=0 0 0
-shading_type=Transmission 
+albedo=1 1 1
+shading_type=Reflection Transmission 
 ior=1.5
 albedo_source=0
 normal_source=0

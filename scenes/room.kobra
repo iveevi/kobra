@@ -226,7 +226,7 @@ source=box
 index=0
 [MATERIAL]
 albedo=1 1 1
-shading_type=Reflection 
+shading_type=Reflection Transmission
 ior=1.5
 albedo_source=0
 normal_source=0
