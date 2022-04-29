@@ -5,32 +5,46 @@ very robust and generalizable framework with which one can easily experiment
 with new and state of the art rendering techniques and style. Thus it is a
 suitable foundation from which to begin research in visual computing.
 
-Kobra is capable of traditional rasterization, with modern techniques like depth
-buffering. It can also perform raytracing in realtime; this is done using the
-flexibility of Vulkan's API to create a streamlined pipeline to perform ray
-calculations for each pixel on the GPU. It uses modern acceleration structures
-like the BVH and incorperates the physical behaviour of light to produce
-photorealistic images.
+## Features
+
+The highlight of Kobra is its ray tracing capability. Using the flexibility of
+the Vulkan API, a streamlined pipeline is created to perform ray tracing in
+grid batches on the GPU. Modern acceleration structures (BVHs) are used to boost
+the throughput of the GPU, and physically accurate bidirectional scattering (and
+reflection) distributions are used to model the interactions of light with the
+materials in the scene.
+
+Kobra is also capable of traditional rasterization, with modern techniques like
+depth buffering.
 
 In the future, Kobra aims to ease the process of building large scenes and
 assets with affordable resources. Algorithms of interest are 3D scene
 reconstruction, material inference from images, and creating character
 animations from video samples.
 
-Below are a few scenes that Kobra can currently render. The hardware used is a
-GTX 1660 Ti.
+## Rendered Scenes
 
-![](media/capture_3.png)
+All these scenes were rendered (ray-traced) on a GTX 1660 Ti.
 
-Path traced with 16 samples per pixel and 1000 shadow samples in around 30
-minutes.
+A demonstration of multiple importance sampling (MIS) with Monte Carlo path
+tracing in a scene composed of diffuse and specular objects (both reflective and
+tranmissive), lit with area lights and environment based lighting.
 
-![](media/capture_4.png)
+<p align = "center">
+	<img src = "media/capture_6.png">
+</p>
 
-Path traced with 1024 samples per pixel and 16 shadow samples in around 2 hours
-and 30 minutes.
+<p align = "center">
+	<b>Figure 1:</b> Scene demonstrating the rendering of relatively basic materials with MIS path tracing (1 hour)
+</p>
 
-![](media/capture_5.png)
+A similar scene (the teapot is now tranmissive as well), but most of the
+lighting is indirect from the environment.
 
-Bidirectional path tracing with 100 samples per pixel and 32 shadow samples in
-around an hour.
+<p align = "center">
+	<img src = "media/capture_7.png">
+</p>
+
+<p align = "center">
+	<b>Figure 2:</b> Scene lit mostly with indirect lighting (3 hours)
+</p>
