@@ -6,7 +6,7 @@
 #include <vulkan/vulkan_raii.hpp>
 
 #define KOBRA_VALIDATION_LAYERS
-// #define KOBRA_VALIDATION_ERROR_ONLY
+#define KOOBRA_THROW_ERROR
 
 // Engine headers
 #include "../include/backend.hpp"
@@ -132,6 +132,22 @@ void present_swapchain_image(const Swapchain &swapchain, uint32_t &image_index,
 	);
 }
 
+// Per frame data
+struct FrameData {
+	vk::raii::Fence		fence = nullptr;
+	vk::raii::Semaphore	present_completed = nullptr;
+	vk::raii::Semaphore	render_completed = nullptr;
+
+	// Default constructor
+	FrameData() = default;
+
+	// Construct from device
+	FrameData(const vk::raii::Device &device) :
+		fence(device, vk::FenceCreateInfo {vk::FenceCreateFlagBits::eSignaled}),
+		present_completed(device, vk::SemaphoreCreateInfo {}),
+		render_completed(device, vk::SemaphoreCreateInfo {}) {}
+};
+
 int main()
 {
 	// Choosing physical device
@@ -220,6 +236,38 @@ int main()
 	// Swapchain
 	auto swapchain = Swapchain {phdev, device, surface, window.extent, queue_family};
 
+	// Transition swapchain images to presentable
+	{
+		// Temporary command buffer
+		auto temp_command_buffer = make_command_buffer(device, command_pool);
+
+		// Record
+		temp_command_buffer.begin(vk::CommandBufferBeginInfo {
+			vk::CommandBufferUsageFlagBits::eOneTimeSubmit
+		});
+
+		// Transition
+		for (auto &img : swapchain.images) {
+			transition_image_layout(temp_command_buffer,
+				img,
+				vk::Format::eB8G8R8A8Unorm,
+				vk::ImageLayout::eUndefined,
+				vk::ImageLayout::ePresentSrcKHR
+			);
+		}
+
+		// End
+		temp_command_buffer.end();
+
+		// Submit
+		graphics_queue.submit(
+			vk::SubmitInfo {
+				0, nullptr, nullptr, 1, &*temp_command_buffer
+			},
+			nullptr
+		);
+	}
+
 	// Depth buffer and render pass
 	auto depth_buffer = DepthBuffer {phdev, device, vk::Format::eD32Sfloat, window.extent};
 	auto render_pass = make_render_pass(device, swapchain.format, depth_buffer.format);
@@ -250,12 +298,31 @@ int main()
 	);
 
 	// Fill with data
+	std::cout << "Box vertices: " << box_mesh.vertices().size() << std::endl;
+	for (uint32_t i = 0; i < box_mesh.vertices().size(); i++) {
+		auto pos = box_mesh.vertices()[i].position;
+		std::cout << "\t" << pos.x << " " << pos.y << " " << pos.z << std::endl;
+	}
+
+	std::cout << "Box indices: " << box_mesh.indices().size() << std::endl;
+	for (uint32_t i = 0; i < box_mesh.indices().size(); i++) {
+		std::cout << "\t" << box_mesh.indices()[i] << std::endl;
+	}
+
 	vertex_buffer.upload(box_mesh.vertices());
 	index_buffer.upload(box_mesh.indices());
+
+	auto vec = index_buffer.download <uint32_t> ();
+	std::cout << "Downloaded indices: " << vec.size() << std::endl;
+	for (uint32_t i = 0; i < vec.size(); i++) {
+		std::cout << "\t" << vec[i] << std::endl;
+	}
 
 	// Load shaders
 	// TODO: compile function for shaders
 	auto vertex = make_shader_module(device, "shaders/bin/raster/vertex.spv");
+
+	// TODO: debug culling with the normal shader
 	auto fragment = make_shader_module(device, "shaders/bin/raster/color_frag.spv");
 
 	// Descriptor set layout
@@ -335,17 +402,6 @@ int main()
 	auto descriptor_sets = vk::raii::DescriptorSets {device, {*descriptor_pool, *dsl}};
 	auto dset = std::move(descriptor_sets.front());
 
-	// Semaphores
-	vk::raii::Semaphore image_available[2] {
-		vk::raii::Semaphore {device, vk::SemaphoreCreateInfo {}},
-		vk::raii::Semaphore {device, vk::SemaphoreCreateInfo {}},
-	};
-
-	vk::raii::Semaphore render_finished[2] {
-		vk::raii::Semaphore {device, vk::SemaphoreCreateInfo {}},
-		vk::raii::Semaphore {device, vk::SemaphoreCreateInfo {}},
-	};
-
 	// Other variables
 	vk::Result result;
 	uint32_t image_index;
@@ -360,6 +416,8 @@ int main()
 		vk::MemoryPropertyFlagBits::eDeviceLocal,
 		vk::ImageAspectFlagBits::eColor
 	);
+
+	auto sampler = make_sampler(device, img);
 
 	// Record the command buffer
 	auto record = [&](const vk::raii::CommandBuffer &command_buffer) {
@@ -391,6 +449,7 @@ int main()
 		pc.model = glm::mat4(1.0f);
 		pc.view = camera.view();
 		pc.projection = camera.perspective();
+		pc.material = mat;
 
 		std::array <PC_Vertex, 1> pcs = {pc};
 
@@ -428,9 +487,15 @@ int main()
 		// Bind the pipeline
 		command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
 
+		// Bind the descriptor set
+		command_buffer.bindDescriptorSets(
+			vk::PipelineBindPoint::eGraphics,
+			*ppl, 0, {*dset}, {}
+		);
+
 		// Bind the cube and draw it
 		command_buffer.bindVertexBuffers(0, *vertex_buffer.buffer, {0});
-		command_buffer.bindIndexBuffer(*index_buffer.buffer, 0, vk::IndexType::eUint16);
+		command_buffer.bindIndexBuffer(*index_buffer.buffer, 0, vk::IndexType::eUint32);
 		command_buffer.drawIndexed(
 			static_cast <uint32_t> (box_mesh.indices().size()),
 			1, 0, 0, 0
@@ -443,102 +508,70 @@ int main()
 		command_buffer.end();
 	};
 
-	// Fences for the command buffer
-	// auto fence = vk::raii::Fence {device, vk::FenceCreateInfo()};
-	vk::raii::Fence images_in_flight[2] {
-		vk::raii::Fence {device, nullptr},
-		vk::raii::Fence {device, nullptr}
-	};
-
-	vk::raii::Fence in_flight_fences[2] {
-		vk::raii::Fence {device, vk::FenceCreateInfo {vk::FenceCreateFlagBits::eSignaled}},
-		vk::raii::Fence {device, vk::FenceCreateInfo {vk::FenceCreateFlagBits::eSignaled}}
-	};
-
 	// Submit the command buffer
 	vk::PipelineStageFlags stage_flags = vk::PipelineStageFlagBits::eColorAttachmentOutput;
 
-	// Present the image
-	// present_swapchain_image(swapchain, present_queue, image_index);
+	// Initialize per frame data
+	auto frame_data = std::vector <FrameData> (framebuffers.size());
+	for (auto &fd : frame_data)
+		fd = FrameData {device};
 
 	// Present while valid window
 	uint32_t frame_index = 0;
 	while (!glfwWindowShouldClose(window.handle)) {
-		std::cout << "==============================\n";
-		std::cout <<"Waiting for fence...\n";
-		result = device.waitForFences(
-			*in_flight_fences[frame_index],
-			true,
-			std::numeric_limits <uint64_t> ::max()
-		);
-
-		KOBRA_ASSERT(result == vk::Result::eSuccess, "Failed to wait for fence");
-
-		// Grab the next image from the swapchain
-		std::tie(result, image_index) = swapchain.swapchain.acquireNextImage(
-			std::numeric_limits <uint64_t> ::max(),
-			*image_available[frame_index]
-		);
-
-		KOBRA_ASSERT(result == vk::Result::eSuccess, "Failed to acquire next image");
-
-		std::cout << "Acquired image " << image_index << "\n";
-
-		// Check if the image is being used by the current frame
-		if (*images_in_flight[image_index] != vk::Fence {nullptr}) {
-			std::cout <<"Waiting for image...\n";
-			result = device.waitForFences(
-				*images_in_flight[image_index],
-				true,
-				std::numeric_limits <uint64_t> ::max()
-			);
-
-			KOBRA_ASSERT(result == vk::Result::eSuccess, "Failed to wait for fence");
-		}
-
-		// Mark the image as in use
-		std::cout << "\nin_flight_fence[" << frame_index << "] = " << *in_flight_fences[frame_index] << "\n";
-		images_in_flight[image_index] = std::move(in_flight_fences[frame_index]);
-		std::cout << "Marking image as in use...\n";
-
-		record(command_buffers[image_index]);
-		std::cout << "Recording command buffer...\n";
-
-		vk::SubmitInfo submit_info {
-			1, &*image_available[frame_index],
-			&stage_flags,
-			1, &*command_buffers[image_index],
-			1, &*render_finished[frame_index]
-		};
-
-		graphics_queue.submit({submit_info}, *in_flight_fences[frame_index]);
-		std::cout << "Submitting command buffer...\n";
-
-		/* Wait for the fence to be signaled
-		result = device.waitForFences(
-			*fences[image_index],
-			true,
-			std::numeric_limits <uint64_t> ::max()
-		); */
-
-		KOBRA_ASSERT(result == vk::Result::eSuccess, "Failed to wait for fence");
-
-		present_swapchain_image(swapchain, image_index, present_queue, render_finished[frame_index]);
-		std::cout << "Presenting image...\n";
-
 		// Poll events
 		glfwPollEvents();
 
+		// Handle input
 		input_handling(window.handle);
-		std::cout << "\nin_flight_fence[" << frame_index << "] = " << *in_flight_fences[frame_index] << "\n";
-		std::cout << "images_in_flight[" << image_index << "] = " << *images_in_flight[image_index] << "\n";
 
-		in_flight_fences[frame_index] = std::move(images_in_flight[image_index]);
+		// Get command buffer
+		const auto &command_buffer = command_buffers[frame_index];
+		std::cout << "Command buffer: " << *command_buffer << " [" << frame_index << "]" << std::endl;
 
-		// Update frame index
-		frame_index = (frame_index + 1) % 2;
-		std::cout << "==============================\n\n";
-		break;
+		// TODO: handle resizing
+
+		// Acquire an image from the swap chain
+		vk::Result result;
+		std::tie(result, image_index) = swapchain.swapchain.acquireNextImage(
+			std::numeric_limits <uint64_t> ::max(),
+			*frame_data[frame_index].present_completed
+		);
+
+		KOBRA_ASSERT(result == vk::Result::eSuccess, "Failed to acquire swapchain image");
+
+		// Wait for the previous frame to finish
+		while(device.waitForFences({*frame_data[frame_index].fence}, VK_TRUE, std::numeric_limits <uint64_t> ::max()) == vk::Result::eTimeout);
+
+		// Reset the fence
+		device.resetFences({*frame_data[frame_index].fence});
+
+		// Record the command buffer
+		record(command_buffer);
+
+		// Submit the command buffer
+		vk::SubmitInfo submit_info = {
+			1, &*frame_data[frame_index].present_completed,
+			&stage_flags,
+			1, &*command_buffer,
+			1, &*frame_data[frame_index].render_completed
+		};
+
+		graphics_queue.submit(submit_info, *frame_data[frame_index].fence);
+
+		// Present the image
+		vk::PresentInfoKHR present_info {
+			*frame_data[frame_index].render_completed,
+			*swapchain.swapchain,
+			image_index // TODO: the problem is here?
+		};
+
+		result = present_queue.presentKHR(present_info);
+
+		KOBRA_ASSERT(result == vk::Result::eSuccess, "Failed to present swapchain image");
+
+		// Increment frame index
+		frame_index = (frame_index + 1) % framebuffers.size();
 	}
 
 	// Wait before exiting

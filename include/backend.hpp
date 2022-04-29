@@ -2300,6 +2300,124 @@ struct Swapchain {
 	}
 };
 
+// Transition image layout
+inline void transition_image_layout(const vk::raii::CommandBuffer &cmd,
+		const vk::Image &image,
+		const vk::Format &format,
+		const vk::ImageLayout old_layout,
+		const vk::ImageLayout new_layout)
+{
+	// Source stage
+	vk::AccessFlags src_access_mask = {};
+
+	switch (old_layout) {
+	case vk::ImageLayout::eTransferDstOptimal:
+		src_access_mask = vk::AccessFlagBits::eTransferWrite;
+		break;
+	case vk::ImageLayout::ePreinitialized:
+		src_access_mask = vk::AccessFlagBits::eHostWrite;
+		break;
+	case vk::ImageLayout::eGeneral:
+	case vk::ImageLayout::eUndefined:
+		break;
+	default:
+		KOBRA_ASSERT(false, "Unsupported old layout");
+		break;
+	}
+
+	// Pipeline stage
+        vk::PipelineStageFlags source_stage;
+        switch (old_layout) {
+	case vk::ImageLayout::eGeneral:
+	case vk::ImageLayout::ePreinitialized:
+		source_stage = vk::PipelineStageFlagBits::eHost;
+		break;
+	case vk::ImageLayout::eTransferDstOptimal:
+		source_stage = vk::PipelineStageFlagBits::eTransfer;
+		break;
+	case vk::ImageLayout::eUndefined:
+		source_stage = vk::PipelineStageFlagBits::eTopOfPipe;
+		break;
+	default:
+		KOBRA_ASSERT(false, "Unsupported old layout");
+		break;
+        }
+
+	// Destination stage
+        vk::AccessFlags dst_access_mask = {};
+        switch (new_layout) {
+	case vk::ImageLayout::eColorAttachmentOptimal:
+		dst_access_mask = vk::AccessFlagBits::eColorAttachmentWrite;
+		break;
+	case vk::ImageLayout::eDepthStencilAttachmentOptimal:
+		dst_access_mask = vk::AccessFlagBits::eDepthStencilAttachmentRead
+			| vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+		break;
+	case vk::ImageLayout::eGeneral:
+	case vk::ImageLayout::ePresentSrcKHR:
+		break;
+	case vk::ImageLayout::eShaderReadOnlyOptimal:
+		dst_access_mask = vk::AccessFlagBits::eShaderRead;
+		break;
+	case vk::ImageLayout::eTransferSrcOptimal:
+		dst_access_mask = vk::AccessFlagBits::eTransferRead;
+		break;
+	case vk::ImageLayout::eTransferDstOptimal:
+		dst_access_mask = vk::AccessFlagBits::eTransferWrite;
+		break;
+	default:
+		KOBRA_ASSERT(false, "Unsupported new layout");
+		break;
+        }
+
+	// Destination stage
+        vk::PipelineStageFlags destination_stage;
+        switch (new_layout) {
+	case vk::ImageLayout::eColorAttachmentOptimal:
+		destination_stage = vk::PipelineStageFlagBits::eColorAttachmentOutput; break;
+	case vk::ImageLayout::eDepthStencilAttachmentOptimal:
+		destination_stage = vk::PipelineStageFlagBits::eEarlyFragmentTests; break;
+	case vk::ImageLayout::eGeneral:
+		destination_stage = vk::PipelineStageFlagBits::eHost; break;
+	case vk::ImageLayout::ePresentSrcKHR:
+		destination_stage = vk::PipelineStageFlagBits::eBottomOfPipe; break;
+	case vk::ImageLayout::eShaderReadOnlyOptimal:
+		destination_stage = vk::PipelineStageFlagBits::eFragmentShader; break;
+	case vk::ImageLayout::eTransferDstOptimal:
+	case vk::ImageLayout::eTransferSrcOptimal:
+		destination_stage = vk::PipelineStageFlagBits::eTransfer; break;
+	default:
+		KOBRA_ASSERT(false, "Unsupported new layout");
+		break;
+        }
+
+	// Aspect mask
+        vk::ImageAspectFlags aspect_mask;
+        if (new_layout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
+		aspect_mask = vk::ImageAspectFlagBits::eDepth;
+		if (format == vk::Format::eD32SfloatS8Uint || format == vk::Format::eD24UnormS8Uint)
+			aspect_mask |= vk::ImageAspectFlagBits::eStencil;
+        } else {
+		aspect_mask = vk::ImageAspectFlagBits::eColor;
+        }
+
+	// Create the barrier
+        vk::ImageSubresourceRange image_subresource_range {
+		aspect_mask,
+		0, 1, 0, 1
+	};
+
+	vk::ImageMemoryBarrier barrier {
+		src_access_mask, dst_access_mask,
+		old_layout, new_layout,
+		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+		image, image_subresource_range
+	};
+
+	// Add the barrier
+	return cmd.pipelineBarrier(source_stage, destination_stage, {}, {}, {}, barrier);
+}
+
 // Image data wrapper
 struct ImageData {
 	vk::Format format;
@@ -2413,6 +2531,25 @@ struct BufferData {
 		memcpy(ptr, data.data(), data.size() * sizeof(T));
 		memory.unmapMemory();
 	}
+
+	// Get buffer data
+	template <class T>
+	std::vector <T> download() const {
+		// Assertions
+		KOBRA_ASSERT(
+			(memory_properties & vk::MemoryPropertyFlagBits::eHostCoherent)
+				&& (memory_properties & vk::MemoryPropertyFlagBits::eHostVisible),
+			"Buffer data must be host coherent and host visible"
+		);
+
+		// Download data
+		std::vector <T> data(size / sizeof(T));
+		void *ptr = memory.mapMemory(0, size);
+		memcpy(data.data(), ptr, size);
+		memory.unmapMemory();
+
+		return data;
+	}
 };
 
 // Copy data to an image
@@ -2435,8 +2572,7 @@ ImageData make_texture(const vk::raii::PhysicalDevice &,
 		vk::ImageAspectFlags);
 
 // Create a sampler from an ImageData object
-inline vk::raii::Sampler make_sampler(const vk::raii::Device &device,
-		const ImageData &image)
+inline vk::raii::Sampler make_sampler(const vk::raii::Device &device, const ImageData &image)
 {
 	return vk::raii::Sampler {
 		device,
