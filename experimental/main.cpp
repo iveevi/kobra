@@ -87,7 +87,7 @@ void keyboard_input(GLFWwindow *window, int key, int, int action, int)
 // Input handling
 void input_handling(GLFWwindow *window)
 {
-	float speed = 0.1f;
+	float speed = 0.01f;
 
 	glm::vec3 forward = camera.transform.forward();
 	glm::vec3 right = camera.transform.right();
@@ -266,6 +266,9 @@ int main()
 			},
 			nullptr
 		);
+
+		// Wait
+		graphics_queue.waitIdle();
 	}
 
 	// Depth buffer and render pass
@@ -298,38 +301,20 @@ int main()
 	);
 
 	// Fill with data
-	std::cout << "Box vertices: " << box_mesh.vertices().size() << std::endl;
-	for (uint32_t i = 0; i < box_mesh.vertices().size(); i++) {
-		auto pos = box_mesh.vertices()[i].position;
-		std::cout << "\t" << pos.x << " " << pos.y << " " << pos.z << std::endl;
-	}
-
-	std::cout << "Box indices: " << box_mesh.indices().size() << std::endl;
-	for (uint32_t i = 0; i < box_mesh.indices().size(); i++) {
-		std::cout << "\t" << box_mesh.indices()[i] << std::endl;
-	}
-
 	vertex_buffer.upload(box_mesh.vertices());
 	index_buffer.upload(box_mesh.indices());
-
-	auto vec = index_buffer.download <uint32_t> ();
-	std::cout << "Downloaded indices: " << vec.size() << std::endl;
-	for (uint32_t i = 0; i < vec.size(); i++) {
-		std::cout << "\t" << vec[i] << std::endl;
-	}
 
 	// Load shaders
 	// TODO: compile function for shaders
 	auto vertex = make_shader_module(device, "shaders/bin/raster/vertex.spv");
-
-	// TODO: debug culling with the normal shader
 	auto fragment = make_shader_module(device, "shaders/bin/raster/color_frag.spv");
 
 	// Descriptor set layout
 	auto dsl = make_descriptor_set_layout(device, {
 		{
-			vk::DescriptorType::eCombinedImageSampler,
 			0,
+			vk::DescriptorType::eCombinedImageSampler,
+			1,
 			vk::ShaderStageFlagBits::eFragment
 		},
 	});
@@ -387,6 +372,9 @@ int main()
 
 		.pipeline_layout = ppl,
 		.pipeline_cache = ppl_cache,
+
+		.depth_test = true,
+		.depth_write = true,
 	};
 
 	auto pipeline = make_graphics_pipeline(grp_info);
@@ -407,17 +395,72 @@ int main()
 	uint32_t image_index;
 
 	// Load image texture
-	auto img = make_texture(phdev, device,
-		"resources/brickwall.jpg",
-		vk::ImageTiling::eOptimal,
-		vk::ImageUsageFlagBits::eSampled
-			| vk::ImageUsageFlagBits::eTransferDst
-			| vk::ImageUsageFlagBits::eTransferSrc,
-		vk::MemoryPropertyFlagBits::eDeviceLocal,
-		vk::ImageAspectFlagBits::eColor
-	);
+	ImageData img = nullptr;
+	
+	KOBRA_LOG_FILE(notify) << "Starting image creation process\n";
+
+	{
+		// Temporary command buffer
+		// TODO: simpler method for single time use (lambda into
+		// function...)
+		auto temp_command_buffer = make_command_buffer(device, command_pool);
+
+		// Record
+		temp_command_buffer.begin(vk::CommandBufferBeginInfo {
+			vk::CommandBufferUsageFlagBits::eOneTimeSubmit
+		});
+
+		// Staging buffer
+		BufferData staging_buffer = nullptr;
+
+		// Create the texture
+		img = std::move(make_texture(temp_command_buffer,
+			phdev, device, staging_buffer,
+			"resources/brickwall.jpg",
+			vk::ImageTiling::eOptimal,
+			vk::ImageUsageFlagBits::eSampled
+				| vk::ImageUsageFlagBits::eTransferDst
+				| vk::ImageUsageFlagBits::eTransferSrc,
+			vk::MemoryPropertyFlagBits::eDeviceLocal,
+			vk::ImageAspectFlagBits::eColor
+		));
+
+		// End
+		temp_command_buffer.end();
+
+		// Submit
+		graphics_queue.submit(
+			vk::SubmitInfo {
+				0, nullptr, nullptr, 1, &*temp_command_buffer
+			},
+			nullptr
+		);
+
+		// Wait
+		graphics_queue.waitIdle();
+	}
+
+	KOBRA_LOG_FILE(notify) << "Image loaded\n";
 
 	auto sampler = make_sampler(device, img);
+
+	// Bind sampler to descriptor set
+	auto dset_info = std::array <vk::DescriptorImageInfo, 1> {
+		vk::DescriptorImageInfo {
+			*sampler,
+			*img.view,
+			vk::ImageLayout::eShaderReadOnlyOptimal
+		}
+	};
+
+	vk::WriteDescriptorSet dset_write {
+		*dset,
+		0, 0,
+		vk::DescriptorType::eCombinedImageSampler,
+		dset_info
+	};
+
+	device.updateDescriptorSets(dset_write, nullptr);
 
 	// Record the command buffer
 	auto record = [&](const vk::raii::CommandBuffer &command_buffer) {
@@ -442,7 +485,7 @@ int main()
 		mat.albedo = glm::vec3 {1.0f, 0.0f, 0.0f};
 		mat.type = Shading::eDiffuse;
 		mat.hightlight = 0;
-		mat.has_albedo = false;
+		mat.has_albedo = true;
 		mat.has_normal = false;
 
 		PC_Vertex pc;
@@ -527,7 +570,6 @@ int main()
 
 		// Get command buffer
 		const auto &command_buffer = command_buffers[frame_index];
-		std::cout << "Command buffer: " << *command_buffer << " [" << frame_index << "]" << std::endl;
 
 		// TODO: handle resizing
 

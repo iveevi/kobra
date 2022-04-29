@@ -1,3 +1,6 @@
+// More vulkan headers
+#include <vulkan/vulkan_format_traits.hpp>
+
 // STBI headrs
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb/stb_image.h>
@@ -15,9 +18,41 @@ const vk::raii::Context &get_vulkan_context()
 	return context;
 }
 
+// Copy a buffer to an image
+void copy_data_to_image(const vk::raii::CommandBuffer &cmd,
+		const vk::raii::Buffer &buffer,
+		const vk::raii::Image &image,
+		const vk::Format &format,
+		uint32_t width,
+		uint32_t height)
+{
+	// Image subresource
+	vk::ImageSubresourceLayers subresource {
+		vk::ImageAspectFlagBits::eColor,
+		0, 0, 1
+	};
+
+	// Copy region
+	vk::BufferImageCopy region = vk::BufferImageCopy()
+		.setBufferOffset(0)
+		.setBufferRowLength(width)
+		.setBufferImageHeight(height)
+		.setImageSubresource(subresource)
+		.setImageOffset({ 0, 0, 0 })
+		.setImageExtent({ width, height, 1 });
+
+	// Copy buffer to image
+	cmd.copyBufferToImage(*buffer, *image,
+		vk::ImageLayout::eTransferDstOptimal,
+		{region}
+	);
+}
+
 // Create ImageData object from a file
-ImageData make_texture(const vk::raii::PhysicalDevice &phdev,
+ImageData make_texture(const vk::raii::CommandBuffer &cmd,
+		const vk::raii::PhysicalDevice &phdev,
 		const vk::raii::Device &device,
+		BufferData &buffer,
 		const std::string &filename,
 		vk::ImageTiling tiling,
 		vk::ImageUsageFlags usage,
@@ -50,7 +85,39 @@ ImageData make_texture(const vk::raii::PhysicalDevice &phdev,
 		aspect_mask
 	);
 
-	// TODO: Copy data to image
+	// Copy the image data into a staging buffer
+	vk::DeviceSize size = width * height * vk::blockSize(img.format);
+
+	buffer = BufferData(
+		phdev, device,
+		size,
+		vk::BufferUsageFlagBits::eTransferSrc,
+		vk::MemoryPropertyFlagBits::eHostVisible
+			| vk::MemoryPropertyFlagBits::eHostCoherent
+	);
+
+	// Copy the data
+	buffer.upload(data, size);
+
+	// First transition the image to the transfer destination layout
+	transition_image_layout(cmd,
+		*img.image, img.format,
+		vk::ImageLayout::ePreinitialized,
+		vk::ImageLayout::eTransferDstOptimal
+	);
+
+	// Copy the buffer to the image
+	copy_data_to_image(cmd,
+		buffer.buffer, img.image,
+		img.format, width, height
+	);
+
+	// Transition the image to the shader read layout
+	transition_image_layout(cmd,
+		*img.image, img.format,
+		vk::ImageLayout::eTransferDstOptimal,
+		vk::ImageLayout::eShaderReadOnlyOptimal
+	);
 
 	return img;
 }

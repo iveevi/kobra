@@ -39,7 +39,8 @@ tranmissive), lit with area lights and environment based lighting.
 </p>
 
 A similar scene (the teapot is now tranmissive as well), but most of the
-lighting is indirect from the environment.
+lighting arrives onto the objects indirectly from the environment through the
+glass pane (transmissive, in the middle).
 
 <p align = "center">
 	<img src = "media/capture_7.png">

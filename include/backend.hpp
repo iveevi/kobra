@@ -2532,6 +2532,26 @@ struct BufferData {
 		memory.unmapMemory();
 	}
 
+	template <class T>
+	void upload(const T *const data, const vk::DeviceSize &size) const {
+		// Assertions
+		KOBRA_ASSERT(
+			(memory_properties & vk::MemoryPropertyFlagBits::eHostCoherent)
+				&& (memory_properties & vk::MemoryPropertyFlagBits::eHostVisible),
+			"Buffer data must be host coherent and host visible"
+		);
+
+		KOBRA_ASSERT(
+			size <= this->size,
+			"Buffer size is smaller than data size"
+		);
+
+		// Upload data
+		void *ptr = memory.mapMemory(0, size);
+		memcpy(ptr, data, size);
+		memory.unmapMemory();
+	}
+
 	// Get buffer data
 	template <class T>
 	std::vector <T> download() const {
@@ -2553,18 +2573,17 @@ struct BufferData {
 };
 
 // Copy data to an image
-inline void copy_data_to_image(
-	const vk::raii::Device &device,
-	const vk::raii::CommandPool &cmd_pool,
-	const vk::raii::CommandBuffer &cmd_buffer,
-	const BufferData &buffer,
-	const ImageData &image)
-{
-}
+void copy_data_to_image(const vk::raii::CommandBuffer &,
+		const vk::raii::Buffer &,
+		const vk::raii::Image &,
+		const vk::Format &,
+		uint32_t, uint32_t);
 
 // Create ImageData object from a file
-ImageData make_texture(const vk::raii::PhysicalDevice &,
+ImageData make_texture(const vk::raii::CommandBuffer &,
+		const vk::raii::PhysicalDevice &,
 		const vk::raii::Device &,
+		BufferData &,
 		const std::string &,
 		vk::ImageTiling,
 		vk::ImageUsageFlags,
@@ -2762,8 +2781,9 @@ inline vk::raii::DescriptorPool make_descriptor_pool(const vk::raii::Device &dev
 }
 
 // Create a descriptor set layout
-using DSLB = std::tuple <vk::DescriptorType, uint32_t, vk::ShaderStageFlagBits>;
+using DSLB = std::tuple <uint32_t, vk::DescriptorType, uint32_t, vk::ShaderStageFlagBits>;
 
+// TODO: is this function even required? 1:1 parameter mapping
 inline vk::raii::DescriptorSetLayout make_descriptor_set_layout
 		(const vk::raii::Device &device,
 		const std::vector <DSLB> &bindings)
@@ -2771,10 +2791,10 @@ inline vk::raii::DescriptorSetLayout make_descriptor_set_layout
 	std::vector <vk::DescriptorSetLayoutBinding> layout_bindings(bindings.size());
 	for (size_t i = 0; i < bindings.size(); ++i) {
 		layout_bindings[i] = {
-			(uint32_t) i,
 			std::get <0> (bindings[i]),
 			std::get <1> (bindings[i]),
-			std::get <2> (bindings[i])
+			std::get <2> (bindings[i]),
+			std::get <3> (bindings[i])
 		};
 	}
 
