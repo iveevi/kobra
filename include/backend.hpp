@@ -2572,6 +2572,17 @@ struct BufferData {
 	}
 };
 
+// Device address
+inline vk::DeviceAddress buffer_addr(const vk::raii::Device &device, const BufferData &bd)
+{
+	VkBufferDeviceAddressInfo info {
+		.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+		.buffer = *bd.buffer
+	};
+
+	return vkGetBufferDeviceAddressKHR(*device, &info);
+}
+
 // Copy data to an image
 void copy_data_to_image(const vk::raii::CommandBuffer &,
 		const vk::raii::Buffer &,

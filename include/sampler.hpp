@@ -98,8 +98,10 @@ public:
 			.channels = 4,
 		};
 
-		static Sampler sampler;
-		if (sampler._sampler == VK_NULL_HANDLE) {
+		// Sampler for each unique device
+		static std::map <VkDevice, Sampler> sampler_cache;
+
+		if (sampler_cache.find(ctx.vk_device()) == sampler_cache.end()) {
 			TexturePacket blank_tp = make_texture(
 				ctx, command_pool,
 				blank,
@@ -115,11 +117,12 @@ public:
 				VK_PIPELINE_STAGE_TRANSFER_BIT
 			);
 
-			sampler._ctx = ctx;
-			sampler._init(blank_tp);
+			sampler_cache[ctx.vk_device()] = Sampler();
+			sampler_cache[ctx.vk_device()]._ctx = ctx;
+			sampler_cache[ctx.vk_device()]._init(blank_tp);
 		}
 
-		return sampler;
+		return sampler_cache[ctx.vk_device()];
 	}
 
 	// Constructed samplers

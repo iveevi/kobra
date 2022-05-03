@@ -346,8 +346,20 @@ public:
 			.pSignalSemaphores = signal_semaphores
 		};
 
-		// Submit the command buffer
+		// Wait for previous frame to finish (1 second timeout)
+		uint64_t timeout = 1e9;
+		while (vkWaitForFences(
+			context.vk_device(), 1,
+			&in_flight_fences[frame_index],
+			VK_TRUE, timeout
+		) != VK_SUCCESS) {
+			KOBRA_LOG_FILE(notify) << "Timed out waiting for fence!\n";
+		}
+	
+		// Reset the fence
 		vkResetFences(context.device.device, 1, &in_flight_fences[frame_index]);
+
+		// Submit the command buffer
 		result = vkQueueSubmit(
 			context.device.graphics_queue, 1, &submit_info,
 			in_flight_fences[frame_index]

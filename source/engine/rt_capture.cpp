@@ -29,10 +29,10 @@ RTCapture::RTCapture(Vulkan *vk, const std::string &scene_file, const Camera &ca
 	// Create batch
 	// TODO: a method to generate optimal batch sizes (eg 50x50 is
 	// faster than 10x10)
-	batch = rt::Batch(800, 800, 50, 50, 100);
+	batch = rt::Batch(800, 800, 25, 25, 100);
 
-	index = batch.make_batch_index(0, 0, 4, 1);
-	index.surface_samples = 32;
+	index = batch.make_batch_index(0, 0, 1, 100);
+	index.surface_samples = 1;
 	index.accumulate = true;
 
 	// Create GUI

@@ -8,7 +8,7 @@
 #include <vulkan/vulkan_core.h>
 
 // Engine macros
-// #define KOBRA_VALIDATION_LAYERS
+#define KOBRA_VALIDATION_LAYERS
 // #define KOBRA_ERROR_ONLY
 // #define KOBRA_THROW_ERROR
 
@@ -30,6 +30,7 @@
 #include "include/raytracing/mesh.hpp"
 #include "include/raytracing/sphere.hpp"
 #include "include/scene.hpp"
+#include "include/texture.hpp"
 #include "include/types.hpp"
 #include "profiler.hpp"
 

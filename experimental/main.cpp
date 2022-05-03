@@ -4,6 +4,7 @@
 // More Vulkan stuff
 #include <vulkan/vulkan_core.h>
 #include <vulkan/vulkan_raii.hpp>
+#include <vulkan/vulkan_structs.hpp>
 
 #define KOBRA_VALIDATION_LAYERS
 #define KOOBRA_THROW_ERROR
@@ -87,7 +88,7 @@ void keyboard_input(GLFWwindow *window, int key, int, int action, int)
 // Input handling
 void input_handling(GLFWwindow *window)
 {
-	float speed = 0.01f;
+	float speed = 0.1f;
 
 	glm::vec3 forward = camera.transform.forward();
 	glm::vec3 right = camera.transform.right();
@@ -148,6 +149,109 @@ struct FrameData {
 		render_completed(device, vk::SemaphoreCreateInfo {}) {}
 };
 
+// Vulkan representation of a model
+struct VkModel {
+	BufferData	vertex_buffer;
+	BufferData	index_buffer;
+
+	uint32_t	vertex_count;
+	uint32_t	index_count;
+};
+
+// Create a VkModel from a Mesh
+VkModel make_vk_model(const vk::raii::PhysicalDevice &phdev, const vk::raii::Device &device, const Mesh &mesh)
+{
+	BufferData vertex_buffer = BufferData(phdev, device,
+		mesh.vertices().size() * sizeof(Vertex),
+		vk::BufferUsageFlagBits::eVertexBuffer,
+		vk::MemoryPropertyFlagBits::eHostVisible
+			| vk::MemoryPropertyFlagBits::eHostCoherent
+	);
+
+	BufferData index_buffer = BufferData(phdev, device,
+		mesh.indices().size() * sizeof(uint32_t),
+		vk::BufferUsageFlagBits::eIndexBuffer,
+		vk::MemoryPropertyFlagBits::eHostVisible
+			| vk::MemoryPropertyFlagBits::eHostCoherent
+	);
+
+	vertex_buffer.upload(mesh.vertices());
+	index_buffer.upload(mesh.indices());
+
+	return {
+		std::move(vertex_buffer),
+		std::move(index_buffer),
+		static_cast <uint32_t> (mesh.vertices().size()),
+		static_cast <uint32_t> (mesh.indices().size())
+	};
+}
+
+namespace as {	// Acceleration structure functions
+
+// KHR acceleration structure aliases
+using Geometry = vk::AccelerationStructureGeometryKHR;
+using BuildRange = vk::AccelerationStructureBuildRangeInfoKHR;
+using Flags = vk::BuildAccelerationStructureFlagsKHR;
+using Accelerator = vk::AccelerationStructureKHR;
+
+// Bottom level acceleration structure (BLAS) info
+struct BLAS {
+	std::vector <Geometry>		geometries;
+	std::vector <BuildRange>	build_offsets;
+	Flags				flags {0};
+};
+
+// Create BLAS info
+BLAS make_blas(const vk::raii::Device &device, const VkModel &model)
+{
+	// Buffer addresses
+	vk::DeviceAddress vertex_buffer_address = buffer_addr(device, model.vertex_buffer);
+	vk::DeviceAddress index_buffer_address = buffer_addr(device, model.index_buffer);
+
+	// Maximum number of primitives
+	uint32_t max_primitives = model.index_count/3;
+
+	// Vertex buffer description
+	vk::AccelerationStructureGeometryTrianglesDataKHR triangles_data;
+	triangles_data.vertexFormat = vk::Format::eR32G32B32Sfloat;
+	triangles_data.vertexData.deviceAddress = vertex_buffer_address;
+	triangles_data.vertexStride = sizeof(Vertex);
+	triangles_data.maxVertex = model.vertex_count;
+	triangles_data.indexType = vk::IndexType::eUint32;
+	triangles_data.indexData.deviceAddress = index_buffer_address;
+
+	// Geometry description
+	vk::AccelerationStructureGeometryKHR geometry;
+	geometry.geometryType = vk::GeometryTypeKHR::eTriangles;
+	geometry.geometry.triangles = triangles_data;
+	geometry.flags = vk::GeometryFlagBitsKHR::eOpaque;
+
+	// Build range
+	vk::AccelerationStructureBuildRangeInfoKHR build_range;
+	build_range.primitiveCount = max_primitives;
+	build_range.primitiveOffset = 0;
+	build_range.firstVertex = 0;
+	build_range.transformOffset = 0;
+
+	return {
+		{geometry},
+		{build_range}
+	};
+}
+
+// Final acceleration structure (AS) info
+struct AccelerationStructure {
+	Accelerator			tlas;
+	std::vector <Accelerator>	blas;
+};
+
+// Create AS info
+void build_as(const std::vector <BLAS> &input, const Flags &flags)
+{
+}
+
+}		// Acceleration structure functions
+
 int main()
 {
 	// Choosing physical device
@@ -167,7 +271,7 @@ int main()
 	auto extensions = {
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 
-		/* For raytracing
+		// For raytracing
 		"VK_KHR_spirv_1_4",
 		"VK_KHR_shader_float_controls",
 		"VK_KHR_ray_tracing_pipeline",
@@ -175,7 +279,7 @@ int main()
 		"VK_EXT_descriptor_indexing",
 		"VK_KHR_maintenance3",
 		"VK_KHR_buffer_device_address",
-		"VK_KHR_deferred_host_operations", */
+		"VK_KHR_deferred_host_operations"
 	};
 
 	auto predicate = [&extensions](const vk::raii::PhysicalDevice &dev) {
@@ -285,7 +389,10 @@ int main()
 	// Box mesh
 	auto box_mesh = Mesh::make_box({0, 0, 0}, {1, 1, 1});
 
-	// Allocate vertex and index buffer
+	// Vulkan model
+	auto box_vk = make_vk_model(phdev, device, box_mesh);
+
+	/* Allocate vertex and index buffer
 	auto vertex_buffer = BufferData(phdev, device,
 		box_mesh.vertices().size() * sizeof(Vertex),
 		vk::BufferUsageFlagBits::eVertexBuffer,
@@ -302,7 +409,7 @@ int main()
 
 	// Fill with data
 	vertex_buffer.upload(box_mesh.vertices());
-	index_buffer.upload(box_mesh.indices());
+	index_buffer.upload(box_mesh.indices()); */
 
 	// Load shaders
 	// TODO: compile function for shaders
@@ -396,7 +503,7 @@ int main()
 
 	// Load image texture
 	ImageData img = nullptr;
-	
+
 	KOBRA_LOG_FILE(notify) << "Starting image creation process\n";
 
 	{
@@ -537,8 +644,8 @@ int main()
 		);
 
 		// Bind the cube and draw it
-		command_buffer.bindVertexBuffers(0, *vertex_buffer.buffer, {0});
-		command_buffer.bindIndexBuffer(*index_buffer.buffer, 0, vk::IndexType::eUint32);
+		command_buffer.bindVertexBuffers(0, *box_vk.vertex_buffer.buffer, {0});
+		command_buffer.bindIndexBuffer(*box_vk.index_buffer.buffer, 0, vk::IndexType::eUint32);
 		command_buffer.drawIndexed(
 			static_cast <uint32_t> (box_mesh.indices().size()),
 			1, 0, 0, 0
