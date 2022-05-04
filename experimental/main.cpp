@@ -88,7 +88,7 @@ void keyboard_input(GLFWwindow *window, int key, int, int action, int)
 // Input handling
 void input_handling(GLFWwindow *window)
 {
-	float speed = 0.1f;
+	float speed = 0.01f;
 
 	glm::vec3 forward = camera.transform.forward();
 	glm::vec3 right = camera.transform.right();
@@ -108,10 +108,6 @@ void input_handling(GLFWwindow *window)
 		camera.transform.move(up * speed);
 	else if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
 		camera.transform.move(-up * speed);
-
-	std::cout << "Position: " << camera.transform.position.x << " "
-		<< camera.transform.position.y << " "
-		<< camera.transform.position.z << std::endl;
 }
 
 // Present an image
@@ -192,7 +188,10 @@ namespace as {	// Acceleration structure functions
 using Geometry = vk::AccelerationStructureGeometryKHR;
 using BuildRange = vk::AccelerationStructureBuildRangeInfoKHR;
 using Flags = vk::BuildAccelerationStructureFlagsKHR;
-using Accelerator = vk::AccelerationStructureKHR;
+
+using BuildInfo = vk::AccelerationStructureBuildGeometryInfoKHR;
+using BuildSize = vk::AccelerationStructureBuildSizesInfoKHR;
+using BuildRange = vk::AccelerationStructureBuildRangeInfoKHR;
 
 // Bottom level acceleration structure (BLAS) info
 struct BLAS {
@@ -239,15 +238,201 @@ BLAS make_blas(const vk::raii::Device &device, const VkModel &model)
 	};
 }
 
+// Acceleration structure wrapper
+struct Accelerator {
+	vk::raii::AccelerationStructureKHR	as = nullptr;
+	BufferData				scratch = nullptr;
+
+	// Default constructor
+	Accelerator() = default;
+
+	// Construct from device
+	Accelerator(const vk::raii::PhysicalDevice &phdev,
+			const vk::raii::Device &device,
+			const vk::AccelerationStructureCreateInfoKHR &info)
+		: as(device, info),
+		scratch(phdev, device,
+			info.size,
+			vk::BufferUsageFlagBits::eStorageBuffer
+				| vk::BufferUsageFlagBits::eShaderDeviceAddress,
+			vk::MemoryPropertyFlagBits::eDeviceLocal
+		) {}
+};
+
 // Final acceleration structure (AS) info
 struct AccelerationStructure {
 	Accelerator			tlas;
 	std::vector <Accelerator>	blas;
 };
 
-// Create AS info
-void build_as(const std::vector <BLAS> &input, const Flags &flags)
+// Record a build command buffer
+void cmd_build_blas(const vk::raii::PhysicalDevice &phdev,
+		const vk::raii::Device &device,
+		const vk::raii::CommandBuffer &cmd,
+		std::vector <Accelerator> &blas_out,
+		const std::vector <uint32_t> &blas_indices,
+		std::vector <BuildInfo> &build_infos,
+		const std::vector <BuildSize> &build_sizes,
+		const std::vector <const BuildRange *> &build_ranges,
+		const vk::DeviceAddress &scratch_addr,
+		const vk::raii::QueryPool &query_pool)
 {
+	/* if (query_pool != nullptr) {
+		cmd.resetQueryPool(*query_pool,
+			0, static_cast <uint32_t> (blas_indices.size())
+		);
+	} */
+
+	// Query count
+	uint32_t query_count;
+
+	// Iterate through BLAS indices
+	for (const auto &i : blas_indices) {
+		// Creation info
+		vk::AccelerationStructureCreateInfoKHR create_info;
+		create_info.type = vk::AccelerationStructureTypeKHR::eBottomLevel;
+		create_info.size = build_sizes[i].accelerationStructureSize;
+
+		// Create acceleration structure
+		blas_out[i] = std::move(Accelerator(phdev, device, create_info));
+
+		// Build command buffer
+		build_infos[i].dstAccelerationStructure = *blas_out[i].as;
+		build_infos[i].scratchData.deviceAddress = scratch_addr;
+
+		cmd.buildAccelerationStructuresKHR(build_infos[i], build_ranges[i]);
+
+		// Memory barrier since we are batching
+		vk::BufferMemoryBarrier memory_barrier;
+		memory_barrier.srcAccessMask = vk::AccessFlagBits::eAccelerationStructureWriteKHR;
+		memory_barrier.dstAccessMask = vk::AccessFlagBits::eAccelerationStructureReadKHR;
+
+		cmd.pipelineBarrier(vk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
+			vk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
+			vk::DependencyFlagBits::eByRegion,
+			{},
+			{memory_barrier},
+			{}
+		);
+
+		/* Query
+		if (query_pool != nullptr) {
+			cmd.writeAccelerationStructurePropertiesKHR(blas_out[i].as,
+				vk::QueryTypeKHR::eAccelerationStructureKHR,
+				0, 1,
+				query_pool,
+				query_count
+			);
+		} */
+	}
+}
+
+// Build AS
+void build_as(const vk::raii::PhysicalDevice &phdev,
+		const vk::raii::Device &device,
+		const vk::raii::CommandPool &command_pool,
+		const std::vector <BLAS> &input,
+		const Flags &flags)
+{
+	// Size infos
+	uint32_t blas_count = static_cast <uint32_t> (input.size());
+
+	vk::DeviceSize blas_size = 0;
+	vk::DeviceSize blas_scratch_size = 0;
+	uint32_t blas_compactions = 0;
+
+	// Population Vulkun build info structure
+	std::vector <BuildInfo> build_infos(blas_count);
+	std::vector <BuildSize> build_sizes(blas_count);
+	std::vector <const BuildRange *> build_offsets(blas_count);
+
+	for (uint32_t i = 0; i < blas_count; i++) {
+		// Fill in build info
+		build_infos[i].flags = flags | input[i].flags;
+		build_infos[i].type = vk::AccelerationStructureTypeKHR::eBottomLevel;
+		build_infos[i].mode = vk::BuildAccelerationStructureModeKHR::eBuild;
+		build_infos[i].geometryCount = static_cast <uint32_t> (input[i].geometries.size());
+		build_infos[i].pGeometries = input[i].geometries.data();
+
+		// Range info
+		build_offsets[i] = input[i].build_offsets.data();
+
+		// Determine sizes
+		std::vector <uint32_t> max_prims(input[i].build_offsets.size());
+		for (uint32_t j = 0; j < input[i].build_offsets.size(); j++)
+			max_prims[j] = input[i].build_offsets[j].primitiveCount;
+
+		// Query sizes
+		build_sizes[i] = device.getAccelerationStructureBuildSizesKHR(
+			vk::AccelerationStructureBuildTypeKHR::eDevice,
+			build_infos[i],
+			max_prims
+		);
+
+		// Accumulate sizes
+		blas_size += build_sizes[i].accelerationStructureSize;
+		blas_scratch_size = std::max(blas_scratch_size, build_sizes[i].buildScratchSize);
+		blas_compactions += (build_infos[i].flags
+			& vk::BuildAccelerationStructureFlagBitsKHR::eAllowCompaction) ? 1 : 0;
+	}
+
+	// Create scratch buffer
+	BufferData blas_scratch_buffer(phdev, device, blas_scratch_size,
+		vk::BufferUsageFlagBits::eStorageBuffer
+			| vk::BufferUsageFlagBits::eShaderDeviceAddress,
+		vk::MemoryPropertyFlagBits::eDeviceLocal
+	);
+
+	vk::DeviceAddress blas_scratch_address = buffer_addr(device, blas_scratch_buffer);
+
+	// Query real sizes
+	vk::raii::QueryPool blas_query_pool = nullptr;
+	if (blas_compactions > 0) {
+		blas_query_pool = vk::raii::QueryPool(device,
+			vk::QueryPoolCreateInfo {
+				vk::QueryPoolCreateFlags(),
+				vk::QueryType::eAccelerationStructureCompactedSizeKHR,
+				blas_compactions
+			}
+		);
+	}
+
+	// Batching build
+	std::vector <uint32_t> blas_indices;
+	vk::DeviceSize batch_size = 0;
+	vk::DeviceSize batch_limit = 256'000'000;	// 256 MB
+
+	// Final BLAS
+	std::vector <Accelerator> blas_out;
+	
+	for (uint32_t i = 0; i < blas_count; i++) {
+		blas_indices.push_back(i);
+
+		// Update size count
+		batch_size += build_sizes[i].accelerationStructureSize;
+
+		// Last batch or batch limit reached
+		if (batch_size >= batch_limit || i == blas_count - 1) {
+			vk::raii::CommandBuffer cmd = make_command_buffer(device, command_pool);
+
+			// Create acceleration structure
+			cmd.begin(vk::CommandBufferBeginInfo {
+				vk::CommandBufferUsageFlagBits::eOneTimeSubmit
+			});
+
+			cmd_build_blas(phdev, device, cmd,
+				blas_out,
+				blas_indices,
+				build_infos,
+				build_sizes,
+				build_offsets,
+				blas_scratch_address,
+				blas_query_pool
+			);
+
+			cmd.end();
+		}
+	}
 }
 
 }		// Acceleration structure functions

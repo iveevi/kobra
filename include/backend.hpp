@@ -2580,7 +2580,7 @@ inline vk::DeviceAddress buffer_addr(const vk::raii::Device &device, const Buffe
 		.buffer = *bd.buffer
 	};
 
-	return vkGetBufferDeviceAddressKHR(*device, &info);
+	return vkGetBufferDeviceAddress(*device, &info);
 }
 
 // Copy data to an image
