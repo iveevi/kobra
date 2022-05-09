@@ -1,11 +1,6 @@
 // Standard headers
 #include <iostream>
 
-// More Vulkan stuff
-#include <vulkan/vulkan_core.h>
-#include <vulkan/vulkan_raii.hpp>
-#include <vulkan/vulkan_structs.hpp>
-
 #define KOBRA_VALIDATION_LAYERS
 #define KOOBRA_THROW_ERROR
 
@@ -14,6 +9,11 @@
 #include "../include/mesh.hpp"
 #include "../include/camera.hpp"
 #include "../shaders/raster/bindings.h"
+
+// More Vulkan stuff
+#include <vulkan/vulkan_core.h>
+#include <vulkan/vulkan_raii.hpp>
+#include <vulkan/vulkan_structs.hpp>
 
 using namespace kobra;
 
@@ -265,7 +265,7 @@ struct AccelerationStructure {
 	std::vector <Accelerator>	blas;
 };
 
-// Record a build command buffer
+// Record a BLAS build command buffer
 void cmd_build_blas(const vk::raii::PhysicalDevice &phdev,
 		const vk::raii::Device &device,
 		const vk::raii::CommandBuffer &cmd,
@@ -325,6 +325,11 @@ void cmd_build_blas(const vk::raii::PhysicalDevice &phdev,
 			);
 		} */
 	}
+}
+
+// Record a TLAS build command buffer
+void cmd_build_tlas()
+{
 }
 
 // Build AS
@@ -404,11 +409,11 @@ void build_as(const vk::raii::PhysicalDevice &phdev,
 
 	// Final BLAS
 	std::vector <Accelerator> blas_out;
-	
+
 	for (uint32_t i = 0; i < blas_count; i++) {
 		blas_indices.push_back(i);
 
-		// Update size count
+		// Update size coun
 		batch_size += build_sizes[i].accelerationStructureSize;
 
 		// Last batch or batch limit reached
@@ -433,9 +438,152 @@ void build_as(const vk::raii::PhysicalDevice &phdev,
 			cmd.end();
 		}
 	}
+
+	// Outline TLAS
+	std::vector <vk::AccelerationStructureInstanceKHR> tlas;
+
+	for (uint32_t i = 0; i < blas_count; i++) {
+		vk::AccelerationStructureInstanceKHR inst;
+		inst.transform = std::array <std::array <float, 4>, 3> {
+			std::array <float, 4> {1.0f, 0.0f, 0.0f, 0.0f},
+			std::array <float, 4> {0.0f, 1.0f, 0.0f, 0.0f},
+			std::array <float, 4> {0.0f, 0.0f, 1.0f, 0.0f}
+		};
+
+		inst.instanceCustomIndex = i;
+		inst.accelerationStructureReference = acceleration_structure_addr(device, blas_out[i].as);
+		inst.flags = (uint32_t) vk::GeometryInstanceFlagBitsKHR::eTriangleCullDisable;
+		inst.mask = 0xFF;
+		inst.instanceShaderBindingTableRecordOffset = 0;
+
+		tlas.push_back(inst);
+	}
+
+	// TODO: another function
+	// Create TLAS
+	
+	uint32_t tlas_count = static_cast <uint32_t> (tlas.size());
+
+	// Command buffer
+	vk::raii::CommandBuffer cmd = make_command_buffer(device, command_pool);
+
+	// Buffer for instance data
+	BufferData tlas_buffer(phdev, device,
+		tlas_count * sizeof(vk::AccelerationStructureInstanceKHR),
+		vk::BufferUsageFlagBits::eStorageBuffer
+			| vk::BufferUsageFlagBits::eShaderDeviceAddress,
+		vk::MemoryPropertyFlagBits::eDeviceLocal
+	);
+
+	vk::DeviceAddress tlas_address = buffer_addr(device, tlas_buffer);
+
+	// Copy instance data
+	cmd.begin(vk::CommandBufferBeginInfo {
+		vk::CommandBufferUsageFlagBits::eOneTimeSubmit
+	});
+
+	cmd.end();
 }
 
 }		// Acceleration structure functions
+
+namespace rt {
+
+// Rya tracing push constants
+struct PC_Ray {
+	glm::vec4	clear_color;
+	glm::vec3	light_pos;
+	float		light_intensity;
+};
+
+// Build the raytracing pipeline
+void build_pipeline(const vk::raii::Device &device)
+{
+	// Stage indices
+	enum StageIndices {
+		eRayGeneration = 0,
+		eMiss,
+		eClosestHit,
+		eShaderGroupCount
+	};
+
+	// Load all the shader modules
+	auto shaders = make_shader_modules(device, {
+		"experimental/bin/raytrace.rgen.spv",
+		"experimental/bin/raytrace.rmiss.spv",
+		"experimental/bin/raytrace.rchit.spv"
+	});
+
+	// Array of shader stages
+	std::array <vk::PipelineShaderStageCreateInfo, eShaderGroupCount> stages;
+	vk::PipelineShaderStageCreateInfo stage;
+
+	// Ray generation
+	stage.stage = vk::ShaderStageFlagBits::eRaygenKHR;
+	stage.module = *shaders[eRayGeneration];
+	stage.pName = "main";
+
+	stages[eRayGeneration] = stage;
+
+	// Miss
+	stage.stage = vk::ShaderStageFlagBits::eMissKHR;
+	stage.module = *shaders[eMiss];
+	stage.pName = "main";
+
+	stages[eMiss] = stage;
+
+	// Closest hit
+	stage.stage = vk::ShaderStageFlagBits::eClosestHitKHR;
+	stage.module = *shaders[eClosestHit];
+	stage.pName = "main";
+
+	stages[eClosestHit] = stage;
+
+	// Shader group info
+	std::vector <vk::RayTracingShaderGroupCreateInfoKHR> shader_groups;
+
+	vk::RayTracingShaderGroupCreateInfoKHR shader_group;
+
+	shader_group.anyHitShader = VK_SHADER_UNUSED_KHR;
+	shader_group.closestHitShader = VK_SHADER_UNUSED_KHR;
+	shader_group.generalShader = VK_SHADER_UNUSED_KHR;
+	shader_group.intersectionShader = VK_SHADER_UNUSED_KHR;
+
+	// Ray generation
+	shader_group.type = vk::RayTracingShaderGroupTypeKHR::eGeneral;
+	shader_group.generalShader = eRayGeneration;
+
+	shader_groups.push_back(shader_group);
+
+	// Miss
+	shader_group.type = vk::RayTracingShaderGroupTypeKHR::eGeneral;
+	shader_group.generalShader = eMiss;
+
+	shader_groups.push_back(shader_group);
+
+	// Closest hit
+	shader_group.type = vk::RayTracingShaderGroupTypeKHR::eTrianglesHitGroup;
+	shader_group.generalShader = VK_SHADER_UNUSED_KHR;
+	shader_group.closestHitShader = eClosestHit;
+
+	shader_groups.push_back(shader_group);
+
+	// Push constants
+	vk::PushConstantRange push_constants;
+	push_constants.offset = 0;
+	push_constants.size = sizeof(PC_Ray);
+	push_constants.stageFlags = vk::ShaderStageFlagBits::eRaygenKHR
+		| vk::ShaderStageFlagBits::eMissKHR
+		| vk::ShaderStageFlagBits::eClosestHitKHR;
+
+	// Ray tracing pipeline layout
+	vk::PipelineLayoutCreateInfo ppl_info;
+
+	ppl_info.pushConstantRangeCount = 1;
+	ppl_info.pPushConstantRanges = &push_constants;
+}
+
+}
 
 int main()
 {
@@ -577,24 +725,8 @@ int main()
 	// Vulkan model
 	auto box_vk = make_vk_model(phdev, device, box_mesh);
 
-	/* Allocate vertex and index buffer
-	auto vertex_buffer = BufferData(phdev, device,
-		box_mesh.vertices().size() * sizeof(Vertex),
-		vk::BufferUsageFlagBits::eVertexBuffer,
-		vk::MemoryPropertyFlagBits::eHostVisible
-			| vk::MemoryPropertyFlagBits::eHostCoherent
-	);
-
-	auto index_buffer = BufferData(phdev, device,
-		box_mesh.indices().size() * sizeof(uint32_t),
-		vk::BufferUsageFlagBits::eIndexBuffer,
-		vk::MemoryPropertyFlagBits::eHostVisible
-			| vk::MemoryPropertyFlagBits::eHostCoherent
-	);
-
-	// Fill with data
-	vertex_buffer.upload(box_mesh.vertices());
-	index_buffer.upload(box_mesh.indices()); */
+	// Acceleration structure things
+	auto blas = as::make_blas(device, box_vk);
 
 	// Load shaders
 	// TODO: compile function for shaders

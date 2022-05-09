@@ -18,7 +18,6 @@
 #include <vulkan/vulkan_enums.hpp>
 #include <vulkan/vulkan_handles.hpp>
 #include <vulkan/vulkan_raii.hpp>
-#include <vulkan/vulkan_structs.hpp>
 #include <GLFW/glfw3.h>
 
 // Engine headers
@@ -2573,15 +2572,8 @@ struct BufferData {
 };
 
 // Device address
-inline vk::DeviceAddress buffer_addr(const vk::raii::Device &device, const BufferData &bd)
-{
-	VkBufferDeviceAddressInfo info {
-		.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-		.buffer = *bd.buffer
-	};
-
-	return vkGetBufferDeviceAddress(*device, &info);
-}
+vk::DeviceAddress buffer_addr(const vk::raii::Device &, const BufferData &);
+vk::DeviceAddress acceleration_structure_addr(const vk::raii::Device &, const vk::raii::AccelerationStructureKHR &);
 
 // Copy data to an image
 void copy_data_to_image(const vk::raii::CommandBuffer &,
@@ -2763,6 +2755,21 @@ inline vk::raii::ShaderModule make_shader_module(const vk::raii::Device &device,
 			{}, spv
 		}
 	);
+}
+
+// Multiple shader modules
+inline std::vector <vk::raii::ShaderModule> make_shader_modules
+		(const vk::raii::Device &device,
+		const std::vector <std::string> &paths)
+{
+	// Create shader modules
+	std::vector <vk::raii::ShaderModule> modules;
+	
+	modules.reserve(paths.size());
+	for (const auto &path : paths)
+		modules.emplace_back(device, path);
+
+	return modules;
 }
 
 // Create descriptor pool from a vector of pool sizes

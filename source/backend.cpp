@@ -1,4 +1,6 @@
 // More vulkan headers
+#include <vulkan/vk_platform.h>
+#include <vulkan/vulkan_core.h>
 #include <vulkan/vulkan_format_traits.hpp>
 
 // STBI headrs
@@ -7,6 +9,35 @@
 
 #include "../include/backend.hpp"
 #include "../include/core.hpp"
+
+// Vulkan extensions
+VKAPI_ATTR VkDeviceAddress VKAPI_CALL vkGetBufferDeviceAddressKHR
+		(VkDevice device,
+		const VkBufferDeviceAddressInfoKHR *pInfo)
+{
+	PFN_vkGetBufferDeviceAddressKHR
+		vkGetBufferDeviceAddressKHR =
+			(PFN_vkGetBufferDeviceAddressKHR)
+			vkGetDeviceProcAddr(device,
+				"vkGetBufferDeviceAddressKHR"
+			);
+
+	return vkGetBufferDeviceAddressKHR(device, pInfo);
+}
+
+VKAPI_ATTR VkDeviceAddress VKAPI_CALL vkGetAccelerationStructureDeviceAddressKHR
+		(VkDevice device,
+		const VkAccelerationStructureDeviceAddressInfoKHR *pInfo)
+{
+	PFN_vkGetAccelerationStructureDeviceAddressKHR
+		vkGetAccelerationStructureDeviceAddressKHR =
+			(PFN_vkGetAccelerationStructureDeviceAddressKHR)
+			vkGetDeviceProcAddr(device,
+				"vkGetAccelerationStructureDeviceAddressKHR"
+			);
+
+	return vkGetAccelerationStructureDeviceAddressKHR(device, pInfo);
+}
 
 namespace kobra {
 
@@ -120,6 +151,28 @@ ImageData make_texture(const vk::raii::CommandBuffer &cmd,
 	);
 
 	return img;
+}
+
+// Buffer addresses
+vk::DeviceAddress buffer_addr(const vk::raii::Device &device, const BufferData &bd)
+{
+	VkBufferDeviceAddressInfo info {
+		.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+		.buffer = *bd.buffer
+	};
+
+	return vkGetBufferDeviceAddressKHR(*device, &info);
+}
+
+// Acceleration structure address
+vk::DeviceAddress acceleration_structure_addr(const vk::raii::Device &device, const vk::raii::AccelerationStructureKHR &as)
+{
+	VkAccelerationStructureDeviceAddressInfoKHR info {
+		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR,
+		.accelerationStructure = *as
+	};
+
+	return vkGetAccelerationStructureDeviceAddressKHR(*device, &info);
 }
 
 }
