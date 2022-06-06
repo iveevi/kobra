@@ -1,8 +1,6 @@
 #include "global.hpp"
 #include "include/backend.hpp"
 #include "tinyfiledialogs.h"
-#include <vulkan/vulkan_core.h>
-#include <vulkan/vulkan_raii.hpp>
 
 // Scene path
 std::string scene_path = "../assets/scene.kobra";
@@ -97,6 +95,8 @@ public:
 
 int main()
 {
+	std::cout << "Vulkan hpp cpp version: " << VULKAN_HPP_CPP_VERSION << std::endl;
+
 	Vulkan *vulkan = new Vulkan();
 
 	// GUIApp gui_app {vulkan};

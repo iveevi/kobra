@@ -2,7 +2,7 @@
 #include <iostream>
 
 #define KOBRA_VALIDATION_LAYERS
-#define KOOBRA_THROW_ERROR
+// #define KOBRA_THROW_ERROR
 
 // Engine headers
 #include "../include/backend.hpp"
@@ -74,8 +74,6 @@ void mouse_movement(GLFWwindow *, double xpos, double ypos)
 
 	px = xpos;
 	py = ypos;
-
-	std::cout << "Pitch: " << pitch << " Yaw: " << yaw << std::endl;
 }
 
 // Key callback
@@ -159,14 +157,16 @@ VkModel make_vk_model(const vk::raii::PhysicalDevice &phdev, const vk::raii::Dev
 {
 	BufferData vertex_buffer = BufferData(phdev, device,
 		mesh.vertices().size() * sizeof(Vertex),
-		vk::BufferUsageFlagBits::eVertexBuffer,
+		vk::BufferUsageFlagBits::eVertexBuffer
+			| vk::BufferUsageFlagBits::eShaderDeviceAddress,
 		vk::MemoryPropertyFlagBits::eHostVisible
 			| vk::MemoryPropertyFlagBits::eHostCoherent
 	);
 
 	BufferData index_buffer = BufferData(phdev, device,
 		mesh.indices().size() * sizeof(uint32_t),
-		vk::BufferUsageFlagBits::eIndexBuffer,
+		vk::BufferUsageFlagBits::eIndexBuffer
+			| vk::BufferUsageFlagBits::eShaderDeviceAddress,
 		vk::MemoryPropertyFlagBits::eHostVisible
 			| vk::MemoryPropertyFlagBits::eHostCoherent
 	);
@@ -186,8 +186,8 @@ namespace as {	// Acceleration structure functions
 
 // KHR acceleration structure aliases
 using Geometry = vk::AccelerationStructureGeometryKHR;
-using BuildRange = vk::AccelerationStructureBuildRangeInfoKHR;
 using Flags = vk::BuildAccelerationStructureFlagsKHR;
+using FlagBits = vk::BuildAccelerationStructureFlagBitsKHR;
 
 using BuildInfo = vk::AccelerationStructureBuildGeometryInfoKHR;
 using BuildSize = vk::AccelerationStructureBuildSizesInfoKHR;
@@ -328,8 +328,86 @@ void cmd_build_blas(const vk::raii::PhysicalDevice &phdev,
 }
 
 // Record a TLAS build command buffer
-void cmd_build_tlas()
+void cmd_build_tlas(const vk::raii::PhysicalDevice &phdev,
+		const vk::raii::Device &device,
+		const vk::raii::CommandBuffer &cmd,
+		Accelerator &tlas_out,
+		uint32_t instance_count,
+		const vk::DeviceAddress &instance_buffer_addr,
+		BufferData &scratchBuffer,
+		VkBuildAccelerationStructureFlagsKHR flags)
+		// Assuming no update or motion
 {
+	bool update = false;
+
+	// Wraps a device pointer to the above uploaded instances.
+	VkAccelerationStructureGeometryInstancesDataKHR instance_data {
+		VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR
+	};
+
+	instance_data.data.deviceAddress = instance_buffer_addr;
+
+	// Put the above into a VkAccelerationStructureGeometryKHR. We need to put the instances struct in a union and label it as instance data.
+	VkAccelerationStructureGeometryKHR topASGeometry{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
+	topASGeometry.geometryType       = VK_GEOMETRY_TYPE_INSTANCES_KHR;
+	topASGeometry.geometry.instances = instance_data;
+
+	// Find sizes
+	VkAccelerationStructureBuildGeometryInfoKHR buildInfo{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
+	buildInfo.flags         = flags;
+	buildInfo.geometryCount = 1;
+	buildInfo.pGeometries   = &topASGeometry;
+	buildInfo.mode = update ? VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR : VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+	buildInfo.type                     = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+	buildInfo.srcAccelerationStructure = VK_NULL_HANDLE;
+
+	VkAccelerationStructureBuildSizesInfoKHR sizeInfo{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+	vkGetAccelerationStructureBuildSizesKHR(*device,
+			VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo,
+			&instance_count, &sizeInfo
+	);
+
+	// Create TLAS
+	if(update == false) {
+		VkAccelerationStructureCreateInfoKHR createInfo{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR};
+		createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+		createInfo.size = sizeInfo.accelerationStructureSize;
+
+		tlas_out = std::move(Accelerator(phdev, device, createInfo));
+	}
+
+	// Allocate the scratch memory
+	// scratchBuffer = m_alloc->createBuffer(sizeInfo.buildScratchSize,
+	//		VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
+	scratchBuffer = BufferData(phdev, device,
+			sizeInfo.buildScratchSize,
+			vk::BufferUsageFlagBits::eStorageBuffer
+				| vk::BufferUsageFlagBits::eShaderDeviceAddress,
+			vk::MemoryPropertyFlagBits::eDeviceLocal
+	);
+
+	VkBufferDeviceAddressInfo bufferInfo {
+		VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+		nullptr,
+		*scratchBuffer.buffer
+	};
+
+	VkDeviceAddress           scratchAddress = vkGetBufferDeviceAddress(*device, &bufferInfo);
+
+	// Update build information
+	buildInfo.srcAccelerationStructure  = update ? *(tlas_out.as) : VK_NULL_HANDLE;
+	buildInfo.dstAccelerationStructure  = *(tlas_out.as);
+	buildInfo.scratchData.deviceAddress = scratchAddress;
+
+	// Build Offsets info: n instances
+	VkAccelerationStructureBuildRangeInfoKHR        buildOffsetInfo {instance_count, 0, 0, 0};
+	const VkAccelerationStructureBuildRangeInfoKHR* pBuildOffsetInfo = &buildOffsetInfo;
+
+	// Build the TLAS
+	// auto build_range = BuildRange(pBuildOffsetInfo, 1);
+	// cmd.buildAccelerationStructuresKHR({buildInfo}, {build_range});
+	
+	vkCmdBuildAccelerationStructuresKHR(*cmd, 1, &buildInfo, &pBuildOffsetInfo);
 }
 
 // Build AS
@@ -612,7 +690,9 @@ int main()
 		"VK_EXT_descriptor_indexing",
 		"VK_KHR_maintenance3",
 		"VK_KHR_buffer_device_address",
-		"VK_KHR_deferred_host_operations"
+		"VK_KHR_deferred_host_operations",
+		"VK_KHR_buffer_device_address",
+		// "VK_KHR_ray_query"
 	};
 
 	auto predicate = [&extensions](const vk::raii::PhysicalDevice &dev) {
@@ -650,6 +730,11 @@ int main()
 	}
 
 	auto device = make_device(phdev, queue_family, extensions);
+
+	// Load Vulkan extensions
+	load_vulkan_extensions(device);
+
+	KOBRA_LOG_FILE(ok) << "Vulkan extensions loaded\n";
 
 	// Command pool and buffer
 	auto command_pool = vk::raii::CommandPool {
@@ -727,6 +812,7 @@ int main()
 
 	// Acceleration structure things
 	auto blas = as::make_blas(device, box_vk);
+	as::build_as(phdev, device, command_pool, {blas}, as::FlagBits::eAllowUpdate);
 
 	// Load shaders
 	// TODO: compile function for shaders

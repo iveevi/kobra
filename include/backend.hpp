@@ -10,7 +10,9 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
+#include <execinfo.h>
 
 // Vulkan and GLFW
 #include <vulkan/vulkan.hpp>
@@ -1745,6 +1747,23 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_logger
 		throw std::runtime_error("[Vulkan Validation Layer] "
 			"An error occured in the validation layer");
 
+#elif defined KOBRA_PAUSE_ON_ERROR
+
+		/* Print stack trace
+		// TODO:
+		void *array[10];
+		size_t size;
+
+		// get void*'s for all entries on the stack
+		size = backtrace(array, 10);
+
+		// print out all the frames to stderr
+		fprintf(stderr, "Error:");
+		backtrace_symbols_fd(array, size, stderr); */
+
+		std::cout << "Enter a key to continue..." << std::endl;
+		std::cin.get();
+
 #endif
 
 #ifndef KOBRA_VALIDATION_ERROR_ONLY
@@ -1803,7 +1822,7 @@ inline const vk::raii::Instance &get_vulkan_instance()
 		VK_MAKE_VERSION(1, 0, 0),
 		"Kobra",
 		VK_MAKE_VERSION(1, 0, 0),
-		VK_API_VERSION_1_0
+		VK_API_VERSION_1_3
 	};
 
 #ifdef KOBRA_VALIDATION_LAYERS
@@ -2067,6 +2086,9 @@ inline vk::raii::Device make_device(const vk::raii::PhysicalDevice &phdev,
 		phdev, device_info
 	};
 }
+
+// Load Vulkan extension functions
+void load_vulkan_extensions(const vk::raii::Device &device);
 
 // Find memory type
 inline uint32_t find_memory_type(const vk::PhysicalDeviceMemoryProperties &mem_props,
@@ -2766,8 +2788,14 @@ inline std::vector <vk::raii::ShaderModule> make_shader_modules
 	std::vector <vk::raii::ShaderModule> modules;
 	
 	modules.reserve(paths.size());
-	for (const auto &path : paths)
-		modules.emplace_back(device, path);
+	for (const auto &path : paths) {
+		auto spv = common::read_glob(path);
+		modules.emplace_back(device,
+			vk::ShaderModuleCreateInfo {
+				{}, spv
+			}
+		);
+	}
 
 	return modules;
 }
