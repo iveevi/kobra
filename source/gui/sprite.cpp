@@ -10,8 +10,8 @@ namespace gui {
 void Sprite::latch(LatchingPacket &lp)
 {
 	_ds = lp.layer->serve_sprite_ds();
-	if (_sampler)
-		_sampler->bind(_ds, 0);
+	if (*_sampler)
+		bind_ds(_device, _ds, _sampler, _image_data, 0);
 }
 
 }

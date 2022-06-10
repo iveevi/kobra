@@ -387,8 +387,10 @@ static std::optional <Mesh> load_raw_mesh(std::ifstream &fin)
 }
 
 // Read from file
-std::optional <Mesh> Mesh::from_file(const Vulkan::Context &ctx,
-		const VkCommandPool &command_pool,
+std::optional <Mesh> Mesh::from_file
+		(const vk::raii::PhysicalDevice &phdev,
+		const vk::raii::Device &device,
+		const vk::raii::CommandPool &command_pool,
 		std::ifstream &file,
 		const std::string &scene_file)
 {
@@ -446,11 +448,18 @@ std::optional <Mesh> Mesh::from_file(const Vulkan::Context &ctx,
 		return std::nullopt;
 	}
 
-	auto mat = Material::from_file(ctx, command_pool, file, scene_file);
-	if (!mat)
+	bool success;
+	auto mat = Material::from_file(
+		phdev, device,
+		command_pool,
+		file, scene_file,
+		success
+	);
+
+	if (!success)
 		return std::nullopt;
 
-	mesh.set_material(*mat);
+	mesh.set_material(std::move(mat));
 	Profiler::one().end();
 
 	// Return mesh

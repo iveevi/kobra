@@ -3,7 +3,7 @@
 
 namespace kobra {
 
-// Convert uint32_t to uint8_ts
+/* Convert uint32_t to uint8_ts
 bytes convert(const uint *ptr, size_t size) {
 	std::vector <uint8_t> result(size * 4);
 	for (size_t i = 0; i < size; i++) {
@@ -22,6 +22,6 @@ void Capture::snapshot(const BufferManager <uint> &pbuf, Image &image)
 	const uint *pixels = pbuf.data();
 	bytes data = convert(pixels, pbuf.size());
 	image.data = data;
-}
+} */
 
 }

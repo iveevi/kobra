@@ -1,4 +1,5 @@
 #include "../../include/gui/gui.hpp"
+#include <vulkan/vulkan_structs.hpp>
 
 namespace kobra {
 
@@ -9,31 +10,28 @@ namespace gui {
 ///////////////////////////
 
 // Get vertex binding description
-Vulkan::VB Vertex::vertex_binding()
+vk::VertexInputBindingDescription Vertex::vertex_binding()
 {
-	return Vulkan::VB {
-		.binding = 0,
-		.stride = sizeof(Vertex),
-		.inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+	return {
+		0, sizeof(Vertex),
+		vk::VertexInputRate::eVertex
 	};
 }
 
 // Get vertex attribute descriptions
-std::vector <Vulkan::VA> Vertex::vertex_attributes()
+std::vector <vk::VertexInputAttributeDescription> Vertex::vertex_attributes()
 {
 	return {
-		Vulkan::VA {
-			.location = 0,
-			.binding = 0,
-			.format = VK_FORMAT_R32G32_SFLOAT,
-			.offset = offsetof(Vertex, pos)
+		vk::VertexInputAttributeDescription {
+			0, 0,
+			vk::Format::eR32G32Sfloat,
+			offsetof(Vertex, pos)
 		},
 
-		Vulkan::VA {
-			.location = 1,
-			.binding = 0,
-			.format = VK_FORMAT_R32G32B32_SFLOAT,
-			.offset = offsetof(Vertex, color)
+		vk::VertexInputAttributeDescription {
+			1, 0,
+			vk::Format::eR32G32B32Sfloat,
+			offsetof(Vertex, color)
 		}
 	};
 }

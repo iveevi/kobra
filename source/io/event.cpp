@@ -27,13 +27,10 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
 	event.ypos = y;
 
 	// Get event queue
-	App::Window *wctx = (App::Window *) glfwGetWindowUserPointer(window);
-	MouseEventQueue *queue = wctx->mouse_events;
+	App::IO *io = (App::IO *) glfwGetWindowUserPointer(window);
 
 	// Push event
-	queue->push(event);
-
-	// std::cout << "Mouse button callback: " << event.button << " " << event.action << " " << event.mods << std::endl;
+	io->mouse_events.push(event);
 }
 
 void mouse_position_callback(GLFWwindow *window, double xpos, double ypos)
@@ -48,13 +45,10 @@ void mouse_position_callback(GLFWwindow *window, double xpos, double ypos)
 	event.ypos = ypos;
 
 	// Get event queue
-	App::Window *wctx = (App::Window *) glfwGetWindowUserPointer(window);
-	MouseEventQueue *queue = wctx->mouse_events;
+	App::IO *io = (App::IO *) glfwGetWindowUserPointer(window);
 
 	// Push event
-	queue->push(event);
-
-	// std::cout << "Mouse position callback: " << event.xpos << " " << event.ypos << std::endl;
+	io->mouse_events.push(event);
 }
 
 void keyboard_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
@@ -67,13 +61,10 @@ void keyboard_callback(GLFWwindow *window, int key, int scancode, int action, in
 	};
 
 	// Get event queue
-	App::Window *wctx = (App::Window *) glfwGetWindowUserPointer(window);
-	KeyboardEventQueue *queue = wctx->keyboard_events;
+	App::IO *io = (App::IO *) glfwGetWindowUserPointer(window);
 
 	// Push event
-	queue->push(event);
-
-	// std::cout << "Keyboard event: " << event.key << " " << event.scancode << " " << event.action << " " << event.mods << std::endl;
+	io->keyboard_events.push(event);
 }
 
 }

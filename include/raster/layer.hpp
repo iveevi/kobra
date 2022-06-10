@@ -1,5 +1,5 @@
-#ifndef RASTER_LAYER_H_
-#define RASTER_LAYER_H_
+#ifndef KOBRA_RASTER_LAYER_H_
+#define KOBRA_RASTER_LAYER_H_
 
 // Standard headers
 #include <vector>
@@ -10,7 +10,7 @@
 // Engine headers
 #include "../../shaders/raster/bindings.h"
 #include "../app.hpp"
-#include "../buffer_manager.hpp"
+// #include "../buffer_manager.hpp"
 #include "../camera.hpp"
 #include "../layer.hpp"
 #include "../scene.hpp"
@@ -33,46 +33,49 @@ public:
 		BLINN_PHONG
 	};
 protected:
-	// Private aliases
-	using DSLBinding = VkDescriptorSetLayoutBinding;
-	using DSLBindings = std::vector <DSLBinding>;
-
 	// All of the layer's cameras
 	std::vector <Camera>		_cameras;
 
 	// Active camera
 	Camera				*_active_camera = nullptr;
 
-	// Application context
-	App::Window			_wctx;
+	// Vulkan structures
+	const vk::raii::PhysicalDevice	&_physical_device = nullptr;
+	const vk::raii::Device		&_device = nullptr;
+	const vk::raii::CommandPool	&_command_pool = nullptr;
+	const vk::raii::DescriptorPool	&_descriptor_pool = nullptr;
 
-	// Render pass
-	VkRenderPass			_render_pass;
+	vk::raii::RenderPass		_render_pass = nullptr;
+
+	// Other layer properties
+	vk::Extent2D			_extent;
 
 	// All rendering pipelines
 	struct {
-		Vulkan::Pipeline	albedo;
-		Vulkan::Pipeline	normals;
-		Vulkan::Pipeline	blinn_phong;
+		// Pipelines
+		vk::raii::Pipeline		albedo = nullptr;
+		vk::raii::Pipeline		normals = nullptr;
+		vk::raii::Pipeline		blinn_phong = nullptr;
+
+		// Common pipeline layout
+		vk::raii::PipelineLayout	layout = nullptr;
 	} _pipelines;
 
 	// Descriptor set and layout
-	VkDescriptorSetLayout		_full_dsl;
+	vk::raii::DescriptorSetLayout	_dsl_full = nullptr;
 
 	// Buffers for lights
-	BufferManager <uint8_t>		_ubo_point_lights_buffer;
+	BufferData			_ubo_point_lights_buffer = nullptr;
 
 	// Refresh a buffer with its data
-	static void _refresh(const VkCommandBuffer &cmd,
-			const VkPipelineLayout &layout,
-			BufferManager <uint8_t> &buffer,
+	static void _refresh(const vk::raii::CommandBuffer &cmd,
+			const vk::raii::PipelineLayout &layout,
+			BufferData &buffer,
 			const uint8_t *data,
 			size_t size,
 			const VkDescriptorSet &ds,
 			size_t binding) {
-		buffer.write(data, size);
-		buffer.sync_upload();
-		buffer.bind(ds, binding);
+		buffer.upload(data, size);
 	}
 
 	// Corresponding structures
@@ -81,30 +84,32 @@ protected:
 	// Current rendering mode
 	Mode				_mode = Mode::ALBEDO;
 
+	// Initialization status
+	bool				_initialized = false;
+
 	// Get current pipeline
-	Vulkan::Pipeline *_get_pipeline() {
+	const vk::raii::Pipeline &_get_pipeline() {
 		switch (_mode) {
 		case Mode::ALBEDO:
-			return &_pipelines.albedo;
+			return _pipelines.albedo;
 		case Mode::NORMAL:
-			return &_pipelines.normals;
+			return _pipelines.normals;
 		case Mode::BLINN_PHONG:
-			return &_pipelines.blinn_phong;
+			return _pipelines.blinn_phong;
 		default:
 			break;
 		}
 
-		return nullptr;
+		throw std::runtime_error("Invalid rendering mode");
+		return _pipelines.albedo;
 	}
 
 	// Initialize Vulkan structures
-	void _initialize_vulkan_structures(const VkAttachmentLoadOp &);
+	void _initialize_vulkan_structures(const vk::AttachmentLoadOp &,
+			const vk::Format &, const vk::Format &);
 
 	// Descriptor set bindings
-	static const DSLBindings	_full_dsl_bindings;
-
-	// Highlight status and methods
-	// std::vector <bool>		_highlighted;
+	static const std::vector <DSLB>	_full_dsl_bindings;
 public:
 	// Default
 	Layer() = default;
@@ -112,17 +117,28 @@ public:
 	// Constructor
 	// TODO: inherit, and add a extra variable to check initialization
 	// status
-	Layer(const App::Window &wctx, const VkAttachmentLoadOp &load = VK_ATTACHMENT_LOAD_OP_LOAD)
-			: _wctx(wctx) {
-		_initialize_vulkan_structures(load);
+	Layer(const vk::raii::PhysicalDevice &phdev,
+			const vk::raii::Device &device,
+			const vk::raii::CommandPool &command_pool,
+			const vk::raii::DescriptorPool &descriptor_pool,
+			const vk::Extent2D &extent,
+			const vk::Format &swapchain_format,
+			const vk::Format &depth_format,
+			const vk::AttachmentLoadOp &load = vk::AttachmentLoadOp::eLoad)
+			: _physical_device(phdev),
+			_device(device),
+			_command_pool(command_pool),
+			_descriptor_pool(descriptor_pool),
+			_extent(extent) {
+		_initialize_vulkan_structures(load, swapchain_format, depth_format);
+		_initialized = true;
 	}
 
 	// Adding elements
 	void add_do(const ptr &e) override {
 		// Prepare latching packet
 		LatchingPacket lp {
-			.context = &_wctx.context,
-			.command_pool = &_wctx.command_pool,
+			.device = _device,
 			.layer = this
 		};
 
@@ -210,17 +226,21 @@ public:
 	}
 
 	// Serve a descriptor set
-	VkDescriptorSet serve_ds() {
-		return _wctx.context.make_ds(
-			_wctx.descriptor_pool,
-			_full_dsl
-		);
+	vk::raii::DescriptorSet serve_ds() {
+		auto dsets = vk::raii::DescriptorSets {
+			_device,
+			{*_descriptor_pool, *_dsl_full}
+		};
+
+		return std::move(dsets.front());
 	}
 
 	// Render
-	void render(const VkCommandBuffer &cmd_buffer, const VkFramebuffer &framebuffer) {
+	void render(const vk::raii::CommandBuffer &cmd,
+			const vk::raii::Framebuffer &framebuffer,
+			const vk::Extent2D &extent) {
 		// Check initialization status
-		if (_get_pipeline()->pipeline == VK_NULL_HANDLE) {
+		if (_initialized == false) {
 			KOBRA_LOG_FUNC(warn) << "calling ::render() on"
 				" raster::Layer (" << this << ") which has not"
 				" been yet been initialized\n";
@@ -236,53 +256,55 @@ public:
 			e->light(lp);
 
 		// Start render pass (clear both color and depth)
-		VkClearValue clear_colors[] = {
-			{.color = {0.0f, 0.0f, 0.0f, 1.0f}},
-			{.depthStencil = {1.0f, 0}}
-		};
-
-		VkRenderPassBeginInfo render_pass_info {
-			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-			.renderPass = _render_pass,
-			.framebuffer = framebuffer,
-			.renderArea {
-				.offset = {0, 0},
-				.extent = _wctx.swapchain.extent
+		std::array <vk::ClearValue, 2> clear_values = {
+			vk::ClearValue {
+				vk::ClearColorValue {
+					std::array <float, 4> {0.0f, 0.0f, 0.0f, 1.0f}
+				}
 			},
-			.clearValueCount = 2,
-			.pClearValues = clear_colors
+			vk::ClearValue {
+				vk::ClearDepthStencilValue {
+					1.0f, 0
+				}
+			}
 		};
 
-		vkCmdBeginRenderPass(cmd_buffer,
-			&render_pass_info,
-			VK_SUBPASS_CONTENTS_INLINE
+		cmd.beginRenderPass(
+			vk::RenderPassBeginInfo {
+				*_render_pass,
+				*framebuffer,
+				vk::Rect2D {
+					vk::Offset2D {0, 0},
+					extent,
+				},
+				static_cast <uint32_t> (clear_values.size()),
+				clear_values.data()
+			},
+			vk::SubpassContents::eInline
 		);
 
 		// Bind pipeline
-		// TODO: Vulkan::CommandBuffer::bind_pipeline()
-		// TODO: pipeline struct with all the necessary info
-		vkCmdBindPipeline(cmd_buffer,
-			VK_PIPELINE_BIND_POINT_GRAPHICS,
-			_get_pipeline()->pipeline
+		cmd.bindPipeline(
+			vk::PipelineBindPoint::eGraphics,
+			*_get_pipeline()
 		);
 
 		// Refresh for all elements
 		for (auto &e : _elements) {
-			_refresh(cmd_buffer,
-				_get_pipeline()->layout,
+			_refresh(cmd,
+				_pipelines.layout,
 				_ubo_point_lights_buffer,
 				(const uint8_t *) &_ubo_point_lights,
 				sizeof(_ubo_point_lights),
-				e->get_local_ds(),
+				*e->get_local_ds(),
 				RASTER_BINDING_POINT_LIGHTS
 			);
 		}
 
 		// Initialize render packet
 		RenderPacket packet {
-			.cmd = cmd_buffer,
-
-			.pipeline_layout = _get_pipeline()->layout,
+			.cmd = cmd,
+			.pipeline_layout = _pipelines.layout,
 
 			// TODO: warn on null camera
 			.view = _active_camera->view(),
@@ -299,7 +321,7 @@ public:
 		}
 
 		// End render pass
-		vkCmdEndRenderPass(cmd_buffer);
+		cmd.endRenderPass();
 	}
 };
 

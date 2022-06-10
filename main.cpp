@@ -1,11 +1,12 @@
-#include "global.hpp"
-#include "include/backend.hpp"
+// #include "global.hpp"
+// #include "include/backend.hpp"
+#include "include/app.hpp"
 #include "tinyfiledialogs.h"
 
 // Scene path
 std::string scene_path = "../assets/scene.kobra";
 
-// Experimental GUI app
+/* Experimental GUI app
 class GUIApp : public BaseApp {
 	gui::Layer layer;
 
@@ -91,11 +92,11 @@ public:
 		layer.render(cmd, framebuffer);
 		Vulkan::end(cmd);
 	}
-};
+}; */
 
 int main()
 {
-	std::cout << "Vulkan hpp cpp version: " << VULKAN_HPP_CPP_VERSION << std::endl;
+	/* std::cout << "Vulkan hpp cpp version: " << VULKAN_HPP_CPP_VERSION << std::endl;
 
 	Vulkan *vulkan = new Vulkan();
 
@@ -111,12 +112,14 @@ int main()
 
 	t1.join();
 
-	delete vulkan;
+	delete vulkan; */
 }
 
 ////////////////////
 // Input handlers //
 ////////////////////
+
+/*
 
 // Keyboard listener
 void RTApp::keyboard_handler(void *user, const io::KeyboardEvent &event)
@@ -148,7 +151,7 @@ void RTApp::keyboard_handler(void *user, const io::KeyboardEvent &event)
 			app->rt_layer.set_mode(rt::Layer::NORMALS);
 			app->raster = false;
 		}
-		
+
 		if (event.key == GLFW_KEY_0) {
 			app->rt_layer.set_mode(rt::Layer::HEATMAP);
 			app->raster = false;
@@ -163,7 +166,7 @@ void RTApp::keyboard_handler(void *user, const io::KeyboardEvent &event)
 			app->rt_layer.set_mode(rt::Layer::PATH_TRACER);
 			app->raster = false;
 		}
-		
+
 		if (event.key == GLFW_KEY_7) {
 			app->rt_layer.set_mode(rt::Layer::MIS_PATH_TRACER);
 			app->raster = false;
@@ -549,4 +552,4 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 	py = event.ypos;
 
 	previous_dir = dir;
-}
+} */

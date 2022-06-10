@@ -6,30 +6,44 @@ namespace kobra {
 // Static member variables //
 /////////////////////////////
 
-TextureManager::TextureCache TextureManager::_cached;
+TextureManager::TextureMap TextureManager::_texture_map;
+TextureManager::TextureData TextureManager::_texture_data;
 std::mutex TextureManager::_mutex;
 
 ////////////////////
 // Static methods //
 ////////////////////
 
-const Texture &TextureManager::load(const std::string &path, int channels)
+const ImageData &TextureManager::load(const vk::raii::PhysicalDevice &phdev,
+		const vk::raii::Device &dev,
+		const vk::raii::CommandPool &command_pool,
+		const std::string &path,
+		int channels)
 {
 	_mutex.lock();
-	if (_cached.find(path) != _cached.end()) {
+	if (_texture_map.find(path) != _texture_map.end()) {
 		_mutex.unlock();
-		return _cached[path];
+		size_t index = _texture_map[path];
+		return _texture_data[index];
 	}
 	_mutex.unlock();
 
-	Texture texture = load_image_texture(path, channels);
+	// TODO: convert channels to image format
+	ImageData img = make_image(phdev, dev,
+		command_pool, path,
+		vk::ImageTiling::eOptimal,
+		vk::ImageUsageFlagBits::eSampled,
+		vk::MemoryPropertyFlagBits::eDeviceLocal,
+		vk::ImageAspectFlagBits::eColor
+	);
 
 	_mutex.lock();
-	_cached[path] = texture;
-	const Texture &t = _cached[path];
+	_texture_data.emplace_back(std::move(img));
+	_texture_map[path] = _texture_data.size() - 1;
+	const ImageData &ret = _texture_data.back();
 	_mutex.unlock();
 
-	return t;
+	return ret;
 }
 
 }

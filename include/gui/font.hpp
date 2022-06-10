@@ -18,7 +18,7 @@
 // Engine headers
 #include "../common.hpp"
 #include "../logger.hpp"
-#include "../sampler.hpp"
+// #include "../sampler.hpp"
 #include "gui.hpp"
 
 namespace kobra {
@@ -36,35 +36,31 @@ public:
 		glm::vec3 color;
 
 		// Get vertex binding description
-		static Vulkan::VB vertex_binding() {
-			return Vulkan::VB {
-				.binding = 0,
-				.stride = sizeof(Vertex),
-				.inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+		static vk::VertexInputBindingDescription
+				vertex_binding() {
+			return vk::VertexInputBindingDescription {
+				0, sizeof(Vertex),
+				vk::VertexInputRate::eVertex
 			};
 		}
 
 		// Get vertex attribute descriptions
-		static std::vector <Vulkan::VA> vertex_attributes() {
+		static std::vector <vk::VertexInputAttributeDescription>
+				vertex_attributes() {
 			return {
-				Vulkan::VA {
-					.location = 0,
-					.binding = 0,
-					.format = VK_FORMAT_R32G32B32A32_SFLOAT,
-					.offset = offsetof(Vertex, bounds)
+				vk::VertexInputAttributeDescription {
+					0, 0, vk::Format::eR32G32B32A32Sfloat, 0
 				},
 
-				Vulkan::VA {
-					.location = 1,
-					.binding = 0,
-					.format = VK_FORMAT_R32G32B32_SFLOAT,
-					.offset = offsetof(Vertex, color)
+				vk::VertexInputAttributeDescription {
+					1, 0, vk::Format::eR32G32B32A32Sfloat,
+					sizeof(glm::vec4)
 				}
 			};
 		}
 	};
 
-	using VertexBuffer = BufferManager <Vertex>;
+	// using VertexBuffer = BufferManager <Vertex>;
 private:
 	// Vertex and index data
 	glm::vec4	_bounds;
@@ -93,8 +89,8 @@ public:
 
 	// Render the glyph
 	// TODO: render method or upload method (instacing)?
-	void upload(VertexBuffer &vb) const {
-		std::array <Vertex, 6> vertices {
+	void upload(std::vector <Vertex> &vb) const {
+		std::vector <Vertex> vertices {
 			Vertex {_bounds, _color},
 			Vertex {_bounds, _color},
 			Vertex {_bounds, _color},
@@ -103,10 +99,10 @@ public:
 			Vertex {_bounds, _color}
 		};
 
-		vb.push_back(vertices);
+		vb.insert(vb.end(), vertices.begin(), vertices.end());
 	}
 
-	// Static buffer properties
+	/* Static buffer properties
 	static constexpr BFM_Settings vb_settings {
 		.size = 1024,
 		.usage_type = BFM_WRITE_ONLY,
@@ -118,14 +114,12 @@ public:
 		.size = 1024,
 		.usage_type = BFM_WRITE_ONLY,
 		.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-	};
+	}; */
 
 	// Descriptor set layout binding
-	static constexpr Vulkan::DSLB bitmap_binding {
-		.binding = 0,
-		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+	static constexpr DSLB bitmap_binding {
+		0, vk::DescriptorType::eCombinedImageSampler,
+		1, vk::ShaderStageFlagBits::eFragment
 	};
 
 	/* Make descriptor set layout
@@ -146,11 +140,10 @@ public:
 //	about a single font
 class Font {
 	// Font bitmaps
-	// TODO: remove, replaced by descritpor sets
-	std::unordered_map <char, TexturePacket>	_bitmaps;
+	std::vector <ImageData>	_bitmaps;
 
 	// Descriptor set for each glyph texture
-	std::unordered_map <char, VkDescriptorSet>	_glyph_ds;
+	std::vector <vk::raii::DescriptorSet>	_glyph_ds;
 
 	// Font metrics
 	std::unordered_map <char, FT_Glyph_Metrics>	_metrics;
@@ -168,9 +161,10 @@ class Font {
 	}
 
 	// Load FreeType library
-	void load_font(const Vulkan::Context &ctx,
-			const VkCommandPool &cpool,
-			const VkDescriptorPool &dpool,
+	void load_font(const vk::raii::PhysicalDevice &phdev,
+			const vk::raii::Device &device,
+			const vk::raii::CommandPool &command_pool,
+			const vk::raii::DescriptorPool &descriptor_pool,
 			const std::string &file) {
 		// Load library
 		FT_Library library;
@@ -191,38 +185,42 @@ class Font {
 		size_t total_cells = 0;
 
 		// Create DSL for general Glyph
-		Vulkan::DSL general_dsl = ctx.make_dsl({
-			Glyph::bitmap_binding
-		});
+		vk::raii::DescriptorSetLayout general_dsl = make_descriptor_set_layout(
+			device, {Glyph::bitmap_binding}
+		);
 
 		// Add space character
 		{
-			TexturePacket tp = make_texture(
-				ctx,
-				cpool,
-				Texture {
-					.width = 1024,
-					.height = 1024
-				},
-				VK_FORMAT_R8_UNORM,
-				VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+			// Create the image data
+			ImageData img = ImageData(
+				phdev, device,
+				vk::Format::eR8Unorm,
+				vk::Extent2D {1, 1},
+				vk::ImageTiling::eOptimal,
+				vk::ImageUsageFlagBits::eSampled
+					| vk::ImageUsageFlagBits::eTransferDst,
+				vk::ImageLayout::eShaderReadOnlyOptimal,
+				vk::MemoryPropertyFlagBits::eDeviceLocal,
+				vk::ImageAspectFlagBits::eColor
 			);
 
-			tp.transition_manual(ctx, cpool,
-				VK_IMAGE_LAYOUT_UNDEFINED,
-				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				VK_PIPELINE_STAGE_TRANSFER_BIT,
-				VK_PIPELINE_STAGE_TRANSFER_BIT
-			);
+			// Create sampler handle
+			vk::raii::Sampler sampler = make_sampler(device, img);
 
-			Sampler sampler(ctx, tp);
+			// Create descriptor set and bind it
+			// TODO: preallocate all needed descriptor sets, and
+			// store those... (instead of indexing each time)
+			vk::raii::DescriptorSets dsets = vk::raii::DescriptorSets {
+				device, {*descriptor_pool, *general_dsl}
+			};
 
-			// VkDescriptorSet ds = Glyph::make_bitmap_ds(ctx, dpool);
-			Vulkan::DS ds = ctx.make_ds(dpool, general_dsl);
-			sampler.bind(ds, 0);
+			// vk::raii::DescriptorSet dset = std::move(dsets.front());
 
-			_glyph_ds[' '] = ds;
+			// bind_ds(device, dset, sampler, img, 0);
+
+			// Store everything
+			_glyph_ds.emplace_back(std::move(dsets.front()));
+			_bitmaps.emplace_back(std::move(img));
 			_metrics[' '] = FT_Glyph_Metrics {
 				.horiBearingX = 0,
 				.horiBearingY = 0,
@@ -234,66 +232,53 @@ class Font {
 		}
 
 		for (char c = 0; c < 127; c++) {
-			// Load bitmap into texture
+			// Load bitmap data
 			FT_Load_Char(face, c, FT_LOAD_RENDER);
+
 			uint width = face->glyph->bitmap.width;
 			uint height = face->glyph->bitmap.rows;
-			Texture tex {
-				.width = width,
-				.height = height,
-				.channels = 1
-			};
 
 			if (width * height == 0)
 				continue;
 
-			// Load texture
-			tex.data = bytes(width * height);
-			memcpy(tex.data.data(), face->glyph->bitmap.buffer, width * height);
-
-			int nulls = 0;
-			for (auto &b : tex.data) {
-				if (b == 0)
-					nulls++;
-			}
-
-			nulls = 0;
-			for (int i = 0; i < tex.data.size(); i++) {
-				if (face->glyph->bitmap.buffer[i] == 0)
-					nulls++;
-			}
-
-			// Create texture
-			TexturePacket tp = make_texture(
-				ctx, cpool, tex,
-				VK_FORMAT_R8_UNORM,
-				VK_IMAGE_USAGE_TRANSFER_DST_BIT
-					| VK_IMAGE_USAGE_SAMPLED_BIT,
-				VK_IMAGE_LAYOUT_UNDEFINED
+			// Create image data
+			ImageData img = make_image(phdev, device,
+				command_pool,
+				width, height,
+				face->glyph->bitmap.buffer,
+				vk::Format::eR8Unorm,
+				vk::ImageTiling::eOptimal,
+				vk::ImageUsageFlagBits::eSampled
+					| vk::ImageUsageFlagBits::eTransferDst,
+				vk::MemoryPropertyFlagBits::eDeviceLocal,
+				vk::ImageAspectFlagBits::eColor
 			);
 
-			tp.transition_manual(ctx, cpool,
-				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				VK_PIPELINE_STAGE_TRANSFER_BIT,
-				VK_PIPELINE_STAGE_TRANSFER_BIT
-			);
+			// Create sampler handle
+			vk::raii::Sampler sampler = make_sampler(device, img);
 
-			// Add to dictionary
-			_bitmaps[c] = tp;
+			// Create descriptor set and bind it
+			vk::raii::DescriptorSets dsets = vk::raii::DescriptorSets {
+				device, {*descriptor_pool, *general_dsl}
+			};
+
+			vk::raii::DescriptorSet dset = std::move(dsets.front());
+
+			bind_ds(device, dset, sampler, img, 0);
+
+			// Store everything
+			_glyph_ds.emplace_back(std::move(dset));
+			_bitmaps.emplace_back(std::move(img));
 			_metrics[c] = face->glyph->metrics;
-
-			// VkDescriptorSet ds = Glyph::make_bitmap_ds(ctx, dpool);
-			Vulkan::DS ds = ctx.make_ds(dpool, general_dsl);
-			Sampler sampler(ctx, tp);
-			sampler.bind(ds, 0);
-
-			_glyph_ds[c] = ds;
 		}
 	}
 public:
 	Font() {}
-	Font(const Vulkan::Context &ctx, const VkCommandPool &cpool, const VkDescriptorPool &dpool, const std::string &file) {
+	Font(const vk::raii::PhysicalDevice &phdev,
+			const vk::raii::Device &device,
+			const vk::raii::CommandPool &command_pool,
+			const vk::raii::DescriptorPool &descriptor_pool,
+			const std::string &file) {
 		// Check that the file exists
 		if (!common::file_exists(file)) {
 			Logger::error("Font file not found: " + file);
@@ -301,18 +286,12 @@ public:
 		}
 
 		// Load font
-		load_font(ctx, cpool, dpool, file);
+		load_font(phdev, device, command_pool, descriptor_pool, file);
 	}
 
 	// Retrieve glyph bitmap
-	const TexturePacket &bitmap(char c) const {
-		auto it = _bitmaps.find(c);
-		if (it == _bitmaps.end()) {
-			Logger::error() << "Glyph not found: " << c << std::endl;
-			throw -1;
-		}
-
-		return it->second;
+	const ImageData &bitmap(char c) const {
+		return _bitmaps.at(c);
 	}
 
 	// Retrieve glyph metrics
@@ -328,15 +307,8 @@ public:
 	}
 
 	// Retrieve glyph descriptor set
-	const VkDescriptorSet &glyph_ds(char c) const {
-		auto it = _glyph_ds.find(c);
-		if (it == _glyph_ds.end()) {
-			Logger::error() << "Glyph descriptor set not found: "
-				<< (int) c << "(\'" << c << "\')" << std::endl;
-			throw -1;
-		}
-
-		return it->second;
+	const vk::raii::DescriptorSet &glyph_ds(char c) const {
+		return _glyph_ds.at(c);
 	}
 
 	// Get line height

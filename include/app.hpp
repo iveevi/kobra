@@ -4,7 +4,7 @@
 // Engine headers
 #include "backend.hpp"
 #include "coords.hpp"
-#include "texture.hpp"
+// #include "texture.hpp"
 #include "timer.hpp"
 #include "io/event.hpp"
 #include "io/input.hpp"
@@ -15,65 +15,28 @@ namespace kobra {
 // (single window)
 class App {
 public:
-	// Application info structure
-	struct Info {
-		Vulkan *ctx;
-
-		uint32_t width;
-		uint32_t height;
-
-		size_t max_frames_in_flight;
-
-		std::string name;
-	};
-
-	// Window context
-	struct Window {
-		Vulkan::Context		context;
-		Vulkan::Surface		surface;
-		Vulkan::Swapchain	swapchain;
-
-		VkCommandPool		command_pool = VK_NULL_HANDLE;
-		VkDescriptorPool	descriptor_pool = VK_NULL_HANDLE;
-
-		// Event based IO
-		io::MouseEventQueue	*mouse_events;
-		io::KeyboardEventQueue	*keyboard_events;
-
-		// Immediate IO (keyboard)
-		io::Input		*input;
-
-		// Dimensions
-		size_t			width;
-		size_t			height;
-
-		// Generate screen coords
-		coordinates::Screen coordinates(float x, float y) {
-			return coordinates::Screen {x, y, width, height};
-		}
-
-		// Cursor mode
-		void cursor_mode(int mode) {
-			glfwSetInputMode(surface.window, GLFW_CURSOR, mode);
-		}
+	struct IO {
+		io::MouseEventQueue	mouse_events;
+		io::KeyboardEventQueue	keyboard_events;
+		io::Input		input;
 	};
 protected:
+	// Stored window info
+	vk::raii::PhysicalDevice	phdev;
+	vk::raii::Device 		device;
+	vk::raii::SurfaceKHR		surface = nullptr;
+
+	Swapchain 			swapchain = nullptr;
+	Window				window;
+
+	// IO info
+	IO				io;
+
 	// Application name
-	std::string		name;
-
-	// This application's window context
-	Window			window;
-
-	// Unrolling window context for convenience
-	Vulkan::Context		context;
-	Vulkan::Surface		surface;
-
-	Vulkan::Swapchain	swapchain;
-	io::Input		input;
+	std::string			name;
 
 	// Dimensions
-	uint32_t		width;
-	uint32_t		height;
+	vk::Extent2D			extent;
 
 	// Frame information
 	Timer			frame_timer;
@@ -82,54 +45,36 @@ protected:
 
 	// Termination status
 	bool			terminated = false;
+
+	// Generate screen coords
+	coordinates::Screen coordinates(float x, float y) {
+		return coordinates::Screen {x, y, extent.width, extent.height};
+	}
+
 public:
 	// Constructor
-	// TODO: constructor for multiple windows?
-	App(const Info &info) : name(info.name), frame_index(0) {
-		// Create surface
-		width = info.width;
-		height = info.height;
+	App(const vk::raii::PhysicalDevice &phdev, vk::raii::Device &device,
+			const vk::Extent2D &extent_)
+			: phdev(phdev),
+			device {std::move(device)},
+			extent(extent_) {
+		// TODO: move to source file
 
-		Logger::ok() << "width = " << width << ", height = " << height << std::endl;
+		// First create the window
+		window = Window("Kobra Application", extent);
 
-		surface = info.ctx->make_surface(
-			info.name, width, height
-		);
+		// Create Vulkan surface and swapchain
+		surface = make_surface(window);
+		auto queue_family = find_queue_families(phdev, surface);
+		swapchain = Swapchain {phdev, device, surface, window.extent, queue_family};
 
-		// Setup the vulkan context
-		context.vk = info.ctx;
-		context.phdev = context.vk->select_phdev(surface);
-		context.device = context.vk->make_device(context.phdev, surface);
-
-		// Create swapchain
-		swapchain = context.vk->make_swapchain(
-			context.phdev,
-			context.device,
-			surface
-		);
-
-		// Set GLFW user pointer
-		glfwSetWindowUserPointer(
-			surface.window, &window
-		);
+		// Set user pointer
+		glfwSetWindowUserPointer(window.handle, &io);
 
 		// Set event callbacks
-		glfwSetMouseButtonCallback(surface.window, &io::mouse_button_callback);
-		glfwSetCursorPosCallback(surface.window, &io::mouse_position_callback);
-		glfwSetKeyCallback(surface.window, &io::keyboard_callback);
-
-		// Setup other window context
-		input = io::Input(surface.window);
-
-		// Copy window info
-		window.context = context;
-		window.surface = surface;
-		window.swapchain = swapchain;
-		window.mouse_events = new io::MouseEventQueue();
-		window.keyboard_events = new io::KeyboardEventQueue();
-		window.input = &input;
-		window.width = width;
-		window.height = height;
+		glfwSetMouseButtonCallback(window.handle, &io::mouse_button_callback);
+		glfwSetCursorPosCallback(window.handle, &io::mouse_position_callback);
+		glfwSetKeyCallback(window.handle, &io::keyboard_callback);
 	}
 
 	// Virtual destructor
@@ -141,7 +86,7 @@ public:
 
 		// Start timer
 		frame_timer.start();
-		while (!glfwWindowShouldClose(surface.window)) {
+		while (!glfwWindowShouldClose(window.handle)) {
 			// Check if manually terminated
 			if (terminated)
 				break;
@@ -159,10 +104,11 @@ public:
 			frame_time = frame_timer.lap()/scale;
 		}
 
-		context.vk->idle(context.device);
+		// Idle till all frames are finished
+		device.waitIdle();
 
 		// Cleanup
-		glfwDestroyWindow(surface.window);
+		glfwDestroyWindow(window.handle);
 	}
 
 	// Manually terminate application
@@ -174,102 +120,117 @@ public:
 	virtual void frame() = 0;
 };
 
-// Base app, includes some more
-//	setup upon construction
+// Base app, includes some more setup upon construction
 class BaseApp : public App {
 protected:
 	// Vulkan structures
-	VkRenderPass			render_pass;	// TODO: is this even necessary?
-	VkCommandPool			command_pool;
-	std::vector <VkCommandBuffer>	command_buffers;
-	VkDescriptorPool		descriptor_pool;
+	vk::raii::RenderPass			render_pass = nullptr;
+	std::vector <vk::raii::Framebuffer>	framebuffers;
 
-	// Sync objects
-	std::vector <VkFence>		in_flight_fences;
-	std::vector <VkFence>		images_in_flight;
+	vk::raii::CommandPool			command_pool = nullptr;
+	vk::raii::DescriptorPool		descriptor_pool = nullptr;
 
-	std::vector <VkSemaphore>	smph_image_available;
-	std::vector <VkSemaphore>	smph_render_finished;
+	vk::raii::Queue				graphics_queue = nullptr;
+	vk::raii::Queue				present_queue = nullptr;
 
-	// Depth resources
-	VkImage 			depth_image;
-	VkDeviceMemory			depth_image_memory;
-	VkImageView			depth_image_view;
+	std::array <vk::raii::CommandBuffer, 2>	command_buffers = {nullptr, nullptr};
+
+	DepthBuffer				depth_buffer = nullptr;
+
+	// Syncro objects
+	struct FrameData {
+		vk::raii::Semaphore		present_completed = nullptr;
+		vk::raii::Semaphore		render_completed = nullptr;
+		vk::raii::Fence			fence = nullptr;
+
+		// Default constructor
+		FrameData() = default;
+
+		// Construct from device
+		FrameData(vk::raii::Device &device) {
+			present_completed = vk::raii::Semaphore(device, {});
+			render_completed = vk::raii::Semaphore(device, {});
+			fence = vk::raii::Fence(device, {vk::FenceCreateFlagBits::eSignaled});
+		}
+	};
+
+	std::vector <FrameData>			frames;
 public:
-	BaseApp(const Info &info) : App(info) {
+	// TODO: is attachment load op needed?
+	BaseApp(const vk::raii::PhysicalDevice &phdev_,
+			vk::raii::Device &device_,
+			const vk::Extent2D &extent_,
+			const vk::AttachmentLoadOp &load = vk::AttachmentLoadOp::eClear)
+			: App(phdev_, device_, extent_) {
+		// Create the depth buffer
+		depth_buffer = DepthBuffer {
+			phdev, device,
+			vk::Format::eD32Sfloat,
+			extent
+		};
+
 		// Create render pass
-		// TODO: context method
-		render_pass = context.vk->make_render_pass(
-			context.phdev,
-			context.device,
-			swapchain,
-			VK_ATTACHMENT_LOAD_OP_CLEAR,
-			VK_ATTACHMENT_STORE_OP_STORE
+		render_pass = make_render_pass(device,
+			swapchain.format,
+			depth_buffer.format,
+			load
 		);
 
-		std::vector <VkImageView> extras;
-
-		// Create depth image
-		// TODO: auto in backend?
-		VkFormat depth_format = context.find_depth_format();
-		context.vk->make_image(context.phdev, context.vk_device(),
-			width, height, depth_format,
-			VK_IMAGE_TILING_OPTIMAL,
-			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			depth_image, depth_image_memory
-		);
-
-		// Create depth image view
-		depth_image_view = context.vk->make_image_view(
-			context.vk_device(),
-			depth_image, depth_format,
-			VK_IMAGE_ASPECT_DEPTH_BIT
-		);
-
-		extras.push_back(depth_image_view);
-
-		// Create framebuffers
-		context.vk->make_framebuffers(context.device,
-			swapchain, render_pass, extras
+		// Create the framebuffers
+		framebuffers = make_framebuffers(device,
+			render_pass,
+			swapchain.image_views,
+			&depth_buffer.view,
+			extent
 		);
 
 		// Create command pool
-		// TODO: context method
-		command_pool = context.vk->make_command_pool(
-			context.phdev,
-			surface,
-			context.device,
-			VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
-		);
+		command_pool = vk::raii::CommandPool {
+			device, {
+				vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+				find_graphics_queue_family(phdev)
+			}
+		};
+
+		// Create command buffers
+		// TODO: function for muliple
+		command_buffers = std::array <vk::raii::CommandBuffer, 2> {
+			make_command_buffer(device, command_pool),
+			make_command_buffer(device, command_pool)
+		};
 
 		// Create descriptor pool
-		descriptor_pool = context.vk->make_descriptor_pool(context.device);
-
-		// Copy to window context
-		window.command_pool = command_pool;
-		window.descriptor_pool = descriptor_pool;
-
-		// Create sync objects
-		// TODO: use max frames in flight
-		images_in_flight.resize(swapchain.images.size(), VK_NULL_HANDLE);
-		for (size_t i = 0; i < 2; i++) {
-			in_flight_fences.push_back(context.vk->make_fence(context.device, VK_FENCE_CREATE_SIGNALED_BIT));
-			smph_image_available.push_back(context.vk->make_semaphore(context.device));
-			smph_render_finished.push_back(context.vk->make_semaphore(context.device));
-		}
-
-		// TODO: context method
-		context.vk->make_command_buffers(
-			context.device,
-			command_pool,
-			command_buffers,
-			swapchain.images.size()
+		descriptor_pool = make_descriptor_pool(
+			device, {
+				// TODO: static const
+				{vk::DescriptorType::eSampler, 1024},
+				{vk::DescriptorType::eCombinedImageSampler, 1024},
+				{vk::DescriptorType::eSampledImage, 1024},
+				{vk::DescriptorType::eStorageImage, 1024},
+				{vk::DescriptorType::eUniformTexelBuffer, 1024},
+				{vk::DescriptorType::eStorageTexelBuffer, 1024},
+				{vk::DescriptorType::eUniformBuffer, 1024},
+				{vk::DescriptorType::eStorageBuffer, 1024},
+				{vk::DescriptorType::eUniformBufferDynamic, 1024},
+				{vk::DescriptorType::eStorageBufferDynamic, 1024},
+				{vk::DescriptorType::eInputAttachment, 1024}
+			}
 		);
+
+		// Create syncro objects
+		frames = std::vector <FrameData> (framebuffers.size());
+		for (auto &frame : frames)
+			frame = FrameData {device};
+
+		// Get queues
+		auto queue_family = find_queue_families(phdev, surface);
+
+		graphics_queue = vk::raii::Queue {device, queue_family.graphics, 0};
+		present_queue = vk::raii::Queue {device, queue_family.present, 0};
 	}
 
 	// Requires a record function
-	virtual void record(const VkCommandBuffer &, const VkFramebuffer &) = 0;
+	virtual void record(const vk::raii::CommandBuffer &, const vk::raii::Framebuffer &) = 0;
 
 	// Possbily override a termination function
 	virtual void terminate() {}
@@ -277,124 +238,59 @@ public:
 	// Present frame
 	// TODO: add a present method in backend
 	void present() {
-		// Wait for the next image in the swap chain
-		vkWaitForFences(
-			context.vk_device(), 1,
-			&in_flight_fences[frame_index],
-			VK_TRUE, UINT64_MAX
-		);
+		// Stage flags
+		static const vk::PipelineStageFlags stage_flags = vk::PipelineStageFlagBits::eColorAttachmentOutput;
 
-		// Acquire the next image from the swap chain
+		// Result from Vulkan functions
+		vk::Result result;
+
+		// Image index
 		uint32_t image_index;
-		VkResult result = vkAcquireNextImageKHR(
-			context.vk_device(), swapchain.swch, UINT64_MAX,
-			smph_image_available[frame_index],
-			VK_NULL_HANDLE, &image_index
+
+		// Get the current command buffer
+		const auto &command_buffer = command_buffers[frame_index];
+
+		// Acquire the next image from the swapchain
+		std::tie(result, image_index) = swapchain.swapchain.acquireNextImage(
+			std::numeric_limits <uint64_t>::max(),
+			*frames[frame_index].present_completed
 		);
 
-		// Check if the swap chain is no longer valid
-		if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-			// TODO: recreate swap chain
-			// _remk_swapchain();
-			return;
-		} else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-			Logger::error("[Vulkan] Failed to acquire swap chain image!");
-			throw (-1);
-		}
+		KOBRA_ASSERT(result == vk::Result::eSuccess, "Failed to acquire next image");
 
-		// Check if the image is being used by the current frame
-		if (images_in_flight[image_index] != VK_NULL_HANDLE) {
-			vkWaitForFences(
-				context.vk_device(), 1,
-				&images_in_flight[image_index],
-				VK_TRUE, UINT64_MAX
-			);
-		}
+		// Wait for the previous frame to finish rendering
+		while (vk::Result(device.waitForFences(
+			*frames[frame_index].fence,
+			true,
+			std::numeric_limits <uint64_t>::max()
+		)) == vk::Result::eTimeout);
 
-		// Mark the image as in use by this frame
-		images_in_flight[image_index] = in_flight_fences[frame_index];
+		// Then reset the fence
+		device.resetFences(*frames[frame_index].fence);
 
-		// Frame submission and synchronization info
-		VkSemaphore wait_semaphores[] = {
-			smph_image_available[frame_index]
-		};
-
-		VkPipelineStageFlags wait_stages[] = {
-			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-			VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
-		};
-
-		VkSemaphore signal_semaphores[] = {
-			smph_render_finished[frame_index],
-		};
-
-		// Record command buffer
-		record(command_buffers[image_index], swapchain.framebuffers[image_index]);
-
-		// Create information
-		// TODO: method
-		VkSubmitInfo submit_info {
-			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-			.waitSemaphoreCount = 1,
-			.pWaitSemaphores = wait_semaphores,
-			.pWaitDstStageMask = wait_stages,
-
-			.commandBufferCount = 1,
-			.pCommandBuffers = &command_buffers[image_index],
-
-			.signalSemaphoreCount = 1,
-			.pSignalSemaphores = signal_semaphores
-		};
-
-		// Wait for previous frame to finish (1 second timeout)
-		uint64_t timeout = 1e9;
-		while (vkWaitForFences(
-			context.vk_device(), 1,
-			&in_flight_fences[frame_index],
-			VK_TRUE, timeout
-		) != VK_SUCCESS) {
-			KOBRA_LOG_FILE(notify) << "Timed out waiting for fence!\n";
-		}
-	
-		// Reset the fence
-		vkResetFences(context.device.device, 1, &in_flight_fences[frame_index]);
+		// Record the command buffer
+		record(command_buffer, framebuffers[image_index]);
 
 		// Submit the command buffer
-		result = vkQueueSubmit(
-			context.device.graphics_queue, 1, &submit_info,
-			in_flight_fences[frame_index]
-		);
-
-		if (result != VK_SUCCESS) {
-			Logger::error("[main] Failed to submit draw command buffer!");
-			vk::Result res = vk::Result(result);
-			std::cout << "Error type = " << vk::to_string(res) << std::endl;
-			throw (-1);
-		}
-
-		// Present the image to the swap chain
-		VkSwapchainKHR swchs[] = {swapchain.swch};
-
-		VkPresentInfoKHR present_info {
-			.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-			.waitSemaphoreCount = 1,
-			.pWaitSemaphores = signal_semaphores,
-			.swapchainCount = 1,
-			.pSwapchains = swchs,
-			.pImageIndices = &image_index,
-			.pResults = nullptr
+		vk::SubmitInfo submit_info {
+			1, &*frames[frame_index].present_completed,
+			&stage_flags,
+			1, &*command_buffer,
+			1, &*frames[frame_index].render_completed
 		};
 
-		result = vkQueuePresentKHR(
-			context.device.present_queue,
-			&present_info
-		);
+		graphics_queue.submit(submit_info, *frames[frame_index].fence);
 
-		// TODO: check resizing (in app)
-		if (result != VK_SUCCESS) {
-			Logger::error("[Vulkan] Failed to present swap chain image!");
-			throw (-1);
-		}
+		// Present the image
+		vk::PresentInfoKHR present_info {
+			*frames[frame_index].render_completed,
+			*swapchain.swapchain,
+			image_index
+		};
+
+		result = present_queue.presentKHR(present_info);
+
+		KOBRA_ASSERT(result == vk::Result::eSuccess, "Failed to present image");
 	}
 
 	// Overload frame function

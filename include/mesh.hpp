@@ -9,7 +9,6 @@
 #include "transform.hpp"
 #include "types.hpp"
 #include "vertex.hpp"
-#include "world_update.hpp"
 #include "object.hpp"
 #include "renderable.hpp"
 
@@ -78,11 +77,36 @@ public:
 	// Default constructor
 	Mesh() = default;
 
+	// Copy constructor
+	Mesh(const Mesh &mesh)
+			: Object(object_type, mesh.transform()),
+			Renderable(mesh.material().copy()),
+			_source(mesh._source),
+			_source_index(mesh._source_index),
+			_vertices(mesh._vertices),
+			_indices(mesh._indices) {}
+
+	// Copy assignment operator
+	Mesh &operator=(const Mesh &mesh) {
+		// Check for self assignment
+		if (this != &mesh) {
+			// Copy the object
+			Object::operator=(mesh);
+			Renderable::operator=(mesh.material().copy());
+			_source = mesh._source;
+			_source_index = mesh._source_index;
+			_vertices = mesh._vertices;
+			_indices = mesh._indices;
+		}
+
+		return *this;
+	}
+
 	// Simple constructor
 	// TODO: load tangent and bitangent in loading models
 	Mesh(const Mesh &mesh, const Transform &transform)
 			: Object(object_type, transform),
-			Renderable(mesh.material()),
+			Renderable(mesh.material().copy()),
 			_source(mesh._source),
 			_source_index(mesh._source_index),
 			_vertices(mesh._vertices),
@@ -198,8 +222,11 @@ public:
 	static Mesh make_ring(const glm::vec3 &, float, float, float, int = 32);
 
 	// Read from file
-	static std::optional <Mesh> from_file(const Vulkan::Context &,
-		const VkCommandPool &, std::ifstream &, const std::string &);
+	static std::optional <Mesh> from_file(const vk::raii::PhysicalDevice &,
+		const vk::raii::Device &,
+		const vk::raii::CommandPool &,
+		std::ifstream &,
+		const std::string &);
 
 	// Friends
 	friend class Model;

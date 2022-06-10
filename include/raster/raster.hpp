@@ -3,7 +3,6 @@
 
 // Engine headers
 #include "../../shaders/raster/constants.h"
-#include "../buffer_manager.hpp"
 #include "../object.hpp"
 #include "../vertex.hpp"
 
@@ -11,18 +10,13 @@ namespace kobra {
 
 namespace raster {
 
-// More aliases
-using VertexBuffer = BufferManager <Vertex>;
-using IndexBuffer = BufferManager <uint32_t>;
-
 // Forward declarations
 class Layer;
 
 // Rasterization abstraction and primitives
 struct RenderPacket {
-	VkCommandBuffer cmd;
-
-	VkPipelineLayout pipeline_layout;
+	const vk::raii::CommandBuffer &cmd;
+	const vk::raii::PipelineLayout &pipeline_layout;
 
 	// View and projection matrices
 	glm::mat4 view;
@@ -44,8 +38,7 @@ struct UBO_PointLights {
 
 // Latching packet
 struct LatchingPacket {
-	Vulkan::Context *context;
-	VkCommandPool	*command_pool;
+	const vk::raii::Device &device;
 	Layer		*layer;
 };
 
@@ -63,7 +56,7 @@ struct _element : virtual public Object {
 	virtual ~_element() = default;
 
 	// Virtual methods
-	virtual VkDescriptorSet get_local_ds() const = 0;
+	virtual const vk::raii::DescriptorSet &get_local_ds() const = 0;
 	virtual void latch(const LatchingPacket &) = 0;
 	virtual void light(const LightingPacket &) = 0;
 	virtual void render(RenderPacket &) = 0;

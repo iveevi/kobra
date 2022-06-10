@@ -128,20 +128,24 @@ private:
 	Font					_font;
 
 	// Vulkan structures
-	Vulkan::Pipeline			_pipeline;
+	vk::raii::Pipeline			_pipeline = nullptr;
+	vk::raii::PipelineLayout		_pipeline_layout = nullptr;
 
 	// Descriptors
-	VkDescriptorSetLayout			_layout;
+	vk::raii::DescriptorSetLayout		_descriptor_set_layout = nullptr;
 
 	// Vertex buffer for text
-	Glyph::VertexBuffer			_vbuf;
+	BufferData				_device_buffer = nullptr;
+	std::vector <Glyph::Vertex>		_host_buffer;
 
 	// Screen dimensions
+	// TODO: do we really need width and hieght (can also be done during
+	// rendering)
 	float					_width;
 	float					_height;
 
 	// Create the pipeline
-	void _make_pipeline(const App::Window &, const VkRenderPass &);
+	void _make_pipeline(const vk::raii::Device &, const vk::raii::RenderPass &);
 
 	// Remove previous references to a Text object
 	void remove(Text *text) {
@@ -161,31 +165,37 @@ public:
 	TextRender() = default;
 
 	// Constructor from paht to font file
-	TextRender(const App::Window &wctx, const VkRenderPass &render_pass, const std::string &path) {
-		// Get context
-		Vulkan::Context context = wctx.context;
-
+	TextRender(const vk::raii::PhysicalDevice &phdev,
+			const vk::raii::Device &device,
+			const vk::raii::CommandPool &command_pool,
+			const vk::raii::DescriptorPool &descriptor_pool,
+			const vk::raii::RenderPass &render_pass,
+			const std::string &path,
+			float width, float height)
+			: _width(width), _height(height) {
 		// Create the descriptor set
 		// TODO: remove later, use the ones from font
 		// _layout = Glyph::make_bitmap_dsl(context);
-		_layout = context.make_dsl({Glyph::bitmap_binding});
+		_descriptor_set_layout = make_descriptor_set_layout(device, {Glyph::bitmap_binding});
 
 		// Allocate vertex buffer
-		_vbuf = Glyph::VertexBuffer(context, Glyph::vb_settings);
-
-		// Create pipeline
-		_make_pipeline(wctx, render_pass);
-
-		// Load font
-		_font = Font(context,
-			wctx.command_pool,
-			wctx.descriptor_pool,
-			path
+		// TODO: auto resizing for vertex buffer
+		_device_buffer = BufferData(phdev, device,
+			sizeof(Glyph::Vertex) * 1000,	// TODO: constant
+			vk::BufferUsageFlagBits::eVertexBuffer,
+			vk::MemoryPropertyFlagBits::eHostVisible
+				| vk::MemoryPropertyFlagBits::eHostCoherent
 		);
 
-		// Dimensions
-		_width = wctx.width;
-		_height = wctx.height;
+		// Create pipeline
+		_make_pipeline(device, render_pass);
+
+		// Load font
+		_font = Font(phdev, device,
+			command_pool,
+			descriptor_pool,
+			path
+		);
 	}
 
 	// Create text object
@@ -378,7 +388,7 @@ public:
 
 		// Iterate over glyphs
 		for (auto &ref : refs)
-			ref.text->_glyphs[ref.index].upload(_vbuf);
+			ref.text->_glyphs[ref.index].upload(_host_buffer);
 
 		return refs.size();
 	}
@@ -390,32 +400,30 @@ public:
 	};
 
 	std::vector <Draw> update() {
-		_vbuf.reset_push_back();
+		_host_buffer.clear();
 
 		// Get glyphs
 		std::vector <Draw> draws;
 
 		// Iterate over glyphs
 		for (auto &refs : _chars) {
-			size_t offset = _vbuf.push_size();
+			size_t offset = _host_buffer.size();
 			size_t number = update(refs.first);
 
 			draws.push_back({offset, number});
 		}
 
-		_vbuf.sync_size();
-		_vbuf.upload();
+		// Upload
+		// TODO: resize
+		_device_buffer.upload(_host_buffer);
 
 		return draws;
 	}
 
 	// Render text
-	void render(const Vulkan::Context &ctx, const VkCommandPool &cpool, const VkCommandBuffer &cmd) {
+	void render(const vk::raii::CommandBuffer &cmd) {
 		// Bind pipeline
-		vkCmdBindPipeline(cmd,
-			VK_PIPELINE_BIND_POINT_GRAPHICS,
-			_pipeline.pipeline
-		);
+		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *_pipeline);
 
 		// Update vertex buffer
 		std::vector <Draw> draws = update();
@@ -424,35 +432,22 @@ public:
 		// Iterate over characters
 		for (auto &c : _chars) {
 			// Get descriptor set for glyph
-			VkDescriptorSet set = _font.glyph_ds(c.first);
+			vk::DescriptorSet dset = *_font.glyph_ds(c.first);
 
 			// Bind descriptor set
-			// TODO: vulkan backend function
-			vkCmdBindDescriptorSets(cmd,
-				VK_PIPELINE_BIND_POINT_GRAPHICS,
-				_pipeline.layout,
-				0, 1, &set,
-				0, nullptr
+			cmd.bindDescriptorSets(
+				vk::PipelineBindPoint::eGraphics,
+				*_pipeline_layout, 0, {dset}, {}
 			);
 
-			// Bind vertex buffer
-			VkBuffer buffers[] {_vbuf.vk_buffer()};
-			VkDeviceSize offsets[] {0};
-
-			vkCmdBindVertexBuffers(
-				cmd,
-				0, 1, buffers, offsets
-			);
+			// Bind buffer
+			cmd.bindVertexBuffers(0, {*_device_buffer.buffer}, {0});
 
 			// Draw call info
 			Draw draw = draws[i++];
 
 			// Draw
-			vkCmdDraw(
-				cmd,
-				6 * draw.number, 1,
-				draw.offset, 0
-			);
+			cmd.draw(6 * draw.number, 1, draw.offset, 0);
 		}
 	}
 };

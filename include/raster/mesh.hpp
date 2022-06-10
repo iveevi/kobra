@@ -16,46 +16,44 @@ public:
 	static constexpr char object_type[] = "Raster Mesh";
 private:
 	// Vertex and index buffers
-	VertexBuffer 	_vb;
-	IndexBuffer	_ib;
+	BufferData		_vertex_buffer = nullptr;
+	BufferData		_index_buffer = nullptr;
 
 	// Descriptor set
-	VkDescriptorSet	_ds = VK_NULL_HANDLE;
+	vk::raii::DescriptorSet	_dset = nullptr;
 public:
 	// Default constructor
 	Mesh() = default;
 
 	// Constructor
-	Mesh (const Vulkan::Context &ctx, const kobra::Mesh &mesh)
+	Mesh (const vk::raii::PhysicalDevice &phdev,
+			const vk::raii::Device &device,
+			const kobra::Mesh &mesh)
 			: Object(mesh.name(), object_type, mesh.transform()),
-			Renderable(mesh.material()),
+			Renderable(mesh.material().copy()),
 			kobra::Mesh(mesh) {
-		// Allocate vertex and index buffers
-		BFM_Settings vb_settings {
-			.size = this->_vertices.size(),
-			.usage_type = BFM_WRITE_ONLY,
-			.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-		};
+		// Buffer sizes
+		vk::DeviceSize vertex_buffer_size = _vertices.size() * sizeof(Vertex);
+		vk::DeviceSize index_buffer_size = _indices.size() * sizeof(uint32_t);
 
-		BFM_Settings ib_settings {
-			.size = this->_indices.size(),
-			.usage_type = BFM_WRITE_ONLY,
-			.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-		};
+		// Create buffers
+		_vertex_buffer = BufferData(phdev, device,
+			vertex_buffer_size,
+			vk::BufferUsageFlagBits::eVertexBuffer,
+			vk::MemoryPropertyFlagBits::eHostVisible
+				| vk::MemoryPropertyFlagBits::eHostCoherent
+		);
 
-		// TODO: alloc method for BufferManagers
-		_vb = VertexBuffer(ctx, vb_settings);
-		_ib = IndexBuffer(ctx, ib_settings);
+		_index_buffer = BufferData(phdev, device,
+			index_buffer_size,
+			vk::BufferUsageFlagBits::eIndexBuffer,
+			vk::MemoryPropertyFlagBits::eHostVisible
+				| vk::MemoryPropertyFlagBits::eHostCoherent
+		);
 
-		// Copy data to buffers
-		_vb.push_back(this->_vertices);
-		_ib.push_back(this->_indices);
-
-		_vb.sync_size();
-		_ib.sync_size();
-
-		_vb.upload();
-		_ib.upload();
+		// Upload data to buffers
+		_vertex_buffer.upload(_vertices);
+		_index_buffer.upload(_indices);
 	}
 
 	// Latch to layer
@@ -71,8 +69,8 @@ public:
 	}
 
 	// Get local descriptor set
-	VkDescriptorSet get_local_ds() const override {
-		return _ds;
+	const vk::raii::DescriptorSet &get_local_ds() const override {
+		return _dset;
 	}
 
 	// MVP structure
@@ -113,31 +111,22 @@ public:
 		};
 
 		// Bind the descriptor set
-		vkCmdBindDescriptorSets(rp.cmd,
-			VK_PIPELINE_BIND_POINT_GRAPHICS,
-			rp.pipeline_layout,
-			0, 1, &_ds,
-			0, nullptr
+		rp.cmd.bindDescriptorSets(
+			vk::PipelineBindPoint::eGraphics,
+			*rp.pipeline_layout, 0, {*_dset}, {}
 		);
 
-		// Bind vertex buffer
-		VkBuffer	buffers[] = {_vb.vk_buffer()};
-		VkDeviceSize	offsets[] = {0};
-
-		vkCmdBindVertexBuffers(rp.cmd, 0, 1, buffers, offsets);
-
-		// Bind index buffer
-		vkCmdBindIndexBuffer(rp.cmd, _ib.vk_buffer(), 0, VK_INDEX_TYPE_UINT32);
+		// Bind vertices and indices
+		rp.cmd.bindVertexBuffers(0, {*_vertex_buffer.buffer}, {0});
+		rp.cmd.bindIndexBuffer(*_index_buffer.buffer, 0, vk::IndexType::eUint32);
 
 		// Push constants
-		vkCmdPushConstants(
-			rp.cmd, rp.pipeline_layout,
-			VK_SHADER_STAGE_VERTEX_BIT,
-			0, sizeof(MVP), &mvp
+		rp.cmd.pushConstants <MVP> (*rp.pipeline_layout,
+			vk::ShaderStageFlagBits::eVertex, 0, mvp
 		);
 
 		// Draw
-		vkCmdDrawIndexed(rp.cmd, _ib.push_size(), 1, 0, 0, 0);
+		rp.cmd.drawIndexed(_indices.size(), 1, 0, 0, 0);
 	}
 
 	// Draw without descriptor set
@@ -152,31 +141,24 @@ public:
 			// TODO: Material method (also keep PC_Material there)
 			{
 				_material.Kd,
-				_material.type,
+				_material.type, // TODO: ermove this casting
 				(float) rp.highlight,
 				(float) _material.has_albedo(),
 				(float) _material.has_normal(),
 			}
 		};
 
-		// Bind vertex buffer
-		VkBuffer	buffers[] = {_vb.vk_buffer()};
-		VkDeviceSize	offsets[] = {0};
-
-		vkCmdBindVertexBuffers(rp.cmd, 0, 1, buffers, offsets);
-
-		// Bind index buffer
-		vkCmdBindIndexBuffer(rp.cmd, _ib.vk_buffer(), 0, VK_INDEX_TYPE_UINT32);
+		// Bind vertices and indices
+		rp.cmd.bindVertexBuffers(0, {*_vertex_buffer.buffer}, {0});
+		rp.cmd.bindIndexBuffer(*_index_buffer.buffer, 0, vk::IndexType::eUint32);
 
 		// Push constants
-		vkCmdPushConstants(
-			rp.cmd, rp.pipeline_layout,
-			VK_SHADER_STAGE_VERTEX_BIT,
-			0, sizeof(MVP), &mvp
+		rp.cmd.pushConstants <MVP> (*rp.pipeline_layout,
+			vk::ShaderStageFlagBits::eVertex, 0, mvp
 		);
 
 		// Draw
-		vkCmdDrawIndexed(rp.cmd, _ib.push_size(), 1, 0, 0, 0);
+		rp.cmd.drawIndexed(_indices.size(), 1, 0, 0, 0);
 	}
 };
 

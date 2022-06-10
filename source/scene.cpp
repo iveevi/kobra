@@ -16,8 +16,9 @@ namespace kobra {
 //////////////////////
 
 // TODO: loading models (with appropriate materials, etc)
-static ObjectPtr load_object(const Vulkan::Context &ctx,
-		const VkCommandPool &command_pool,
+static ObjectPtr load_object(const vk::raii::PhysicalDevice &phdev,
+		const vk::raii::Device &device,
+		const vk::raii::CommandPool &command_pool,
 		std::ifstream &fin, const std::string &path)
 {
 	std::string header;
@@ -65,7 +66,7 @@ static ObjectPtr load_object(const Vulkan::Context &ctx,
 	// Switch on the object type
 	if (header == "[SPHERE]") {
 		Profiler::one().frame("Loading sphere");
-		auto sphere = Sphere::from_file(ctx, command_pool, fin, path);
+		auto sphere = Sphere::from_file(phdev, device, command_pool, fin, path);
 		Profiler::one().end();
 
 		if (!sphere)
@@ -79,7 +80,7 @@ static ObjectPtr load_object(const Vulkan::Context &ctx,
 
 	if (header == "[MESH]") {
 		Profiler::one().frame("Loading mesh");
-		auto mesh = Mesh::from_file(ctx, command_pool, fin, path);
+		auto mesh = Mesh::from_file(phdev, device, command_pool, fin, path);
 		Profiler::one().end();
 
 		if (!mesh)
@@ -100,8 +101,9 @@ static ObjectPtr load_object(const Vulkan::Context &ctx,
 // Constructors //
 //////////////////
 
-Scene::Scene(const Vulkan::Context &ctx,
-		const VkCommandPool &command_pool,
+Scene::Scene(const vk::raii::PhysicalDevice &phdev,
+		const vk::raii::Device &device,
+		const vk::raii::CommandPool &command_pool,
 		const std::string &filename)
 {
 	// Open the file
@@ -121,7 +123,11 @@ Scene::Scene(const Vulkan::Context &ctx,
 
 		// Read the next object
 		Profiler::one().frame("Loading object");
-		ObjectPtr obj = load_object(ctx, command_pool, fin, filename);
+		ObjectPtr obj = load_object(
+			phdev, device, command_pool,
+			fin, filename
+		);
+
 		Profiler::one().end();
 
 		// Check if the object is valid

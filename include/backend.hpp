@@ -20,10 +20,12 @@
 #include <vulkan/vulkan_enums.hpp>
 #include <vulkan/vulkan_handles.hpp>
 #include <vulkan/vulkan_raii.hpp>
+#include <vulkan/vulkan_structs.hpp>
 #include <GLFW/glfw3.h>
 
 // Engine headers
 #include "common.hpp"
+#include "core.hpp"
 #include "logger.hpp"
 
 const uint32_t WIDTH = 800;
@@ -33,6 +35,7 @@ const int MAX_FRAMES_IN_FLIGHT = 2;
 
 namespace kobra {
 
+/*
 // TODO: aux class which stores device and physcial device
 // (and other per device objects)
 class Vulkan {
@@ -1624,7 +1627,7 @@ public:
 	// Static member variables
 	static const std::vector <const char *> device_extensions;
 	static const std::vector <const char *> validation_layers;
-};
+}; */
 
 //////////////////////
 // Object factories //
@@ -2319,6 +2322,9 @@ struct Swapchain {
 			image_views.emplace_back(device, create_view_info);
 		}
 	}
+
+	// Null constructor
+	Swapchain(std::nullptr_t) {}
 };
 
 // Transition image layout
@@ -2441,7 +2447,8 @@ inline void transition_image_layout(const vk::raii::CommandBuffer &cmd,
 
 // Image data wrapper
 struct ImageData {
-	vk::Format format;
+	vk::Format		format;
+	vk::Extent2D		extent;
 	vk::raii::Image		image = nullptr;
 	vk::raii::DeviceMemory	memory = nullptr;
 	vk::raii::ImageView	view = nullptr;
@@ -2450,15 +2457,14 @@ struct ImageData {
 	ImageData(const vk::raii::PhysicalDevice &phdev,
 			const vk::raii::Device &device,
 			const vk::Format &fmt,
-			const vk::Extent2D &extent,
+			const vk::Extent2D &ext,
 			vk::ImageTiling tiling,
 			vk::ImageUsageFlags usage,
 			vk::ImageLayout initial_layout,
 			vk::MemoryPropertyFlags memory_properties,
 			vk::ImageAspectFlags aspect_mask)
-			: format { fmt },
-
-			image { device,
+			: format {fmt}, extent {ext},
+			image {device,
 				  {
 					  vk::ImageCreateFlags(),
 					  vk::ImageType::e2D,
@@ -2490,6 +2496,20 @@ struct ImageData {
 				format, {}, { aspect_mask, 0, 1, 0, 1 }
 			}
 		};
+	}
+
+	// Blank image
+	static ImageData blank(const vk::raii::PhysicalDevice &phdev,
+			const vk::raii::Device &device) {
+		return ImageData(phdev, device,
+			vk::Format::eR8G8B8A8Unorm,
+			vk::Extent2D(1, 1),
+			vk::ImageTiling::eOptimal,
+			vk::ImageUsageFlagBits::eSampled,
+			vk::ImageLayout::eShaderReadOnlyOptimal,
+			vk::MemoryPropertyFlagBits::eDeviceLocal,
+			vk::ImageAspectFlagBits::eColor
+		);
 	}
 
 	ImageData(std::nullptr_t) {}
@@ -2604,8 +2624,22 @@ void copy_data_to_image(const vk::raii::CommandBuffer &,
 		const vk::Format &,
 		uint32_t, uint32_t);
 
+// Create ImageData object from byte data
+ImageData make_image(const vk::raii::CommandBuffer &,
+		const vk::raii::PhysicalDevice &,
+		const vk::raii::Device &,
+		BufferData &,
+		uint32_t,
+		uint32_t,
+		byte *,
+		const vk::Format &,
+		vk::ImageTiling,
+		vk::ImageUsageFlags,
+		vk::MemoryPropertyFlags,
+		vk::ImageAspectFlags);
+
 // Create ImageData object from a file
-ImageData make_texture(const vk::raii::CommandBuffer &,
+ImageData make_image(const vk::raii::CommandBuffer &,
 		const vk::raii::PhysicalDevice &,
 		const vk::raii::Device &,
 		BufferData &,
@@ -2614,6 +2648,116 @@ ImageData make_texture(const vk::raii::CommandBuffer &,
 		vk::ImageUsageFlags,
 		vk::MemoryPropertyFlags,
 		vk::ImageAspectFlags);
+
+// Create ImageData object from a file (without hastle of extra arguments)
+// TODO: source file
+inline ImageData make_image(const vk::raii::PhysicalDevice &phdev,
+		const vk::raii::Device &device,
+		const vk::raii::CommandPool &command_pool,
+		uint32_t width,
+		uint32_t height,
+		byte *data,
+		const vk::Format &format,
+		vk::ImageTiling tiling,
+		vk::ImageUsageFlags usage,
+		vk::MemoryPropertyFlags memory_properties,
+		vk::ImageAspectFlags aspect_mask)
+{
+	// Image data to be returned
+	ImageData img = nullptr;
+
+	// Queue to submit commands to
+	vk::raii::Queue queue {device, 0, 0};
+
+	// Temporary command buffer
+	auto temp_command_buffer = make_command_buffer(device, command_pool);
+
+	// Record
+	temp_command_buffer.begin(vk::CommandBufferBeginInfo {
+		vk::CommandBufferUsageFlagBits::eOneTimeSubmit
+	});
+
+	// Staging buffer
+	BufferData staging_buffer = nullptr;
+
+	// Create the texture
+	img = std::move(make_image(temp_command_buffer,
+		phdev, device, staging_buffer,
+		width, height, data,
+		format, tiling, usage,
+		memory_properties, aspect_mask
+	));
+
+	// End
+	temp_command_buffer.end();
+
+	// Submit
+	queue.submit(
+		vk::SubmitInfo {
+			0, nullptr, nullptr, 1, &*temp_command_buffer
+		},
+		nullptr
+	);
+
+	// Wait
+	queue.waitIdle();
+
+	// Return image data
+	return img;
+}
+
+// Create ImageData object from a file (without hastle of extra arguments)
+// TODO: source file
+inline ImageData make_image(const vk::raii::PhysicalDevice &phdev,
+		const vk::raii::Device &device,
+		const vk::raii::CommandPool &command_pool,
+		const std::string &filename,
+		vk::ImageTiling tiling,
+		vk::ImageUsageFlags usage,
+		vk::MemoryPropertyFlags memory_properties,
+		vk::ImageAspectFlags aspect_mask)
+{
+	// Image data to be returned
+	ImageData img = nullptr;
+
+	// Queue to submit commands to
+	vk::raii::Queue queue {device, 0, 0};
+
+	// Temporary command buffer
+	auto temp_command_buffer = make_command_buffer(device, command_pool);
+
+	// Record
+	temp_command_buffer.begin(vk::CommandBufferBeginInfo {
+		vk::CommandBufferUsageFlagBits::eOneTimeSubmit
+	});
+
+	// Staging buffer
+	BufferData staging_buffer = nullptr;
+
+	// Create the texture
+	img = std::move(make_image(temp_command_buffer,
+		phdev, device, staging_buffer,
+		filename, tiling, usage,
+		memory_properties, aspect_mask
+	));
+
+	// End
+	temp_command_buffer.end();
+
+	// Submit
+	queue.submit(
+		vk::SubmitInfo {
+			0, nullptr, nullptr, 1, &*temp_command_buffer
+		},
+		nullptr
+	);
+
+	// Wait
+	queue.waitIdle();
+
+	// Return image data
+	return img;
+}
 
 // Create a sampler from an ImageData object
 inline vk::raii::Sampler make_sampler(const vk::raii::Device &device, const ImageData &image)
@@ -2655,6 +2799,9 @@ struct DepthBuffer : public ImageData {
 				vk::ImageLayout::eUndefined,
 				vk::MemoryPropertyFlagBits::eDeviceLocal,
 				vk::ImageAspectFlagBits::eDepth) {}
+
+	// Null constructor
+	DepthBuffer(std::nullptr_t) : ImageData(nullptr) {}
 };
 
 // Create a render pass
@@ -2786,7 +2933,7 @@ inline std::vector <vk::raii::ShaderModule> make_shader_modules
 {
 	// Create shader modules
 	std::vector <vk::raii::ShaderModule> modules;
-	
+
 	modules.reserve(paths.size());
 	for (const auto &path : paths) {
 		auto spv = common::read_glob(path);
@@ -2852,15 +2999,66 @@ inline vk::raii::DescriptorSetLayout make_descriptor_set_layout
 	);
 }
 
+// Binding to a descriptor set
+inline void bind_ds(const vk::raii::Device &device,
+		const vk::raii::DescriptorSet &dset,
+		const vk::raii::Sampler &sampler,
+		const ImageData &img,
+		uint32_t binding)
+{
+	// Bind sampler to descriptor set
+	auto dset_info = std::array <vk::DescriptorImageInfo, 1> {
+		vk::DescriptorImageInfo {
+			*sampler,
+			*img.view,
+			vk::ImageLayout::eShaderReadOnlyOptimal
+		}
+	};
+
+	vk::WriteDescriptorSet dset_write {
+		*dset,
+		binding, 0,
+		vk::DescriptorType::eCombinedImageSampler,
+		dset_info
+	};
+
+	device.updateDescriptorSets(dset_write, nullptr);
+}
+
+inline void bind_ds(const vk::raii::Device &device,
+		const vk::raii::DescriptorSet &dset,
+		const BufferData &buffer,
+		const vk::DescriptorType &type,
+		uint32_t binding)
+{
+	// Bind buffer to descriptor set
+	auto dset_info = std::array <vk::DescriptorBufferInfo, 1> {
+		vk::DescriptorBufferInfo {
+			*buffer.buffer,
+			0, buffer.size
+		}
+	};
+
+	vk::WriteDescriptorSet dset_write {
+		*dset,
+		binding, 0,
+		type,
+		nullptr,
+		dset_info
+	};
+
+	device.updateDescriptorSets(dset_write, nullptr);
+}
+
 // Create a graphics pipeline
 struct GraphicsPipelineInfo {
 	const vk::raii::Device &device;
 	const vk::raii::RenderPass &render_pass;
 
-	const vk::raii::ShaderModule &vertex_shader;
+	vk::raii::ShaderModule vertex_shader;
 	const vk::SpecializationInfo *vertex_specialization = nullptr;
 
-	const vk::raii::ShaderModule &fragment_shader;
+	vk::raii::ShaderModule fragment_shader;
 	const vk::SpecializationInfo *fragment_specialization = nullptr;
 
 	const vk::VertexInputBindingDescription &vertex_binding;

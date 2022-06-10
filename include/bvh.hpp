@@ -7,13 +7,14 @@
 // Engine headers
 #include "backend.hpp"
 #include "bbox.hpp"
-#include "buffer_manager.hpp"
+// #include "buffer_manager.hpp"
 #include "core.hpp"
-#include "world.hpp"
+// #include "world.hpp"
 
 namespace kobra {
 
 // C++ representation of a BVH node
+// TODO: remove this implementation
 struct BVHNode {
 	BoundingBox	bbox;
 
@@ -50,12 +51,12 @@ struct BVHNode {
 	// Recursively write the BVH to a buffer
 	//	miss is the index of tree node
 	//	that should be visited next (essential for traversal)
-	void write(Buffer4f *buffer, int miss = -1) {
+	void write(std::vector <aligned_vec4> &buffer, int miss = -1) {
 		// Is the node a leaf?
 		float leaf = (left == nullptr && right == nullptr) ? 0x1 : 0x0;
 
 		// Current size and after
-		int size = buffer->push_size();
+		int size = buffer.size();
 		int after = size + 3;
 
 		// Index of left and right children
@@ -82,9 +83,9 @@ struct BVHNode {
 		};
 
 		// Write the node
-		buffer->push_back(header);
-		buffer->push_back(bbox.min);
-		buffer->push_back(bbox.max);
+		buffer.push_back(header);
+		buffer.push_back(bbox.min);
+		buffer.push_back(bbox.max);
 
 		// Write the children
 		if (left)
@@ -98,23 +99,25 @@ struct BVHNode {
 class BVH {
 	// Root nodes
 	std::vector <BVHNode *>	_nodes;
-
-	// Actual buffers
-	Buffer4f		_bf_nodes;
 public:
+	// Buffer of serliazed BVH nodes
+	BufferData		buffer = nullptr;
+
 	// Default constructor
 	BVH() = default;
 
 	// Construct BVH from bounding boxes
-	BVH(const Vulkan::Context &ctx, const std::vector <BoundingBox> &bboxes) {
+	BVH(const vk::raii::PhysicalDevice &phdev,
+			const vk::raii::Device &device,
+			const std::vector <BoundingBox> &bboxes) {
 		// Allocate buffer
-		BFM_Settings nodes_settings {
-			.size = 1024,
-			.usage_type = BFM_WRITE_ONLY,
-			.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-		};
+		vk::DeviceSize size = 2 * 4 * bboxes.size() * sizeof(float);
 
-		_bf_nodes = Buffer4f(ctx, nodes_settings);
+		buffer = BufferData(phdev, device, size,
+			vk::BufferUsageFlagBits::eStorageBuffer,
+			vk::MemoryPropertyFlagBits::eHostVisible
+				| vk::MemoryPropertyFlagBits::eHostCoherent
+		);
 
 		// Process into BVH nodes
 		if (bboxes.empty())
@@ -313,20 +316,10 @@ public:
 	// Dump all nodes to buffer
 	void write() {
 		// Dump all nodes to buffer
-		_bf_nodes.reset_push_back();
+		std::vector <aligned_vec4> host_buffer;
 		for (BVHNode *node : _nodes)
-			node->write(&_bf_nodes);
-		_bf_nodes.sync_upload();
-	}
-
-	// Clear the buffer
-	void clear() {
-		_bf_nodes.clear();
-	}
-
-	// Bind buffer to descriptor set
-	void bind(const VkDescriptorSet &dset, size_t index) {
-		_bf_nodes.bind(dset, index);
+			node->write(host_buffer);
+		buffer.upload(host_buffer);
 	}
 };
 

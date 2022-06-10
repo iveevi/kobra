@@ -844,30 +844,7 @@ int main()
 		vk::VertexInputRate::eVertex
 	};
 
-	auto _vertex_input_attributes = Vertex::vertex_attributes();
-
-	// Convert to vk::VertexInputAttributeDescription
-	auto vertex_input_attributes = std::vector <vk::VertexInputAttributeDescription> {};
-	for (auto &attr : _vertex_input_attributes) {
-		vk::Format format;
-
-		// Convert from VkFormat to vk::Format
-		if (attr.format == VK_FORMAT_R32G32B32_SFLOAT)
-			format = vk::Format::eR32G32B32Sfloat;
-		else if (attr.format == VK_FORMAT_R32G32B32A32_SFLOAT)
-			format = vk::Format::eR32G32B32A32Sfloat;
-		else if (attr.format == VK_FORMAT_R32G32_SFLOAT)
-			format = vk::Format::eR32G32Sfloat;
-
-		vertex_input_attributes.push_back(
-			vk::VertexInputAttributeDescription {
-				attr.location,
-				attr.binding,
-				format,
-				attr.offset
-			}
-		);
-	}
+	auto vertex_input_attributes = Vertex::vertex_attributes();
 
 	// Create the graphics pipeline
 	auto grp_info = GraphicsPipelineInfo {
@@ -924,7 +901,7 @@ int main()
 		BufferData staging_buffer = nullptr;
 
 		// Create the texture
-		img = std::move(make_texture(temp_command_buffer,
+		img = std::move(make_image(temp_command_buffer,
 			phdev, device, staging_buffer,
 			"resources/brickwall.jpg",
 			vk::ImageTiling::eOptimal,
@@ -1096,7 +1073,7 @@ int main()
 		while(device.waitForFences({*frame_data[frame_index].fence}, VK_TRUE, std::numeric_limits <uint64_t> ::max()) == vk::Result::eTimeout);
 
 		// Reset the fence
-		device.resetFences({*frame_data[frame_index].fence});
+		device.resetFences(*frame_data[frame_index].fence);
 
 		// Record the command buffer
 		record(command_buffer);

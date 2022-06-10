@@ -15,7 +15,7 @@ extern "C" {
 
 // Engine headers
 #include "backend.hpp"
-#include "buffer_manager.hpp"
+// #include "buffer_manager.hpp"
 #include "core.hpp"
 
 namespace kobra {
@@ -158,7 +158,7 @@ public:
 		image.height = fmt.height;
 	}
 
-	// Write frame
+	/* Write frame
 	void write(const BufferManager <uint> &pbuf) {
 		// Get image data
 		snapshot(pbuf, image);
@@ -186,7 +186,7 @@ public:
 		// Write to file
 		file.write((char *) buffer, pkt.size);
 		frame_count++;
-	}
+	} */
 
 	// Get time in seconds
 	double time() const {
@@ -204,8 +204,7 @@ public:
 	// TODO: method to play the video to the renderer
 
 	// Get a snapshot
-	// TODO: pass image format as well --> bundle in struct
-	static void snapshot(const BufferManager <uint> &, Image &);
+	// static void snapshot(const BufferData, Image &);
 };
 
 }

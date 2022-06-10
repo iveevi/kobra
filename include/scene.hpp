@@ -27,8 +27,9 @@ public:
 	Scene() = default;
 
 	// Constructor from file
-	Scene(const Vulkan::Context &,
-		const VkCommandPool &,
+	Scene(const vk::raii::PhysicalDevice &,
+		const vk::raii::Device &,
+		const vk::raii::CommandPool &,
 		const std::string &);
 
 	// Constructor from list of objects

@@ -10,7 +10,6 @@
 
 // Engine headers
 #include "../backend.hpp"
-#include "../buffer_manager.hpp"
 #include "../object.hpp"
 
 namespace kobra {
@@ -26,21 +25,23 @@ struct Vertex {
 	glm::vec3 color;
 
 	// Get Vulkan info for vertex
-	static Vulkan::VB vertex_binding();
-	static std::vector <Vulkan::VA> vertex_attributes();
+	static vk::VertexInputBindingDescription
+		vertex_binding();
+
+	static std::vector <vk::VertexInputAttributeDescription>
+		vertex_attributes();
 };
 
 // Aliases
-using VertexBuffer = BufferManager <Vertex>;
-using IndexBuffer = BufferManager <uint32_t>;
+// using VertexBuffer = BufferManager <Vertex>;
+// using IndexBuffer = BufferManager <uint32_t>;
 
 // RenderPacket structure contains
 // 	the data needed to render all
 // 	the GUI elements in a Layer object
 struct RenderPacket {
-	VkCommandBuffer		cmd = VK_NULL_HANDLE;
-
-	VkPipelineLayout	sprite_layout = VK_NULL_HANDLE;
+	const vk::raii::CommandBuffer &cmd;
+	const vk::raii::PipelineLayout &sprite_layout;
 };
 
 // Latching packet

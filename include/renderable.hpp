@@ -16,8 +16,12 @@ public:
 	Renderable() = default;
 
 	// Constructor
-	Renderable(const Material &material)
-			: _material(material) {}
+	Renderable(Material &&material)
+			: _material {std::move(material)} {}
+
+	// Move constructor and assignment operator
+	Renderable(Renderable &&other) = default;
+	Renderable &operator=(Renderable &&other) = default;
 
 	// Destructor
 	virtual ~Renderable() {}
@@ -31,8 +35,8 @@ public:
 		return _material;
 	}
 
-	void set_material(const Material &material) {
-		_material = material;
+	void set_material(Material &&material) {
+		_material = std::move(material);
 	}
 };
 

@@ -27,53 +27,50 @@ class Rect : public _element {
 	glm::vec3 color = glm::vec3 {0.0f, 0.0f, 0.0f};
 
 	// Vertex and index buffers
-	VertexBuffer	_vb;
-	IndexBuffer	_ib;
+	BufferData _vertex_buffer = nullptr;
+	BufferData _index_buffer = nullptr;
 
 	// Update buffer contents
 	void _update_buffers() {
 		// Fill buffers
-		std::array <uint, 6> indices {
+		std::vector <uint> indices {
 			0, 1, 2,
 			2, 3, 0
 		};
 
-		std::array <Vertex, 4> vertices {
+		std::vector <Vertex> vertices {
 			Vertex {min,				color},
 			Vertex {glm::vec2 {min.x, max.y},	color},
 			Vertex {max,				color},
 			Vertex {glm::vec2 {max.x, min.y},	color}
 		};
 
-		// Upload vertex data
-		_vb.reset_push_back();
-		_ib.reset_push_back();
-
-		_vb.push_back(vertices);
-		_ib.push_back(indices);
-
-		_vb.sync_upload();
-		_ib.sync_upload();
+		// Upload data
+		_vertex_buffer.upload(vertices);
+		_index_buffer.upload(indices);
 	}
 
 	// Initialize buffers
-	void _init_buffers(const Vulkan::Context &context) {
-		// Settings
-		BFM_Settings vb_settings {
-			.size = 4,
-			.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-			.usage_type = BFM_WRITE_ONLY
-		};
+	void _init_buffers(const vk::raii::PhysicalDevice &phdev,
+			const vk::raii::Device &device) {
+		// Buffer sizes
+		vk::DeviceSize vertex_buffer_size = 4 * sizeof(Vertex);
+		vk::DeviceSize index_buffer_size = 6 * sizeof(uint);
 
-		BFM_Settings ib_settings {
-			.size = 6,
-			.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-			.usage_type = BFM_WRITE_ONLY
-		};
+		// Construct the buffers
+		_vertex_buffer = BufferData(phdev, device,
+			vertex_buffer_size,
+			vk::BufferUsageFlagBits::eVertexBuffer,
+			vk::MemoryPropertyFlagBits::eHostVisible
+				| vk::MemoryPropertyFlagBits::eHostCoherent
+		);
 
-		// Initialize buffers
-		_vb = VertexBuffer(context, vb_settings);
-		_ib = IndexBuffer(context, ib_settings);
+		_index_buffer = BufferData(phdev, device,
+			index_buffer_size,
+			vk::BufferUsageFlagBits::eIndexBuffer,
+			vk::MemoryPropertyFlagBits::eHostVisible
+				| vk::MemoryPropertyFlagBits::eHostCoherent
+		);
 
 		// Update buffers
 		_update_buffers();
@@ -86,14 +83,21 @@ public:
 	Rect() = default;
 
 	// Constructors
-	Rect(const Vulkan::Context &context, const glm::vec4 &bounds, const glm::vec3 &c = glm::vec3 {1.0})
-			: Object(object_type), min(bounds.x, bounds.y),
-			max(bounds.z, bounds.w), color(c) {
+	Rect(const vk::raii::PhysicalDevice &phdev,
+			const vk::raii::Device &device,
+			const glm::vec4 &bounds,
+			const glm::vec3 &c = glm::vec3 {1.0})
+			: Object(object_type),
+			min(bounds.x, bounds.y),
+			max(bounds.z, bounds.w),
+			color(c) {
 		// Initialize buffers
-		_init_buffers(context);
+		_init_buffers(phdev, device);
 	}
 
-	Rect(const Vulkan::Context &context, const coordinates::Screen &sc,
+	Rect(const vk::raii::PhysicalDevice &phdev,
+			const vk::raii::Device &device,
+			const coordinates::Screen &sc,
 			const coordinates::Screen &size,
 			const glm::vec3 &c = glm::vec3 {1.0})
 			: Object(object_type), color(c) {
@@ -105,7 +109,7 @@ public:
 		max = ndc + ndc_size;
 
 		// Initialize buffers
-		_init_buffers(context);
+		_init_buffers(phdev, device);
 	}
 
 	// Setters
@@ -128,24 +132,13 @@ public:
 	void latch(LatchingPacket &lp) override {}
 
 	// Render
-	void render(RenderPacket &packet) override {
+	void render(RenderPacket &rp) override {
+		// Bind buffers
+		rp.cmd.bindVertexBuffers(0, {*_vertex_buffer.buffer}, {0});
+		rp.cmd.bindIndexBuffer(*_index_buffer.buffer, 0, vk::IndexType::eUint32);
+
 		// Draw
-		VkBuffer	vbuffers[] = {_vb.vk_buffer()};
-		VkDeviceSize	offsets[] = {0};
-
-		vkCmdBindVertexBuffers(packet.cmd,
-			0, 1, vbuffers, offsets
-		);
-
-		vkCmdBindIndexBuffer(packet.cmd,
-			_ib.vk_buffer(), 0,
-			VK_INDEX_TYPE_UINT32
-		);
-
-		vkCmdDrawIndexed(packet.cmd,
-			_ib.push_size(),
-			1, 0, 0, 0
-		);
+		rp.cmd.drawIndexed(6, 1, 0, 0, 0);
 	}
 };
 

@@ -7,13 +7,14 @@
 
 namespace kobra {
 
-// Copy constructor
+/* Copy constructor
 Material::Material(const Material &other)
 		: Kd(other.Kd), Ks(other.Ks),
 		type(other.type),
 		refr_eta(other.refr_eta),
 		refr_k(other.refr_k)
 {
+	// TODO: copy image data
 	if (other.albedo_sampler != nullptr) {
 		albedo_sampler = new Sampler(*other.albedo_sampler);
 		albedo_source = other.albedo_source;
@@ -23,9 +24,9 @@ Material::Material(const Material &other)
 		normal_sampler = new Sampler(*other.normal_sampler);
 		normal_source = other.normal_source;
 	}
-}
+} */
 
-// Assignment operator
+/* Assignment operator
 Material &Material::operator=(const Material &other)
 {
 	if (this != &other) {
@@ -53,91 +54,110 @@ Material &Material::operator=(const Material &other)
 	}
 
 	return *this;
-}
-
-// Destructor
-Material::~Material()
-{
-	if (albedo_sampler != nullptr)
-		delete albedo_sampler;
-
-	if (normal_sampler != nullptr)
-		delete normal_sampler;
-}
+} */
 
 // Properties
 bool Material::has_albedo() const
 {
-	return albedo_sampler != nullptr;
+	return !albedo_source.empty();
 }
 
 bool Material::has_normal() const
 {
-	return normal_sampler != nullptr;
+	return !normal_source.empty();
 }
 
 // Get image descriptors
-std::optional <VkDescriptorImageInfo> Material::get_albedo_descriptor() const
+std::optional <vk::DescriptorImageInfo> Material::get_albedo_descriptor() const
 {
-	if (albedo_sampler == nullptr)
+	if (albedo_source.empty())
 		return std::nullopt;
-	return albedo_sampler->get_image_info();	// TODO: refactor
+
+	return vk::DescriptorImageInfo {
+		*albedo_sampler,
+		*albedo_image.view,
+		vk::ImageLayout::eShaderReadOnlyOptimal
+	};
 }
 
-std::optional <VkDescriptorImageInfo> Material::get_normal_descriptor() const
+std::optional <vk::DescriptorImageInfo> Material::get_normal_descriptor() const
 {
-	if (normal_sampler == nullptr)
+	if (normal_source.empty())
 		return std::nullopt;
-	return normal_sampler->get_image_info();	// TODO: refactor
+
+	return vk::DescriptorImageInfo {
+		*normal_sampler,
+		*normal_image.view,
+		vk::ImageLayout::eShaderReadOnlyOptimal
+	};
 }
 
 // Bind albdeo and normal textures
-void Material::bind(const Vulkan::Context &context,
-		const VkCommandPool &command_pool,
-		const VkDescriptorSet &ds, size_t b1, size_t b2) const
+void Material::bind(const vk::raii::Device &device,
+		const vk::raii::DescriptorSet &dset,
+		uint32_t b1, uint32_t b2) const
 {
-	// Blank sampler
-	Sampler blank = Sampler::blank_sampler(context, command_pool);
+	// TODO: do we need to bind a blank sampler?
 
 	// Bind albedo
-	if (albedo_sampler != nullptr)
-		albedo_sampler->bind(ds, b1);
-	else
-		blank.bind(ds, b1);
+	if (albedo_source.length() > 0)
+		bind_ds(device, dset, albedo_sampler, albedo_image, b1);
 
 	// Bind normal
-	if (normal_sampler != nullptr)
-		normal_sampler->bind(ds, b2);
-	else
-		blank.bind(ds, b2);
+	if (normal_source.length() > 0)
+		bind_ds(device, dset, normal_sampler, normal_image, b2);
 }
 
 // Set textures
-void Material::set_albedo(const Vulkan::Context &ctx,
-		const VkCommandPool &command_pool,
+void Material::set_albedo(const vk::raii::PhysicalDevice &phdev,
+		const vk::raii::Device &device,
+		const vk::raii::CommandPool &command_pool,
 		const std::string &path)
 {
 	albedo_source = path;
-	albedo_sampler = new Sampler(ctx, command_pool, path);
+
+	albedo_image = make_image(phdev, device,
+		command_pool, path,
+		vk::ImageTiling::eOptimal,
+		vk::ImageUsageFlagBits::eSampled
+			| vk::ImageUsageFlagBits::eTransferDst
+			| vk::ImageUsageFlagBits::eTransferSrc,
+		vk::MemoryPropertyFlagBits::eDeviceLocal,
+		vk::ImageAspectFlagBits::eColor
+	);
+
+	albedo_sampler = make_sampler(device, albedo_image);
 }
 
-void Material::set_normal(const Vulkan::Context &ctx,
-		const VkCommandPool &command_pool,
+void Material::set_normal(const vk::raii::PhysicalDevice &phdev,
+		const vk::raii::Device &device,
+		const vk::raii::CommandPool &command_pool,
 		const std::string &path)
 {
 	normal_source = path;
-	normal_sampler = new Sampler(ctx, command_pool, path);
+
+	normal_image = make_image(phdev, device,
+		command_pool, path,
+		vk::ImageTiling::eOptimal,
+		vk::ImageUsageFlagBits::eSampled
+			| vk::ImageUsageFlagBits::eTransferDst
+			| vk::ImageUsageFlagBits::eTransferSrc,
+		vk::MemoryPropertyFlagBits::eDeviceLocal,
+		vk::ImageAspectFlagBits::eColor
+	);
+
+	normal_sampler = make_sampler(device, normal_image);
 }
 
-// Serialize to GPU buffer
-void Material::serialize(Buffer4f *bf_mats) const
+// Serialize to buffer
+void Material::serialize(std::vector <aligned_vec4> &buffer) const
 {
 	int i_type = static_cast <int> (type);
 	float f_type = *reinterpret_cast <float *> (&i_type);
 
-	bf_mats->push_back(aligned_vec4(Kd, f_type));
-	bf_mats->push_back(aligned_vec4(
-		{refr_eta, (!albedo_sampler), (!normal_sampler), 0}
+	buffer.push_back(aligned_vec4(Kd, f_type));
+	buffer.push_back(aligned_vec4(
+		{refr_eta, albedo_source.empty(), normal_source.empty(), 0}
 	));
 }
 
@@ -151,17 +171,25 @@ void Material::save(std::ofstream &file) const
 	file << "index_of_refraction=" << refr_eta << std::endl;
 	file << "extinction_coefficient=" << refr_k << std::endl;
 
-	file << "albedo_texture=" << (albedo_sampler ? albedo_source : "0") << std::endl;
-	file << "normal_texture=" << (normal_sampler ? normal_source : "0") << std::endl;
+	file << "albedo_texture=" << (albedo_source.empty() ? "0" : albedo_source) << std::endl;
+	file << "normal_texture=" << (normal_source.empty() ? "0" : normal_source) << std::endl;
 }
 
 // Read material from file
-std::optional <Material> Material::from_file
-		(const Vulkan::Context &ctx,
-		const VkCommandPool &command_pool,
+Material &&Material::from_file
+		(const vk::raii::PhysicalDevice &phdev,
+		const vk::raii::Device &device,
+		const vk::raii::CommandPool &command_pool,
 		std::ifstream &file,
-		const std::string &scene_file)
+		const std::string &scene_file,
+		bool &success)
 {
+	// Material to return
+	Material mat;
+
+	// Default success to false
+	success = false;
+
 	// TODO: field reader and writer class...
 	// 	template parameter, with a lambda to
 	// 	process and reutrn the value
@@ -174,7 +202,7 @@ std::optional <Material> Material::from_file
 	// Ensure correct header ("Kd=")
 	if (line.substr(0, 3) != "Kd=") {
 		KOBRA_LOG_FUNC(error) << "Expected Kd= but got " << line << std::endl;
-		return std::nullopt;
+		return std::move(mat);
 	}
 
 	std::sscanf(line.c_str(), "Kd=%f %f %f", &Kd.x, &Kd.y, &Kd.z);
@@ -186,7 +214,7 @@ std::optional <Material> Material::from_file
 	// Ensure correct header ("Ks=")
 	if (line.substr(0, 3) != "Ks=") {
 		KOBRA_LOG_FUNC(error) << "Expected Ks= but got " << line << std::endl;
-		return std::nullopt;
+		return std::move(mat);
 	}
 
 	std::sscanf(line.c_str(), "Ks=%f %f %f", &Ks.x, &Ks.y, &Ks.z);
@@ -213,7 +241,7 @@ std::optional <Material> Material::from_file
 	if (line.substr(0, 20) != "index_of_refraction=") {
 		KOBRA_LOG_FUNC(error) << "Expected index_of_refraction= but got "
 			<< line.substr(0, 20) << std::endl;
-		return std::nullopt;
+		return std::move(mat);
 	}
 
 	std::sscanf(line.c_str(), "index_of_refraction=%f", &refr_eta);
@@ -225,7 +253,7 @@ std::optional <Material> Material::from_file
 	// Ensure correct header ("extinction_coefficient=")
 	if (line.substr(0, 23) != "extinction_coefficient=") {
 		KOBRA_LOG_FUNC(error) << "Expected extinction_coefficient= but got " << line << std::endl;
-		return std::nullopt;
+		return std::move(mat);
 	}
 
 	std::sscanf(line.c_str(), "extinction_coefficient=%f", &refr_k);
@@ -238,7 +266,7 @@ std::optional <Material> Material::from_file
 	// Ensure correct header ("albedo_texture=")
 	if (line.substr(0, 15) != "albedo_texture=") {
 		KOBRA_LOG_FUNC(error) << "Expected albedo_texture= but got " << line << std::endl;
-		return std::nullopt;
+		return std::move(mat);
 	}
 
 	std::sscanf(line.c_str(), "albedo_texture=%s", buf2);
@@ -252,14 +280,11 @@ std::optional <Material> Material::from_file
 	// Ensure correct header ("normal_texture=")
 	if (line.substr(0, 15) != "normal_texture=") {
 		KOBRA_LOG_FUNC(error) << "Expected normal_texture= but got " << line << std::endl;
-		return std::nullopt;
+		return std::move(mat);
 	}
 
 	std::sscanf(line.c_str(), "normal_texture=%s", buf3);
 	normal_source = buf3;
-
-	// Construct and return material
-	Material mat;
 
 	mat.Kd = Kd;
 	mat.Ks = Ks;
@@ -283,7 +308,7 @@ std::optional <Material> Material::from_file
 				common::get_directory(scene_file)
 			);
 
-			mat.set_albedo(ctx, command_pool, albedo_source);
+			mat.set_albedo(phdev, device, command_pool, albedo_source);
 			Profiler::one().end();
 		};
 
@@ -298,7 +323,7 @@ std::optional <Material> Material::from_file
 			common::get_directory(scene_file)
 		);
 
-		mat.set_normal(ctx, command_pool, normal_source);
+		mat.set_normal(phdev, device, command_pool, normal_source);
 		Profiler::one().end();
 	}
 
@@ -311,7 +336,8 @@ std::optional <Material> Material::from_file
 	std::cout << "Material loaded" << std::endl;
 
 	// Return material
-	return mat;
+	success = true;
+	return std::move(mat);
 }
 
 }

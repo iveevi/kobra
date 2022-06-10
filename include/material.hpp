@@ -7,19 +7,26 @@
 #include <optional>
 
 // Engine headers
-#include "buffer_manager.hpp"
-#include "core.hpp"
-#include "sampler.hpp"
-#include "types.hpp"
+#include "backend.hpp"
 #include "common.hpp"
+#include "core.hpp"
+#include "types.hpp"
+// #include "buffer_manager.hpp"
+// #include "sampler.hpp"
 
 namespace kobra {
 
 // Material
 class Material {
 	// Textures, if any
-	Sampler 	*albedo_sampler = nullptr;
-	Sampler 	*normal_sampler = nullptr;
+	vk::raii::Sampler albedo_sampler = nullptr;
+	vk::raii::Sampler normal_sampler = nullptr;
+
+	ImageData albedo_image = nullptr;
+	ImageData normal_image = nullptr;
+
+	// Source device
+	vk::raii::Device *device = nullptr;
 
 	// Texture sources (for scene loading)
 	// TODO: Kd, Kd, normal
@@ -39,49 +46,69 @@ public:
 	// Defualt constructor
 	Material() = default;
 
-	// Copy constructor
-	Material(const Material &);
+	// No copies or assignments
+	Material(const Material &) = delete;
+	Material &operator=(const Material &) = delete;
 
-	// Assignment operator
-	Material &operator=(const Material &);
+	// Moves only
+	Material(Material &&) = default;
+	Material &operator=(Material &&) = default;
 
-	// Destructor
-	~Material();
+	// Create a deep copy of the material
+	Material &&copy() const {
+		Material m;
+
+		/* Create copies for each texture only if they exist
+		if (albedo_source != "") {
+			// Create duplicate image data
+			// TODO: this is wasteful
+
+		} */
+
+		// TODO: fill
+		m.Kd = glm::vec3 {1.0, 0.0, 1.0}; // dummy color
+
+		// Return the moved material
+		return std::move(m);
+	}
 
 	// Properties
 	bool has_albedo() const;
 	bool has_normal() const;
 
 	// Get image descriptors
-	std::optional <VkDescriptorImageInfo> get_albedo_descriptor() const;
-	std::optional <VkDescriptorImageInfo> get_normal_descriptor() const;
+	std::optional <vk::DescriptorImageInfo> get_albedo_descriptor() const;
+	std::optional <vk::DescriptorImageInfo> get_normal_descriptor() const;
 
 	// Bind albdeo and normal textures
-	void bind(const Vulkan::Context &,
-			const VkCommandPool &,
-			const VkDescriptorSet &, size_t, size_t) const;
+	void bind(const vk::raii::Device &, const vk::raii::DescriptorSet &, uint32_t, uint32_t) const;
 
 	// Set textures
-	void set_albedo(const Vulkan::Context &,
-			const VkCommandPool &,
+	void set_albedo(const vk::raii::PhysicalDevice &,
+			const vk::raii::Device &,
+			const vk::raii::CommandPool &,
 			const std::string &);
 
-	void set_normal(const Vulkan::Context &,
-			const VkCommandPool &,
+	void set_normal(const vk::raii::PhysicalDevice &,
+			const vk::raii::Device &,
+			const vk::raii::CommandPool &,
 			const std::string &);
 
 	// Serialize to GPU buffer
-	void serialize(Buffer4f *) const;
+	void serialize(std::vector <aligned_vec4> &) const;
 
 	// Save material to file
 	void save(std::ofstream &) const;
 
 	// Read material from file
 	// TODO: pack args into a struct
-	static std::optional <Material> from_file(const Vulkan::Context &,
-			const VkCommandPool &,
+	static Material &&from_file
+			(const vk::raii::PhysicalDevice &,
+			const vk::raii::Device &,
+			const vk::raii::CommandPool &,
 			std::ifstream &,
-			const std::string &);
+			const std::string &,
+			bool &);
 };
 
 }

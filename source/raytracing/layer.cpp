@@ -14,124 +14,89 @@ namespace rt {
 // Static member variables //
 /////////////////////////////
 
-const Layer::DSLBindings Layer::_mesh_compute_bindings {
-	DSLBinding {
-		.binding = MESH_BINDING_PIXELS,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-		.pImmutableSamplers = nullptr
+const std::vector <DSLB> Layer::_raytracing_bindings {
+	DSLB {
+		MESH_BINDING_PIXELS,
+		vk::DescriptorType::eStorageBuffer,
+		1, vk::ShaderStageFlagBits::eCompute,
 	},
 
-	DSLBinding {
-		.binding = MESH_BINDING_VERTICES,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-		.pImmutableSamplers = nullptr
+	DSLB {
+		MESH_BINDING_VERTICES,
+		vk::DescriptorType::eStorageBuffer,
+		1, vk::ShaderStageFlagBits::eCompute,
 	},
 
-	DSLBinding {
-		.binding = MESH_BINDING_TRIANGLES,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-		.pImmutableSamplers = nullptr
+	DSLB {
+		MESH_BINDING_TRIANGLES,
+		vk::DescriptorType::eStorageBuffer,
+		1, vk::ShaderStageFlagBits::eCompute,
 	},
 
-	DSLBinding {
-		.binding = MESH_BINDING_TRANSFORMS,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-		.pImmutableSamplers = nullptr
+	DSLB {
+		MESH_BINDING_TRANSFORMS,
+		vk::DescriptorType::eStorageBuffer,
+		1, vk::ShaderStageFlagBits::eCompute,
 	},
 
-	DSLBinding {
-		.binding = MESH_BINDING_BVH,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-		.pImmutableSamplers = nullptr
+	DSLB {
+		MESH_BINDING_BVH,
+		vk::DescriptorType::eStorageBuffer,
+		1, vk::ShaderStageFlagBits::eCompute,
 	},
 
 	// Materials buffer
-	DSLBinding {
-		.binding = MESH_BINDING_MATERIALS,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-		.pImmutableSamplers = nullptr
+	DSLB {
+		MESH_BINDING_MATERIALS,
+		vk::DescriptorType::eStorageBuffer,
+		1, vk::ShaderStageFlagBits::eCompute,
 	},
 
 	// Lights buffer
-	DSLBinding {
-		.binding = MESH_BINDING_LIGHTS,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-		.pImmutableSamplers = nullptr
+	DSLB {
+		MESH_BINDING_LIGHTS,
+		vk::DescriptorType::eStorageBuffer,
+		1, vk::ShaderStageFlagBits::eCompute,
 	},
 
 	// Light indices
-	DSLBinding {
-		.binding = MESH_BINDING_LIGHT_INDICES,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-		.pImmutableSamplers = nullptr
+	DSLB {
+		MESH_BINDING_LIGHT_INDICES,
+		vk::DescriptorType::eStorageBuffer,
+		1, vk::ShaderStageFlagBits::eCompute,
 	},
 
 	// Texture samplers
-	DSLBinding {
-		.binding = MESH_BINDING_ALBEDOS,
-		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-		.descriptorCount = MAX_TEXTURES,
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-		.pImmutableSamplers = nullptr
+	DSLB {
+		MESH_BINDING_ALBEDOS,
+		vk::DescriptorType::eCombinedImageSampler,
+		MAX_TEXTURES, vk::ShaderStageFlagBits::eCompute,
 	},
 
-	DSLBinding {
-		.binding = MESH_BINDING_NORMAL_MAPS,
-		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-		.descriptorCount = MAX_TEXTURES,
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-		.pImmutableSamplers = nullptr
+	DSLB {
+		MESH_BINDING_NORMAL_MAPS,
+		vk::DescriptorType::eCombinedImageSampler,
+		MAX_TEXTURES, vk::ShaderStageFlagBits::eCompute,
 	},
 
-	DSLBinding {
-		.binding = MESH_BINDING_ENVIRONMENT,
-		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-		.pImmutableSamplers = nullptr
+	DSLB {
+		MESH_BINDING_ENVIRONMENT,
+		vk::DescriptorType::eCombinedImageSampler,
+		1, vk::ShaderStageFlagBits::eCompute,
 	},
 
-	DSLBinding {
-		.binding = MESH_BINDING_OUTPUT,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-		.pImmutableSamplers = nullptr
+	DSLB {
+		MESH_BINDING_OUTPUT,
+		vk::DescriptorType::eStorageBuffer,
+		1, vk::ShaderStageFlagBits::eCompute,
 	},
 };
 
-const Layer::DSLBindings Layer::_postproc_bindings = {
-	VkDescriptorSetLayoutBinding {
-		.binding = 0,
-		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-		.pImmutableSamplers = nullptr
-	},
-
-	/* VkDescriptorSetLayoutBinding {
-		.binding = 1,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-		.pImmutableSamplers = nullptr
-	}, */
+const std::vector <DSLB> Layer::_postproc_bindings = {
+	DSLB {
+		0, vk::DescriptorType::eCombinedImageSampler,
+		1, vk::ShaderStageFlagBits::eFragment
+	}
 };
 
 //////////////////////////////
@@ -141,40 +106,19 @@ const Layer::DSLBindings Layer::_postproc_bindings = {
 void Layer::_init_compute_pipelines()
 {
 	// Push constants
-	VkPushConstantRange push_constants = {
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-		.offset = 0,
-		.size = sizeof(PushConstants)
+	auto pcr = vk::PushConstantRange {
+		vk::ShaderStageFlagBits::eCompute,
+		0, sizeof(PushConstants)
 	};
 
 	// Common pipeline layout
-	VkPipelineLayoutCreateInfo compute_ppl_info = {
-		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-		.setLayoutCount = 1,
-		.pSetLayouts = &_mesh_dsl,
-		.pushConstantRangeCount = 1,
-		.pPushConstantRanges = &push_constants
+	_pipelines.raytracing_layout = vk::raii::PipelineLayout {
+		_device,
+		{{}, *_dsl_raytracing, pcr}
 	};
 
-	VkPipelineLayout compute_ppl;
-
-	VkResult result;
-	result = vkCreatePipelineLayout(
-		_context.vk_device(),
-		&compute_ppl_info,
-		nullptr,
-		&compute_ppl
-	);
-
-	KOBRA_ASSERT(
-		result == VK_SUCCESS,
-		"Failed to create pipeline layout for common compute pipeline"
-	);
-
-	VkPipeline mesh_pp;
-
 	// Get all the shaders
-	auto shaders = _context.make_shaders({
+	auto shaders = make_shader_modules(_device, {
 		"shaders/bin/generic/normal.spv",
 		"shaders/bin/generic/heatmap.spv",
 		"shaders/bin/generic/fast_path_tracer.spv",
@@ -183,81 +127,60 @@ void Layer::_init_compute_pipelines()
 		"shaders/bin/generic/bidirectional_path_tracer.spv"
 	});
 
-	// Shader stage
-	VkPipelineShaderStageCreateInfo shader_stages[] = {
-		{	// Normals
-			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-			.stage = VK_SHADER_STAGE_COMPUTE_BIT,
-			.module = shaders[0],
-			.pName = "main"
+	// Shader stages for each pipeline
+	std::array <vk::PipelineShaderStageCreateInfo, 6> shader_stages {
+		vk::PipelineShaderStageCreateInfo {
+			{}, vk::ShaderStageFlagBits::eCompute,
+			*shaders[0], "main"
 		},
-		{
-			// Heatmap
-			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-			.stage = VK_SHADER_STAGE_COMPUTE_BIT,
-			.module = shaders[1],
-			.pName = "main"
+
+		vk::PipelineShaderStageCreateInfo {
+			{}, vk::ShaderStageFlagBits::eCompute,
+			*shaders[1], "main"
 		},
-		{	// Fast path tracer
-			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-			.stage = VK_SHADER_STAGE_COMPUTE_BIT,
-			.module = shaders[2],
-			.pName = "main"
+
+		vk::PipelineShaderStageCreateInfo {
+			{}, vk::ShaderStageFlagBits::eCompute,
+			*shaders[2], "main"
 		},
-		{	// PBR path tracer
-			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-			.stage = VK_SHADER_STAGE_COMPUTE_BIT,
-			.module = shaders[3],
-			.pName = "main"
+
+		vk::PipelineShaderStageCreateInfo {
+			{}, vk::ShaderStageFlagBits::eCompute,
+			*shaders[3], "main"
 		},
-		{
-			// MIS path tracer
-			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-			.stage = VK_SHADER_STAGE_COMPUTE_BIT,
-			.module = shaders[4],
-			.pName = "main"
+
+		vk::PipelineShaderStageCreateInfo {
+			{}, vk::ShaderStageFlagBits::eCompute,
+			*shaders[4], "main"
 		},
-		{
-			// Bidirectional path tracer
-			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-			.stage = VK_SHADER_STAGE_COMPUTE_BIT,
-			.module = shaders[5],
-			.pName = "main"
+
+		vk::PipelineShaderStageCreateInfo {
+			{}, vk::ShaderStageFlagBits::eCompute,
+			*shaders[5], "main"
 		}
 	};
 
-	VkComputePipelineCreateInfo ppl_info = {
-		.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-		.layout = compute_ppl,
-		.basePipelineHandle = VK_NULL_HANDLE,
-		.basePipelineIndex = -1
+	// Compute pipeline creation info
+	vk::ComputePipelineCreateInfo ppl_info {
+		{}, {},
+		*_pipelines.raytracing_layout,
+		nullptr,
 	};
 
 	// Lambda to create the pipeline
-	auto ppl_maker = [&](const VkPipelineShaderStageCreateInfo &shader_stage) {
+	auto ppl_maker = [&](const vk::PipelineShaderStageCreateInfo &shader_stage) {
 		// Set the shader stage
 		ppl_info.stage = shader_stage;
 
 		// Pipeline to return
-		Vulkan::Pipeline pipeline;
-
-		VkResult result = vkCreateComputePipelines(
-			_context.vk_device(),
-			VK_NULL_HANDLE,
-			1,
-			&ppl_info,
-			nullptr,
-			&pipeline.pipeline
-		);
-
-		KOBRA_ASSERT(
-			result == VK_SUCCESS,
-			"Failed to create compute pipeline"
-		);
-
-		// Transfer the layout and return
-		pipeline.layout = compute_ppl;
-		return pipeline;
+		return vk::raii::Pipeline {
+			_device,
+			vk::raii::PipelineCache {
+				_device,
+				vk::PipelineCacheCreateInfo {}
+			},
+			ppl_info
+		};
 	};
 
 	// Create the pipelines
@@ -269,271 +192,110 @@ void Layer::_init_compute_pipelines()
 	_pipelines.bidirectional_path_tracer = ppl_maker(shader_stages[5]);
 }
 
-void Layer::_init_postproc_pipeline(const Vulkan::Swapchain &swapchain)
+void Layer::_init_postprocess_pipeline()
 {
 	// Load the shaders
-	auto shaders = _context.make_shaders({
+	auto shaders = make_shader_modules(_device, {
 		"shaders/bin/generic/postproc_vert.spv",
 		"shaders/bin/generic/postproc_frag.spv"
 	});
 
-	// Pipeline stages
-	VkPipelineShaderStageCreateInfo vertex {
-		.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-		.stage = VK_SHADER_STAGE_VERTEX_BIT,
-		.module = shaders[0],
-		.pName = "main"
+	// Push constants
+	auto pcr = vk::PushConstantRange {
+		vk::ShaderStageFlagBits::eVertex,
+		0, sizeof(PC_Viewport) // TODO: Why is this needed?
 	};
 
-	VkPipelineShaderStageCreateInfo fragment {
-		.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-		.stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-		.module = shaders[1],
-		.pName = "main"
+	// Create the pipeline layout
+	_pipelines.postprocess_layout = vk::raii::PipelineLayout {
+		_device,
+		{{}, *_dsl_postprocess, pcr}
 	};
 
-	VkPipelineShaderStageCreateInfo shader_stages[] = {vertex, fragment};
-
-	// Vertex input
-	VkPipelineVertexInputStateCreateInfo vertex_input_info {
-		.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-		.vertexBindingDescriptionCount = 0,
-		.pVertexBindingDescriptions = nullptr,
-		.vertexAttributeDescriptionCount = 0,
-		.pVertexAttributeDescriptions = nullptr
+	// Create pipeline cache
+	auto pc = vk::raii::PipelineCache {
+		_device,
+		vk::PipelineCacheCreateInfo {}
 	};
 
-	// Input assembly
-	VkPipelineInputAssemblyStateCreateInfo input_assembly {
-		.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-		.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-		.primitiveRestartEnable = VK_FALSE
+	// Create the graphics pipeline
+	auto grp_info = GraphicsPipelineInfo {
+		.device = _device,
+		.render_pass = _render_pass,
+
+		.vertex_shader = std::move(shaders[0]),
+		.fragment_shader = std::move(shaders[1]),
+
+		.vertex_binding = {},
+		.vertex_attributes = {},
+
+		.pipeline_layout = _pipelines.postprocess_layout,
+		.pipeline_cache = pc,
+
+		.depth_test = true,
+		.depth_write = true
 	};
 
-	// TODO: swapchain function (to generate viewport and scissor, and
-	// state)
-	// Viewport
-	VkViewport viewport {
-		.x = 0.0f,
-		.y = 0.0f,
-		.width = (float) swapchain.extent.width,
-		.height = (float) swapchain.extent.height,
-		.minDepth = 0.0f,
-		.maxDepth = 1.0f
-	};
-
-	// Scissor
-	VkRect2D scissor {
-		.offset = {0, 0},
-		.extent = swapchain.extent
-	};
-
-	// Viewport state
-	VkPipelineViewportStateCreateInfo viewport_state {
-		.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-		.viewportCount = 1,
-		.pViewports = &viewport,
-		.scissorCount = 1,
-		.pScissors = &scissor
-	};
-
-	// Rasterizer
-	VkPipelineRasterizationStateCreateInfo rasterizer {
-		.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-		.depthClampEnable = VK_FALSE,
-		.rasterizerDiscardEnable = VK_FALSE,
-		.polygonMode = VK_POLYGON_MODE_FILL,
-		.cullMode = VK_CULL_MODE_NONE,
-		.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
-		.depthBiasEnable = VK_FALSE,
-		.depthBiasConstantFactor = 0.0f,
-		.depthBiasClamp = 0.0f,
-		.depthBiasSlopeFactor = 0.0f,
-		.lineWidth = 1.0f,
-	};
-
-	// Multisampling
-	VkPipelineMultisampleStateCreateInfo multisampling {
-		.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-		.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
-		.sampleShadingEnable = VK_FALSE,
-		.minSampleShading = 1.0f,
-		.pSampleMask = nullptr,
-		.alphaToCoverageEnable = VK_FALSE,
-		.alphaToOneEnable = VK_FALSE,
-	};
-
-	// Depth stencil
-	VkPipelineDepthStencilStateCreateInfo depth_stencil {
-		.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-		.depthTestEnable = VK_TRUE,
-		.depthWriteEnable = VK_TRUE,
-		.depthCompareOp = VK_COMPARE_OP_LESS,
-		.depthBoundsTestEnable = VK_FALSE,
-		.stencilTestEnable = VK_FALSE,
-		.front = {},
-		.back = {}
-	};
-
-	// Color blending
-	VkPipelineColorBlendAttachmentState color_blend_attachment {
-		.blendEnable = VK_FALSE,
-		.srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
-		.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO,
-		.colorBlendOp = VK_BLEND_OP_ADD,
-		.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
-		.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
-		.alphaBlendOp = VK_BLEND_OP_ADD,
-		.colorWriteMask = VK_COLOR_COMPONENT_R_BIT
-			| VK_COLOR_COMPONENT_G_BIT
-			| VK_COLOR_COMPONENT_B_BIT
-			| VK_COLOR_COMPONENT_A_BIT
-	};
-
-	// Color blending
-	VkPipelineColorBlendStateCreateInfo color_blending {
-		.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-		.logicOpEnable = VK_FALSE,
-		.logicOp = VK_LOGIC_OP_COPY,
-		.attachmentCount = 1,
-		.pAttachments = &color_blend_attachment,
-		.blendConstants = {0.0f, 0.0f, 0.0f, 0.0f}
-	};
-
-	// Pipeline layout
-	VkPushConstantRange push_constant_range {
-		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-		.offset = 0,
-		.size = sizeof(PC_Viewport)
-	};
-
-	VkPipelineLayoutCreateInfo pipeline_layout_info {
-		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-		.setLayoutCount = 1,
-		.pSetLayouts = &_postproc_dsl,
-		.pushConstantRangeCount = 1,
-		.pPushConstantRanges = &push_constant_range
-	};
-
-	VkResult result;
-
-	VkPipelineLayout pipeline_layout;
-	result = vkCreatePipelineLayout(
-		_context.vk_device(),
-		&pipeline_layout_info,
-		nullptr,
-		&pipeline_layout
-	);
-
-	if (result != VK_SUCCESS) {
-		KOBRA_LOG_FUNC(error) << "Failed to create POSTPROC pipeline layout\n";
-		return;
-	}
-
-	// Pipeline
-	VkGraphicsPipelineCreateInfo pipeline_info {
-		.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-		.stageCount = 2,
-		.pStages = shader_stages,
-		.pVertexInputState = &vertex_input_info,
-		.pInputAssemblyState = &input_assembly,
-		.pViewportState = &viewport_state,
-		.pRasterizationState = &rasterizer,
-		.pMultisampleState = &multisampling,
-		.pDepthStencilState = &depth_stencil,
-		.pColorBlendState = &color_blending,
-		.pDynamicState = nullptr,
-		.layout = pipeline_layout,
-		.renderPass = _render_pass,
-		.subpass = 0,
-		.basePipelineHandle = VK_NULL_HANDLE,
-		.basePipelineIndex = -1
-	};
-
-	VkPipeline pipeline;
-	result = vkCreateGraphicsPipelines(
-		_context.vk_device(),
-		VK_NULL_HANDLE,
-		1,
-		&pipeline_info,
-		nullptr,
-		&pipeline
-	);
-
-	if (result != VK_SUCCESS) {
-		KOBRA_LOG_FUNC(error) << "Failed to create POSTPROC pipeline\n";
-		return;
-	}
-
-	// Set pipeline
-	_pipelines.postproc = {
-		.pipeline = pipeline,
-		.layout = pipeline_layout
-	};
+	_pipelines.postprocess = make_graphics_pipeline(grp_info);
 }
 
 // Initialize all pipelines
-void Layer::_init_pipelines(const Vulkan::Swapchain &swapchain)
+void Layer::_init_pipelines()
 {
-	// First, create the DSLs
-	_mesh_dsl = _context.vk->make_descriptor_set_layout(
-		_context.device,
-		_mesh_compute_bindings
+	// First, create the descriptor set layouts
+	_dsl_raytracing = make_descriptor_set_layout(
+		_device,
+		_raytracing_bindings
 	);
 
-	_postproc_dsl = _context.vk->make_descriptor_set_layout(
-		_context.device,
+	_dsl_postprocess = make_descriptor_set_layout(
+		_device,
 		_postproc_bindings
 	);
 
 	// Then, create the descriptor sets
-	_mesh_ds = _context.vk->make_descriptor_set(
-		_context.device,
-		_descriptor_pool,
-		_mesh_dsl
-	);
+	std::array <vk::DescriptorSetLayout, 2> dsls {
+		*_dsl_raytracing,
+		*_dsl_postprocess
+	};
 
-	_postproc_ds = _context.vk->make_descriptor_set(
-		_context.device,
-		_descriptor_pool,
-		_postproc_dsl
-	);
+	auto dset = vk::raii::DescriptorSets {
+		_device,
+		{*_descriptor_pool, dsls}
+	};
+
+	_dset_raytracing = std::move(dset[0]);
+	_dset_postprocess = std::move(dset[1]);
 
 	// All pipelines
 	_init_compute_pipelines();
-	_init_postproc_pipeline(swapchain);
+	_init_postprocess_pipeline();
 }
 
 // Update descriptor sets for samplers
-void Layer::_update_samplers(const ImageDescriptors &ids, uint binding)
+void Layer::_update_samplers(const ImageDescriptors &descriptors, uint32_t binding)
 {
 	// Update descriptor set
-	VkWriteDescriptorSet descriptor_write {
-		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		.dstSet = _mesh_ds,
-		.dstBinding = binding,
-		.dstArrayElement = 0,
-		.descriptorCount = (uint) ids.size(),
-		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-		.pImageInfo = ids.data()
+	vk::WriteDescriptorSet dset_write {
+		*_dset_raytracing,
+		binding, 0,
+		vk::DescriptorType::eCombinedImageSampler,
+		descriptors
 	};
 
-	vkUpdateDescriptorSets(_context.vk_device(),
-		1, &descriptor_write,
-		0, nullptr
-	);
+	_device.updateDescriptorSets(dset_write, nullptr);
 }
 
 // Get list of bboxes for each triangle
 std::vector <BoundingBox> Layer::_get_bboxes() const
 {
 	std::vector <BoundingBox> bboxes;
-	bboxes.reserve(_triangles.size());
+	bboxes.reserve(_host.triangles.size());
 
-	const auto &vertices = _vertices.vector();
-	const auto &triangles = _triangles.vector();
+	const auto &vertices = _host.vertices;
+	const auto &triangles = _host.triangles;
 
-	for (size_t i = 0; i < _triangles.push_size(); i++) {
+	for (size_t i = 0; i < _host.triangles.size(); i++) {
 		const auto &triangle = triangles[i];
 
 		float ia = triangle.data.x;
@@ -575,144 +337,154 @@ std::vector <BoundingBox> Layer::_get_bboxes() const
 ////////////////////
 
 // Constructor
-Layer::Layer(const App::Window &wctx)
-		: _context(wctx.context),
-		_extent(wctx.swapchain.extent),
-		_descriptor_pool(wctx.descriptor_pool),
-		_command_pool(wctx.command_pool)
+Layer::Layer(const vk::raii::PhysicalDevice &phdev,
+		const vk::raii::Device &device,
+		const vk::raii::CommandPool &command_pool,
+		const vk::raii::DescriptorPool &descriptor_pool,
+		const vk::Extent2D &extent,
+		const vk::Format &swapchain_format,
+		const vk::Format &depth_format,
+		const vk::AttachmentLoadOp &load)
+		: _physical_device(phdev), _device(device),
+		_command_pool(command_pool),
+		_descriptor_pool(descriptor_pool),
+		_extent(extent)
 {
 	// Create the render pass
-	// TODO: context method
-	_render_pass = _context.vk->make_render_pass(
-		_context.phdev,
-		_context.device,
-		wctx.swapchain,
-		VK_ATTACHMENT_LOAD_OP_CLEAR,
-		VK_ATTACHMENT_STORE_OP_STORE
+	_render_pass = make_render_pass(_device,
+		swapchain_format,
+		depth_format, load
 	);
 
 	// Initialize pipelines
-	_init_pipelines(wctx.swapchain);
+	_init_pipelines();
 
 	// Allocate buffers
-	size_t pixels = wctx.swapchain.extent.width
-		* wctx.swapchain.extent.height;
+	vk::DeviceSize uint_size = 1024 * sizeof(uint);
+	vk::DeviceSize vec4_size = 1024 * sizeof(aligned_vec4);
+	vk::DeviceSize mat4_size = 1024 * sizeof(aligned_mat4);
+	vk::DeviceSize pixels_size = _extent.width * _extent.height * sizeof(uint);
 
-	BFM_Settings pixel_settings {
-		.size = pixels,
-		.usage_type = BFM_READ_ONLY,
-		.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
-			| VK_BUFFER_USAGE_TRANSFER_SRC_BIT
-	};
+	auto usage = vk::BufferUsageFlagBits::eStorageBuffer;
+	auto mem_props = vk::MemoryPropertyFlagBits::eDeviceLocal
+		| vk::MemoryPropertyFlagBits::eHostVisible;
 
-	// Debug output settings
-	BFM_Settings debug_settings {
-		.size = pixels,
-		.usage_type = BFM_READ_WRITE,
-		.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
-			| VK_BUFFER_USAGE_TRANSFER_SRC_BIT
-	};
+	_dev.pixels = BufferData(
+		_physical_device, device, pixels_size,
+		usage | vk::BufferUsageFlagBits::eTransferDst, mem_props
+	);
 
-	// TODO: remove this
-	BFM_Settings viewport_settings {
-		.size = 2,
-		.usage_type = BFM_WRITE_ONLY,
-		.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-	};
+	_dev.vertices = BufferData(phdev, device, vec4_size, usage, mem_props);
+	_dev.triangles = BufferData(phdev, device, vec4_size, usage, mem_props);
+	_dev.materials = BufferData(phdev, device, vec4_size, usage, mem_props);
 
-	BFM_Settings write_only_settings {
-		.size = 1024,
-		.usage_type = BFM_WRITE_ONLY,
-		.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-	};
+	_dev.lights = BufferData(phdev, device, vec4_size, usage, mem_props);
+	_dev.light_indices = BufferData(phdev, device, uint_size, usage, mem_props);
 
-	_pixels = BufferManager <uint> (_context, pixel_settings);
-
-	_vertices = Buffer4f(_context, write_only_settings);
-	_triangles = Buffer4f(_context, write_only_settings);
-	_materials = Buffer4f(_context, write_only_settings);
-	_lights = Buffer4f(_context, write_only_settings);
-	_light_indices = BufferManager <uint> (_context, write_only_settings);
-	_transforms = Buffer4m(_context, write_only_settings);
+	_dev.transforms = BufferData(phdev, device, mat4_size, usage, mem_props);
 
 	// Initial (blank) binding
-	_vertices.bind(_mesh_ds, MESH_BINDING_VERTICES);
-	_triangles.bind(_mesh_ds, MESH_BINDING_TRIANGLES);
-	_materials.bind(_mesh_ds, MESH_BINDING_MATERIALS);
-	_transforms.bind(_mesh_ds, MESH_BINDING_TRANSFORMS);
-	_lights.bind(_mesh_ds, MESH_BINDING_LIGHTS);
-	_light_indices.bind(_mesh_ds, MESH_BINDING_LIGHT_INDICES);
+	_dev.bind(_device, _dset_raytracing);
 
 	// Rebind to descriptor sets
-	_bvh = BVH(_context, _get_bboxes());
-	_bvh.bind(_mesh_ds, MESH_BINDING_BVH);
+	_bvh = BVH(_physical_device, _device, _get_bboxes());
+	
+	bind_ds(_device,
+		_dset_raytracing, _bvh.buffer,
+		vk::DescriptorType::eStorageBuffer,
+		MESH_BINDING_BVH
+	);
 
 	// Bind to descriptor sets
-	_pixels.bind(_mesh_ds, MESH_BINDING_PIXELS);
+	bind_ds(device,
+		_dset_raytracing, _dev.pixels,
+		vk::DescriptorType::eStorageBuffer,
+		MESH_BINDING_PIXELS
+	);
 
-	/////////////////////////////////////////////
-	// Fill sampler arrays with blank samplers //
-	/////////////////////////////////////////////
+	// Sampler source images
+	_samplers.empty_image = ImageData::blank(_physical_device, device);
+	_samplers.environment_image = ImageData::blank(_physical_device, device);
 
 	// Initialize samplers
-	_empty_sampler = Sampler::blank_sampler(_context, _command_pool);
-	_env_sampler = Sampler::blank_sampler(_context, _command_pool);
+	_samplers.empty = make_sampler(_device, _samplers.empty_image);
+	_samplers.environment = make_sampler(_device, _samplers.environment_image);
 
 	// Output image and sampler
-	auto texture = Texture {
-		.width = _extent.width,
-		.height = _extent.height,
-		.channels = 4,
-	};
-
-	_final_texture = make_texture(_context, _command_pool,
-		texture,
-		VK_FORMAT_R8G8B8A8_UNORM,
-		VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+	_samplers.result_image = ImageData(_physical_device, _device,
+		vk::Format::eR8G8B8A8Unorm, _extent,
+		vk::ImageTiling::eOptimal,
+		vk::ImageUsageFlagBits::eSampled,
+		vk::ImageLayout::eShaderReadOnlyOptimal,
+		vk::MemoryPropertyFlagBits::eDeviceLocal,
+		vk::ImageAspectFlagBits::eColor
 	);
 
-	_final_texture.transition_manual(_context, _command_pool,
-		VK_IMAGE_LAYOUT_UNDEFINED,
-		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+	_samplers.result = make_sampler(_device, _samplers.result_image);
+
+	// Binding environment and result sampler
+	bind_ds(_device,
+		_dset_raytracing,
+		_samplers.environment,
+		_samplers.environment_image,
+		MESH_BINDING_ENVIRONMENT
 	);
 
-	_final_sampler = Sampler(_context, _final_texture);
-	_final_sampler.bind(_postproc_ds, MESH_BINDING_PIXELS);
-
-	// Binding environment sampler
-	_env_sampler.bind(_mesh_ds, MESH_BINDING_ENVIRONMENT);
+	bind_ds(_device,
+		_dset_raytracing,
+		_samplers.result,
+		_samplers.result_image,
+		MESH_BINDING_PIXELS
+	);
 
 	// Albedos
-	while (_albedo_image_descriptors.size() < MAX_TEXTURES)
-		_albedo_image_descriptors.push_back(_empty_sampler.get_image_info());
+	while (_albedo_image_descriptors.size() < MAX_TEXTURES) {
+		_albedo_image_descriptors.push_back(
+			vk::DescriptorImageInfo(
+				*_samplers.empty,
+				*_samplers.empty_image.view,
+				vk::ImageLayout::eShaderReadOnlyOptimal
+			)
+		);
+	}
 
 	_update_samplers(_albedo_image_descriptors, MESH_BINDING_ALBEDOS);
 
 	// Normals
-	while (_normal_image_descriptors.size() < MAX_TEXTURES)
-		_normal_image_descriptors.push_back(_empty_sampler.get_image_info());
+	while (_normal_image_descriptors.size() < MAX_TEXTURES) {
+		_normal_image_descriptors.push_back(
+			vk::DescriptorImageInfo(
+				*_samplers.empty,
+				*_samplers.empty_image.view,
+				vk::ImageLayout::eShaderReadOnlyOptimal
+			)
+		);
+	}
 
 	_update_samplers(_normal_image_descriptors, MESH_BINDING_NORMAL_MAPS);
+
+	// Initialized
+	_initialized = true;
 }
 
 // Adding elements
 void Layer::add_do(const ptr &e)
 {
-	if (_pipelines.path_tracer.pipeline == VK_NULL_HANDLE) {
+	// Make sure the resources were intialized
+	if (!_initialized) {
 		KOBRA_LOG_FUNC(warn) << "rt::Layer is not yet initialized\n";
 		return;
 	}
 
 	LatchingPacket lp {
-		.vertices = &_vertices,
-		.triangles = &_triangles,
-		.materials = &_materials,
-		.transforms = &_transforms,
-		.lights = &_lights,
-		.light_indices = &_light_indices,
+		.vertices = _host.vertices,
+		.triangles = _host.triangles,
+		.materials = _host.materials,
+		
+		.lights = _host.lights,
+		.light_indices = _host.light_indices,
+		
+		.transforms = _host.transforms,
 
 		.albedo_samplers = _albedo_image_descriptors,
 		.normal_samplers = _normal_image_descriptors,
@@ -720,32 +492,32 @@ void Layer::add_do(const ptr &e)
 
 	e->latch(lp, _elements.size());
 
-	// Flush the vertices and triangles
-	_vertices.sync_upload();
-	_triangles.sync_upload();
-	_materials.sync_upload();
-	_transforms.sync_upload();
-	_lights.sync_upload();
-	_light_indices.sync_upload();
+	// Upload all data to device memory
+	_dev.vertices.upload(_host.vertices);
+	_dev.triangles.upload(_host.triangles);
+	_dev.materials.upload(_host.materials);
+
+	_dev.lights.upload(_host.lights);
+	_dev.light_indices.upload(_host.light_indices);
+
+	_dev.transforms.upload(_host.transforms);
 
 	// Rebind to descriptor sets
-	// TODO: method
-	_vertices.bind(_mesh_ds, MESH_BINDING_VERTICES);
-	_triangles.bind(_mesh_ds, MESH_BINDING_TRIANGLES);
-	_materials.bind(_mesh_ds, MESH_BINDING_MATERIALS);
-	_transforms.bind(_mesh_ds, MESH_BINDING_TRANSFORMS);
-	_lights.bind(_mesh_ds, MESH_BINDING_LIGHTS);
-	_light_indices.bind(_mesh_ds, MESH_BINDING_LIGHT_INDICES);
+	_dev.bind(_device, _dset_raytracing);
 
 	// Update sampler descriptors
 	_update_samplers(_albedo_image_descriptors, MESH_BINDING_ALBEDOS);
 	_update_samplers(_normal_image_descriptors, MESH_BINDING_NORMAL_MAPS);
 
 	// Update the BVH
-	_bvh = BVH(_context, _get_bboxes());
+	_bvh = BVH(_physical_device, _device, _get_bboxes());
 
 	// Rebind to descriptor sets
-	_bvh.bind(_mesh_ds, MESH_BINDING_BVH);
+	bind_ds(_device,
+		_dset_raytracing, _bvh.buffer,
+		vk::DescriptorType::eStorageBuffer,
+		MESH_BINDING_BVH
+	);
 }
 
 // Adding scenes
@@ -786,31 +558,17 @@ void Layer::add_scene(const Scene &scene)
 }
 
 // Set environment map
-void Layer::set_environment_map(const Texture &env)
+void Layer::set_environment_map(ImageData &&image)
 {
-	// Create texture packet
-	TexturePacket tp = make_texture(_context,
-		_command_pool,
-		env,
-		VK_FORMAT_R8G8B8A8_UNORM,
-		VK_IMAGE_USAGE_SAMPLED_BIT
-			| VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+	// Copy, create a new sampler, and rebind
+	_samplers.environment_image = std::move(image);
+	_samplers.environment = make_sampler(_device, _samplers.environment_image);
+	bind_ds(_device,
+		_dset_raytracing,
+		_samplers.environment,
+		_samplers.environment_image,
+		MESH_BINDING_ENVIRONMENT
 	);
-
-	// TODO: do this inside make_texture method automatically
-	// TODO: constructor for texture packet instead of this garbage
-	tp.transition_manual(_context,
-		_command_pool,
-		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-		VK_PIPELINE_STAGE_TRANSFER_BIT,
-		VK_PIPELINE_STAGE_TRANSFER_BIT
-	);
-
-	// Construct and rebind
-	_env_sampler = Sampler(_context, tp);
-	_env_sampler.bind(_mesh_ds, MESH_BINDING_ENVIRONMENT);
 }
 
 // Clearning all data
@@ -820,20 +578,18 @@ void Layer::clear()
 	kobra::Layer <_element> ::clear();
 
 	// Clear all the buffers
-	// _pixels.clear();
-	_vertices.clear();
-	_triangles.clear();
-	_materials.clear();
-	_lights.clear();
-	_light_indices.clear();
-	_transforms.clear();
-	_bvh.clear();
+	_host.vertices.clear();
+	_host.triangles.clear();
+	_host.materials.clear();
+	_host.lights.clear();
+	_host.light_indices.clear();
+	_host.transforms.clear();
 }
 
 // Number of triangles
 size_t Layer::triangle_count() const
 {
-	return _triangles.push_size();
+	return _host.triangles.size();
 }
 
 // Number of cameras
@@ -882,9 +638,9 @@ void Layer::set_active_camera(const Camera &camera)
 }
 
 // Get pixel buffer
-const BufferManager <uint> &Layer::pixels()
+const BufferData &Layer::pixels()
 {
-	return _pixels;
+	return _dev.pixels;
 }
 
 // Display memory footprint
@@ -894,7 +650,7 @@ void Layer::display_memory_footprint() const
 	Logger::notify() << "BVH: " << bvh->node_count() << " nodes, "
 		<< bvh->primitive_count() << " primitives\n";
 
-	// Display memory footprint
+	/* Display memory footprint
 	Logger::notify() << "Memory footprint of pixels = "
 		<< _pixels.bytes()/float(1024 * 1024) << " MiB\n";
 	Logger::notify() << "Memory footprint of bvh = "
@@ -942,17 +698,18 @@ void Layer::display_memory_footprint() const
 	Logger::notify() << "Memory footprint of ALLnormal textures = "
 		<< normal_bytes/float(1024 * 1024) << " MiB\n";
 
-	Logger::plain() << "\n";
+	Logger::plain() << "\n"; */
 }
 
 // Render a batch
-void Layer::render(const VkCommandBuffer &cmd,
-		const VkFramebuffer &framebuffer,
+void Layer::render(const vk::raii::CommandBuffer &cmd,
+		const vk::raii::Framebuffer &framebuffer,
+		const vk::Extent2D &extent,
 		const Batch &batch,
 		const BatchIndex &bi)
 {
 	// Handle null pipeline
-	if (_active_pipeline()->pipeline == VK_NULL_HANDLE) {
+	if (!_initialized) {
 		KOBRA_LOG_FUNC(warn) << "rt::Layer is not yet initialized\n";
 		return;
 	}
@@ -963,14 +720,10 @@ void Layer::render(const VkCommandBuffer &cmd,
 		return;
 	}
 
-	///////////////////////////
-	// Mesh compute pipeline //
-	///////////////////////////
-
-	// TODO: context method
-	vkCmdBindPipeline(cmd,
-		VK_PIPELINE_BIND_POINT_COMPUTE,
-		_active_pipeline()->pipeline
+	// Run the raytracing pipeline
+	cmd.bindPipeline(
+		vk::PipelineBindPoint::eCompute,
+		*_active_pipeline()
 	);
 
 	// Time as float
@@ -987,8 +740,8 @@ void Layer::render(const VkCommandBuffer &cmd,
 		.xoffset = bi.offset_x,
 		.yoffset = bi.offset_y,
 
-		.triangles = (uint) _triangles.push_size(),
-		.lights = (uint) _light_indices.push_size(),
+		.triangles = (uint) _host.triangles.size(),
+		.lights = (uint) _host.light_indices.size(),
 
 		// TODO: still unable to do large number of samples
 		.samples_per_pixel = bi.pixel_samples,
@@ -996,8 +749,8 @@ void Layer::render(const VkCommandBuffer &cmd,
 		.samples_per_light = bi.light_samples,
 
 		.accumulate = (bi.accumulate) ? 1u : 0u,
-		.present = (uint) batch.samples(bi),
-		.total = (uint) batch.total_samples(),
+		.present = (uint32_t) batch.samples(bi),
+		.total = (uint32_t) batch.total_samples(),
 
 		// Pass current time (as float)
 		.time = (float) time,
@@ -1015,108 +768,79 @@ void Layer::render(const VkCommandBuffer &cmd,
 	};
 
 	// Bind descriptor set
-	vkCmdBindDescriptorSets(cmd,
-		VK_PIPELINE_BIND_POINT_COMPUTE,
-		_active_pipeline()->layout,
-		0, 1, &_mesh_ds,
-		0, nullptr
+	cmd.bindDescriptorSets(
+		vk::PipelineBindPoint::eCompute,
+		*_pipelines.raytracing_layout,
+		0, {*_dset_raytracing}, {}
 	);
 
 	// Push constants
-	vkCmdPushConstants(cmd,
-		_active_pipeline()->layout,
-		VK_SHADER_STAGE_COMPUTE_BIT,
-		0, sizeof(PushConstants), &pc
+	cmd.pushConstants <PushConstants> (
+		*_pipelines.raytracing_layout,
+		vk::ShaderStageFlagBits::eCompute,
+		0, pc
 	);
 
 	// Dispatch the compute shader
-	vkCmdDispatch(cmd,
-		bi.width,
-		bi.height,
-		1
-	);
+	cmd.dispatch(bi.width, bi.height, 1);
 
 	// Buffer memory barrier
-	VkBufferMemoryBarrier buffer_barrier {
-		.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-		.pNext = nullptr,
-		.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
-		.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
-		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-		.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-		.buffer = _pixels.vk_buffer(),
-		.offset = 0,
-		.size = VK_WHOLE_SIZE
+	vk::BufferMemoryBarrier buffer_barrier {
+		vk::AccessFlagBits::eShaderWrite,
+		vk::AccessFlagBits::eShaderRead,
+		VK_QUEUE_FAMILY_IGNORED,
+		VK_QUEUE_FAMILY_IGNORED,
+		*_dev.pixels.buffer,
+		0, _dev.pixels.size
 	};
 
 	// Wait for the compute shader to finish
-	vkCmdPipelineBarrier(cmd,
-		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-		VK_PIPELINE_STAGE_TRANSFER_BIT,
-		0,
-		0, nullptr,
-		1, &buffer_barrier,
-		0, nullptr
+	cmd.pipelineBarrier(
+		vk::PipelineStageFlagBits::eComputeShader,
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::DependencyFlags {},
+		nullptr,
+		{buffer_barrier},
+		nullptr
 	);
 
-	// KOBRA_LOG_FILE(notify) << "rt::Layer::render()\n";
-
-	//////////////////////////////
-	// Post-processing pipeline //
-	//////////////////////////////
-
-	vkCmdBindPipeline(cmd,
-		VK_PIPELINE_BIND_POINT_GRAPHICS,
-		_pipelines.postproc.pipeline
+	// Post process pipeline
+	cmd.bindPipeline(
+		vk::PipelineBindPoint::eGraphics,
+		*_pipelines.postprocess
 	);
-
-	/////////////////////////////////
-	// Copy buffer to output image //
-	/////////////////////////////////
-
-	VkBufferImageCopy region {
-		.bufferOffset = 0,
-		.bufferRowLength = 0,
-		.bufferImageHeight = 0,
-
-		.imageSubresource = {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-			.mipLevel = 0,
-			.baseArrayLayer = 0,
-			.layerCount = 1
-		},
-
-		.imageOffset = { 0, 0, 0 },
-		.imageExtent = {
-			.width = _final_texture.width,
-			.height = _final_texture.height,
-			.depth = 1
-		}
+	
+	// Copy buffer to result image
+	vk::BufferImageCopy buffer_image_copy {
+		0, 0, 0,
+		{vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+		{0, 0, 0},
+		{_extent.width, _extent.height, 1}
 	};
 
-	_final_texture.transition_manual(cmd,
+	/* _final_texture.transition_manual(cmd,
 		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+	); */
+
+	cmd.copyBufferToImage(
+		*_dev.pixels.buffer,
+		*_samplers.result_image.image,
+		vk::ImageLayout::eTransferDstOptimal,
+		{buffer_image_copy}
 	);
 
-	vkCmdCopyBufferToImage(cmd,
-		_pixels.vk_buffer(),
-		_final_texture.image,
-		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		1, &region
-	);
-
-	_final_texture.transition_manual(cmd,
+	/* _final_texture.transition_manual(cmd,
 		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
-	);
+	); */
 
 	// Image memory barrier
-	VkImageMemoryBarrier image_barrier {
+	/* VkImageMemoryBarrier image_barrier {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
 		.pNext = nullptr,
 		.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -1135,39 +859,46 @@ void Layer::render(const VkCommandBuffer &cmd,
 		}
 	};
 
-	// Wait for the copy to finish
+	// Wait for the copy to finish */
 
 	// Bind descriptor set
-	vkCmdBindDescriptorSets(cmd,
-		VK_PIPELINE_BIND_POINT_GRAPHICS,
-		_pipelines.postproc.layout,
-		0, 1, &_postproc_ds,
-		0, nullptr
+	cmd.bindDescriptorSets(
+		vk::PipelineBindPoint::eGraphics,
+		*_pipelines.postprocess_layout,
+		0, {*_dset_postprocess}, {}
+	);
+		
+	// Start render pass
+	std::array <vk::ClearValue, 2> clear_values = {
+		vk::ClearValue {
+			vk::ClearColorValue {
+				std::array <float, 4> {0.0f, 0.0f, 0.0f, 1.0f}
+			}
+		},
+		vk::ClearValue {
+			vk::ClearDepthStencilValue {
+				1.0f, 0
+			}
+		}
+	};
+
+	cmd.beginRenderPass(
+		vk::RenderPassBeginInfo {
+			*_render_pass,
+			*framebuffer,
+			vk::Rect2D {
+				vk::Offset2D {0, 0},
+				_extent,
+			},
+			static_cast <uint32_t> (clear_values.size()),
+			clear_values.data()
+		},
+		vk::SubpassContents::eInline
 	);
 
-	// Clear colors
-	VkClearValue clear_values[2] = {
-		{ .color = { 0.0f, 0.0f, 0.0f, 1.0f } },
-		{ .depthStencil = { 1.0f, 0 } }
-	};
-
-	// Begin render pass
-	// TODO: context method
-	VkRenderPassBeginInfo rp_info {
-		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-		.renderPass = _render_pass,
-		.framebuffer = framebuffer,
-		.renderArea = {
-			.offset = {0, 0},
-			.extent = _extent
-		},
-		.clearValueCount = 2,
-		.pClearValues = clear_values
-	};
-
-	vkCmdBeginRenderPass(cmd, &rp_info, VK_SUBPASS_CONTENTS_INLINE);
-	vkCmdDraw(cmd, 6, 1, 0, 0);
-	vkCmdEndRenderPass(cmd);
+	// Draw and end
+	cmd.draw(6, 1, 0, 0);
+	cmd.endRenderPass();
 
 	// Callback for batch index
 	bi.callback();

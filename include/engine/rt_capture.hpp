@@ -16,20 +16,29 @@ namespace engine {
 // RT capture class
 class RTCapture : public BaseApp {
 	Camera		camera;
+
 	rt::Layer	layer;
 	rt::Batch	batch;
 	rt::BatchIndex	index;
+	
 	bool		term = false;
 
 	// GUI
 	gui::Layer	gui_layer;
 	gui::Text	*text_progress;
+
+	// Screen dimensions
+	vk::Extent2D	dimensions;
 public:
 	// Constructor from scene file and camera
-	RTCapture(Vulkan *, const std::string &, const Camera &c);
+	RTCapture(const vk::raii::PhysicalDevice &,
+			vk::raii::Device &,
+			const vk::Extent2D &,
+			const std::string &,
+			const Camera &);
 
 	// Render loop
-	void record(const VkCommandBuffer &, const VkFramebuffer &);
+	void record(const vk::raii::CommandBuffer &, const vk::raii::Framebuffer &);
 
 	// Treminators
 	void terminate();

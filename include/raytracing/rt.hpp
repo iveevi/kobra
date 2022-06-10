@@ -6,14 +6,14 @@
 
 // Engine headers
 #include "../backend.hpp"
-#include "../buffer_manager.hpp"
+// #include "../buffer_manager.hpp"
 
 namespace kobra {
 
 namespace rt {
 
 // Aliases
-using ImageDescriptors = std::vector <VkDescriptorImageInfo>;
+using ImageDescriptors = std::vector <vk::DescriptorImageInfo>;
 
 // Push constant structure
 struct PushConstants {
@@ -51,16 +51,18 @@ struct PC_Viewport {
 // Latching packet
 struct LatchingPacket {
 	// Buffers
-	Buffer4f		*vertices;
-	Buffer4f		*triangles;
-	Buffer4f		*materials;
-	Buffer4m		*transforms;
-	Buffer4f		*lights;
-	BufferManager <uint>	*light_indices;
+	std::vector <aligned_vec4>	&vertices;
+	std::vector <aligned_vec4>	&triangles;
+	std::vector <aligned_vec4>	&materials;
+	
+	std::vector <aligned_vec4>	&lights;
+	std::vector <uint>		&light_indices;
+	
+	std::vector <aligned_mat4>	&transforms; // TODO: is this needed?
 
 	// Samplers
-	ImageDescriptors	&albedo_samplers;
-	ImageDescriptors	&normal_samplers;
+	ImageDescriptors		&albedo_samplers;
+	ImageDescriptors		&normal_samplers;
 };
 
 // Element type

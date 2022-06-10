@@ -24,26 +24,27 @@ public:
 
 	Sphere(const kobra::Sphere &sphere)
 			: Object(sphere.name(), object_type, sphere.transform()),
-			Renderable(sphere.material()),
+			Renderable(sphere.material().copy()),
 			kobra::Sphere(sphere) {}
 
 	// Latching to layer
 	void latch(const LatchingPacket &lp, size_t id) override {
 		// Offset for triangle indices
-		uint offset = lp.vertices->push_size()/VERTEX_STRIDE;
+		uint offset = lp.vertices.size()/VERTEX_STRIDE;
 
 		// Add vertex data
-		lp.vertices->push_back(glm::vec4 {_transform.position, _radius});
-		lp.vertices->push_back(glm::vec4 {0.0});
-		lp.vertices->push_back(glm::vec4 {0.0});
-		lp.vertices->push_back(glm::vec4 {0.0});
-		lp.vertices->push_back(glm::vec4 {0.0});
+		// TODO: copy from a vector
+		lp.vertices.push_back(glm::vec4 {_transform.position, _radius});
+		lp.vertices.push_back(glm::vec4 {0.0});
+		lp.vertices.push_back(glm::vec4 {0.0});
+		lp.vertices.push_back(glm::vec4 {0.0});
+		lp.vertices.push_back(glm::vec4 {0.0});
 
 		// Add as an object
 		uint obj_id = id - 1;
 
 		float ia = *(reinterpret_cast <float *> (&offset));
-		lp.triangles->push_back(glm::vec4 {
+		lp.triangles.push_back(glm::vec4 {
 			ia, ia, ia,
 			*(reinterpret_cast <float *> (&obj_id))
 		});
@@ -61,7 +62,7 @@ public:
 
 		// Write the transform
 		// TODO: do we still need this?
-		lp.transforms->push_back(transform().matrix());
+		lp.transforms.push_back(transform().matrix());
 
 		// TODO: currently, sphere cannot be emmisive
 	}

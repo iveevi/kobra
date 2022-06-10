@@ -20,14 +20,19 @@ public:
 	// Default constructor
 	Sphere() = default;
 
-	// Constructor
+	// Copy constructor
+	Sphere(const Sphere &sphere)
+			: Object(object_type, Transform()),
+			Renderable(sphere.material().copy()) {}
+
+	// Constructors
 	Sphere(float radius)
 			: Object(object_type, Transform()),
 			_radius(radius) {}
 
 	Sphere(const Sphere &sphere, const Transform &transform)
 			: Object(object_type, transform),
-			Renderable(sphere.material()),
+			Renderable(sphere.material().copy()),
 			_radius(sphere._radius) {}
 
 	// Getters
@@ -38,7 +43,7 @@ public:
 	float radius() const {
 		return _radius;
 	}
-	
+
 	// Ray intersection
 	float intersect(const Ray &ray) const override {
 		glm::vec3 oc = ray.origin - _transform.position;
@@ -62,8 +67,10 @@ public:
 	}
 
 	// Read sphere object from file
-	static std::optional <Sphere> from_file(const Vulkan::Context &ctx,
-			const VkCommandPool &command_pool,
+	static std::optional <Sphere> from_file
+			(const vk::raii::PhysicalDevice &phdev,
+			const vk::raii::Device &device,
+			const vk::raii::CommandPool &command_pool,
 			std::ifstream &file,
 			const std::string &scene_file) {
 		std::string line;
@@ -82,18 +89,23 @@ public:
 		}
 
 		// Read material
-		std::optional <Material> material = Material::from_file(ctx,
-			command_pool, file, scene_file
+		bool success;
+		auto mat = Material::from_file(
+			phdev, device,
+			command_pool,
+			file, scene_file,
+			success
 		);
 
-		if (!material) {
+		if (!success) {
 			KOBRA_LOG_FUNC(error) << "Invalid kobra scene file format (bad material)\n";
 			return std::nullopt;
 		}
 
 		// Construct and return sphere
 		Sphere sphere(radius);
-		sphere.set_material(material.value());
+		sphere.set_material(std::move(mat));
+
 		return sphere;
 	}
 };

@@ -1,5 +1,5 @@
-#ifndef LAYER_H_
-#define LAYER_H_
+#ifndef KOBRA_GUI_LAYER_H_
+#define KOBRA_GUI_LAYER_H_
 
 // Standard headers
 #include <map>
@@ -26,81 +26,110 @@ class Layer : public kobra::Layer <_element> {
 	// Element arranged by pipeline
 	str_map <std::vector <ptr>>	_pipeline_map;
 
-	// Set of Text Render objects
-	// for each font
+	// Set of Text Render objects for each font
 	std::vector <TextRender>	_text_renders;
 
 	// Map of font names/aliases to
 	//	their respective TextRender indices
 	str_map <int>			_font_map;
 
-	// Application context
-	App::Window			_wctx;
-
 	// Vulkan structures
-	VkRenderPass			_render_pass;
+	const vk::raii::PhysicalDevice	&_physical_device = nullptr;
+	const vk::raii::Device		&_device = nullptr;
+	const vk::raii::CommandPool	&_command_pool = nullptr;
+	const vk::raii::DescriptorPool	&_descriptor_pool = nullptr;
+
+	vk::raii::RenderPass		_render_pass = nullptr;
+
+	// Other layer properties
+	vk::Extent2D			_extent;
 
 	// Pipelines
 	struct {
-		Vulkan::Pipeline	shapes;
-		Vulkan::Pipeline	sprites;
+		// Vulkan::Pipeline	shapes;
+		// Vulkan::Pipeline	sprites;
+
+		// Pipelines
+		vk::raii::Pipeline shapes = nullptr;
+		vk::raii::Pipeline sprites = nullptr;
+
+		// Pipeline layouts
+		vk::raii::PipelineLayout shapes_layout = nullptr;
+		vk::raii::PipelineLayout sprites_layout = nullptr;
 	} _pipelines;
 
 	// Descriptor set layouts
-	Vulkan::DSL			_dsl_sprites;
+	vk::raii::DescriptorSetLayout	_dsl_sprites = nullptr;
 
 	// Descriptor set layout bindings
-	static const std::vector <Vulkan::DSLB>	_sprites_bindings;
+	static const std::vector <DSLB>	_sprites_bindings;
 
 	// Allocation methods
-	void _init_vulkan_structures(VkAttachmentLoadOp load) {
+	void _init_vulkan_structures(const vk::AttachmentLoadOp &load,
+			const vk::Format &swapchain_format,
+			const vk::Format &depth_format) {
 		// Create render pass
-		_render_pass = _wctx.context.vk->make_render_pass(
-			_wctx.context.phdev,
-			_wctx.context.device,
-			_wctx.swapchain,
-			load,
-			VK_ATTACHMENT_STORE_OP_STORE
+		_render_pass = make_render_pass(
+			_device,
+			swapchain_format,
+			depth_format
 		);
 	}
 
 	// Hardware resources
 	struct {
-		VertexBuffer vb;
-		IndexBuffer ib;
+		BufferData vertex = nullptr;
+		BufferData index = nullptr;
 	} rects;
 
 	// Allocation methods
-	void _alloc_rects() {
-		BFM_Settings vb_settings {
-			.size = 1024,
-			.usage_type = BFM_WRITE_ONLY,
-			.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-		};
+	void _alloc_rects(const vk::raii::PhysicalDevice &phdev,
+			const vk::raii::Device &device) {
+		// Base sizes for both buffers
+		vk::DeviceSize vertex_size = 1024 * sizeof(Vertex);
+		vk::DeviceSize index_size = 1024 * sizeof(uint32_t);
 
-		BFM_Settings ib_settings {
-			.size = 1024,
-			.usage_type = BFM_WRITE_ONLY,
-			.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-		};
+		// Allocate vertex buffer
+		rects.vertex = BufferData(phdev, device,
+			vertex_size,
+			vk::BufferUsageFlagBits::eVertexBuffer,
+			vk::MemoryPropertyFlagBits::eHostVisible
+				| vk::MemoryPropertyFlagBits::eHostCoherent
+		);
 
-		rects.vb = VertexBuffer(_wctx.context, vb_settings);
-		rects.ib = IndexBuffer(_wctx.context, ib_settings);
+		// Allocate index buffer
+		rects.index = BufferData(phdev, device,
+			index_size,
+			vk::BufferUsageFlagBits::eIndexBuffer,
+			vk::MemoryPropertyFlagBits::eHostVisible
+				| vk::MemoryPropertyFlagBits::eHostCoherent
+		);
 	}
 public:
 	// Default
 	Layer() = default;
 
 	// Constructor
-	// TODO: _layer base class
-	Layer(const App::Window &, const VkAttachmentLoadOp & = VK_ATTACHMENT_LOAD_OP_LOAD);
+	Layer(const vk::raii::PhysicalDevice &,
+			const vk::raii::Device &,
+			const vk::raii::CommandPool &,
+			const vk::raii::DescriptorPool &,
+			const vk::Extent2D &,
+			const vk::Format &,
+			const vk::Format &,
+			const vk::AttachmentLoadOp & = vk::AttachmentLoadOp::eLoad);
 
 	// Add action
 	void add_do(const ptr &) override;
 
 	// Serve descriptor sets
-	Vulkan::DS serve_sprite_ds() {
-		return _wctx.context.make_ds(_wctx.descriptor_pool, _dsl_sprites);
+	vk::raii::DescriptorSet serve_sprite_ds() {
+		auto dsets = vk::raii::DescriptorSets {
+			_device,
+			{*_descriptor_pool, *_dsl_sprites}
+		};
+
+		return std::move(dsets.front());
 	}
 
 	// Adding a scene
@@ -111,7 +140,16 @@ public:
 	// Load fonts
 	void load_font(const std::string &alias, const std::string &path) {
 		size_t index = _text_renders.size();
-		_text_renders.push_back(TextRender(_wctx, _render_pass, path));
+		_text_renders.push_back(
+			TextRender(_physical_device, _device,
+				_command_pool,
+				_descriptor_pool,
+				_render_pass, path,
+				_extent.width,
+				_extent.height
+			)
+		);
+
 		_font_map[alias] = index;
 	}
 
@@ -125,59 +163,58 @@ public:
 	}
 
 	// Render using command buffer and framebuffer
-	void render(const VkCommandBuffer &cmd_buffer, const VkFramebuffer &framebuffer) {
+	void render(const vk::raii::CommandBuffer &cmd,
+			const vk::raii::Framebuffer &framebuffer) {
 		// Start render pass
-		// TODO: vulkan method
-		VkClearValue clear_colors[] {
-			{0.0f, 0.0f, 0.0f, 1.0f}, // Color
-			{1.0f, 0.0f, 0.0f, 1.0f}  // Depth
-		};
-
-		VkRenderPassBeginInfo render_pass_info {
-			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-			.renderPass = _render_pass,
-			.framebuffer = framebuffer,
-			.renderArea {
-				.offset = {0, 0},
-				.extent = _wctx.swapchain.extent
+		std::array <vk::ClearValue, 2> clear_values = {
+			vk::ClearValue {
+				vk::ClearColorValue {
+					std::array <float, 4> {0.0f, 0.0f, 0.0f, 1.0f}
+				}
 			},
-			.clearValueCount = 2,
-			.pClearValues = clear_colors
+			vk::ClearValue {
+				vk::ClearDepthStencilValue {
+					1.0f, 0
+				}
+			}
 		};
 
-		vkCmdBeginRenderPass(cmd_buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
-
+		cmd.beginRenderPass(
+			vk::RenderPassBeginInfo {
+				*_render_pass,
+				*framebuffer,
+				vk::Rect2D {
+					vk::Offset2D {0, 0},
+					_extent,
+				},
+				static_cast <uint32_t> (clear_values.size()),
+				clear_values.data()
+			},
+			vk::SubpassContents::eInline
+		);
 
 		// Initialize render packet
 		RenderPacket rp {
-			.cmd = cmd_buffer,
-			.sprite_layout = _pipelines.sprites.layout,
+			.cmd = cmd,
+			.sprite_layout = _pipelines.sprites_layout,
 		};
 
 		// Render all plain shapes
-		vkCmdBindPipeline(cmd_buffer,
-			VK_PIPELINE_BIND_POINT_GRAPHICS,
-			_pipelines.shapes.pipeline
-		);
-
+		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *_pipelines.shapes);
 		for (auto &e : _pipeline_map["shapes"])
 			e->render_element(rp);
 
 		// Render all sprites
-		vkCmdBindPipeline(cmd_buffer,
-			VK_PIPELINE_BIND_POINT_GRAPHICS,
-			_pipelines.sprites.pipeline
-		);
-
+		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *_pipelines.sprites);
 		for (auto &e : _pipeline_map["sprites"])
 			e->render_element(rp);
 
 		// Render all the text renders
 		for (auto &tr : _text_renders)
-			tr.render(_wctx.context, _wctx.command_pool, cmd_buffer);
+			tr.render(cmd);
 
 		// End render pass
-		vkCmdEndRenderPass(cmd_buffer);
+		cmd.endRenderPass();
 	}
 };
 

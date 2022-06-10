@@ -5,26 +5,51 @@ namespace kobra {
 namespace engine {
 
 // Constructor from scene file and camera
-RTCapture::RTCapture(Vulkan *vk, const std::string &scene_file, const Camera &camera)
-		: BaseApp({
-			vk,
-			800, 800, 2,
-			"RT Capture",
-		}),
-		camera(camera)
+RTCapture::RTCapture(const vk::raii::PhysicalDevice &phdev,
+		vk::raii::Device &device,
+		const vk::Extent2D &extent,
+		const std::string &scene_file,
+		const Camera &camera)
+		: BaseApp(phdev, device, extent),
+		camera(camera),
+		layer(phdev, device,
+			command_pool,
+			descriptor_pool,
+			extent,
+			swapchain.format,
+			depth_buffer.format
+		),
+		gui_layer(phdev, device,
+			command_pool,
+			descriptor_pool,
+			extent,
+			swapchain.format,
+			depth_buffer.format,
+			vk::AttachmentLoadOp::eLoad
+		),
+		dimensions(extent)
 {
 	// Load scene
-	Scene scene = Scene(context, window.command_pool, scene_file);
+	Scene scene = Scene(phdev, device, command_pool, scene_file);
 
-	// Create raster layer
-	layer = rt::Layer(window);
+	// Create raytracing layer
 	layer.add_scene(scene);
 	layer.set_active_camera(camera);
-	layer.set_environment_map(
-		load_image_texture("resources/skies/background_1.jpg", 4)
+	layer.set_mode(rt::Layer::Mode::MIS_PATH_TRACER);
+
+	// Set background texture
+	// TODO: default arguments for this function
+	ImageData background = make_image(phdev, device,
+		command_pool,
+		"resources/skies/background_1.jpg",
+		vk::ImageTiling::eOptimal,
+		vk::ImageUsageFlagBits::eTransferDst
+			| vk::ImageUsageFlagBits::eSampled,
+		vk::MemoryPropertyFlagBits::eDeviceLocal,
+		vk::ImageAspectFlagBits::eColor
 	);
 
-	layer.set_mode(rt::Layer::Mode::MIS_PATH_TRACER);
+	layer.set_environment_map(std::move(background));
 
 	// Create batch
 	// TODO: a method to generate optimal batch sizes (eg 50x50 is
@@ -35,16 +60,13 @@ RTCapture::RTCapture(Vulkan *vk, const std::string &scene_file, const Camera &ca
 	index.surface_samples = 1;
 	index.accumulate = true;
 
-	// Create GUI
-	gui_layer = gui::Layer(window, VK_ATTACHMENT_LOAD_OP_LOAD);
-
 	// Fonts
 	gui_layer.load_font("default", "resources/fonts/noto_sans.ttf");
 
 	// Progress indicator
 	text_progress = gui_layer.text_render("default")->text(
 		"Progress: ",
-		window.coordinates(0, window.height - 20),
+		coordinates(0, extent.height - 20),
 		{0, 1, 0, 1}, 0.5
 	);
 
@@ -52,16 +74,16 @@ RTCapture::RTCapture(Vulkan *vk, const std::string &scene_file, const Camera &ca
 }
 
 // Render loop
-void RTCapture::record(const VkCommandBuffer &cmd, const VkFramebuffer &framebuffer)
+void RTCapture::record(const vk::raii::CommandBuffer &cmd, const vk::raii::Framebuffer &framebuffer)
 {
 	static char buffer[1024];
 	static float time = 0.0f;
 
 	// Start recording command buffer
-	Vulkan::begin(cmd);
+	cmd.begin({});
 
 	// Render scene
-	layer.render(cmd, framebuffer, batch, index);
+	layer.render(cmd, framebuffer, dimensions, batch, index);
 
 	// Track progress
 	time += frame_time;
@@ -91,7 +113,7 @@ void RTCapture::record(const VkCommandBuffer &cmd, const VkFramebuffer &framebuf
 	gui_layer.render(cmd, framebuffer);
 
 	// End recording command buffer
-	Vulkan::end(cmd);
+	cmd.end();
 
 	// Next batch
 	batch.increment(index);
@@ -102,10 +124,10 @@ void RTCapture::terminate()
 {
 	bool b = batch.completed();
 	if (term || b) {
-		glfwSetWindowShouldClose(surface.window, GLFW_TRUE);
-		auto buffer = layer.pixels();
+		glfwSetWindowShouldClose(window.handle, GLFW_TRUE);
+		const auto &buffer = layer.pixels();
 
-		// TODO: make an easier an more straight forward way to
+		/* TODO: make an easier an more straight forward way to
 		// save a buffer to an image
 		Image img {
 			.width = 800,
@@ -114,7 +136,7 @@ void RTCapture::terminate()
 
 		Capture::snapshot(buffer, img);
 		img.write("capture.png");
-		KOBRA_LOG_FUNC(notify) << "Capture saved to capture.png\n";
+		KOBRA_LOG_FUNC(notify) << "Capture saved to capture.png\n"; */
 	}
 }
 
