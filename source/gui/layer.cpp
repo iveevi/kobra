@@ -1,6 +1,7 @@
 #include "../../include/gui/layer.hpp"
 #include "../../include/gui/rect.hpp"
 #include "../../include/gui/sprite.hpp"
+#include "../../include/vertex.hpp"
 
 namespace kobra {
 

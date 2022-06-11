@@ -22,8 +22,8 @@ public:
 	};
 protected:
 	// Stored window info
-	vk::raii::PhysicalDevice	phdev;
-	vk::raii::Device 		device;
+	vk::raii::PhysicalDevice	phdev = nullptr;
+	vk::raii::Device 		device = nullptr;
 	vk::raii::SurfaceKHR		surface = nullptr;
 
 	Swapchain 			swapchain = nullptr;
@@ -50,23 +50,39 @@ protected:
 	coordinates::Screen coordinates(float x, float y) {
 		return coordinates::Screen {x, y, extent.width, extent.height};
 	}
-
 public:
 	// Constructor
-	App(const vk::raii::PhysicalDevice &phdev, vk::raii::Device &device,
-			const vk::Extent2D &extent_)
-			: phdev(phdev),
-			device {std::move(device)},
-			extent(extent_) {
+	App(const vk::raii::PhysicalDevice &phdev_,
+			const vk::Extent2D &extent_,
+			const std::vector <const char *> &extensions)
+			: phdev(phdev_),
+			window("Kobra Application", extent_),
+			extent(extent_),
+			frame_index(0) {
 		// TODO: move to source file
+		std::cout << dev_info(phdev) << std::endl;
 
-		// First create the window
-		window = Window("Kobra Application", extent);
+		std::cout << "Window handle: " << window.handle << std::endl;
 
-		// Create Vulkan surface and swapchain
+		// Create Vulkan surface
 		surface = make_surface(window);
+
+		std::cout << "Surface created" << std::endl;
+		std::cout << "Surface info: " << *surface << std::endl;
+
+		// Create Vulkan device
 		auto queue_family = find_queue_families(phdev, surface);
+
+		std::cout << "Graphics: " << queue_family.graphics << std::endl;
+		std::cout << "Present: " << queue_family.present << std::endl;
+
+		// TODO: extensions as a device
+		device = make_device(phdev, queue_family, extensions);
+
+		// Create swapchain
 		swapchain = Swapchain {phdev, device, surface, window.extent, queue_family};
+
+		std::cout << "Post swch" << std::endl;
 
 		// Set user pointer
 		glfwSetWindowUserPointer(window.handle, &io);
@@ -147,21 +163,20 @@ protected:
 		FrameData() = default;
 
 		// Construct from device
-		FrameData(vk::raii::Device &device) {
-			present_completed = vk::raii::Semaphore(device, {});
-			render_completed = vk::raii::Semaphore(device, {});
-			fence = vk::raii::Fence(device, {vk::FenceCreateFlagBits::eSignaled});
-		}
+		FrameData(const vk::raii::Device &device)
+			: fence(device, vk::FenceCreateInfo {vk::FenceCreateFlagBits::eSignaled}),
+			present_completed(device, vk::SemaphoreCreateInfo {}),
+			render_completed(device, vk::SemaphoreCreateInfo {}) {}
 	};
 
 	std::vector <FrameData>			frames;
 public:
 	// TODO: is attachment load op needed?
 	BaseApp(const vk::raii::PhysicalDevice &phdev_,
-			vk::raii::Device &device_,
 			const vk::Extent2D &extent_,
+			const std::vector <const char *> &extensions,
 			const vk::AttachmentLoadOp &load = vk::AttachmentLoadOp::eClear)
-			: App(phdev_, device_, extent_) {
+			: App(phdev_, extent_, extensions) {
 		// Create the depth buffer
 		depth_buffer = DepthBuffer {
 			phdev, device,
@@ -218,9 +233,11 @@ public:
 		);
 
 		// Create syncro objects
-		frames = std::vector <FrameData> (framebuffers.size());
-		for (auto &frame : frames)
+		auto frames_ = std::vector <FrameData> (framebuffers.size());
+		for (auto &frame : frames_)
 			frame = FrameData {device};
+
+		frames = std::move(frames_);
 
 		// Get queues
 		auto queue_family = find_queue_families(phdev, surface);

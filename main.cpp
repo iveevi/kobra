@@ -1,12 +1,18 @@
+#define KOBRA_VALIDATION_LAYERS
+#define KOBRA_THROW_ERROR
+
 // #include "global.hpp"
-// #include "include/backend.hpp"
+#include "include/backend.hpp"
+#include "include/gui/layer.hpp"
 #include "include/app.hpp"
 #include "tinyfiledialogs.h"
+
+using namespace kobra;
 
 // Scene path
 std::string scene_path = "../assets/scene.kobra";
 
-/* Experimental GUI app
+// Experimental GUI app
 class GUIApp : public BaseApp {
 	gui::Layer layer;
 
@@ -55,25 +61,28 @@ class GUIApp : public BaseApp {
 		}
 	}
 public:
-	GUIApp(Vulkan *vk) : BaseApp({
-		vk,
-		1000, 1000, 2,
-		"GUI App"
-	}) {
-		// Initialize layer and load all fonts
-		layer = gui::Layer(window, VK_ATTACHMENT_LOAD_OP_CLEAR);
+	GUIApp(const vk::raii::PhysicalDevice &phdev_,
+			const vk::Extent2D &extent_,
+			const std::vector <const char *> &extensions_)
+			: BaseApp(phdev_, extent_, extensions_),
+			layer(phdev, device,
+				command_pool, descriptor_pool, extent,
+				swapchain.format, depth_buffer.format,
+				vk::AttachmentLoadOp::eClear
+			) {
+		// Load all fonts
 		layer.load_font("default", "resources/fonts/noto_sans.ttf");
 
 		// Create text
 		text_expl = layer.text_render("default")->text(
 			"Input: ",
-			window.coordinates(10, 10),
+			coordinates(10, 10),
 			{1, 1, 1, 1}, 0.5
 		);
 
 		text_input = layer.text_render("default")->text(
 			"",
-			window.coordinates(80, 10),
+			coordinates(80, 10),
 			{1, 1, 1, 1}, 0.5
 		);
 
@@ -84,35 +93,35 @@ public:
 		});
 
 		// Bind keyboard handler
-		window.keyboard_events->subscribe(keyboard_handler, this);
+		io.keyboard_events.subscribe(keyboard_handler, this);
 	}
 
-	void record(const VkCommandBuffer &cmd, const VkFramebuffer &framebuffer) override {
-		Vulkan::begin(cmd);
+	void record(const vk::raii::CommandBuffer &cmd,
+			const vk::raii::Framebuffer &framebuffer) override {
+		cmd.begin({});
 		layer.render(cmd, framebuffer);
-		Vulkan::end(cmd);
+		cmd.end();
 	}
-}; */
+};
 
 int main()
 {
-	/* std::cout << "Vulkan hpp cpp version: " << VULKAN_HPP_CPP_VERSION << std::endl;
-
-	Vulkan *vulkan = new Vulkan();
-
-	// GUIApp gui_app {vulkan};
-	RTApp main_app {vulkan};
-	// engine::RTCapture main_app {vulkan, "scene.kobra", camera};
-
-	std::thread t1 {
-		[&]() {
-			main_app.run();
-		}
+	auto extensions = {
+		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 	};
 
-	t1.join();
+	auto predicate = [&extensions](const vk::raii::PhysicalDevice &dev) {
+		return physical_device_able(dev, extensions);
+	};
+	// Choose a physical device
+	// TODO: static lambda (FIRST)
+	auto phdev = pick_physical_device(predicate);
 
-	delete vulkan; */
+	// Create a GUI app
+	GUIApp app(phdev, {800, 600}, extensions);
+
+	// Run the app
+	app.run();
 }
 
 ////////////////////

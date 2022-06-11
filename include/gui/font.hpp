@@ -139,11 +139,10 @@ public:
 // Font class holds information
 //	about a single font
 class Font {
-	// Font bitmaps
+	// Font bitmap data
 	std::vector <ImageData>	_bitmaps;
-
-	// Descriptor set for each glyph texture
-	std::vector <vk::raii::DescriptorSet>	_glyph_ds;
+	std::vector <vk::raii::DescriptorSet> _glyph_ds;
+	std::vector <vk::raii::Sampler>	_glyph_samplers;
 
 	// Font metrics
 	std::unordered_map <char, FT_Glyph_Metrics>	_metrics;
@@ -199,7 +198,7 @@ class Font {
 				vk::ImageTiling::eOptimal,
 				vk::ImageUsageFlagBits::eSampled
 					| vk::ImageUsageFlagBits::eTransferDst,
-				vk::ImageLayout::eShaderReadOnlyOptimal,
+				vk::ImageLayout::ePreinitialized,
 				vk::MemoryPropertyFlagBits::eDeviceLocal,
 				vk::ImageAspectFlagBits::eColor
 			);
@@ -220,6 +219,7 @@ class Font {
 
 			// Store everything
 			_glyph_ds.emplace_back(std::move(dsets.front()));
+			_glyph_samplers.emplace_back(std::move(sampler));
 			_bitmaps.emplace_back(std::move(img));
 			_metrics[' '] = FT_Glyph_Metrics {
 				.horiBearingX = 0,
@@ -268,6 +268,7 @@ class Font {
 
 			// Store everything
 			_glyph_ds.emplace_back(std::move(dset));
+			_glyph_samplers.emplace_back(std::move(sampler));
 			_bitmaps.emplace_back(std::move(img));
 			_metrics[c] = face->glyph->metrics;
 		}

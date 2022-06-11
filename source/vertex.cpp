@@ -38,6 +38,7 @@ std::vector <vk::VertexInputAttributeDescription> Vertex::vertex_attributes()
 			vk::Format::eR32G32B32Sfloat,
 			offsetof(Vertex, position)
 		},
+
 		vk::VertexInputAttributeDescription {
 			1, 0,
 			vk::Format::eR32G32B32Sfloat,

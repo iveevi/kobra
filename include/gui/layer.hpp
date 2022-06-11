@@ -165,6 +165,24 @@ public:
 	// Render using command buffer and framebuffer
 	void render(const vk::raii::CommandBuffer &cmd,
 			const vk::raii::Framebuffer &framebuffer) {
+		// Set viewport
+		auto viewport = vk::Viewport {
+			0.0f, 0.0f,
+			static_cast<float>(_extent.width),
+			static_cast<float>(_extent.height),
+			0.0f, 1.0f
+		};
+
+		cmd.setViewport(0, viewport);
+
+		// Set scissor
+		auto scissor = vk::Rect2D {
+			vk::Offset2D {0, 0},
+			_extent
+		};
+
+		cmd.setScissor(0, scissor);
+
 		// Start render pass
 		std::array <vk::ClearValue, 2> clear_values = {
 			vk::ClearValue {

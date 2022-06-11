@@ -1347,6 +1347,9 @@ public:
 			throw(-1);
 		}
 
+		std::cout << "[Vulkan] Created surface!\n"
+			"Handle: " << new_surface << std::endl;
+
 		// Log creation
 		return Surface {window, new_surface};
 	}
@@ -1817,9 +1820,27 @@ struct DebugMessenger {
 
 #endif
 
+// Initialize GLFW statically
+inline void _initialize_glfw()
+{
+	static bool initialized = false;
+
+	// Make sure Vulkan is initialized
+	if (!initialized) {
+		glfwInit();
+		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+		initialized = true;
+
+		KOBRA_LOG_FUNC(ok) << "GLFW initialized\n";
+	}
+}
+
 // Get (or create) the singleton instance
 inline const vk::raii::Instance &get_vulkan_instance()
 {
+	static bool initialized = false;
+	static vk::raii::Instance instance = nullptr;
 	static vk::ApplicationInfo app_info {
 		"Kobra",
 		VK_MAKE_VERSION(1, 0, 0),
@@ -1827,6 +1848,13 @@ inline const vk::raii::Instance &get_vulkan_instance()
 		VK_MAKE_VERSION(1, 0, 0),
 		VK_API_VERSION_1_3
 	};
+
+	// Skip if already initialized
+	if (initialized)
+		return instance;
+
+	// Make sure GLFW is initialized
+	_initialize_glfw();
 
 #ifdef KOBRA_VALIDATION_LAYERS
 
@@ -1880,7 +1908,7 @@ inline const vk::raii::Instance &get_vulkan_instance()
 
 #endif
 
-	static vk::raii::Instance instance {
+	instance = vk::raii::Instance {
 		get_vulkan_context(),
 		instance_info
 	};
@@ -1905,21 +1933,10 @@ inline const vk::raii::Instance &get_vulkan_instance()
 
 #endif
 
+	KOBRA_LOG_FUNC(ok) << "Vulkan instance created\n";
+	initialized = true;
+
 	return instance;
-}
-
-
-// Initialize GLFW statically
-inline void _initialize_glfw()
-{
-	static bool initialized = false;
-
-	if (!initialized) {
-		glfwInit();
-		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-		initialized = true;
-	}
 }
 
 // Window type
@@ -1948,13 +1965,22 @@ struct Window {
 // Create a surface given a window
 inline vk::raii::SurfaceKHR make_surface(const Window &window)
 {
+	std::cout << "MAKE SURFACE: " << window.handle << std::endl;
+	std::cout << "\tinstance: " << *get_vulkan_instance() << std::endl;
+
 	// Create the surface
 	VkSurfaceKHR surface;
-	glfwCreateWindowSurface(
+	VkResult result = glfwCreateWindowSurface(
 		*get_vulkan_instance(),
 		window.handle,
-		nullptr, &surface
+		nullptr,
+		&surface
 	);
+
+	std::cout << "[Vulkan] Created surface!\n"
+		"Handle: " << surface << std::endl;
+
+	KOBRA_ASSERT(result == VK_SUCCESS, "Failed to create surface");
 
 	return vk::raii::SurfaceKHR {
 		get_vulkan_instance(),
@@ -2116,6 +2142,32 @@ inline uint32_t find_memory_type(const vk::PhysicalDeviceMemoryProperties &mem_p
 	return type_index;
 }
 
+// Dump device properties
+inline std::string dev_info(const vk::raii::PhysicalDevice &phdev)
+{
+	std::stringstream ss;
+
+	ss << "Chosen device: " << phdev.getProperties().deviceName << std::endl;
+	ss << "\tgraphics queue family: " << find_graphics_queue_family(phdev) << std::endl;
+
+	auto queue_families = phdev.getQueueFamilyProperties();
+	for (uint32_t i = 0; i < queue_families.size(); i++) {
+		auto flags = queue_families[i].queueFlags;
+		ss << "\tqueue family [" << queue_families[i].queueCount << "] ";
+		if (flags & vk::QueueFlagBits::eGraphics)
+			ss << "Graphics ";
+		if (flags & vk::QueueFlagBits::eCompute)
+			ss << "Compute ";
+		if (flags & vk::QueueFlagBits::eTransfer)
+			ss << "Transfer ";
+		if (flags & vk::QueueFlagBits::eSparseBinding)
+			ss << "SparseBinding ";
+		ss << std::endl;
+	}
+
+	return ss.str();
+}
+
 // Allocate device memory
 inline vk::raii::DeviceMemory allocate_device_memory(const vk::raii::Device &device,
 		const vk::PhysicalDeviceMemoryProperties &memory_properties,
@@ -2153,6 +2205,9 @@ inline vk::SurfaceFormatKHR pick_surface_format(const vk::raii::PhysicalDevice &
 	static const std::vector <vk::SurfaceFormatKHR> target_formats = {
 		{ vk::Format::eB8G8R8A8Unorm, vk::ColorSpaceKHR::eSrgbNonlinear },
 	};
+
+	std::cout << "DEvice:\n" << dev_info(phdev) << std::endl;
+	std::cout << "surface handle: " << *surface << std::endl;
 
 	// Get the surface formats
 	std::vector <vk::SurfaceFormatKHR> formats =
@@ -3061,8 +3116,8 @@ struct GraphicsPipelineInfo {
 	vk::raii::ShaderModule fragment_shader;
 	const vk::SpecializationInfo *fragment_specialization = nullptr;
 
-	const vk::VertexInputBindingDescription &vertex_binding;
-	const std::vector <vk::VertexInputAttributeDescription> &vertex_attributes;
+	vk::VertexInputBindingDescription vertex_binding;
+	std::vector <vk::VertexInputAttributeDescription> vertex_attributes;
 
 	const vk::raii::PipelineLayout &pipeline_layout;
 	const vk::raii::PipelineCache &pipeline_cache;
@@ -3086,6 +3141,12 @@ inline vk::raii::Pipeline make_graphics_pipeline(const GraphicsPipelineInfo &inf
 			info.fragment_specialization
 		}
 	};
+
+	std::cout << "Vertex attribute formats:" << info.vertex_attributes.size() << std::endl;
+	for (const auto &attr : info.vertex_attributes) {
+		std::cout << "\t" << attr.binding << " " << attr.location << " "
+			<< vk::to_string(attr.format) << " " << attr.offset << std::endl;
+	}
 
 	// Vertex input state
 	vk::PipelineVertexInputStateCreateInfo vertex_input_info {

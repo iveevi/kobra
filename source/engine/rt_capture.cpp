@@ -6,11 +6,11 @@ namespace engine {
 
 // Constructor from scene file and camera
 RTCapture::RTCapture(const vk::raii::PhysicalDevice &phdev,
-		vk::raii::Device &device,
 		const vk::Extent2D &extent,
+		const std::vector <const char *> &extensions_,
 		const std::string &scene_file,
 		const Camera &camera)
-		: BaseApp(phdev, device, extent),
+		: BaseApp(phdev, extent, extensions_),
 		camera(camera),
 		layer(phdev, device,
 			command_pool,

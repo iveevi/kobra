@@ -810,9 +810,9 @@ int main()
 	// Vulkan model
 	auto box_vk = make_vk_model(phdev, device, box_mesh);
 
-	// Acceleration structure things
+	/* Acceleration structure things
 	auto blas = as::make_blas(device, box_vk);
-	as::build_as(phdev, device, command_pool, {blas}, as::FlagBits::eAllowUpdate);
+	as::build_as(phdev, device, command_pool, {blas}, as::FlagBits::eAllowUpdate); */
 
 	// Load shaders
 	// TODO: compile function for shaders
@@ -846,13 +846,19 @@ int main()
 
 	auto vertex_input_attributes = Vertex::vertex_attributes();
 
+	std::cout << "Vertex input attributes:" << vertex_input_attributes.size() << std::endl;
+	for (auto &attr : vertex_input_attributes) {
+		std::cout << "\t" << attr.binding << " " << attr.location << " "
+			<< vk::to_string(attr.format) << " " << attr.offset << std::endl;
+	}
+
 	// Create the graphics pipeline
 	auto grp_info = GraphicsPipelineInfo {
 		.device = device,
 		.render_pass = render_pass,
 
-		.vertex_shader = vertex,
-		.fragment_shader = fragment,
+		.vertex_shader = std::move(vertex),
+		.fragment_shader = std::move(fragment),
 
 		.vertex_binding = vertex_input_binding,
 		.vertex_attributes = vertex_input_attributes,
@@ -1043,8 +1049,12 @@ int main()
 
 	// Initialize per frame data
 	auto frame_data = std::vector <FrameData> (framebuffers.size());
-	for (auto &fd : frame_data)
-		fd = FrameData {device};
+	for (auto &frame : frame_data) {
+		frame = FrameData {device};
+		std::cout << "FrameData:\n\tFence " << *frame.fence<< std::endl;
+		std::cout << "\tPresent " << *frame.present_completed << std::endl;
+		std::cout << "\tRender " << *frame.render_completed << std::endl;
+	}
 
 	// Present while valid window
 	uint32_t frame_index = 0;
