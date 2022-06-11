@@ -47,14 +47,15 @@ public:
 
 	// Constructor needs app window context
 	//	to subscribe to mouse events
-	Button(App::Window &wctx,
-			std::shared_ptr <Area> area,
+	Button(App::IO &io, std::shared_ptr <Area> area,
 			Rect idle,
 			Rect hover,
 			Rect press,
 			int button = GLFW_MOUSE_BUTTON_LEFT)
-			: _area(area), _idle(idle),
-			_hover(hover), _pressed(press),
+			: _area(area),
+			_idle {std::move(idle)},
+			_hover {std::move(hover)},
+			_pressed {std::move(press)},
 			_button(button) {
 		// Subscribe lambda to mouse events
 		// TODO: static method
@@ -73,19 +74,21 @@ public:
 		};
 
 		// TODO: later subscribe to specific events
-		wctx.mouse_events->subscribe(mouse_callback, this);
+		io.mouse_events.subscribe(mouse_callback, this);
 	}
 
 	// Specialized constructors
-	Button(App::Window &wctx, RectButton rb)
-			: Button(wctx,
+	Button(const vk::raii::PhysicalDevice &phdev,
+			const vk::raii::Device &device,
+			App::IO &io, RectButton rb)
+			: Button(io,
 				std::shared_ptr <Area> (new RectArea(
 					rb.pos.x, rb.pos.y,
 					rb.size.x, rb.size.y
 				)),
-				Rect(wctx.context, rb.pos, rb.size, rb.idle),
-				Rect(wctx.context, rb.pos, rb.size, rb.hover),
-				Rect(wctx.context, rb.pos, rb.size, rb.active),
+				Rect(phdev, device, rb.pos, rb.size, rb.idle),
+				Rect(phdev, device, rb.pos, rb.size, rb.hover),
+				Rect(phdev, device, rb.pos, rb.size, rb.active),
 				rb.button) {}
 
 	// Virtual methods

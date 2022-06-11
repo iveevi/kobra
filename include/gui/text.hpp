@@ -204,6 +204,10 @@ public:
 	Text *text(const std::string &text, const glm::vec2 &pos, const glm::vec4 &color, float scale = 1.0f) {
 		static const float factor = 1/1000.0f;
 
+		KOBRA_LOG_FILE(notify) << "Creating text: " << text << " at "
+			<< pos.x << ", " << pos.y << " with scale "
+			<< scale << std::endl;
+
 		// NOTE: pos is the origin pos, not the top-left corner
 		float x = pos.x;
 		float y = pos.y;
@@ -213,6 +217,7 @@ public:
 
 		float iwidth = scale * factor/_width;
 		float iheight = scale * factor/_height;
+		std::cout << "iwidth: " << iwidth << " iheight: " << iheight << std::endl;
 
 		// Initialize text object
 		Text *txt = new Text();
@@ -229,8 +234,6 @@ public:
 			if (c == '\n') {
 				x = pos.x;
 				y += _font.line_height();
-				KOBRA_LOG_FUNC(notify) << "Newline: height = " << _font.line_height()
-					<< " y = " << y << std::endl;
 				continue;
 			}
 
@@ -240,6 +243,7 @@ public:
 			// Get glyph top-left
 			float x0 = x + (metrics.horiBearingX * iwidth);
 			float y0 = y - (metrics.horiBearingY * iheight);
+			std::cout << "metrics.horiBearingX: " << metrics.horiBearingX << " metrics.horiBearingY: " << metrics.horiBearingY << std::endl;
 
 			miny = std::min(miny, y0);
 
@@ -432,7 +436,7 @@ public:
 		// Iterate over characters
 		for (auto &c : _chars) {
 			// Get descriptor set for glyph
-			vk::DescriptorSet dset = *_font.glyph_ds(c.first);
+			const auto &dset = *_font.glyph_ds(c.first);
 
 			// Bind descriptor set
 			cmd.bindDescriptorSets(

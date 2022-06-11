@@ -64,8 +64,8 @@ protected:
 	void _update_buffers() {
 		// Fill buffers
 		std::vector <uint> indices {
-			0, 1, 2,
-			2, 3, 0
+			0, 2, 1,
+			3, 2, 0
 		};
 
 		std::vector <Vertex> vertices {
@@ -128,7 +128,8 @@ public:
 			_image_data = make_image(phdev, device,
 				command_pool, path,
 				vk::ImageTiling::eOptimal,
-				vk::ImageUsageFlagBits::eSampled,
+				vk::ImageUsageFlagBits::eSampled
+					| vk::ImageUsageFlagBits::eTransferDst,
 				vk::MemoryPropertyFlagBits::eDeviceLocal,
 				vk::ImageAspectFlagBits::eColor
 			);
@@ -160,7 +161,8 @@ public:
 			_image_data = make_image(phdev, device,
 				command_pool, path,
 				vk::ImageTiling::eOptimal,
-				vk::ImageUsageFlagBits::eSampled,
+				vk::ImageUsageFlagBits::eSampled
+					| vk::ImageUsageFlagBits::eTransferDst,
 				vk::MemoryPropertyFlagBits::eDeviceLocal,
 				vk::ImageAspectFlagBits::eColor
 			);

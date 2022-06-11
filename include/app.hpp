@@ -91,6 +91,8 @@ public:
 		glfwSetMouseButtonCallback(window.handle, &io::mouse_button_callback);
 		glfwSetCursorPosCallback(window.handle, &io::mouse_position_callback);
 		glfwSetKeyCallback(window.handle, &io::keyboard_callback);
+
+		// TODO: store memory requirements
 	}
 
 	// Virtual destructor

@@ -12,13 +12,13 @@ layout (location = 1) out vec2 out_pos;
 vec2 nvecs[6] = vec2[6] (
 	// Triangle 1
 	vec2(0.0, 0.0),
-	vec2(1.0, 0.0),
 	vec2(0.0, 1.0),
+	vec2(1.0, 0.0),
 
 	// Triangle 2
 	vec2(1.0, 0.0),
-	vec2(1.0, 1.0),
-	vec2(0.0, 1.0)
+	vec2(0.0, 1.0),
+	vec2(1.0, 1.0)
 );
 
 // Main function
@@ -28,13 +28,13 @@ void main()
 	vec2 pos[6] = vec2[6] (
 		// Triangle 1
 		vec2(bounds.x, bounds.y),
-		vec2(bounds.z, bounds.y),
 		vec2(bounds.x, bounds.w),
+		vec2(bounds.z, bounds.y),
 
 		// Triangle 2
 		vec2(bounds.z, bounds.y),
-		vec2(bounds.z, bounds.w),
-		vec2(bounds.x, bounds.w)
+		vec2(bounds.x, bounds.w),
+		vec2(bounds.z, bounds.w)
 	);
 
 	// Set the vertex position

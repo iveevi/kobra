@@ -4,7 +4,7 @@
 // Standard headers
 #include <array>
 #include <string>
-#include <unordered_map>
+#include <map>
 
 // Vulkan headers
 #include <vulkan/vulkan_core.h>
@@ -144,6 +144,9 @@ class Font {
 	std::vector <vk::raii::DescriptorSet> _glyph_ds;
 	std::vector <vk::raii::Sampler>	_glyph_samplers;
 
+	// Character to index map
+	std::map <char, uint32_t> _char_to_index;
+
 	// Font metrics
 	std::unordered_map <char, FT_Glyph_Metrics>	_metrics;
 
@@ -165,6 +168,12 @@ class Font {
 			const vk::raii::CommandPool &command_pool,
 			const vk::raii::DescriptorPool &descriptor_pool,
 			const std::string &file) {
+		// Temporary command buffer
+		vk::raii::CommandBuffer tmp_cmd = make_command_buffer(device, command_pool);
+
+		// Queue to submit commands to
+		vk::raii::Queue queue {device, 0, 0};
+
 		// Load library
 		FT_Library library;
 		check_error(FT_Init_FreeType(&library));
@@ -203,6 +212,27 @@ class Font {
 				vk::ImageAspectFlagBits::eColor
 			);
 
+			// Transition image layout
+			// TODO: method using command_pool
+			{
+				tmp_cmd.begin({});
+
+				transition_image_layout(tmp_cmd,
+					*img.image, img.format,
+					vk::ImageLayout::ePreinitialized,
+					vk::ImageLayout::eShaderReadOnlyOptimal
+				);
+
+				tmp_cmd.end();
+
+				queue.submit(
+					vk::SubmitInfo {
+						0, nullptr, nullptr, 1, &*tmp_cmd
+					},
+					nullptr
+				);
+			}
+
 			// Create sampler handle
 			vk::raii::Sampler sampler = make_sampler(device, img);
 
@@ -213,14 +243,15 @@ class Font {
 				device, {*descriptor_pool, *general_dsl}
 			};
 
-			// vk::raii::DescriptorSet dset = std::move(dsets.front());
+			vk::raii::DescriptorSet dset = std::move(dsets.front());
 
-			// bind_ds(device, dset, sampler, img, 0);
+			bind_ds(device, dset, sampler, img, 0);
 
 			// Store everything
-			_glyph_ds.emplace_back(std::move(dsets.front()));
+			_glyph_ds.emplace_back(std::move(dset));
 			_glyph_samplers.emplace_back(std::move(sampler));
 			_bitmaps.emplace_back(std::move(img));
+
 			_metrics[' '] = FT_Glyph_Metrics {
 				.horiBearingX = 0,
 				.horiBearingY = 0,
@@ -229,6 +260,8 @@ class Font {
 				.vertBearingY = 0,
 				.vertAdvance = 0,
 			};
+
+			_char_to_index[' '] = 0;
 		}
 
 		for (char c = 0; c < 127; c++) {
@@ -271,6 +304,7 @@ class Font {
 			_glyph_samplers.emplace_back(std::move(sampler));
 			_bitmaps.emplace_back(std::move(img));
 			_metrics[c] = face->glyph->metrics;
+			_char_to_index[c] = _glyph_ds.size() - 1;
 		}
 	}
 public:
@@ -292,7 +326,8 @@ public:
 
 	// Retrieve glyph bitmap
 	const ImageData &bitmap(char c) const {
-		return _bitmaps.at(c);
+		uint32_t index = _char_to_index.at(c);
+		return _bitmaps.at(index);
 	}
 
 	// Retrieve glyph metrics
@@ -309,7 +344,8 @@ public:
 
 	// Retrieve glyph descriptor set
 	const vk::raii::DescriptorSet &glyph_ds(char c) const {
-		return _glyph_ds.at(c);
+		uint32_t index = _char_to_index.at(c);
+		return _glyph_ds.at(index);
 	}
 
 	// Get line height

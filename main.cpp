@@ -2,9 +2,12 @@
 #define KOBRA_THROW_ERROR
 
 // #include "global.hpp"
-#include "include/backend.hpp"
-#include "include/gui/layer.hpp"
 #include "include/app.hpp"
+#include "include/backend.hpp"
+#include "include/gui/button.hpp"
+#include "include/gui/layer.hpp"
+#include "include/gui/rect.hpp"
+#include "include/gui/sprite.hpp"
 #include "tinyfiledialogs.h"
 
 using namespace kobra;
@@ -71,19 +74,21 @@ public:
 				vk::AttachmentLoadOp::eClear
 			) {
 		// Load all fonts
+		// TODO: later add layouts to tightly pack text and other gui elements
 		layer.load_font("default", "resources/fonts/noto_sans.ttf");
 
 		// Create text
+		std::cout << "Coords: " << coordinates(10, 10).x << " " << coordinates(10, 10).y << std::endl;
 		text_expl = layer.text_render("default")->text(
 			"Input: ",
-			coordinates(10, 10),
-			{1, 1, 1, 1}, 0.5
+			coordinates(100, 10),
+			{1, 1, 1, 1}, 1
 		);
 
 		text_input = layer.text_render("default")->text(
 			"",
-			coordinates(80, 10),
-			{1, 1, 1, 1}, 0.5
+			coordinates(220, 10),
+			{1, 1, 1, 1}, 1
 		);
 
 		// Add elements
@@ -94,6 +99,41 @@ public:
 
 		// Bind keyboard handler
 		io.keyboard_events.subscribe(keyboard_handler, this);
+
+		// Rectangle
+		auto rect = new gui::Rect(phdev, device,
+			coordinates(0, 0),
+			coordinates(100, 100),
+			{1, 1, 1}
+		);
+
+		// layer.add(rect);
+
+		// Button
+		auto button_info = gui::Button::RectButton {
+			.pos = coordinates(400, 400),
+			.size = coordinates(100, 100),
+			
+			.button = GLFW_MOUSE_BUTTON_LEFT,
+
+			.idle = {0.5, 0.5, 1},
+			.hover = {1, 0.5, 0.5},
+			.active = {1, 1, 1}
+		};
+
+		auto button = new gui::Button(phdev, device, io, button_info);
+
+		layer.add(button);
+
+		// Sprite
+		auto sprite = new gui::Sprite(phdev, device,
+			command_pool,
+			coordinates(0, 0),
+			coordinates(100, 100),
+			"resources/icons/mesh.png"
+		);
+
+		layer.add(sprite);
 	}
 
 	void record(const vk::raii::CommandBuffer &cmd,
