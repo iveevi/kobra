@@ -34,10 +34,10 @@ class Layer : public kobra::Layer <_element> {
 	str_map <int>			_font_map;
 
 	// Vulkan structures
-	const vk::raii::PhysicalDevice	&_physical_device = nullptr;
-	const vk::raii::Device		&_device = nullptr;
-	const vk::raii::CommandPool	&_command_pool = nullptr;
-	const vk::raii::DescriptorPool	&_descriptor_pool = nullptr;
+	vk::raii::PhysicalDevice	*_physical_device = nullptr;
+	vk::raii::Device		*_device = nullptr;
+	vk::raii::CommandPool		*_command_pool = nullptr;
+	vk::raii::DescriptorPool	*_descriptor_pool = nullptr;
 
 	vk::raii::RenderPass		_render_pass = nullptr;
 
@@ -70,7 +70,7 @@ class Layer : public kobra::Layer <_element> {
 			const vk::Format &depth_format) {
 		// Create render pass
 		_render_pass = make_render_pass(
-			_device,
+			*_device,
 			swapchain_format,
 			depth_format
 		);
@@ -110,14 +110,22 @@ public:
 	Layer() = default;
 
 	// Constructor
-	Layer(const vk::raii::PhysicalDevice &,
-			const vk::raii::Device &,
-			const vk::raii::CommandPool &,
-			const vk::raii::DescriptorPool &,
+	Layer(vk::raii::PhysicalDevice &,
+			vk::raii::Device &,
+			vk::raii::CommandPool &,
+			vk::raii::DescriptorPool &,
 			const vk::Extent2D &,
 			const vk::Format &,
 			const vk::Format &,
 			const vk::AttachmentLoadOp & = vk::AttachmentLoadOp::eLoad);
+
+	// Delete copy and assignment
+	Layer(const Layer &) = delete;
+	Layer &operator=(const Layer &) = delete;
+
+	// Add move and assignment
+	Layer(Layer &&) = default;
+	Layer &operator=(Layer &&) = default;
 
 	// Add action
 	void add_do(const ptr &) override;
@@ -125,8 +133,8 @@ public:
 	// Serve descriptor sets
 	vk::raii::DescriptorSet serve_sprite_ds() {
 		auto dsets = vk::raii::DescriptorSets {
-			_device,
-			{*_descriptor_pool, *_dsl_sprites}
+			*_device,
+			{**_descriptor_pool, *_dsl_sprites}
 		};
 
 		return std::move(dsets.front());
@@ -141,9 +149,9 @@ public:
 	void load_font(const std::string &alias, const std::string &path) {
 		size_t index = _text_renders.size();
 		_text_renders.push_back(
-			TextRender(_physical_device, _device,
-				_command_pool,
-				_descriptor_pool,
+			TextRender(*_physical_device, *_device,
+				*_command_pool,
+				*_descriptor_pool,
 				_render_pass, path,
 				_extent.width,
 				_extent.height

@@ -5,7 +5,7 @@ namespace kobra {
 namespace engine {
 
 // Constructor from scene file and camera
-RTCapture::RTCapture(const vk::raii::PhysicalDevice &phdev,
+RTCapture::RTCapture(vk::raii::PhysicalDevice &phdev,
 		const vk::Extent2D &extent,
 		const std::vector <const char *> &extensions_,
 		const std::string &scene_file,

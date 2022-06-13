@@ -112,6 +112,7 @@ public:
 			const std::vector <BoundingBox> &bboxes) {
 		// Allocate buffer
 		vk::DeviceSize size = 2 * 4 * bboxes.size() * sizeof(float);
+		size = std::max(size, vk::DeviceSize(1024));
 
 		buffer = BufferData(phdev, device, size,
 			vk::BufferUsageFlagBits::eStorageBuffer,

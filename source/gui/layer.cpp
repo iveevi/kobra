@@ -22,30 +22,31 @@ const std::vector <DSLB> Layer::_sprites_bindings {
 // Constructor //
 /////////////////
 
-Layer::Layer(const vk::raii::PhysicalDevice &phdev,
-		const vk::raii::Device &device,
-		const vk::raii::CommandPool &command_pool,
-		const vk::raii::DescriptorPool &descriptor_pool,
+Layer::Layer(vk::raii::PhysicalDevice &phdev,
+		vk::raii::Device &device,
+		vk::raii::CommandPool &command_pool,
+		vk::raii::DescriptorPool &descriptor_pool,
 		const vk::Extent2D &extent,
 		const vk::Format &swapchain_format,
 		const vk::Format &depth_format,
 		const vk::AttachmentLoadOp &load)
-		: _physical_device(phdev), _device(device),
-		_command_pool(command_pool),
-		_descriptor_pool(descriptor_pool),
+		: _physical_device(&phdev),
+		_device(&device),
+		_command_pool(&command_pool),
+		_descriptor_pool(&descriptor_pool),
 		_extent(extent)
 {
 	// Initialize all Vulkan objects
 	_init_vulkan_structures(load, swapchain_format, depth_format);
 
 	// Allocate buffers
-	_alloc_rects(_physical_device, _device);
+	_alloc_rects(*_physical_device, *_device);
 
 	// Create descriptor set layouts
-	_dsl_sprites = make_descriptor_set_layout(_device, _sprites_bindings);
+	_dsl_sprites = make_descriptor_set_layout(*_device, _sprites_bindings);
 
 	// Load all shaders
-	auto shaders = make_shader_modules(_device, {
+	auto shaders = make_shader_modules(*_device, {
 		"shaders/bin/gui/basic_vert.spv",
 		"shaders/bin/gui/basic_frag.spv",
 		"shaders/bin/gui/sprite_vert.spv",
@@ -54,24 +55,24 @@ Layer::Layer(const vk::raii::PhysicalDevice &phdev,
 
 	// Pipeline layouts
 	_pipelines.shapes_layout = vk::raii::PipelineLayout(
-		_device,
+		*_device,
 		{{}, {}, {}}
 	);
 
 	_pipelines.sprites_layout = vk::raii::PipelineLayout(
-		_device,
+		*_device,
 		{{}, *_dsl_sprites, {}}
 	);
 
 	// Create pipeline cache
 	auto pc = vk::raii::PipelineCache(
-		_device,
+		*_device,
 		vk::PipelineCacheCreateInfo {}
 	);
 
 	// Create graphics pipelines
 	auto shapes_grp_info = GraphicsPipelineInfo {
-		.device = _device,
+		.device = *_device,
 		.render_pass = _render_pass,
 
 		.vertex_shader = std::move(shaders[0]),
@@ -90,7 +91,7 @@ Layer::Layer(const vk::raii::PhysicalDevice &phdev,
 	_pipelines.shapes = make_graphics_pipeline(shapes_grp_info);
 
 	auto sprites_grp_info = GraphicsPipelineInfo {
-		.device = _device,
+		.device = *_device,
 		.render_pass = _render_pass,
 
 		.vertex_shader = std::move(shaders[2]),

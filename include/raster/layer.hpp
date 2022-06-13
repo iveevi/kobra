@@ -134,6 +134,10 @@ public:
 		_initialized = true;
 	}
 
+	// Move constructor and assignment operator
+	// Layer(Layer &&other) noexcept = default;
+	// Layer &operator=(Layer &&other) noexcept = default;
+
 	// Adding elements
 	void add_do(const ptr &e) override {
 		// Prepare latching packet

@@ -415,7 +415,7 @@ Layer::Layer(const vk::raii::PhysicalDevice &phdev,
 		vk::Format::eR8G8B8A8Unorm, _extent,
 		vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eSampled,
-		vk::ImageLayout::eShaderReadOnlyOptimal,
+		vk::ImageLayout::ePreinitialized,
 		vk::MemoryPropertyFlagBits::eDeviceLocal,
 		vk::ImageAspectFlagBits::eColor
 	);
@@ -432,8 +432,8 @@ Layer::Layer(const vk::raii::PhysicalDevice &phdev,
 
 	bind_ds(_device,
 		_dset_raytracing,
-		_samplers.result,
-		_samplers.result_image,
+		_dev.pixels,
+		vk::DescriptorType::eStorageBuffer,
 		MESH_BINDING_PIXELS
 	);
 

@@ -5,7 +5,6 @@
 #include <cstring>
 #include <iostream>
 #include <thread>
-#include <vulkan/vulkan_core.h>
 
 // Engine macros
 #define KOBRA_VALIDATION_LAYERS
@@ -23,6 +22,7 @@
 #include "include/gui/rect.hpp"
 #include "include/gui/sprite.hpp"
 #include "include/io/event.hpp"
+#include "include/logger.hpp"
 #include "include/model.hpp"
 #include "include/profiler.hpp"
 #include "include/raster/layer.hpp"
@@ -30,9 +30,8 @@
 #include "include/raytracing/mesh.hpp"
 #include "include/raytracing/sphere.hpp"
 #include "include/scene.hpp"
-#include "include/texture.hpp"
 #include "include/types.hpp"
-#include "profiler.hpp"
+// #include "profiler.hpp"
 
 using namespace kobra;
 
@@ -126,7 +125,7 @@ class RTApp :  public BaseApp {
 			auto mesh = model[i];
 
 			// Add to raster and scene
-			raster_layer.add(new raster::Mesh(context, mesh));
+			raster_layer.add(new raster::Mesh(phdev, device, mesh));
 			scene.add(ObjectPtr(new Mesh(mesh)));
 		}
 	}
@@ -149,7 +148,7 @@ class RTApp :  public BaseApp {
 			auto ptr_mesh = std::dynamic_pointer_cast <Mesh> (raster_obj);
 
 			auto scene_mesh = new Mesh(*ptr_mesh);
-			auto raster_mesh = new raster::Mesh(context, *ptr_mesh);
+			auto raster_mesh = new raster::Mesh(phdev, device, *ptr_mesh);
 
 			scene_mesh->set_name(new_name);
 			raster_mesh->set_name(new_name);
@@ -161,7 +160,7 @@ class RTApp :  public BaseApp {
 			auto scene_sphere = new Sphere(*ptr_sphere);
 
 			auto sphere_mesh = Mesh::make_sphere(ptr_sphere->center(), ptr_sphere->radius());
-			auto raster_sphere = new raster::Mesh(context, sphere_mesh);
+			auto raster_sphere = new raster::Mesh(phdev, device, sphere_mesh);
 
 			scene_sphere->set_name(new_name);
 			raster_sphere->set_name(new_name);
@@ -189,7 +188,7 @@ class RTApp :  public BaseApp {
 		// Statistics
 		gui.stats.frame_rate = gui_layer.text_render("default")->text(
 			"",
-			window.coordinates(10, 10),
+			coordinates(10, 10),
 			{1, 1, 1, 1}
 		);
 
@@ -232,10 +231,10 @@ class RTApp :  public BaseApp {
 			fptr = &transform.scale[transform_col];
 		}
 
-		if (input.is_key_down('=')) {
+		if (io.input.is_key_down('=')) {
 			*fptr += speed;
 			modified = true;
-		} else if (input.is_key_down('-')) {
+		} else if (io.input.is_key_down('-')) {
 			*fptr -= speed;
 			modified = true;
 		}
@@ -266,67 +265,89 @@ class RTApp :  public BaseApp {
 	engine::Gizmo			gizmo_set;
 
 	// Gizmo pipeline
-	VkRenderPass			gizmo_render_pass;
-	Vulkan::Pipeline		gizmo_pipeline;
+	vk::raii::RenderPass		gizmo_render_pass = nullptr;
+	vk::raii::Pipeline		gizmo_pipeline = nullptr;
+	vk::raii::PipelineLayout	gizmo_pipeline_layout = nullptr;
 
 	void init_gizmo() {
 		// Create render pass
-		gizmo_render_pass = context.make_render_pass(swapchain,
-			VK_ATTACHMENT_LOAD_OP_LOAD,
-			VK_ATTACHMENT_STORE_OP_STORE
+		gizmo_render_pass = make_render_pass(device,
+			swapchain.format,
+			depth_buffer.format,
+			vk::AttachmentLoadOp::eLoad
 		);
 
 		// Load shaders
-		auto shaders = context.make_shaders({
+		auto shaders = make_shader_modules(device, {
 			"shaders/bin/raster/vertex.spv",
 			"shaders/bin/raster/plain_color_frag.spv"
 		});
 
 		// Push constants
-		VkPushConstantRange pcr {
-			.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-			.offset = 0,
-			.size = sizeof(typename raster::Mesh::MVP)
+		vk::PushConstantRange pcr {
+			vk::ShaderStageFlagBits::eVertex,
+			0, sizeof(raster::Mesh::MVP)
 		};
 
-		// Creation info
-		Vulkan::PipelineInfo info {
-			.swapchain = swapchain,
-			.render_pass = render_pass,
+		// Pipline layout
+		gizmo_pipeline_layout = vk::raii::PipelineLayout {
+			device,
+			{{}, {}, pcr}
+		};
 
-			.vert = shaders[0],
-			.frag = shaders[1],
+		// Pipline cache
+		vk::raii::PipelineCache pc {device, {}};
 
-			.dsls = {},
+		// Create graphics pipeline
+		auto grp_info = GraphicsPipelineInfo {
+			.device = device,
+			.render_pass = gizmo_render_pass,
+
+			.vertex_shader = std::move(shaders[0]),
+			.fragment_shader = std::move(shaders[1]),
 
 			.vertex_binding = Vertex::vertex_binding(),
 			.vertex_attributes = Vertex::vertex_attributes(),
 
-			.push_consts = 1,
-			.push_consts_range = &pcr,
+			.pipeline_layout = gizmo_pipeline_layout,
+			.pipeline_cache = pc,
 
-			.depth_test = false,
-
-			.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-
-			// TODO: make a swapchain method to get viewport
-			.viewport {
-				.width = (int) swapchain.extent.width,
-				.height = (int) swapchain.extent.height,
-				.x = 0,
-				.y = 0
-			}
+			.depth_test = true,
+			.depth_write = true
 		};
 
-		gizmo_pipeline = context.make_pipeline(info);
+		gizmo_pipeline = make_graphics_pipeline(grp_info);
 	}
 public:
 	// TODO: just remove the option of no depth buffer (always use depth buffer)
-	RTApp(Vulkan *vk) : BaseApp({
-		vk,
-		1000, 1000, 2,
-		"RT App"
-	}) {
+	RTApp(const vk::raii::PhysicalDevice &phdev_,
+			const std::vector <const char *> &exts)
+			: BaseApp(phdev_, {1000, 1000}, exts),
+			// TODO: base app method to generate the required
+			// structure for layer construction
+			rt_layer(phdev, device,
+				command_pool, descriptor_pool,
+				extent, swapchain.format, depth_buffer.format,
+				vk::AttachmentLoadOp::eClear
+			),
+
+			raster_layer(phdev, device,
+				command_pool, descriptor_pool,
+				extent, swapchain.format, depth_buffer.format,
+				vk::AttachmentLoadOp::eLoad
+			),
+
+			gui_layer(phdev, device,
+				command_pool, descriptor_pool,
+				extent, swapchain.format, depth_buffer.format,
+				vk::AttachmentLoadOp::eLoad
+			),
+
+			gizmo_set(phdev, device,
+				extent, swapchain.format, depth_buffer.format,
+				vk::AttachmentLoadOp::eLoad
+			)
+	{
 		// Construct camera
 		camera = Camera {
 			Transform { {0, 6, 18}, {-0.2, 0, 0} },
@@ -336,7 +357,7 @@ public:
 		// Load scene
 		// create_scene();
 		Profiler::one().frame("Loading scene");
-		scene = Scene(context, window.command_pool, scene_path);
+		scene = Scene(phdev, device, command_pool, scene_path);
 		Profiler::one().end();
 
 		for (auto &obj : scene)
@@ -347,7 +368,6 @@ public:
 		///////////////////////
 
 		// Ray tracing layer
-		rt_layer = rt::Layer(window);
 		rt_layer.add_scene(scene);
 
 		// Initialize batch and batch index
@@ -356,12 +376,19 @@ public:
 		batch_index.light_samples = 1;
 
 		// TODO: m8 gotta really fix auto channels
-		rt_layer.set_environment_map(
-			load_image_texture("resources/skies/background_1.jpg", 4)
+		ImageData background = make_image(phdev, device,
+			command_pool,
+			"resources/skies/background_1.jpg",
+			vk::ImageTiling::eOptimal,
+			vk::ImageUsageFlagBits::eTransferDst
+				| vk::ImageUsageFlagBits::eSampled,
+			vk::MemoryPropertyFlagBits::eDeviceLocal,
+			vk::ImageAspectFlagBits::eColor
 		);
 
+		rt_layer.set_environment_map(std::move(background));
+
 		// Rasterization layer
-		raster_layer = raster::Layer(window, VK_ATTACHMENT_LOAD_OP_CLEAR);
 		raster_layer.set_mode(raster::Layer::Mode::BLINN_PHONG);
 		raster_layer.add_scene(scene);
 
@@ -377,40 +404,41 @@ public:
 		ring_y.material().Kd = {0, 1, 0};
 		ring_z.material().Kd = {0, 0, 1};
 
-		edit.gizmo_x = new raster::Mesh(context, ring_x);
-		edit.gizmo_y = new raster::Mesh(context, ring_y);
-		edit.gizmo_z = new raster::Mesh(context, ring_z);
+		edit.gizmo_x = new raster::Mesh(phdev, device, ring_x);
+		edit.gizmo_y = new raster::Mesh(phdev, device, ring_y);
+		edit.gizmo_z = new raster::Mesh(phdev, device, ring_z);
 
 		auto s0 = Mesh::make_sphere({0, 0, 0}, 0.05);
 
-		edit.p0 = new raster::Mesh(context, s0);
+		edit.p0 = new raster::Mesh(phdev, device, s0);
 		edit.p0->material().Kd = {0, 0, 0};
-		
-		edit.p1 = new raster::Mesh(context, s0);
+
+		edit.p1 = new raster::Mesh(phdev, device, s0);
 		edit.p1->material().Kd = {1, 1, 1};
 
 		init_gizmo();
 
 		// GUI layer
 		// TODO: be able to load gui elements from scene
-		gui_layer = gui::Layer(window, VK_ATTACHMENT_LOAD_OP_LOAD);
+		// gui_layer = gui::Layer(window, VK_ATTACHMENT_LOAD_OP_LOAD);
 		initialize_gui();
 
 		// Gizmo layer
 		// TODO: all layer type constructor should take a mandatory load
 		// operation
-		gizmo_set = engine::Gizmo(window, VK_ATTACHMENT_LOAD_OP_LOAD);
+		// gizmo_set = engine::Gizmo(window, VK_ATTACHMENT_LOAD_OP_LOAD);
 		gizmo_handle = gizmo_set.transform_gizmo();
 
 		// Add event listeners
-		window.keyboard_events->subscribe(keyboard_handler, this);
-		window.mouse_events->subscribe(mouse_movement, this);
+		io.keyboard_events.subscribe(keyboard_handler, this);
+		io.mouse_events.subscribe(mouse_movement, this);
 
 		// Show results of profiling
 		auto frame = Profiler::one().pop();
 		// std::cout << Profiler::pretty(frame);
-		
+
 		// rt_layer.display_memory_footprint();
+		KOBRA_LOG_FILE(ok) << "Finished initialization\n";
 	}
 
 	// Destructor
@@ -425,17 +453,18 @@ public:
 
 	// Override record method
 	// TODO: preview raytraced scene with a very low resolution
-	void record(const VkCommandBuffer &cmd, const VkFramebuffer &framebuffer) override {
+	void record(const vk::raii::CommandBuffer &cmd, const vk::raii::Framebuffer &framebuffer) override {
 		static float time = 0.0f;
+		KOBRA_LOG_FILE(ok) << "Recording frame\n";
 
 		// Hide mouse cursor if alt
-		if (input.is_key_down(GLFW_KEY_LEFT_ALT))
-			window.cursor_mode(GLFW_CURSOR_DISABLED);
+		if (io.input.is_key_down(GLFW_KEY_LEFT_ALT))
+			window.set_cursor_mode(GLFW_CURSOR_DISABLED);
 		else
-			window.cursor_mode(GLFW_CURSOR_NORMAL);
+			window.set_cursor_mode(GLFW_CURSOR_NORMAL);
 
 		// Start recording command buffer
-		Vulkan::begin(cmd);
+		cmd.begin({});
 
 		// WASDEQ movement
 		// TODO: method
@@ -445,19 +474,19 @@ public:
 		glm::vec3 right = camera.transform.right();
 		glm::vec3 up = camera.transform.up();
 
-		if (input.is_key_down(GLFW_KEY_W))
+		if (io.input.is_key_down(GLFW_KEY_W))
 			camera.transform.move(forward * speed);
-		else if (input.is_key_down(GLFW_KEY_S))
+		else if (io.input.is_key_down(GLFW_KEY_S))
 			camera.transform.move(-forward * speed);
 
-		if (input.is_key_down(GLFW_KEY_A))
+		if (io.input.is_key_down(GLFW_KEY_A))
 			camera.transform.move(-right * speed);
-		else if (input.is_key_down(GLFW_KEY_D))
+		else if (io.input.is_key_down(GLFW_KEY_D))
 			camera.transform.move(right * speed);
 
-		if (input.is_key_down(GLFW_KEY_E))
+		if (io.input.is_key_down(GLFW_KEY_E))
 			camera.transform.move(up * speed);
-		else if (input.is_key_down(GLFW_KEY_Q))
+		else if (io.input.is_key_down(GLFW_KEY_Q))
 			camera.transform.move(-up * speed);
 
 		// Input
@@ -476,23 +505,25 @@ public:
 
 		// Render appropriate layer
 		if (raster) {
-			raster_layer.render(cmd, framebuffer);
+			raster_layer.render(cmd, framebuffer, extent);
 		} else {
 			if (modified) {
 				// TODO: fix clear method
 				// rt_layer.clear();
 				// rt_layer.add_scene(scene);
 				KOBRA_LOG_FILE(notify) << "Reconstructing RT layer\n";
-				scene.save(scene_path);
-				scene = Scene(context, window.command_pool, scene_path);
+				throw int(1);
+
+				/* scene.save(scene_path);
+				scene = Scene(phdev, device, command_pool, scene_path);
 
 				rt_layer = rt::Layer(window);
 				rt_layer.add_scene(scene);
 				rt_layer.set_active_camera(camera);
-				modified = false;
+				modified = false; */
 			}
 
-			rt_layer.render(cmd, framebuffer, batch, batch_index);
+			rt_layer.render(cmd, framebuffer, extent, batch, batch_index);
 
 			batch.increment(batch_index);
 			if (batch.completed())
@@ -506,36 +537,43 @@ public:
 		// Render gizmo
 		if (gizmo_handle->get_object() != nullptr && edit.gizmo_mode == 1)
 			gizmo_set.render(cmd, framebuffer);
-		
+
 		// Start gizmo render pass
-		VkRect2D render_area {
-			.offset = {0, 0},
-			.extent = swapchain.extent
+		std::array <vk::ClearValue, 2> clear_values = {
+			vk::ClearValue {
+				vk::ClearColorValue {
+					std::array <float, 4> {0.0f, 0.0f, 0.0f, 1.0f}
+				}
+			},
+			vk::ClearValue {
+				vk::ClearDepthStencilValue {
+					1.0f, 0
+				}
+			}
 		};
 
-		std::vector <VkClearValue> clear_colors {
-			{.color = {0.0f, 0.0f, 0.0f, 1.0f}},
-			{.depthStencil = {1.0f, 0}}
-		};
-		
-		Vulkan::begin_render_pass(cmd,
-			gizmo_render_pass,
-			framebuffer,
-			render_area,
-			clear_colors
+		cmd.beginRenderPass(
+			vk::RenderPassBeginInfo {
+				*gizmo_render_pass,
+				*framebuffer,
+				vk::Rect2D {
+					vk::Offset2D {0, 0},
+					extent,
+				},
+				static_cast <uint32_t> (clear_values.size()),
+				clear_values.data()
+			},
+			vk::SubpassContents::eInline
 		);
 
 		// Bind pipeline
-		vkCmdBindPipeline(cmd,
-			VK_PIPELINE_BIND_POINT_GRAPHICS,
-			gizmo_pipeline.pipeline
-		);
+		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *gizmo_pipeline);
 
 		// Initialize render packet
 		raster::RenderPacket packet {
 			.cmd = cmd,
 
-			.pipeline_layout = gizmo_pipeline.layout,
+			.pipeline_layout = gizmo_pipeline_layout,
 
 			// TODO: warn on null camera
 			.view = camera.view(),
@@ -558,10 +596,10 @@ public:
 		}
 
 		// End render pass
-		Vulkan::end_render_pass(cmd);
+		cmd.endRenderPass();
 
 		// End recording command buffer
-		Vulkan::end(cmd);
+		cmd.end();
 
 		// Update time
 		time += frame_time;
@@ -570,8 +608,8 @@ public:
 	// Termination method
 	void terminate() override {
 		// Check input
-		if (window.input->is_key_down(GLFW_KEY_ESCAPE))
-			glfwSetWindowShouldClose(surface.window, true);
+		if (io.input.is_key_down(GLFW_KEY_ESCAPE))
+			glfwSetWindowShouldClose(window.handle, true);
 	}
 };
 

@@ -31,7 +31,7 @@ class RTCapture : public BaseApp {
 	vk::Extent2D	dimensions;
 public:
 	// Constructor from scene file and camera
-	RTCapture(const vk::raii::PhysicalDevice &,
+	RTCapture(vk::raii::PhysicalDevice &,
 			const vk::Extent2D &,
 			const std::vector <const char *> &,
 			const std::string &,

@@ -80,7 +80,7 @@ public:
 	// Copy constructor
 	Mesh(const Mesh &mesh)
 			: Object(object_type, mesh.transform()),
-			Renderable(mesh.material().copy()),
+			Renderable(std::forward <Material> (mesh.material().copy())),
 			_source(mesh._source),
 			_source_index(mesh._source_index),
 			_vertices(mesh._vertices),
@@ -120,6 +120,12 @@ public:
 		// Process the vertex data
 		if (calculate_tangents)
 			_process_vertex_data();
+	}
+
+	// Copy vertex and index data from another mesh
+	void copy_data(const Mesh &mesh) {
+		_vertices = mesh._vertices;
+		_indices = mesh._indices;
 	}
 
 	// Properties

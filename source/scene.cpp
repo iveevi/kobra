@@ -65,6 +65,7 @@ static ObjectPtr load_object(const vk::raii::PhysicalDevice &phdev,
 
 	// Switch on the object type
 	if (header == "[SPHERE]") {
+		KOBRA_LOG_FUNC(notify) << "Loading sphere " << name << std::endl;
 		Profiler::one().frame("Loading sphere");
 		auto sphere = Sphere::from_file(phdev, device, command_pool, fin, path);
 		Profiler::one().end();
@@ -79,6 +80,7 @@ static ObjectPtr load_object(const vk::raii::PhysicalDevice &phdev,
 	}
 
 	if (header == "[MESH]") {
+		KOBRA_LOG_FUNC(notify) << "Loading mesh " << name << std::endl;
 		Profiler::one().frame("Loading mesh");
 		auto mesh = Mesh::from_file(phdev, device, command_pool, fin, path);
 		Profiler::one().end();
@@ -86,6 +88,7 @@ static ObjectPtr load_object(const vk::raii::PhysicalDevice &phdev,
 		if (!mesh)
 			return nullptr;
 
+		KOBRA_LOG_FUNC(notify) << "Finshed loading model, creating object" << std::endl;
 		auto optr = ObjectPtr(new Mesh(*mesh, *t));
 		optr->set_name(name);
 		optr->transform() = *t;

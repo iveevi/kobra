@@ -176,7 +176,7 @@ void Material::save(std::ofstream &file) const
 }
 
 // Read material from file
-Material &&Material::from_file
+Material Material::from_file
 		(const vk::raii::PhysicalDevice &phdev,
 		const vk::raii::Device &device,
 		const vk::raii::CommandPool &command_pool,
@@ -299,8 +299,18 @@ Material &&Material::from_file
 
 	// TODO: create a texture loader agent to handle multithreaded textures
 	std::thread *albdeo_loader = nullptr;
+
+	// Create new command_pool
+	vk::raii::CommandPool cmd_pool {
+		device, {
+			vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+				find_graphics_queue_family(phdev)
+		}
+	};
+
 	if (albedo_source != "0") {
 		std::cout << "Loading albedo texture: " << albedo_source << std::endl;
+
 		auto load_albedo = [&]() {
 			Profiler::one().frame("Loading albedo texture");
 			albedo_source = common::get_path(
@@ -308,7 +318,7 @@ Material &&Material::from_file
 				common::get_directory(scene_file)
 			);
 
-			mat.set_albedo(phdev, device, command_pool, albedo_source);
+			mat.set_albedo(phdev, device, cmd_pool, albedo_source);
 			Profiler::one().end();
 		};
 
@@ -337,7 +347,7 @@ Material &&Material::from_file
 
 	// Return material
 	success = true;
-	return std::move(mat);
+	return mat; 
 }
 
 }

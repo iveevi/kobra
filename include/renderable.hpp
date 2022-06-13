@@ -16,8 +16,13 @@ public:
 	Renderable() = default;
 
 	// Constructor
-	Renderable(Material &&material)
-			: _material {std::move(material)} {}
+	Renderable(Material &&material) {
+		KOBRA_LOG_FILE(notify) << "Renderable::Renderable()" << std::endl;
+		_material = std::move(material);
+		// std::swap(_material, material);
+		KOBRA_LOG_FILE(notify) << "Renderable::Renderable() - end (finished copy)" << std::endl;
+	}
+			// : _material {std::forward <Material> (material)} {}
 
 	// Move constructor and assignment operator
 	Renderable(Renderable &&other) = default;
@@ -36,7 +41,7 @@ public:
 	}
 
 	void set_material(Material &&material) {
-		_material = std::move(material);
+		_material = std::forward <Material> (material);
 	}
 };
 

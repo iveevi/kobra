@@ -1,7 +1,7 @@
 #define KOBRA_VALIDATION_LAYERS
 #define KOBRA_THROW_ERROR
 
-// #include "global.hpp"
+#include "global.hpp"
 #include "include/app.hpp"
 #include "include/backend.hpp"
 #include "include/gui/button.hpp"
@@ -64,15 +64,16 @@ class GUIApp : public BaseApp {
 		}
 	}
 public:
-	GUIApp(const vk::raii::PhysicalDevice &phdev_,
+	GUIApp(vk::raii::PhysicalDevice &phdev_,
 			const vk::Extent2D &extent_,
 			const std::vector <const char *> &extensions_)
-			: BaseApp(phdev_, extent_, extensions_),
-			layer(phdev, device,
-				command_pool, descriptor_pool, extent,
-				swapchain.format, depth_buffer.format,
-				vk::AttachmentLoadOp::eClear
-			) {
+			: BaseApp(phdev_, extent_, extensions_) {
+		layer = std::move(gui::Layer(phdev, device,
+			command_pool, descriptor_pool, extent,
+			swapchain.format, depth_buffer.format,
+			vk::AttachmentLoadOp::eClear
+		));
+
 		// Load all fonts
 		// TODO: later add layouts to tightly pack text and other gui elements
 		layer.load_font("default", "resources/fonts/noto_sans.ttf");
@@ -113,7 +114,7 @@ public:
 		auto button_info = gui::Button::RectButton {
 			.pos = coordinates(400, 400),
 			.size = coordinates(100, 100),
-			
+
 			.button = GLFW_MOUSE_BUTTON_LEFT,
 
 			.idle = {0.5, 0.5, 1},
@@ -158,7 +159,7 @@ int main()
 	auto phdev = pick_physical_device(predicate);
 
 	// Create a GUI app
-	GUIApp app(phdev, {800, 600}, extensions);
+	RTApp app(phdev, extensions);
 
 	// Run the app
 	app.run();
@@ -167,8 +168,6 @@ int main()
 ////////////////////
 // Input handlers //
 ////////////////////
-
-/*
 
 // Keyboard listener
 void RTApp::keyboard_handler(void *user, const io::KeyboardEvent &event)
@@ -330,19 +329,27 @@ void RTApp::keyboard_handler(void *user, const io::KeyboardEvent &event)
 		if (event.key == GLFW_KEY_R &&
 			event.mods == GLFW_MOD_CONTROL) {
 			KOBRA_LOG_FILE(notify) << "Force refreshing scene...\n";
-			app->save(scene_path);
-			app->scene = Scene(app->context, app->window.command_pool, scene_path);
-			app->raster_layer = raster::Layer(app->window, VK_ATTACHMENT_LOAD_OP_CLEAR);
+			throw int(1);
+
+			/* app->save(scene_path);
+			app->scene = Scene(app->phdev, app->device, app->command_pool, scene_path);
+			app->raster_layer = raster::Layer(app->phdev, app->device,
+				app->command_pool, app->descriptor_pool,
+				app->extent, app->swapchain.format,
+				app->depth_buffer.format,
+				vk::AttachmentLoadOp::eLoad
+			);
+
 			app->raster_layer.add_scene(app->scene);
 			app->raster_layer.set_active_camera(app->camera);
 			app->raster_layer.set_mode(raster::Layer::Mode::BLINN_PHONG);
-			app->gizmo_handle->deselect();
+			app->gizmo_handle->deselect(); */
 		}
 
 		// Toggle mouse visibility
 		if (event.key == GLFW_KEY_M) {
 			app->show_mouse = !app->show_mouse;
-			app->window.cursor_mode(
+			app->window.set_cursor_mode(
 				app->show_mouse ? GLFW_CURSOR_NORMAL
 					: GLFW_CURSOR_HIDDEN
 			);
@@ -350,8 +357,11 @@ void RTApp::keyboard_handler(void *user, const io::KeyboardEvent &event)
 
 		// Start a capture
 		if (event.key == GLFW_KEY_C) {
+			// TODO: store extensions in use
 			app->capturer = new engine::RTCapture(
-				app->context.vk,
+				app->phdev,
+				app->extent,
+				{},
 				scene_path,
 				app->camera
 			);
@@ -401,7 +411,7 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 	glm::vec2 dir {dx, dy};
 
 	// Is alt pressed?
-	bool alt = app->input.is_key_down(GLFW_KEY_LEFT_ALT);
+	bool alt = app->io.input.is_key_down(GLFW_KEY_LEFT_ALT);
 
 	// Dragging only with the drag button
 	// TODO: alt left dragging as ewll
@@ -425,16 +435,16 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 
 		// Clicked coordinates
 		float x = event.xpos;
-		float y = (app->window.height - event.ypos);
+		float y = (app->extent.height - event.ypos);
 
 		bool activated = app->gizmo_handle->handle_select(proj,
-			x, y, app->window.width,
-			app->window.height
+			x, y, app->extent.width,
+			app->extent.height
 		);
 
 		// Rotation gizmo
-		float _x = event.xpos / (float) app->window.width;
-		float _y = event.ypos / (float) app->window.height;
+		float _x = event.xpos / (float) app->extent.width;
+		float _y = event.ypos / (float) app->extent.height;
 		Ray ray = app->camera.generate_ray(_x, _y);
 
 		auto d_x = closest_distance(*app->edit.gizmo_x, ray);
@@ -462,8 +472,8 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 			app->edit.rot_axis = min_axis;
 		} else {
 			// Select an object instead
-			float x = event.xpos / (float) app->window.width;
-			float y = event.ypos / (float) app->window.height;
+			float x = event.xpos / (float) app->extent.width;
+			float y = event.ypos / (float) app->extent.height;
 			Ray ray = app->camera.generate_ray(x, y);
 
 			float t = std::numeric_limits <float> ::max();
@@ -510,7 +520,7 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 		glm::mat4 proj = app->camera.projection();
 		app->gizmo_handle->handle_drag(proj,
 			dx, -dy,
-			app->window.width, app->window.height
+			app->extent.width, app->extent.height
 		);
 	}
 
@@ -520,11 +530,11 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 			&& app->edit.gizmo_mode == 2) {
 		glm::vec3 pos = app->edit.selected->transform().position;
 
-		float xp = (event.xpos - dx) / (float) app->window.width;
-		float yp = (event.ypos - dy) / (float) app->window.height;
+		float xp = (event.xpos - dx) / (float) app->extent.width;
+		float yp = (event.ypos - dy) / (float) app->extent.height;
 
-		float x = event.xpos / (float) app->window.width;
-		float y = event.ypos / (float) app->window.height;
+		float x = event.xpos / (float) app->extent.width;
+		float y = event.ypos / (float) app->extent.height;
 
 		Ray ray0 = app->camera.generate_ray(xp, yp);
 		Ray ray1 = app->camera.generate_ray(x, y);
@@ -601,4 +611,4 @@ void RTApp::mouse_movement(void *user, const io::MouseEvent &event)
 	py = event.ypos;
 
 	previous_dir = dir;
-} */
+}

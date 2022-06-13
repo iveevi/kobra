@@ -55,7 +55,7 @@ public:
 	Material &operator=(Material &&) = default;
 
 	// Create a deep copy of the material
-	Material &&copy() const {
+	Material copy() const {
 		Material m;
 
 		/* Create copies for each texture only if they exist
@@ -69,7 +69,7 @@ public:
 		m.Kd = glm::vec3 {1.0, 0.0, 1.0}; // dummy color
 
 		// Return the moved material
-		return std::move(m);
+		return m;
 	}
 
 	// Properties
@@ -102,7 +102,7 @@ public:
 
 	// Read material from file
 	// TODO: pack args into a struct
-	static Material &&from_file
+	static Material from_file
 			(const vk::raii::PhysicalDevice &,
 			const vk::raii::Device &,
 			const vk::raii::CommandPool &,
