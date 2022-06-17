@@ -26,7 +26,9 @@ class Material {
 	ImageData normal_image = nullptr;
 
 	// Source device
+	vk::raii::PhysicalDevice *phdev = nullptr;
 	vk::raii::Device *device = nullptr;
+	vk::raii::CommandPool *command_pool = nullptr;
 
 	// Texture sources (for scene loading)
 	// TODO: Kd, Kd, normal
@@ -58,18 +60,19 @@ public:
 	Material copy() const {
 		Material m;
 
-		/* Create copies for each texture only if they exist
-		if (albedo_source != "") {
-			// Create duplicate image data
-			// TODO: this is wasteful
+		if (has_albedo())
+			m.set_albedo(*phdev, *device, *command_pool, albedo_source);
 
-		} */
+		if (has_normal())
+			m.set_normal(*phdev, *device, *command_pool, normal_source);
 
-		// TODO: fill
-		m.Kd = glm::vec3 {1.0, 0.0, 1.0}; // dummy color
+		m.Kd = Kd; // dummy color
 		m.Ks = Ks;
 
 		m.type = type;
+
+		m.refr_eta = refr_eta;
+		m.refr_k = refr_k;
 
 		// Return the moved material
 		return m;
@@ -91,14 +94,14 @@ public:
 			uint32_t, uint32_t);
 
 	// Set textures
-	void set_albedo(const vk::raii::PhysicalDevice &,
-			const vk::raii::Device &,
-			const vk::raii::CommandPool &,
+	void set_albedo(vk::raii::PhysicalDevice &,
+			vk::raii::Device &,
+			vk::raii::CommandPool &,
 			const std::string &);
 
-	void set_normal(const vk::raii::PhysicalDevice &,
-			const vk::raii::Device &,
-			const vk::raii::CommandPool &,
+	void set_normal(vk::raii::PhysicalDevice &,
+			vk::raii::Device &,
+			vk::raii::CommandPool &,
 			const std::string &);
 
 	// Serialize to GPU buffer
@@ -110,9 +113,9 @@ public:
 	// Read material from file
 	// TODO: pack args into a struct
 	static Material from_file
-			(const vk::raii::PhysicalDevice &,
-			const vk::raii::Device &,
-			const vk::raii::CommandPool &,
+			(vk::raii::PhysicalDevice &,
+			vk::raii::Device &,
+			vk::raii::CommandPool &,
 			std::ifstream &,
 			const std::string &,
 			bool &);

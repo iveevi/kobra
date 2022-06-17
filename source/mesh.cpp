@@ -388,14 +388,12 @@ static std::optional <Mesh> load_raw_mesh(std::ifstream &fin)
 
 // Read from file
 std::optional <Mesh> Mesh::from_file
-		(const vk::raii::PhysicalDevice &phdev,
-		const vk::raii::Device &device,
-		const vk::raii::CommandPool &command_pool,
+		(vk::raii::PhysicalDevice &phdev,
+		vk::raii::Device &device,
+		vk::raii::CommandPool &command_pool,
 		std::ifstream &file,
 		const std::string &scene_file)
 {
-	KOBRA_LOG_FILE(notify) << "Loading mesh from file: " << scene_file << std::endl;
-
 	std::string line;
 
 	// Read source
@@ -409,8 +407,6 @@ std::optional <Mesh> Mesh::from_file
 
 	Mesh mesh;
 	if (source == "0") {
-		KOBRA_LOG_FILE(notify) << "Loading raw mesh data" << std::endl;
-
 		// Load raw mesh
 		auto m = load_raw_mesh(file);
 		if (!m)
@@ -418,8 +414,6 @@ std::optional <Mesh> Mesh::from_file
 
 		mesh = *m;
 	} else {
-		KOBRA_LOG_FILE(notify) << "Loading mesh from file: " << source << std::endl;
-
 		// Read mesh index
 		int source_index = -1;
 		std::getline(file, line);
@@ -446,8 +440,6 @@ std::optional <Mesh> Mesh::from_file
 	}
 	Profiler::one().end();
 
-	KOBRA_LOG_FILE(notify) << "Mesh data loaded" << std::endl;
-
 	// Read material header, then material
 	Profiler::one().frame("Loading mesh material");
 	std::getline(file, line);
@@ -455,8 +447,6 @@ std::optional <Mesh> Mesh::from_file
 		KOBRA_LOG_FUNC(error) << "Expected material header\n";
 		return std::nullopt;
 	}
-
-	KOBRA_LOG_FILE(notify) << "Going to load material from file\n";
 
 	bool success;
 	Material mat = Material::from_file(
@@ -469,9 +459,7 @@ std::optional <Mesh> Mesh::from_file
 	if (!success)
 		return std::nullopt;
 
-	KOBRA_LOG_FILE(notify) << "Going to transfer material to device\n";
 	mesh.set_material(std::forward <Material> (mat));
-	KOBRA_LOG_FILE(notify) << "Material loaded, mesh completed" << std::endl;
 	Profiler::one().end();
 
 	// Return mesh

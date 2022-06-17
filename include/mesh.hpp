@@ -228,9 +228,9 @@ public:
 	static Mesh make_ring(const glm::vec3 &, float, float, float, int = 32);
 
 	// Read from file
-	static std::optional <Mesh> from_file(const vk::raii::PhysicalDevice &,
-		const vk::raii::Device &,
-		const vk::raii::CommandPool &,
+	static std::optional <Mesh> from_file(vk::raii::PhysicalDevice &,
+		vk::raii::Device &,
+		vk::raii::CommandPool &,
 		std::ifstream &,
 		const std::string &);
 

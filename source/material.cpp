@@ -45,46 +45,53 @@ std::optional <vk::DescriptorImageInfo> Material::get_normal_descriptor() const
 
 // Bind albdeo and normal textures
 void Material::bind(const vk::raii::PhysicalDevice &phdev,
-		const vk::raii::Device &device,
+		const vk::raii::Device &device_,
 		const vk::raii::CommandPool &command_pool,
 		const vk::raii::DescriptorSet &dset,
 		uint32_t b1, uint32_t b2)
 {
 	// Bind albedo
 	if (albedo_source.length() > 0) {
-		bind_ds(device, dset, albedo_sampler, albedo_image, b1);
+		bind_ds(device_, dset, albedo_sampler, albedo_image, b1);
 	} else {
-		albedo_image = ImageData::blank(phdev, device);
-		albedo_image.transition_layout(device, command_pool, vk::ImageLayout::eShaderReadOnlyOptimal);
+		albedo_image = ImageData::blank(phdev, device_);
+		albedo_image.transition_layout(device_, command_pool, vk::ImageLayout::eShaderReadOnlyOptimal);
 
-		albedo_sampler = make_sampler(device, albedo_image);
+		albedo_sampler = make_sampler(device_, albedo_image);
 		albedo_source = "0";
-		bind_ds(device, dset, albedo_sampler, albedo_image, b1);
+		bind_ds(device_, dset, albedo_sampler, albedo_image, b1);
 	}
 
 	// Bind normal
 	if (normal_source.length() > 0) {
-		bind_ds(device, dset, normal_sampler, normal_image, b2);
+		bind_ds(device_, dset, normal_sampler, normal_image, b2);
 	} else {
-		normal_image = ImageData::blank(phdev, device);
-		normal_image.transition_layout(device, command_pool, vk::ImageLayout::eShaderReadOnlyOptimal);
+		normal_image = ImageData::blank(phdev, device_);
+		normal_image.transition_layout(device_, command_pool, vk::ImageLayout::eShaderReadOnlyOptimal);
 
-		normal_sampler = make_sampler(device, normal_image);
+		normal_sampler = make_sampler(device_, normal_image);
 		normal_source = "0";
-		bind_ds(device, dset, normal_sampler, normal_image, b2);
+		bind_ds(device_, dset, normal_sampler, normal_image, b2);
 	}
 }
 
 // Set textures
-void Material::set_albedo(const vk::raii::PhysicalDevice &phdev,
-		const vk::raii::Device &device,
-		const vk::raii::CommandPool &command_pool,
+void Material::set_albedo(vk::raii::PhysicalDevice &phdev_,
+		vk::raii::Device &device_,
+		vk::raii::CommandPool &command_pool_,
 		const std::string &path)
 {
+	std::cout << "Set albedo texture: " << path << std::endl;
+	std::cout << "\tcommand_pool = " << *command_pool_ << std::endl;
+	
+	phdev = &phdev_;
+	device = &device_;
+	command_pool = &command_pool_;
+
 	albedo_source = path;
 
-	albedo_image = make_image(phdev, device,
-		command_pool, path,
+	albedo_image = make_image(*phdev, *device,
+		*command_pool, path,
 		vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eSampled
 			| vk::ImageUsageFlagBits::eTransferDst
@@ -93,18 +100,22 @@ void Material::set_albedo(const vk::raii::PhysicalDevice &phdev,
 		vk::ImageAspectFlagBits::eColor
 	);
 
-	albedo_sampler = make_sampler(device, albedo_image);
+	albedo_sampler = make_sampler(*device, albedo_image);
 }
 
-void Material::set_normal(const vk::raii::PhysicalDevice &phdev,
-		const vk::raii::Device &device,
-		const vk::raii::CommandPool &command_pool,
+void Material::set_normal(vk::raii::PhysicalDevice &phdev_,
+		vk::raii::Device &device_,
+		vk::raii::CommandPool &command_pool_,
 		const std::string &path)
 {
+	phdev = &phdev_;
+	device = &device_;
+	command_pool = &command_pool_;
+
 	normal_source = path;
 
-	normal_image = make_image(phdev, device,
-		command_pool, path,
+	normal_image = make_image(*phdev, *device,
+		*command_pool, path,
 		vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eSampled
 			| vk::ImageUsageFlagBits::eTransferDst
@@ -113,7 +124,7 @@ void Material::set_normal(const vk::raii::PhysicalDevice &phdev,
 		vk::ImageAspectFlagBits::eColor
 	);
 
-	normal_sampler = make_sampler(device, normal_image);
+	normal_sampler = make_sampler(*device, normal_image);
 }
 
 // Serialize to buffer
@@ -144,9 +155,9 @@ void Material::save(std::ofstream &file) const
 
 // Read material from file
 Material Material::from_file
-		(const vk::raii::PhysicalDevice &phdev,
-		const vk::raii::Device &device,
-		const vk::raii::CommandPool &command_pool,
+		(vk::raii::PhysicalDevice &phdev,
+		vk::raii::Device &device,
+		vk::raii::CommandPool &command_pool,
 		std::ifstream &file,
 		const std::string &scene_file,
 		bool &success)
@@ -185,9 +196,6 @@ Material Material::from_file
 	}
 
 	std::sscanf(line.c_str(), "Ks=%f %f %f", &Ks.x, &Ks.y, &Ks.z);
-
-	std::cout << "Kd: " << Kd.x << " " << Kd.y << " " << Kd.z << std::endl;
-	std::cout << "Ks: " << Ks.x << " " << Ks.y << " " << Ks.z << std::endl;
 
 	// Read shading type
 	std::getline(file, line);
@@ -261,39 +269,22 @@ Material Material::from_file
 	mat.refr_eta = refr_eta;
 	mat.refr_k = refr_k;
 
-	std::cout << "refr_eta = " << refr_eta << std::endl;
-	std::cout << "refr_k = " << refr_k << std::endl;
-
 	// TODO: create a texture loader agent to handle multithreaded textures
 	std::thread *albdeo_loader = nullptr;
 
-	// Create new command_pool
-	vk::raii::CommandPool cmd_pool {
-		device, {
-			vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-				find_graphics_queue_family(phdev)
-		}
-	};
-
 	if (albedo_source != "0") {
-		std::cout << "Loading albedo texture: " << albedo_source << std::endl;
+		// TODO: multithreading
+		Profiler::one().frame("Loading albedo texture");
+		albedo_source = common::get_path(
+			albedo_source,
+			common::get_directory(scene_file)
+		);
 
-		auto load_albedo = [&]() {
-			Profiler::one().frame("Loading albedo texture");
-			albedo_source = common::get_path(
-				albedo_source,
-				common::get_directory(scene_file)
-			);
-
-			mat.set_albedo(phdev, device, cmd_pool, albedo_source);
-			Profiler::one().end();
-		};
-
-		albdeo_loader = new std::thread(load_albedo);
+		mat.set_albedo(phdev, device, command_pool, albedo_source);
+		Profiler::one().end();
 	}
 
 	if (normal_source != "0") {
-		std::cout << "Loading normal texture: " << normal_source << std::endl;
 		Profiler::one().frame("Loading normal texture");
 		normal_source = common::get_path(
 			normal_source,
@@ -309,8 +300,6 @@ Material Material::from_file
 		albdeo_loader->join();
 		delete albdeo_loader;
 	}
-
-	std::cout << "Material loaded" << std::endl;
 
 	// Return material
 	success = true;

@@ -68,9 +68,9 @@ public:
 
 	// Read sphere object from file
 	static std::optional <Sphere> from_file
-			(const vk::raii::PhysicalDevice &phdev,
-			const vk::raii::Device &device,
-			const vk::raii::CommandPool &command_pool,
+			(vk::raii::PhysicalDevice &phdev,
+			vk::raii::Device &device,
+			vk::raii::CommandPool &command_pool,
 			std::ifstream &file,
 			const std::string &scene_file) {
 		std::string line;

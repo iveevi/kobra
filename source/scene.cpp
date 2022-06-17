@@ -16,9 +16,9 @@ namespace kobra {
 //////////////////////
 
 // TODO: loading models (with appropriate materials, etc)
-static ObjectPtr load_object(const vk::raii::PhysicalDevice &phdev,
-		const vk::raii::Device &device,
-		const vk::raii::CommandPool &command_pool,
+static ObjectPtr load_object(vk::raii::PhysicalDevice &phdev,
+		vk::raii::Device &device,
+		vk::raii::CommandPool &command_pool,
 		std::ifstream &fin, const std::string &path)
 {
 	std::string header;
@@ -56,9 +56,6 @@ static ObjectPtr load_object(const vk::raii::PhysicalDevice &phdev,
 	auto t = Transform::from_file(fin);
 	if (!t)
 		return nullptr;
-	std::cout << "Loaded transform:\n";
-	glm::vec3 v = t->position;
-	std::cout << "\tPosition: " << v.x << ", " << v.y << ", " << v.z << std::endl;
 
 	// Read the object header
 	std::getline(fin, header);
@@ -104,9 +101,9 @@ static ObjectPtr load_object(const vk::raii::PhysicalDevice &phdev,
 // Constructors //
 //////////////////
 
-Scene::Scene(const vk::raii::PhysicalDevice &phdev,
-		const vk::raii::Device &device,
-		const vk::raii::CommandPool &command_pool,
+Scene::Scene(vk::raii::PhysicalDevice &phdev,
+		vk::raii::Device &device,
+		vk::raii::CommandPool &command_pool,
 		const std::string &filename)
 {
 	// Open the file

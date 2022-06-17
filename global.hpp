@@ -348,6 +348,8 @@ public:
 				vk::AttachmentLoadOp::eLoad
 			)
 	{
+		KOBRA_LOG_FILE(notify) << "Command Pool: " << *command_pool << std::endl;
+
 		// Construct camera
 		camera = Camera {
 			Transform { {0, 6, 18}, {-0.2, 0, 0} },

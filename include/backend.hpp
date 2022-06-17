@@ -1735,11 +1735,11 @@ inline vk::raii::Pipeline make_graphics_pipeline(const GraphicsPipelineInfo &inf
 		}
 	};
 
-	std::cout << "Vertex attribute formats:" << info.vertex_attributes.size() << std::endl;
+	/* std::cout << "Vertex attribute formats:" << info.vertex_attributes.size() << std::endl;
 	for (const auto &attr : info.vertex_attributes) {
 		std::cout << "\t" << attr.binding << " " << attr.location << " "
 			<< vk::to_string(attr.format) << " " << attr.offset << std::endl;
-	}
+	} */
 
 	// Vertex input state
 	vk::PipelineVertexInputStateCreateInfo vertex_input_info {

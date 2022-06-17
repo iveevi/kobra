@@ -27,9 +27,9 @@ public:
 	Scene() = default;
 
 	// Constructor from file
-	Scene(const vk::raii::PhysicalDevice &,
-		const vk::raii::Device &,
-		const vk::raii::CommandPool &,
+	Scene(vk::raii::PhysicalDevice &,
+		vk::raii::Device &,
+		vk::raii::CommandPool &,
 		const std::string &);
 
 	// Constructor from list of objects
