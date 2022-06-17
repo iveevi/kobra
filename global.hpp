@@ -9,7 +9,7 @@
 // Engine macros
 #define KOBRA_VALIDATION_LAYERS
 // #define KOBRA_ERROR_ONLY
-// #define KOBRA_THROW_ERROR
+#define KOBRA_THROW_ERROR
 
 // Engine headers
 #include "include/app.hpp"
@@ -334,7 +334,7 @@ public:
 			raster_layer(phdev, device,
 				command_pool, descriptor_pool,
 				extent, swapchain.format, depth_buffer.format,
-				vk::AttachmentLoadOp::eLoad
+				vk::AttachmentLoadOp::eClear
 			),
 
 			gui_layer(phdev, device,
@@ -371,7 +371,7 @@ public:
 		rt_layer.add_scene(scene);
 
 		// Initialize batch and batch index
-		batch = rt::Batch(1000, 1000, 100, 100, 16);
+		batch = rt::Batch(1000, 1000, 100, 100, 1);
 		batch_index = batch.make_batch_index(0, 0);
 		batch_index.light_samples = 1;
 
@@ -455,7 +455,6 @@ public:
 	// TODO: preview raytraced scene with a very low resolution
 	void record(const vk::raii::CommandBuffer &cmd, const vk::raii::Framebuffer &framebuffer) override {
 		static float time = 0.0f;
-		KOBRA_LOG_FILE(ok) << "Recording frame\n";
 
 		// Hide mouse cursor if alt
 		if (io.input.is_key_down(GLFW_KEY_LEFT_ALT))

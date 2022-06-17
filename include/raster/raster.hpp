@@ -38,7 +38,9 @@ struct UBO_PointLights {
 
 // Latching packet
 struct LatchingPacket {
+	const vk::raii::PhysicalDevice &phdev;
 	const vk::raii::Device &device;
+	const vk::raii::CommandPool &command_pool;
 	Layer		*layer;
 };
 

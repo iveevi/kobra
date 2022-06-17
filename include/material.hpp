@@ -67,6 +67,9 @@ public:
 
 		// TODO: fill
 		m.Kd = glm::vec3 {1.0, 0.0, 1.0}; // dummy color
+		m.Ks = Ks;
+
+		m.type = type;
 
 		// Return the moved material
 		return m;
@@ -81,7 +84,11 @@ public:
 	std::optional <vk::DescriptorImageInfo> get_normal_descriptor() const;
 
 	// Bind albdeo and normal textures
-	void bind(const vk::raii::Device &, const vk::raii::DescriptorSet &, uint32_t, uint32_t) const;
+	void bind(const vk::raii::PhysicalDevice &,
+			const vk::raii::Device &,
+			const vk::raii::CommandPool &,
+			const vk::raii::DescriptorSet &,
+			uint32_t, uint32_t);
 
 	// Set textures
 	void set_albedo(const vk::raii::PhysicalDevice &,

@@ -7,64 +7,15 @@
 
 namespace kobra {
 
-/* Copy constructor
-Material::Material(const Material &other)
-		: Kd(other.Kd), Ks(other.Ks),
-		type(other.type),
-		refr_eta(other.refr_eta),
-		refr_k(other.refr_k)
-{
-	// TODO: copy image data
-	if (other.albedo_sampler != nullptr) {
-		albedo_sampler = new Sampler(*other.albedo_sampler);
-		albedo_source = other.albedo_source;
-	}
-
-	if (other.normal_sampler != nullptr) {
-		normal_sampler = new Sampler(*other.normal_sampler);
-		normal_source = other.normal_source;
-	}
-} */
-
-/* Assignment operator
-Material &Material::operator=(const Material &other)
-{
-	if (this != &other) {
-		Kd = other.Kd;
-		Ks = other.Ks;
-		type = other.type;
-		refr_eta = other.refr_eta;
-		refr_k = other.refr_k;
-
-		if (other.albedo_sampler != nullptr) {
-			if (albedo_sampler != nullptr)
-				delete albedo_sampler;
-
-			albedo_sampler = new Sampler(*other.albedo_sampler);
-			albedo_source = other.albedo_source;
-		}
-
-		if (other.normal_sampler != nullptr) {
-			if (normal_sampler != nullptr)
-				delete normal_sampler;
-
-			normal_sampler = new Sampler(*other.normal_sampler);
-			normal_source = other.normal_source;
-		}
-	}
-
-	return *this;
-} */
-
 // Properties
 bool Material::has_albedo() const
 {
-	return !albedo_source.empty();
+	return !(albedo_source.empty() || albedo_source == "0");
 }
 
 bool Material::has_normal() const
 {
-	return !normal_source.empty();
+	return !(normal_source.empty() || normal_source == "0");
 }
 
 // Get image descriptors
@@ -93,19 +44,35 @@ std::optional <vk::DescriptorImageInfo> Material::get_normal_descriptor() const
 }
 
 // Bind albdeo and normal textures
-void Material::bind(const vk::raii::Device &device,
+void Material::bind(const vk::raii::PhysicalDevice &phdev,
+		const vk::raii::Device &device,
+		const vk::raii::CommandPool &command_pool,
 		const vk::raii::DescriptorSet &dset,
-		uint32_t b1, uint32_t b2) const
+		uint32_t b1, uint32_t b2)
 {
-	// TODO: do we need to bind a blank sampler?
-
 	// Bind albedo
-	if (albedo_source.length() > 0)
+	if (albedo_source.length() > 0) {
 		bind_ds(device, dset, albedo_sampler, albedo_image, b1);
+	} else {
+		albedo_image = ImageData::blank(phdev, device);
+		albedo_image.transition_layout(device, command_pool, vk::ImageLayout::eShaderReadOnlyOptimal);
+
+		albedo_sampler = make_sampler(device, albedo_image);
+		albedo_source = "0";
+		bind_ds(device, dset, albedo_sampler, albedo_image, b1);
+	}
 
 	// Bind normal
-	if (normal_source.length() > 0)
+	if (normal_source.length() > 0) {
 		bind_ds(device, dset, normal_sampler, normal_image, b2);
+	} else {
+		normal_image = ImageData::blank(phdev, device);
+		normal_image.transition_layout(device, command_pool, vk::ImageLayout::eShaderReadOnlyOptimal);
+
+		normal_sampler = make_sampler(device, normal_image);
+		normal_source = "0";
+		bind_ds(device, dset, normal_sampler, normal_image, b2);
+	}
 }
 
 // Set textures

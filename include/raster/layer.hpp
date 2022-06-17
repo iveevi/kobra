@@ -67,16 +67,15 @@ protected:
 	// Buffers for lights
 	BufferData			_ubo_point_lights_buffer = nullptr;
 
-	// Refresh a buffer with its data
-	static void _refresh(const vk::raii::CommandBuffer &cmd,
-			const vk::raii::PipelineLayout &layout,
-			BufferData &buffer,
+	/* Refresh a buffer with its data
+	void _refresh(BufferData &buffer,
 			const uint8_t *data,
 			size_t size,
-			const VkDescriptorSet &ds,
+			const vk::raii::DescriptorSet &dset,
 			size_t binding) {
 		buffer.upload(data, size);
-	}
+		bind_ds(_device, dset, buffer, vk::DescriptorType::eUniformBuffer, binding);
+	} */
 
 	// Corresponding structures
 	UBO_PointLights			_ubo_point_lights;
@@ -142,12 +141,21 @@ public:
 	void add_do(const ptr &e) override {
 		// Prepare latching packet
 		LatchingPacket lp {
+			.phdev = _physical_device,
 			.device = _device,
+			.command_pool = _command_pool,
 			.layer = this
 		};
 
 		// Add element
 		e->latch(lp);
+
+		// Bind descriptor
+		bind_ds(_device, e->get_local_ds(),
+			_ubo_point_lights_buffer,
+			vk::DescriptorType::eUniformBuffer,
+			RASTER_BINDING_POINT_LIGHTS
+		);
 	}
 
 	// Import scene objects
@@ -250,6 +258,24 @@ public:
 				" been yet been initialized\n";
 		}
 
+		// Set viewport
+		auto viewport = vk::Viewport {
+			0.0f, 0.0f,
+			static_cast<float>(_extent.width),
+			static_cast<float>(_extent.height),
+			0.0f, 1.0f
+		};
+
+		cmd.setViewport(0, viewport);
+
+		// Set scissor
+		auto scissor = vk::Rect2D {
+			vk::Offset2D {0, 0},
+			_extent
+		};
+
+		cmd.setScissor(0, scissor);
+
 		// First update the lighting
 		_ubo_point_lights.number = 0;
 		LightingPacket lp {
@@ -258,6 +284,13 @@ public:
 
 		for (auto &e : _elements)
 			e->light(lp);
+
+		// Upload to GPU
+		_ubo_point_lights_buffer.upload(
+			(const uint8_t *) &_ubo_point_lights,
+			sizeof(_ubo_point_lights),
+			false
+		);
 
 		// Start render pass (clear both color and depth)
 		std::array <vk::ClearValue, 2> clear_values = {
@@ -293,17 +326,16 @@ public:
 			*_get_pipeline()
 		);
 
-		// Refresh for all elements
+		/* Refresh for all elements
 		for (auto &e : _elements) {
-			_refresh(cmd,
-				_pipelines.layout,
+			_refresh(
 				_ubo_point_lights_buffer,
 				(const uint8_t *) &_ubo_point_lights,
 				sizeof(_ubo_point_lights),
-				*e->get_local_ds(),
+				e->get_local_ds(),
 				RASTER_BINDING_POINT_LIGHTS
 			);
-		}
+		} */
 
 		// Initialize render packet
 		RenderPacket packet {

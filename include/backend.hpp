@@ -810,8 +810,11 @@ inline void transition_image_layout(const vk::raii::CommandBuffer &cmd,
 	case vk::ImageLayout::eGeneral:
 	case vk::ImageLayout::eUndefined:
 		break;
+	case vk::ImageLayout::eShaderReadOnlyOptimal:
+		src_access_mask = vk::AccessFlagBits::eShaderRead;
+		break;
 	default:
-		KOBRA_ASSERT(false, "Unsupported old layout");
+		KOBRA_ASSERT(false, "Unsupported old layout " + vk::to_string(old_layout));
 		break;
 	}
 
@@ -828,8 +831,11 @@ inline void transition_image_layout(const vk::raii::CommandBuffer &cmd,
 	case vk::ImageLayout::eUndefined:
 		source_stage = vk::PipelineStageFlagBits::eTopOfPipe;
 		break;
+	case vk::ImageLayout::eShaderReadOnlyOptimal:
+		source_stage = vk::PipelineStageFlagBits::eFragmentShader;
+		break;
 	default:
-		KOBRA_ASSERT(false, "Unsupported old layout");
+		KOBRA_ASSERT(false, "Unsupported old layout " + vk::to_string(old_layout));
 		break;
         }
 
@@ -856,7 +862,7 @@ inline void transition_image_layout(const vk::raii::CommandBuffer &cmd,
 		dst_access_mask = vk::AccessFlagBits::eTransferWrite;
 		break;
 	default:
-		KOBRA_ASSERT(false, "Unsupported new layout");
+		KOBRA_ASSERT(false, "Unsupported new layout " + vk::to_string(new_layout));
 		break;
         }
 
@@ -877,7 +883,7 @@ inline void transition_image_layout(const vk::raii::CommandBuffer &cmd,
 	case vk::ImageLayout::eTransferSrcOptimal:
 		destination_stage = vk::PipelineStageFlagBits::eTransfer; break;
 	default:
-		KOBRA_ASSERT(false, "Unsupported new layout");
+		KOBRA_ASSERT(false, "Unsupported new layout " + vk::to_string(new_layout));
 		break;
         }
 
@@ -912,22 +918,33 @@ inline void transition_image_layout(const vk::raii::CommandBuffer &cmd,
 struct ImageData {
 	vk::Format		format;
 	vk::Extent2D		extent;
+	vk::ImageTiling		tiling;
+	vk::ImageUsageFlags	usage;
+	vk::ImageLayout  	layout;
+	vk::MemoryPropertyFlags	properties;
+	vk::ImageAspectFlags	aspect_mask;
 	vk::raii::Image		image = nullptr;
 	vk::raii::DeviceMemory	memory = nullptr;
 	vk::raii::ImageView	view = nullptr;
 
 	// Constructors
-	ImageData(const vk::raii::PhysicalDevice &phdev,
-			const vk::raii::Device &device,
-			const vk::Format &fmt,
-			const vk::Extent2D &ext,
-			vk::ImageTiling tiling,
-			vk::ImageUsageFlags usage,
-			vk::ImageLayout initial_layout,
-			vk::MemoryPropertyFlags memory_properties,
-			vk::ImageAspectFlags aspect_mask)
-			: format {fmt}, extent {ext},
-			image {device,
+	ImageData(const vk::raii::PhysicalDevice &phdev_,
+			const vk::raii::Device &device_,
+			const vk::Format &fmt_,
+			const vk::Extent2D &ext_,
+			vk::ImageTiling tiling_,
+			vk::ImageUsageFlags usage_,
+			vk::ImageLayout initial_layout_,
+			vk::MemoryPropertyFlags memory_properties_,
+			vk::ImageAspectFlags aspect_mask_)
+			: format {fmt_},
+			extent {ext_},
+			tiling {tiling_},
+			usage {usage_},
+			layout {initial_layout_},
+			properties {memory_properties_},
+			aspect_mask {aspect_mask_},
+			image {device_,
 				  {
 					  vk::ImageCreateFlags(),
 					  vk::ImageType::e2D,
@@ -940,26 +957,123 @@ struct ImageData {
 					  usage | vk::ImageUsageFlagBits::eSampled,
 					  vk::SharingMode::eExclusive,
 					  {},
-					  initial_layout
+					  layout
 				  }
 			},
 
 			memory {
 				allocate_device_memory(
-					device, phdev.getMemoryProperties(),
+					device_, phdev_.getMemoryProperties(),
 					image.getMemoryRequirements(),
-					memory_properties
+					memory_properties_
 				)
 			} {
 		image.bindMemory(*memory, 0);
 		view = vk::raii::ImageView {
-			device,
+			device_,
 			vk::ImageViewCreateInfo {
 				{}, *image, vk::ImageViewType::e2D,
-				format, {}, { aspect_mask, 0, 1, 0, 1 }
+				format, {}, {aspect_mask, 0, 1, 0, 1}
 			}
 		};
 	}
+
+	ImageData(std::nullptr_t) {}
+
+	// Transition the image to a new layout
+	void transition_layout(const vk::raii::CommandBuffer &cmd,
+				const vk::ImageLayout &new_layout) {
+		transition_image_layout(cmd, *image, format, layout, new_layout);
+		layout = new_layout;
+	}
+
+	void transition_layout(const vk::raii::Device &device,
+			const vk::raii::CommandPool &command_pool,
+			const vk::ImageLayout &new_layout) {
+		// Create temporary command buffer
+		auto cmd = make_command_buffer(device, command_pool);
+		cmd.begin({});
+
+		// Transition the image to a new layout
+		transition_layout(cmd, new_layout);
+		cmd.end();
+
+		// Submit the command buffer
+		vk::raii::Queue queue {device, 0, 0};
+	
+		queue.submit(
+			vk::SubmitInfo {
+				0, nullptr, nullptr, 1, &*cmd
+			},
+			nullptr
+		);
+
+		// Wait for the command buffer to finish
+		queue.waitIdle();
+	}	
+
+	/* Create a copy of the image data
+	ImageData copy(const vk::raii::PhysicalDevice &phdev,
+			const vk::raii::Device &device,
+			const vk::raii::CommandPool &command_pool) const {
+		ImageData copy {
+			phdev, device,
+			format, extent, tiling,
+			vk::ImageUsageFlagBits::eSampled
+				| vk::ImageUsageFlagBits::eTransferDst,
+			vk::ImageLayout::ePreinitialized,
+			properties,
+			aspect_mask
+		};
+
+		// Create a temporary command buffer
+		auto cmd = make_command_buffer(device, command_pool);
+
+		// Transition layuot, then copy image data
+		{
+			// Start recording the command buffer
+			cmd.begin({vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+
+			// Transition for copying
+			transition_image_layout(cmd, *image, format, layout, vk::ImageLayout::eTransferSrcOptimal);
+
+			vk::ImageCopy copy_region {
+				{vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+				{0, 0, 0},
+				{vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+				{0, 0, 0},
+				{extent.width, extent.height, 1}
+			};
+
+			cmd.copyImage(
+				*image, vk::ImageLayout::eTransferSrcOptimal,
+				*copy.image, vk::ImageLayout::eTransferDstOptimal,
+				copy_region
+			);
+
+			// Transition to original layout
+			// transition_image_layout(cmd, *image, format, vk::ImageLayout::eTransferSrcOptimal, layout);
+
+			// End recording the command buffer
+			cmd.end();
+		}
+
+		// Queue to submit commands to
+		vk::raii::Queue queue {device, 0, 0};
+
+		// Submit the command buffer
+		queue.submit(
+			vk::SubmitInfo {
+				0, nullptr, nullptr, 1, &*cmd
+			},
+			nullptr
+		);
+
+		// Wait for the command buffer to finish
+		queue.waitIdle();
+
+		return copy;
+	} */
 
 	// Blank image
 	static ImageData blank(const vk::raii::PhysicalDevice &phdev,
@@ -974,18 +1088,21 @@ struct ImageData {
 			vk::ImageAspectFlagBits::eColor
 		);
 	}
-
-	ImageData(std::nullptr_t) {}
 };
 
 // Buffer data wrapper
-struct BufferData {
-	vk::DeviceSize		size;
-	vk::BufferUsageFlags	flags;
-	vk::MemoryPropertyFlags	memory_properties;
+class BufferData {
+	// Buffer permanent data
+	const vk::raii::Device			*_device = nullptr;
+	vk::PhysicalDeviceMemoryProperties	_memory_properties;
+public:
+	// Once-a-lifetime properties
+	vk::DeviceSize				size;
+	vk::BufferUsageFlags			flags;
+	vk::MemoryPropertyFlags			memory_properties;
 
-	vk::raii::Buffer	buffer = nullptr;
-	vk::raii::DeviceMemory	memory = nullptr;
+	vk::raii::Buffer			buffer = nullptr;
+	vk::raii::DeviceMemory			memory = nullptr;
 
 	// Constructors
 	BufferData(const vk::raii::PhysicalDevice &phdev,
@@ -993,7 +1110,9 @@ struct BufferData {
 			const vk::DeviceSize &size,
 			vk::BufferUsageFlags usage,
 			vk::MemoryPropertyFlags memory_properties)
-			: size { size },
+			: _device(&device),
+			_memory_properties(phdev.getMemoryProperties()),
+			size { size },
 			flags { usage },
 			memory_properties { memory_properties },
 
@@ -1017,43 +1136,74 @@ struct BufferData {
 
 	// Upload data to buffer
 	template <class T>
-	void upload(const std::vector <T> &data) const {
+	bool upload(const std::vector <T> &data, bool auto_resize = true) {
+		static constexpr char prop_msg[] = "Buffer data must be host coherent and host visible";
+		static constexpr char size_msg[] = "Buffer size is smaller than data size";
+
+		// Resize status
+		bool resized = false;
+
 		// Assertions
 		KOBRA_ASSERT(
 			(memory_properties & vk::MemoryPropertyFlagBits::eHostCoherent)
 				&& (memory_properties & vk::MemoryPropertyFlagBits::eHostVisible),
-			"Buffer data must be host coherent and host visible"
+			prop_msg
 		);
 
-		KOBRA_ASSERT(
-			data.size() * sizeof(T) <= size,
-			"Buffer size is smaller than data size"
-		);
+		bool smaller = (data.size() * sizeof(T) <= size);
+
+		KOBRA_ASSERT(smaller || auto_resize, size_msg);
+		if (!smaller) {
+			KOBRA_LOG_FUNC(warn) << size_msg << " (size = " << size
+				<< ", data size = " << data.size() * sizeof(T)
+				<< ")" << std::endl;
+
+			// Resize buffer
+			resize(data.size() * sizeof(T));
+			resized = true;
+		}
 
 		// Upload data
 		void *ptr = memory.mapMemory(0, size);
 		memcpy(ptr, data.data(), data.size() * sizeof(T));
 		memory.unmapMemory();
+
+		return resized;
 	}
 
 	template <class T>
-	void upload(const T *const data, const vk::DeviceSize &size) const {
+	bool upload(const T *const data, const vk::DeviceSize &size_, bool auto_resize = true) {
+		static constexpr char prop_msg[] = "Buffer data must be host coherent and host visible";
+		static constexpr char size_msg[] = "Buffer size is smaller than data size";
+
+		// Resize status
+		bool resized = false;
+
 		// Assertions
 		KOBRA_ASSERT(
 			(memory_properties & vk::MemoryPropertyFlagBits::eHostCoherent)
 				&& (memory_properties & vk::MemoryPropertyFlagBits::eHostVisible),
-			"Buffer data must be host coherent and host visible"
+			prop_msg
 		);
 
-		KOBRA_ASSERT(
-			size <= this->size,
-			"Buffer size is smaller than data size"
-		);
+		bool smaller = (size_ <= size);
+		KOBRA_ASSERT(smaller || auto_resize, size_msg);
+
+		if (!smaller) {
+			KOBRA_LOG_FUNC(warn) << size_msg << " (size = " << size
+				<< ", buffer size = " << size << ")" << std::endl;
+
+			// Resize buffer
+			resize(size_);
+			resized = true;
+		}
 
 		// Upload data
 		void *ptr = memory.mapMemory(0, size);
 		memcpy(ptr, data, size);
 		memory.unmapMemory();
+
+		return resized;
 	}
 
 	// Get buffer data
@@ -1073,6 +1223,35 @@ struct BufferData {
 		memory.unmapMemory();
 
 		return data;
+	}
+
+	// Resize buffer
+	void resize(const vk::DeviceSize &size_) {
+		// Assertions
+		KOBRA_ASSERT(
+			(memory_properties & vk::MemoryPropertyFlagBits::eHostCoherent)
+				&& (memory_properties & vk::MemoryPropertyFlagBits::eHostVisible),
+			"Buffer data must be host coherent and host visible"
+		);
+
+		// Resize buffer
+		size = size_;
+
+		buffer = vk::raii::Buffer {
+			*_device,
+			vk::BufferCreateInfo {
+				{}, size, flags,
+			}
+		};
+
+		memory = allocate_device_memory(
+			*_device, _memory_properties,
+			buffer.getMemoryRequirements(),
+			memory_properties
+		);
+
+		// Bind memory
+		buffer.bindMemory(*memory, 0);
 	}
 };
 
@@ -1287,7 +1466,7 @@ inline vk::raii::RenderPass make_render_pass(const vk::raii::Device &device,
 	vk::AttachmentDescription color_attachment {
 		{}, format,
 		vk::SampleCountFlagBits::e1,
-		vk::AttachmentLoadOp::eClear,
+		load_op,
 		vk::AttachmentStoreOp::eStore,
 		vk::AttachmentLoadOp::eDontCare,
 		vk::AttachmentStoreOp::eDontCare,
@@ -1303,7 +1482,7 @@ inline vk::raii::RenderPass make_render_pass(const vk::raii::Device &device,
 		vk::AttachmentDescription depth_attachment {
 			{}, depth_format,
 			vk::SampleCountFlagBits::e1,
-			vk::AttachmentLoadOp::eClear,
+			load_op,
 			vk::AttachmentStoreOp::eDontCare,
 			vk::AttachmentLoadOp::eDontCare,
 			vk::AttachmentStoreOp::eDontCare,
@@ -1431,7 +1610,11 @@ inline vk::raii::DescriptorPool make_descriptor_pool(const vk::raii::Device &dev
 	// Create descriptor pool
 	return vk::raii::DescriptorPool(device,
 		vk::DescriptorPoolCreateInfo {
-			{}, max_sets, pool_sizes
+			{
+				vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind
+					| vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet
+			},
+			max_sets, pool_sizes
 		}
 	);
 }
@@ -1442,7 +1625,8 @@ using DSLB = std::tuple <uint32_t, vk::DescriptorType, uint32_t, vk::ShaderStage
 // TODO: is this function even required? 1:1 parameter mapping
 inline vk::raii::DescriptorSetLayout make_descriptor_set_layout
 		(const vk::raii::Device &device,
-		const std::vector <DSLB> &bindings)
+		const std::vector <DSLB> &bindings,
+		const vk::DescriptorSetLayoutCreateFlags &flags = {})
 {
 	std::vector <vk::DescriptorSetLayoutBinding> layout_bindings(bindings.size());
 	for (size_t i = 0; i < bindings.size(); ++i) {
@@ -1457,7 +1641,7 @@ inline vk::raii::DescriptorSetLayout make_descriptor_set_layout
 	// Create descriptor set layout
 	return vk::raii::DescriptorSetLayout(device,
 		vk::DescriptorSetLayoutCreateInfo {
-			{}, layout_bindings
+			flags, layout_bindings
 		}
 	);
 }
@@ -1524,6 +1708,7 @@ struct GraphicsPipelineInfo {
 	vk::raii::ShaderModule fragment_shader;
 	const vk::SpecializationInfo *fragment_specialization = nullptr;
 
+	bool no_bindings = false;
 	vk::VertexInputBindingDescription vertex_binding;
 	std::vector <vk::VertexInputAttributeDescription> vertex_attributes;
 
@@ -1558,7 +1743,7 @@ inline vk::raii::Pipeline make_graphics_pipeline(const GraphicsPipelineInfo &inf
 
 	// Vertex input state
 	vk::PipelineVertexInputStateCreateInfo vertex_input_info {
-		{}, 1, &info.vertex_binding,
+		{}, !info.no_bindings, &info.vertex_binding,
 		(uint32_t) info.vertex_attributes.size(),
 		info.vertex_attributes.data()
 	};

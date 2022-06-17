@@ -72,7 +72,8 @@ class Layer : public kobra::Layer <_element> {
 		_render_pass = make_render_pass(
 			*_device,
 			swapchain_format,
-			depth_format
+			depth_format,
+			load
 		);
 	}
 

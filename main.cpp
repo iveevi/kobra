@@ -1,6 +1,3 @@
-#define KOBRA_VALIDATION_LAYERS
-#define KOBRA_THROW_ERROR
-
 #include "global.hpp"
 #include "include/app.hpp"
 #include "include/backend.hpp"
@@ -13,7 +10,7 @@
 using namespace kobra;
 
 // Scene path
-std::string scene_path = "../assets/scene.kobra";
+std::string scene_path = "scenes/room.kobra";
 
 // Experimental GUI app
 class GUIApp : public BaseApp {

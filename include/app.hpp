@@ -93,6 +93,9 @@ public:
 		glfwSetKeyCallback(window.handle, &io::keyboard_callback);
 
 		// TODO: store memory requirements
+
+		// Initialize IO info
+		io.input = io::Input(window.handle);
 	}
 
 	// Virtual destructor

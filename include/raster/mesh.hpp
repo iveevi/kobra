@@ -26,7 +26,7 @@ public:
 	Mesh() = default;
 
 	// Constructor
-	Mesh (const vk::raii::PhysicalDevice &phdev,
+	Mesh(const vk::raii::PhysicalDevice &phdev,
 			const vk::raii::Device &device,
 			const kobra::Mesh &mesh)
 			: Object(mesh.name(), object_type, mesh.transform()),

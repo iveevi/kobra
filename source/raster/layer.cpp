@@ -43,7 +43,10 @@ void Layer::_initialize_vulkan_structures
 	_render_pass = make_render_pass(_device, swapchain_format, depth_format);
 
 	// Create descriptor set layout
-	_dsl_full = make_descriptor_set_layout(_device, _full_dsl_bindings);
+	_dsl_full = make_descriptor_set_layout(
+		_device, _full_dsl_bindings,
+		vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool
+	);
 
 	// Load necessary shader modules
 	// TODO: create a map of names to shaders (for fragment, since

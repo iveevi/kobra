@@ -226,6 +226,7 @@ void Layer::_init_postprocess_pipeline()
 		.vertex_shader = std::move(shaders[0]),
 		.fragment_shader = std::move(shaders[1]),
 
+		.no_bindings = true,
 		.vertex_binding = {},
 		.vertex_attributes = {},
 
@@ -367,11 +368,12 @@ Layer::Layer(const vk::raii::PhysicalDevice &phdev,
 
 	auto usage = vk::BufferUsageFlagBits::eStorageBuffer;
 	auto mem_props = vk::MemoryPropertyFlagBits::eDeviceLocal
+		| vk::MemoryPropertyFlagBits::eHostCoherent
 		| vk::MemoryPropertyFlagBits::eHostVisible;
 
 	_dev.pixels = BufferData(
 		_physical_device, device, pixels_size,
-		usage | vk::BufferUsageFlagBits::eTransferDst, mem_props
+		usage | vk::BufferUsageFlagBits::eTransferSrc, mem_props
 	);
 
 	_dev.vertices = BufferData(phdev, device, vec4_size, usage, mem_props);
@@ -388,7 +390,7 @@ Layer::Layer(const vk::raii::PhysicalDevice &phdev,
 
 	// Rebind to descriptor sets
 	_bvh = BVH(_physical_device, _device, _get_bboxes());
-	
+
 	bind_ds(_device,
 		_dset_raytracing, _bvh.buffer,
 		vk::DescriptorType::eStorageBuffer,
@@ -414,13 +416,34 @@ Layer::Layer(const vk::raii::PhysicalDevice &phdev,
 	_samplers.result_image = ImageData(_physical_device, _device,
 		vk::Format::eR8G8B8A8Unorm, _extent,
 		vk::ImageTiling::eOptimal,
-		vk::ImageUsageFlagBits::eSampled,
+		vk::ImageUsageFlagBits::eSampled
+			| vk::ImageUsageFlagBits::eTransferDst,
 		vk::ImageLayout::ePreinitialized,
 		vk::MemoryPropertyFlagBits::eDeviceLocal,
 		vk::ImageAspectFlagBits::eColor
 	);
 
 	_samplers.result = make_sampler(_device, _samplers.result_image);
+
+	// Transition image layout
+	auto tmp_cmd = make_command_buffer(_device, _command_pool);
+	auto queue = vk::raii::Queue {_device, 0, 0};
+
+	{
+		tmp_cmd.begin({});
+		_samplers.environment_image.transition_layout(tmp_cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
+		_samplers.empty_image.transition_layout(tmp_cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
+		tmp_cmd.end();
+	}
+
+	queue.submit(
+		vk::SubmitInfo {
+			0, nullptr, nullptr, 1, &*tmp_cmd
+		},
+		nullptr
+	);
+
+	queue.waitIdle();
 
 	// Binding environment and result sampler
 	bind_ds(_device,
@@ -434,6 +457,13 @@ Layer::Layer(const vk::raii::PhysicalDevice &phdev,
 		_dset_raytracing,
 		_dev.pixels,
 		vk::DescriptorType::eStorageBuffer,
+		MESH_BINDING_PIXELS
+	);
+
+	bind_ds(_device,
+		_dset_postprocess,
+		_samplers.result,
+		_samplers.result_image,
 		MESH_BINDING_PIXELS
 	);
 
@@ -480,10 +510,10 @@ void Layer::add_do(const ptr &e)
 		.vertices = _host.vertices,
 		.triangles = _host.triangles,
 		.materials = _host.materials,
-		
+
 		.lights = _host.lights,
 		.light_indices = _host.light_indices,
-		
+
 		.transforms = _host.transforms,
 
 		.albedo_samplers = _albedo_image_descriptors,
@@ -562,7 +592,10 @@ void Layer::set_environment_map(ImageData &&image)
 {
 	// Copy, create a new sampler, and rebind
 	_samplers.environment_image = std::move(image);
+
+	// Create sampler and bind
 	_samplers.environment = make_sampler(_device, _samplers.environment_image);
+
 	bind_ds(_device,
 		_dset_raytracing,
 		_samplers.environment,
@@ -720,6 +753,29 @@ void Layer::render(const vk::raii::CommandBuffer &cmd,
 		return;
 	}
 
+	// Set viewport
+	auto viewport = vk::Viewport {
+		0.0f, 0.0f,
+		static_cast <float> (_extent.width),
+		static_cast <float> (_extent.height),
+		0.0f, 1.0f
+	};
+
+	cmd.setViewport(0, viewport);
+
+	// Set scissor
+	auto scissor = vk::Rect2D {
+		vk::Offset2D {0, 0},
+		_extent
+	};
+
+	cmd.setScissor(0, scissor);
+
+	/* Transition layouts if necessary
+	if (_samplers.environment_image.layout != vk::ImageLayout::eShaderReadOnlyOptimal) {
+		_samplers.environment_image.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
+	} */
+
 	// Run the raytracing pipeline
 	cmd.bindPipeline(
 		vk::PipelineBindPoint::eCompute,
@@ -797,7 +853,7 @@ void Layer::render(const vk::raii::CommandBuffer &cmd,
 	// Wait for the compute shader to finish
 	cmd.pipelineBarrier(
 		vk::PipelineStageFlagBits::eComputeShader,
-		vk::PipelineStageFlagBits::eTransfer,
+		vk::PipelineStageFlagBits::eComputeShader,
 		vk::DependencyFlags {},
 		nullptr,
 		{buffer_barrier},
@@ -809,57 +865,57 @@ void Layer::render(const vk::raii::CommandBuffer &cmd,
 		vk::PipelineBindPoint::eGraphics,
 		*_pipelines.postprocess
 	);
-	
+
 	// Copy buffer to result image
-	vk::BufferImageCopy buffer_image_copy {
+	/* vk::BufferImageCopy buffer_image_copy {
 		0, 0, 0,
 		{vk::ImageAspectFlagBits::eColor, 0, 0, 1},
 		{0, 0, 0},
 		{_extent.width, _extent.height, 1}
-	};
+	}; */
 
-	/* _final_texture.transition_manual(cmd,
-		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
-	); */
+	// Transition the result image to transfer destination
+	_samplers.result_image.transition_layout(cmd, vk::ImageLayout::eTransferDstOptimal);
 
-	cmd.copyBufferToImage(
+	/* cmd.copyBufferToImage(
 		*_dev.pixels.buffer,
 		*_samplers.result_image.image,
 		vk::ImageLayout::eTransferDstOptimal,
 		{buffer_image_copy}
-	);
-
-	/* _final_texture.transition_manual(cmd,
-		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
 	); */
 
-	// Image memory barrier
-	/* VkImageMemoryBarrier image_barrier {
-		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-		.pNext = nullptr,
-		.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-		.dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
-		.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-		.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-		.image = _final_texture.image,
-		.subresourceRange = {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-			.baseMipLevel = 0,
-			.levelCount = 1,
-			.baseArrayLayer = 0,
-			.layerCount = 1
-		}
+	copy_data_to_image(cmd,
+		_dev.pixels.buffer,
+		_samplers.result_image.image,
+		_samplers.result_image.format,
+		_extent.width,
+		_extent.height
+	);
+
+	// Transition image back to shader read
+	_samplers.result_image.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
+
+	/* Image memory barrier
+	vk::ImageMemoryBarrier image_barrier {
+		vk::AccessFlagBits::eTransferWrite,
+		vk::AccessFlagBits::eShaderRead,
+		vk::ImageLayout::eTransferDstOptimal,
+		vk::ImageLayout::eShaderReadOnlyOptimal,
+		VK_QUEUE_FAMILY_IGNORED,
+		VK_QUEUE_FAMILY_IGNORED,
+		*_samplers.result_image.image,
+		{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}
 	};
 
-	// Wait for the copy to finish */
+	// Wait for the copy to finish
+	cmd.pipelineBarrier(
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::PipelineStageFlagBits::eFragmentShader,
+		vk::DependencyFlags {},
+		nullptr,
+		nullptr,
+		{image_barrier}
+	); */
 
 	// Bind descriptor set
 	cmd.bindDescriptorSets(
@@ -867,7 +923,7 @@ void Layer::render(const vk::raii::CommandBuffer &cmd,
 		*_pipelines.postprocess_layout,
 		0, {*_dset_postprocess}, {}
 	);
-		
+
 	// Start render pass
 	std::array <vk::ClearValue, 2> clear_values = {
 		vk::ClearValue {

@@ -176,7 +176,10 @@ public:
 		// Create the descriptor set
 		// TODO: remove later, use the ones from font
 		// _layout = Glyph::make_bitmap_dsl(context);
-		_descriptor_set_layout = make_descriptor_set_layout(device, {Glyph::bitmap_binding});
+		_descriptor_set_layout = make_descriptor_set_layout(
+			device, {Glyph::bitmap_binding},
+			vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool
+		);
 
 		// Allocate vertex buffer
 		// TODO: auto resizing for vertex buffer
