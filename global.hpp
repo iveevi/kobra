@@ -8,7 +8,7 @@
 
 // Engine macros
 #define KOBRA_VALIDATION_LAYERS
-// #define KOBRA_ERROR_ONLY
+#define KOBRA_ERROR_ONLY
 #define KOBRA_THROW_ERROR
 
 // Engine headers
@@ -526,9 +526,9 @@ public:
 
 			rt_layer.render(cmd, framebuffer, extent, batch, batch_index);
 
-			batch.increment(batch_index);
+			/* batch.increment(batch_index);
 			if (batch.completed())
-				batch.reset();
+				batch.reset(); */
 		}
 
 		// Render GUI

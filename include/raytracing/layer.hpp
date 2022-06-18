@@ -36,6 +36,9 @@ public:
 		BIDIRECTIONAL_PATH_TRACE
 	};
 protected:
+	// Multiprocessing compute batches
+	const int PARALLELIZATION = 8;
+
 	// Camera things
 	std::vector <Camera>		_cameras;
 	Camera				*_active_camera = nullptr;
@@ -48,6 +51,11 @@ protected:
 
 	vk::raii::RenderPass		_render_pass = nullptr;
 	vk::Extent2D			_extent;
+
+	// Resources for multiprocessing
+	std::vector <vk::raii::Queue>	_queues;
+	std::vector <vk::raii::CommandBuffer>
+					_command_buffers;
 
 	// Pipelines
 	struct {
@@ -210,6 +218,9 @@ protected:
 
 	// Get list of bboxes for each triangle
 	std::vector <BoundingBox> _get_bboxes() const;
+
+	// Launch an RT batch kernel
+	void _launch_kernel(uint32_t, const Batch &, const BatchIndex &bi);
 public:
 	// Default constructor
 	Layer() = default;
@@ -260,8 +271,8 @@ public:
 	void render(const vk::raii::CommandBuffer &,
 			const vk::raii::Framebuffer &,
 			const vk::Extent2D &,
-			const Batch &,
-			const BatchIndex &);
+			Batch &,
+			BatchIndex &);
 };
 
 }

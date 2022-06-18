@@ -255,18 +255,18 @@ void Layer::_init_pipelines()
 	);
 
 	// Then, create the descriptor sets
-	std::array <vk::DescriptorSetLayout, 2> dsls {
-		*_dsl_raytracing,
-		*_dsl_postprocess
-	};
-
-	auto dset = vk::raii::DescriptorSets {
+	auto dset1 = vk::raii::DescriptorSets {
 		_device,
-		{*_descriptor_pool, dsls}
+		{*_descriptor_pool, *_dsl_raytracing},
 	};
 
-	_dset_raytracing = std::move(dset[0]);
-	_dset_postprocess = std::move(dset[1]);
+	auto dset2 = vk::raii::DescriptorSets {
+		_device,
+		{*_descriptor_pool, *_dsl_postprocess},
+	};
+
+	_dset_raytracing = std::move(dset1.front());
+	_dset_postprocess = std::move(dset2.front());
 
 	// All pipelines
 	_init_compute_pipelines();
@@ -351,6 +351,48 @@ Layer::Layer(const vk::raii::PhysicalDevice &phdev,
 		_descriptor_pool(descriptor_pool),
 		_extent(extent)
 {
+	// Organize queues
+	// TODO: helper function
+	auto queue_families = _physical_device.getQueueFamilyProperties();
+	auto graphics_familiy = find_graphics_queue_family(_physical_device);
+
+	// TODO: singleton queue tracker to track which queues are in use
+
+	KOBRA_LOG_FILE(notify) << "Queue families:\n";
+	std::cout << dev_info(_physical_device) << std::endl;
+
+	std::cout << "Scanning for compute queues:\n";
+	std::cout << "\t# of queues: " << queue_families.size() << std::endl;
+	int count = 0;
+	for (uint32_t i = 0; i < queue_families.size(); i++) {
+		const auto &qf = queue_families[i];
+		std::cout << "\t" << qf.queueCount << " queues in family " << i << std::endl;
+		if (qf.queueCount > 0 && (qf.queueFlags & vk::QueueFlagBits::eCompute)){
+			count += qf.queueCount;
+
+			// TODO: acquire queue method or something
+			int j = 0;
+			while (_queues.size() < PARALLELIZATION) {
+				// TODO: dont hardcode..., check which queues
+				// are already in use...
+				if (i == graphics_familiy && j == 0) {
+					j++;
+					continue;
+				}
+
+				_queues.emplace_back(_device, i, j++);
+				_command_buffers.emplace_back(
+					make_command_buffer(
+						_device,
+						_command_pool
+					)
+				);
+			}
+		}
+	}
+
+	KOBRA_LOG_FILE(notify) << "Found " << count << " compute queues\n";
+
 	// Create the render pass
 	_render_pass = make_render_pass(_device,
 		swapchain_format,
@@ -372,21 +414,21 @@ Layer::Layer(const vk::raii::PhysicalDevice &phdev,
 		| vk::MemoryPropertyFlagBits::eHostVisible;
 
 	_dev.pixels = BufferData(
-		_physical_device, device, pixels_size,
+		_physical_device, _device, pixels_size,
 		usage | vk::BufferUsageFlagBits::eTransferSrc, mem_props
 	);
 
-	_dev.vertices = BufferData(phdev, device, vec4_size, usage, mem_props);
-	_dev.triangles = BufferData(phdev, device, vec4_size, usage, mem_props);
-	_dev.materials = BufferData(phdev, device, vec4_size, usage, mem_props);
+	_dev.vertices = BufferData(phdev, _device, vec4_size, usage, mem_props);
+	_dev.triangles = BufferData(phdev, _device, vec4_size, usage, mem_props);
+	_dev.materials = BufferData(phdev, _device, vec4_size, usage, mem_props);
 
-	_dev.lights = BufferData(phdev, device, vec4_size, usage, mem_props);
-	_dev.light_indices = BufferData(phdev, device, uint_size, usage, mem_props);
+	_dev.lights = BufferData(phdev, _device, vec4_size, usage, mem_props);
+	_dev.light_indices = BufferData(phdev, _device, uint_size, usage, mem_props);
 
-	_dev.transforms = BufferData(phdev, device, mat4_size, usage, mem_props);
+	_dev.transforms = BufferData(phdev, _device, mat4_size, usage, mem_props);
 
-	// Initial (blank) binding
 	_dev.bind(_device, _dset_raytracing);
+	// Initial (blank) binding
 
 	// Rebind to descriptor sets
 	_bvh = BVH(_physical_device, _device, _get_bboxes());
@@ -398,22 +440,23 @@ Layer::Layer(const vk::raii::PhysicalDevice &phdev,
 	);
 
 	// Bind to descriptor sets
-	bind_ds(device,
+	bind_ds(_device,
 		_dset_raytracing, _dev.pixels,
 		vk::DescriptorType::eStorageBuffer,
 		MESH_BINDING_PIXELS
 	);
 
 	// Sampler source images
-	_samplers.empty_image = ImageData::blank(_physical_device, device);
-	_samplers.environment_image = ImageData::blank(_physical_device, device);
+	_samplers.empty_image = ImageData::blank(_physical_device, _device);
+	_samplers.environment_image = ImageData::blank(_physical_device, _device);
 
 	// Initialize samplers
 	_samplers.empty = make_sampler(_device, _samplers.empty_image);
 	_samplers.environment = make_sampler(_device, _samplers.environment_image);
 
 	// Output image and sampler
-	_samplers.result_image = ImageData(_physical_device, _device,
+	_samplers.result_image = ImageData(
+		_physical_device, _device,
 		vk::Format::eR8G8B8A8Unorm, _extent,
 		vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eSampled
@@ -734,50 +777,15 @@ void Layer::display_memory_footprint() const
 	Logger::plain() << "\n"; */
 }
 
-// Render a batch
-void Layer::render(const vk::raii::CommandBuffer &cmd,
-		const vk::raii::Framebuffer &framebuffer,
-		const vk::Extent2D &extent,
-		const Batch &batch,
-		const BatchIndex &bi)
+// Laucnh RT batch kernel
+void Layer::_launch_kernel(uint32_t index, const Batch &batch, const BatchIndex &bi)
 {
-	// Handle null pipeline
-	if (!_initialized) {
-		KOBRA_LOG_FUNC(warn) << "rt::Layer is not yet initialized\n";
-		return;
-	}
+	auto &computer = _command_buffers[index];
 
-	// Handle null active camera
-	if (_active_camera == nullptr) {
-		KOBRA_LOG_FUNC(warn) << "rt::Layer has no active camera\n";
-		return;
-	}
-
-	// Set viewport
-	auto viewport = vk::Viewport {
-		0.0f, 0.0f,
-		static_cast <float> (_extent.width),
-		static_cast <float> (_extent.height),
-		0.0f, 1.0f
-	};
-
-	cmd.setViewport(0, viewport);
-
-	// Set scissor
-	auto scissor = vk::Rect2D {
-		vk::Offset2D {0, 0},
-		_extent
-	};
-
-	cmd.setScissor(0, scissor);
-
-	/* Transition layouts if necessary
-	if (_samplers.environment_image.layout != vk::ImageLayout::eShaderReadOnlyOptimal) {
-		_samplers.environment_image.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
-	} */
+	computer.begin({});
 
 	// Run the raytracing pipeline
-	cmd.bindPipeline(
+	computer.bindPipeline(
 		vk::PipelineBindPoint::eCompute,
 		*_active_pipeline()
 	);
@@ -824,21 +832,90 @@ void Layer::render(const vk::raii::CommandBuffer &cmd,
 	};
 
 	// Bind descriptor set
-	cmd.bindDescriptorSets(
+	computer.bindDescriptorSets(
 		vk::PipelineBindPoint::eCompute,
 		*_pipelines.raytracing_layout,
 		0, {*_dset_raytracing}, {}
 	);
 
 	// Push constants
-	cmd.pushConstants <PushConstants> (
+	computer.pushConstants <PushConstants> (
 		*_pipelines.raytracing_layout,
 		vk::ShaderStageFlagBits::eCompute,
 		0, pc
 	);
 
 	// Dispatch the compute shader
-	cmd.dispatch(bi.width, bi.height, 1);
+	computer.dispatch(bi.width, bi.height, 1);
+	computer.end();
+
+	// Submit the command buffer
+	vk::SubmitInfo submit_info {
+		0, nullptr, nullptr,
+		1, &*computer
+	};
+
+	_queues[index].submit(submit_info, nullptr);
+
+	// Callback for batch index
+	bi.callback();
+}
+
+// Render a batch
+void Layer::render(const vk::raii::CommandBuffer &cmd,
+		const vk::raii::Framebuffer &framebuffer,
+		const vk::Extent2D &extent,
+		Batch &batch,
+		BatchIndex &bi)
+{
+	// Handle null pipeline
+	if (!_initialized) {
+		KOBRA_LOG_FUNC(warn) << "rt::Layer is not yet initialized\n";
+		return;
+	}
+
+	// Handle null active camera
+	if (_active_camera == nullptr) {
+		KOBRA_LOG_FUNC(warn) << "rt::Layer has no active camera\n";
+		return;
+	}
+
+	// Set viewport
+	auto viewport = vk::Viewport {
+		0.0f, 0.0f,
+		static_cast <float> (_extent.width),
+		static_cast <float> (_extent.height),
+		0.0f, 1.0f
+	};
+
+	cmd.setViewport(0, viewport);
+
+	// Set scissor
+	auto scissor = vk::Rect2D {
+		vk::Offset2D {0, 0},
+		_extent
+	};
+
+	cmd.setScissor(0, scissor);
+
+	/* Transition layouts if necessary
+	if (_samplers.environment_image.layout != vk::ImageLayout::eShaderReadOnlyOptimal) {
+		_samplers.environment_image.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
+	} */
+
+	// Launch RT batch kernel
+	for (uint32_t i = 0; i < PARALLELIZATION; i++) {
+		_launch_kernel(i, batch, bi);
+
+		batch.increment(bi);
+		if (batch.completed())
+			batch.reset();
+	}
+
+	// Wait for the command buffers to finish
+	// TODO: fences
+	for (uint32_t i = 0; i < PARALLELIZATION; i++)
+		_queues[i].waitIdle();
 
 	// Buffer memory barrier
 	vk::BufferMemoryBarrier buffer_barrier {
@@ -850,7 +927,7 @@ void Layer::render(const vk::raii::CommandBuffer &cmd,
 		0, _dev.pixels.size
 	};
 
-	// Wait for the compute shader to finish
+	/* Wait for the compute shader to finish
 	cmd.pipelineBarrier(
 		vk::PipelineStageFlagBits::eComputeShader,
 		vk::PipelineStageFlagBits::eComputeShader,
@@ -858,7 +935,7 @@ void Layer::render(const vk::raii::CommandBuffer &cmd,
 		nullptr,
 		{buffer_barrier},
 		nullptr
-	);
+	); */
 
 	// Post process pipeline
 	cmd.bindPipeline(
@@ -866,23 +943,8 @@ void Layer::render(const vk::raii::CommandBuffer &cmd,
 		*_pipelines.postprocess
 	);
 
-	// Copy buffer to result image
-	/* vk::BufferImageCopy buffer_image_copy {
-		0, 0, 0,
-		{vk::ImageAspectFlagBits::eColor, 0, 0, 1},
-		{0, 0, 0},
-		{_extent.width, _extent.height, 1}
-	}; */
-
 	// Transition the result image to transfer destination
 	_samplers.result_image.transition_layout(cmd, vk::ImageLayout::eTransferDstOptimal);
-
-	/* cmd.copyBufferToImage(
-		*_dev.pixels.buffer,
-		*_samplers.result_image.image,
-		vk::ImageLayout::eTransferDstOptimal,
-		{buffer_image_copy}
-	); */
 
 	copy_data_to_image(cmd,
 		_dev.pixels.buffer,
@@ -894,28 +956,6 @@ void Layer::render(const vk::raii::CommandBuffer &cmd,
 
 	// Transition image back to shader read
 	_samplers.result_image.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
-
-	/* Image memory barrier
-	vk::ImageMemoryBarrier image_barrier {
-		vk::AccessFlagBits::eTransferWrite,
-		vk::AccessFlagBits::eShaderRead,
-		vk::ImageLayout::eTransferDstOptimal,
-		vk::ImageLayout::eShaderReadOnlyOptimal,
-		VK_QUEUE_FAMILY_IGNORED,
-		VK_QUEUE_FAMILY_IGNORED,
-		*_samplers.result_image.image,
-		{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}
-	};
-
-	// Wait for the copy to finish
-	cmd.pipelineBarrier(
-		vk::PipelineStageFlagBits::eTransfer,
-		vk::PipelineStageFlagBits::eFragmentShader,
-		vk::DependencyFlags {},
-		nullptr,
-		nullptr,
-		{image_barrier}
-	); */
 
 	// Bind descriptor set
 	cmd.bindDescriptorSets(
@@ -955,9 +995,6 @@ void Layer::render(const vk::raii::CommandBuffer &cmd,
 	// Draw and end
 	cmd.draw(6, 1, 0, 0);
 	cmd.endRenderPass();
-
-	// Callback for batch index
-	bi.callback();
 }
 
 }

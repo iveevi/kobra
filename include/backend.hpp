@@ -498,17 +498,20 @@ inline QueueFamilyIndices find_queue_families(const vk::raii::PhysicalDevice &ph
 	};
 }
 
-// Create a logical device
+// Create logical device on an arbitrary queue
 inline vk::raii::Device make_device(const vk::raii::PhysicalDevice &phdev,
-		const QueueFamilyIndices &indices,
-		const std::vector <const char *> &extensions)
+		const uint32_t queue_family,
+		const uint32_t queue_count,
+		const std::vector <const char *> &extensions = {})
 {
-	float queue_priority = 0.0f;
+	// Queue priorities
+	std::vector <float> queue_priorities(queue_count, 1.0f);
 
 	// Create the device info
 	vk::DeviceQueueCreateInfo queue_info {
 		vk::DeviceQueueCreateFlags(),
-		indices.graphics, 1, &queue_priority
+		queue_family, queue_count,
+		queue_priorities.data()
 	};
 
 	// Create the device
@@ -522,6 +525,16 @@ inline vk::raii::Device make_device(const vk::raii::PhysicalDevice &phdev,
 	return vk::raii::Device {
 		phdev, device_info
 	};
+}
+
+// Create a logical device
+inline vk::raii::Device make_device(const vk::raii::PhysicalDevice &phdev,
+		const QueueFamilyIndices &indices,
+		const std::vector <const char *> &extensions)
+{
+	auto families = phdev.getQueueFamilyProperties();
+	uint32_t count = families[indices.graphics].queueCount;
+	return make_device(phdev, indices.graphics, count, extensions);
 }
 
 // Load Vulkan extension functions
@@ -1000,7 +1013,7 @@ struct ImageData {
 
 		// Submit the command buffer
 		vk::raii::Queue queue {device, 0, 0};
-	
+
 		queue.submit(
 			vk::SubmitInfo {
 				0, nullptr, nullptr, 1, &*cmd
@@ -1010,7 +1023,7 @@ struct ImageData {
 
 		// Wait for the command buffer to finish
 		queue.waitIdle();
-	}	
+	}
 
 	/* Create a copy of the image data
 	ImageData copy(const vk::raii::PhysicalDevice &phdev,
@@ -1154,9 +1167,13 @@ public:
 
 		KOBRA_ASSERT(smaller || auto_resize, size_msg);
 		if (!smaller) {
+#ifndef KOBRA_ERROR_ONLY
+
 			KOBRA_LOG_FUNC(warn) << size_msg << " (size = " << size
 				<< ", data size = " << data.size() * sizeof(T)
 				<< ")" << std::endl;
+
+#endif
 
 			// Resize buffer
 			resize(data.size() * sizeof(T));
@@ -1190,8 +1207,12 @@ public:
 		KOBRA_ASSERT(smaller || auto_resize, size_msg);
 
 		if (!smaller) {
+#ifndef KOBRA_ERROR_ONLY
+
 			KOBRA_LOG_FUNC(warn) << size_msg << " (size = " << size
 				<< ", buffer size = " << size << ")" << std::endl;
+
+#endif
 
 			// Resize buffer
 			resize(size_);
