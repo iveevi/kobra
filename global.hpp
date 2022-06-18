@@ -8,7 +8,7 @@
 
 // Engine macros
 #define KOBRA_VALIDATION_LAYERS
-#define KOBRA_ERROR_ONLY
+#define KOBRA_VALIDATION_ERROR_ONLY
 #define KOBRA_THROW_ERROR
 
 // Engine headers
@@ -373,7 +373,7 @@ public:
 		rt_layer.add_scene(scene);
 
 		// Initialize batch and batch index
-		batch = rt::Batch(1000, 1000, 100, 100, 1);
+		batch = rt::Batch(1000, 1000, 50, 50, 1);
 		batch_index = batch.make_batch_index(0, 0);
 		batch_index.light_samples = 1;
 

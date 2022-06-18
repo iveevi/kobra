@@ -1167,7 +1167,7 @@ public:
 
 		KOBRA_ASSERT(smaller || auto_resize, size_msg);
 		if (!smaller) {
-#ifndef KOBRA_ERROR_ONLY
+#ifndef KOBRA_VALIDATION_ERROR_ONLY
 
 			KOBRA_LOG_FUNC(warn) << size_msg << " (size = " << size
 				<< ", data size = " << data.size() * sizeof(T)
@@ -1207,7 +1207,7 @@ public:
 		KOBRA_ASSERT(smaller || auto_resize, size_msg);
 
 		if (!smaller) {
-#ifndef KOBRA_ERROR_ONLY
+#ifndef KOBRA_VALIDATION_ERROR_ONLY
 
 			KOBRA_LOG_FUNC(warn) << size_msg << " (size = " << size
 				<< ", buffer size = " << size << ")" << std::endl;

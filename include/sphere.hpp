@@ -13,7 +13,7 @@ namespace kobra {
 // Basic sphere class
 class Sphere : virtual public Object, virtual public Renderable {
 protected:
-	float		_radius;
+	float		_radius = 0;
 public:
 	static constexpr char object_type[] = "Sphere";
 
@@ -23,7 +23,8 @@ public:
 	// Copy constructor
 	Sphere(const Sphere &sphere)
 			: Object(object_type, Transform()),
-			Renderable(sphere.material().copy()) {}
+			Renderable(sphere.material().copy()),
+			_radius(sphere._radius) {}
 
 	// Constructors
 	Sphere(float radius)
@@ -79,6 +80,8 @@ public:
 		float radius;
 		std::getline(file, line);
 		std::sscanf(line.c_str(), "radius=%f", &radius);
+
+		KOBRA_LOG_FILE(ok) << "Sphere radius: " << radius << "(line = " << line << ")\n";
 
 		// Read material header
 		std::getline(file, line);

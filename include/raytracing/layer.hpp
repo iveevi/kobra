@@ -37,7 +37,7 @@ public:
 	};
 protected:
 	// Multiprocessing compute batches
-	const int PARALLELIZATION = 8;
+	const int PARALLELIZATION = 12;
 
 	// Camera things
 	std::vector <Camera>		_cameras;
@@ -56,6 +56,7 @@ protected:
 	std::vector <vk::raii::Queue>	_queues;
 	std::vector <vk::raii::CommandBuffer>
 					_command_buffers;
+	std::vector <vk::raii::Fence>	_fences;
 
 	// Pipelines
 	struct {

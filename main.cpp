@@ -10,7 +10,7 @@
 using namespace kobra;
 
 // Scene path
-std::string scene_path = "scenes/room.kobra";
+std::string scene_path = "scenes/scene.kobra";
 
 // Experimental GUI app
 class GUIApp : public BaseApp {

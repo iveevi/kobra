@@ -387,6 +387,10 @@ Layer::Layer(const vk::raii::PhysicalDevice &phdev,
 						_command_pool
 					)
 				);
+				
+				_fences.emplace_back(_device, vk::FenceCreateInfo {
+					vk::FenceCreateFlagBits::eSignaled
+				});
 			}
 		}
 	}
@@ -855,7 +859,7 @@ void Layer::_launch_kernel(uint32_t index, const Batch &batch, const BatchIndex 
 		1, &*computer
 	};
 
-	_queues[index].submit(submit_info, nullptr);
+	_queues[index].submit(submit_info, *_fences[index]);
 
 	// Callback for batch index
 	bi.callback();
@@ -903,6 +907,18 @@ void Layer::render(const vk::raii::CommandBuffer &cmd,
 		_samplers.environment_image.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
 	} */
 
+	// Wait for the fence to be signaled
+	for (uint32_t i = 0; i < PARALLELIZATION; i++) {
+		// Wait for the fence to be signaled
+		while (vk::Result(_device.waitForFences(
+			*_fences[i], true,
+			std::numeric_limits <uint64_t>::max()
+		)) != vk::Result::eSuccess);
+
+		// Reset the fence
+		_device.resetFences(*_fences[i]);
+	}
+
 	// Launch RT batch kernel
 	for (uint32_t i = 0; i < PARALLELIZATION; i++) {
 		_launch_kernel(i, batch, bi);
@@ -911,11 +927,6 @@ void Layer::render(const vk::raii::CommandBuffer &cmd,
 		if (batch.completed())
 			batch.reset();
 	}
-
-	// Wait for the command buffers to finish
-	// TODO: fences
-	for (uint32_t i = 0; i < PARALLELIZATION; i++)
-		_queues[i].waitIdle();
 
 	// Buffer memory barrier
 	vk::BufferMemoryBarrier buffer_barrier {

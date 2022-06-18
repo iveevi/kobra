@@ -140,16 +140,16 @@ Mesh Mesh::make_sphere(const glm::vec3 &center, float radius, int slices, int st
 		int i1 = (i + 1) % slices + 1;
 
 		indices.push_back(0);
-		indices.push_back(i0);
 		indices.push_back(i1);
+		indices.push_back(i0);
 
 		// Corresponding bottom
 		i0 = i + slices * (stacks - 2) + 1;
 		i1 = (i + 1) % slices + slices * (stacks - 2) + 1;
 
 		indices.push_back(vertices.size() - 1);
-		indices.push_back(i1);
 		indices.push_back(i0);
+		indices.push_back(i1);
 	}
 
 	// Middle triangles

@@ -156,6 +156,7 @@ void Layer::add_scene(const Scene &scene)
 
 			glm::vec3 pos = sphere->transform().position;
 			std::cout << "Sphere: " << pos.x << ", " << pos.y << ", " << pos.z << std::endl;
+			std::cout << "\tradius = " << sphere->radius() << std::endl;
 
 			// Create a sphere mesh
 			kobra::Mesh mesh = kobra::Mesh::make_sphere(
