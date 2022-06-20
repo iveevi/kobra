@@ -1,6 +1,7 @@
 #include "global.hpp"
 #include "include/app.hpp"
 #include "include/backend.hpp"
+#include "include/engine/rt_capture.hpp"
 #include "include/gui/button.hpp"
 #include "include/gui/layer.hpp"
 #include "include/gui/rect.hpp"
@@ -10,7 +11,7 @@
 using namespace kobra;
 
 // Scene path
-std::string scene_path = "scenes/scene.kobra";
+std::string scene_path = "scenes/room.kobra";
 
 // Experimental GUI app
 class GUIApp : public BaseApp {
@@ -154,9 +155,15 @@ int main()
 	// Choose a physical device
 	// TODO: static lambda (FIRST)
 	auto phdev = pick_physical_device(predicate);
+		
+	auto camera = Camera {
+		Transform { {0, 3, 9}, {-0.2, 0, 0} },
+		Tunings { 45.0f, 800, 800 }
+	};
 
 	// Create a GUI app
-	RTApp app(phdev, extensions);
+	// RTApp app(phdev, extensions);
+	engine::RTCapture app(phdev, {1000, 1000}, extensions, scene_path, camera);
 
 	// Run the app
 	app.run();

@@ -220,7 +220,6 @@ public:
 
 		float iwidth = scale * factor/_width;
 		float iheight = scale * factor/_height;
-		std::cout << "iwidth: " << iwidth << " iheight: " << iheight << std::endl;
 
 		// Initialize text object
 		Text *txt = new Text();
@@ -246,7 +245,6 @@ public:
 			// Get glyph top-left
 			float x0 = x + (metrics.horiBearingX * iwidth);
 			float y0 = y - (metrics.horiBearingY * iheight);
-			std::cout << "metrics.horiBearingX: " << metrics.horiBearingX << " metrics.horiBearingY: " << metrics.horiBearingY << std::endl;
 
 			miny = std::min(miny, y0);
 

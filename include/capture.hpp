@@ -20,7 +20,7 @@ extern "C" {
 
 namespace kobra {
 
-// Image structure
+/* Image structure
 // TODO: eventually move to another header
 // TODO: what is the different between this an a textuer
 struct Image {
@@ -135,7 +135,7 @@ public:
 		// Allocate buffer
 		if (buffer)
 			delete[] buffer;
-		
+
 		buffer_size = fmt.width * fmt.height * 4;
 		buffer = new byte[buffer_size];
 
@@ -158,7 +158,7 @@ public:
 		image.height = fmt.height;
 	}
 
-	/* Write frame
+	* Write frame
 	void write(const BufferManager <uint> &pbuf) {
 		// Get image data
 		snapshot(pbuf, image);
@@ -186,14 +186,14 @@ public:
 		// Write to file
 		file.write((char *) buffer, pkt.size);
 		frame_count++;
-	} */
+	}
 
 	// Get time in seconds
 	double time() const {
 		// TODO: this is not correct
 		return frame_count / (double) codec_ctx->time_base.den;
 	}
-	
+
 	// Flush to file
 	void flush() {
 		// Flush file
@@ -205,7 +205,13 @@ public:
 
 	// Get a snapshot
 	// static void snapshot(const BufferData, Image &);
-};
+}; */
+
+namespace capture {
+
+void snapshot(const BufferData &, const vk::Extent3D &, const std::string &);
+
+}
 
 }
 

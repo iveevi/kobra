@@ -79,6 +79,9 @@ public:
 		// TODO: extensions as a device
 		device = make_device(phdev, queue_family, extensions);
 
+		std::cout << "Device: " << *device << std::endl;
+		std::cout << "\tdispatcher = " << device.getDispatcher() << std::endl;
+
 		// Create swapchain
 		swapchain = Swapchain {phdev, device, surface, window.extent, queue_family};
 
@@ -108,6 +111,7 @@ public:
 		// Start timer
 		frame_timer.start();
 		while (!glfwWindowShouldClose(window.handle)) {
+			std::cout << "Frame " << frame_index << std::endl;
 			// Check if manually terminated
 			if (terminated)
 				break;
@@ -125,6 +129,8 @@ public:
 			frame_time = frame_timer.lap()/scale;
 		}
 
+		KOBRA_LOG_FILE(notify) << "App terminated\n";
+
 		// Idle till all frames are finished
 		device.waitIdle();
 
@@ -134,6 +140,7 @@ public:
 
 	// Manually terminate application
 	void terminate_now() {
+		std::cout << "Terminated..." << std::endl;
 		terminated = true;
 	}
 

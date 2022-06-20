@@ -1,54 +1,5 @@
 [OBJECT]
-name=Sphere A
-[TRANSFORM]
-position=-0.69753 1.66162 0.445055
-rotation=0 0 0
-scale=1 1 1
-[SPHERE]
-radius=0.5
-[MATERIAL]
-Kd=0.4 0.8 1
-Ks=0 0 0
-shading_type=Diffuse 
-index_of_refraction=1.5
-extinction_coefficient=0
-albedo_texture=0
-normal_texture=0
-[OBJECT]
-name=Sphere B
-[TRANSFORM]
-position=-0.230044 0.811069 -0.696417
-rotation=0 0 0
-scale=1 1 1
-[SPHERE]
-radius=0.3
-[MATERIAL]
-Kd=0.5 0.5 0.5
-Ks=0 0 0
-shading_type=Diffuse 
-index_of_refraction=1
-extinction_coefficient=0
-albedo_texture=0
-normal_texture=0
-[OBJECT]
-name=Floor
-[TRANSFORM]
-position=0 -2 0
-rotation=0 0 0
-scale=10 0.1 10
-[MESH]
-source=box
-index=0
-[MATERIAL]
-Kd=0.7 0.7 0.7
-Ks=0 0 0
-shading_type=Diffuse 
-index_of_refraction=1
-extinction_coefficient=0
-albedo_texture=resources/wood_floor_albedo.jpg
-normal_texture=resources/wood_floor_normal.jpg
-[OBJECT]
-name=Monkey
+name=Teapot
 [TRANSFORM]
 position=1.1812 0.466907 0.721303
 rotation=0 -126.578 0
@@ -65,14 +16,135 @@ extinction_coefficient=0
 albedo_texture=0
 normal_texture=0
 [OBJECT]
+name=Teapot
+[TRANSFORM]
+position=1.1812 0.466907 0.721303
+rotation=0 -126.578 0
+scale=0.5 0.5 0.5
+[MESH]
+source=resources/benchmark/teapot.obj
+index=0
+[MATERIAL]
+Kd=1 0.55 0.3
+Ks=0 0 0
+shading_type=Diffuse 
+index_of_refraction=1
+extinction_coefficient=0
+albedo_texture=0
+normal_texture=0
+[OBJECT]
+name=Teapot
+[TRANSFORM]
+position=1.1812 0.466907 0.721303
+rotation=0 -126.578 0
+scale=0.5 0.5 0.5
+[MESH]
+source=resources/benchmark/teapot.obj
+index=0
+[MATERIAL]
+Kd=1 0.55 0.3
+Ks=0 0 0
+shading_type=Diffuse 
+index_of_refraction=1
+extinction_coefficient=0
+albedo_texture=0
+normal_texture=0
+[OBJECT]
+name=Floor
+[TRANSFORM]
+position=0 -2 0
+rotation=0 0 0
+scale=10 0.1 10
+[MESH]
+source=0
+v -1 -1 1 0 0 1 0 0
+v 1 -1 1 0 0 1 1 0
+v 1 1 1 0 0 1 1 1
+v -1 1 1 0 0 1 0 1
+v -1 -1 -1 0 0 -1 0 0
+v 1 -1 -1 0 0 -1 1 0
+v 1 1 -1 0 0 -1 1 1
+v -1 1 -1 0 0 -1 0 1
+v -1 -1 1 -1 0 0 0 0
+v -1 -1 -1 -1 0 0 1 0
+v -1 1 -1 -1 0 0 1 1
+v -1 1 1 -1 0 0 0 1
+v 1 -1 1 1 0 0 0 0
+v 1 -1 -1 1 0 0 1 0
+v 1 1 -1 1 0 0 1 1
+v 1 1 1 1 0 0 0 1
+v -1 1 1 0 1 0 0 0
+v 1 1 1 0 1 0 1 0
+v 1 1 -1 0 1 0 1 1
+v -1 1 -1 0 1 0 0 1
+v -1 -1 1 0 -1 0 0 0
+v 1 -1 1 0 -1 0 1 0
+v 1 -1 -1 0 -1 0 1 1
+v -1 -1 -1 0 -1 0 0 1
+f 1 2 3
+f 3 4 1
+f 5 7 6
+f 7 5 8
+f 9 11 10
+f 11 9 12
+f 13 14 15
+f 15 16 13
+f 17 18 19
+f 19 20 17
+f 21 23 22
+f 23 21 24
+[MATERIAL]
+Kd=0.7 0.7 0.7
+Ks=0 0 0
+shading_type=Diffuse 
+index_of_refraction=1
+extinction_coefficient=0
+albedo_texture=resources/wood_floor_albedo.jpg
+normal_texture=resources/wood_floor_normal.jpg
+[OBJECT]
 name=Object 6
 [TRANSFORM]
 position=-10 3 0
 rotation=0 0 0
 scale=0.1 5 10
 [MESH]
-source=box
-index=0
+source=0
+v -1 -1 1 0 0 1 0 0
+v 1 -1 1 0 0 1 1 0
+v 1 1 1 0 0 1 1 1
+v -1 1 1 0 0 1 0 1
+v -1 -1 -1 0 0 -1 0 0
+v 1 -1 -1 0 0 -1 1 0
+v 1 1 -1 0 0 -1 1 1
+v -1 1 -1 0 0 -1 0 1
+v -1 -1 1 -1 0 0 0 0
+v -1 -1 -1 -1 0 0 1 0
+v -1 1 -1 -1 0 0 1 1
+v -1 1 1 -1 0 0 0 1
+v 1 -1 1 1 0 0 0 0
+v 1 -1 -1 1 0 0 1 0
+v 1 1 -1 1 0 0 1 1
+v 1 1 1 1 0 0 0 1
+v -1 1 1 0 1 0 0 0
+v 1 1 1 0 1 0 1 0
+v 1 1 -1 0 1 0 1 1
+v -1 1 -1 0 1 0 0 1
+v -1 -1 1 0 -1 0 0 0
+v 1 -1 1 0 -1 0 1 0
+v 1 -1 -1 0 -1 0 1 1
+v -1 -1 -1 0 -1 0 0 1
+f 1 2 3
+f 3 4 1
+f 5 7 6
+f 7 5 8
+f 9 11 10
+f 11 9 12
+f 13 14 15
+f 15 16 13
+f 17 18 19
+f 19 20 17
+f 21 23 22
+f 23 21 24
 [MATERIAL]
 Kd=0.8 0.8 0.5
 Ks=0 0 0
@@ -88,8 +160,43 @@ position=10 3 0
 rotation=0 0 0
 scale=0.1 5 10
 [MESH]
-source=box
-index=0
+source=0
+v -1 -1 1 0 0 1 0 0
+v 1 -1 1 0 0 1 1 0
+v 1 1 1 0 0 1 1 1
+v -1 1 1 0 0 1 0 1
+v -1 -1 -1 0 0 -1 0 0
+v 1 -1 -1 0 0 -1 1 0
+v 1 1 -1 0 0 -1 1 1
+v -1 1 -1 0 0 -1 0 1
+v -1 -1 1 -1 0 0 0 0
+v -1 -1 -1 -1 0 0 1 0
+v -1 1 -1 -1 0 0 1 1
+v -1 1 1 -1 0 0 0 1
+v 1 -1 1 1 0 0 0 0
+v 1 -1 -1 1 0 0 1 0
+v 1 1 -1 1 0 0 1 1
+v 1 1 1 1 0 0 0 1
+v -1 1 1 0 1 0 0 0
+v 1 1 1 0 1 0 1 0
+v 1 1 -1 0 1 0 1 1
+v -1 1 -1 0 1 0 0 1
+v -1 -1 1 0 -1 0 0 0
+v 1 -1 1 0 -1 0 1 0
+v 1 -1 -1 0 -1 0 1 1
+v -1 -1 -1 0 -1 0 0 1
+f 1 2 3
+f 3 4 1
+f 5 7 6
+f 7 5 8
+f 9 11 10
+f 11 9 12
+f 13 14 15
+f 15 16 13
+f 17 18 19
+f 19 20 17
+f 21 23 22
+f 23 21 24
 [MATERIAL]
 Kd=0.8 0.8 0.5
 Ks=0 0 0
@@ -173,8 +280,43 @@ position=0 8.09929 0
 rotation=0 0 0
 scale=10 0.1 10
 [MESH]
-source=box
-index=0
+source=0
+v -1 -1 1 0 0 1 0 0
+v 1 -1 1 0 0 1 1 0
+v 1 1 1 0 0 1 1 1
+v -1 1 1 0 0 1 0 1
+v -1 -1 -1 0 0 -1 0 0
+v 1 -1 -1 0 0 -1 1 0
+v 1 1 -1 0 0 -1 1 1
+v -1 1 -1 0 0 -1 0 1
+v -1 -1 1 -1 0 0 0 0
+v -1 -1 -1 -1 0 0 1 0
+v -1 1 -1 -1 0 0 1 1
+v -1 1 1 -1 0 0 0 1
+v 1 -1 1 1 0 0 0 0
+v 1 -1 -1 1 0 0 1 0
+v 1 1 -1 1 0 0 1 1
+v 1 1 1 1 0 0 0 1
+v -1 1 1 0 1 0 0 0
+v 1 1 1 0 1 0 1 0
+v 1 1 -1 0 1 0 1 1
+v -1 1 -1 0 1 0 0 1
+v -1 -1 1 0 -1 0 0 0
+v 1 -1 1 0 -1 0 1 0
+v 1 -1 -1 0 -1 0 1 1
+v -1 -1 -1 0 -1 0 0 1
+f 1 2 3
+f 3 4 1
+f 5 7 6
+f 7 5 8
+f 9 11 10
+f 11 9 12
+f 13 14 15
+f 15 16 13
+f 17 18 19
+f 19 20 17
+f 21 23 22
+f 23 21 24
 [MATERIAL]
 Kd=0.7 0.7 0.7
 Ks=0 0 0
@@ -190,8 +332,43 @@ position=0 3 10
 rotation=0 0 0
 scale=10 5 0.1
 [MESH]
-source=box
-index=0
+source=0
+v -1 -1 1 0 0 1 0 0
+v 1 -1 1 0 0 1 1 0
+v 1 1 1 0 0 1 1 1
+v -1 1 1 0 0 1 0 1
+v -1 -1 -1 0 0 -1 0 0
+v 1 -1 -1 0 0 -1 1 0
+v 1 1 -1 0 0 -1 1 1
+v -1 1 -1 0 0 -1 0 1
+v -1 -1 1 -1 0 0 0 0
+v -1 -1 -1 -1 0 0 1 0
+v -1 1 -1 -1 0 0 1 1
+v -1 1 1 -1 0 0 0 1
+v 1 -1 1 1 0 0 0 0
+v 1 -1 -1 1 0 0 1 0
+v 1 1 -1 1 0 0 1 1
+v 1 1 1 1 0 0 0 1
+v -1 1 1 0 1 0 0 0
+v 1 1 1 0 1 0 1 0
+v 1 1 -1 0 1 0 1 1
+v -1 1 -1 0 1 0 0 1
+v -1 -1 1 0 -1 0 0 0
+v 1 -1 1 0 -1 0 1 0
+v 1 -1 -1 0 -1 0 1 1
+v -1 -1 -1 0 -1 0 0 1
+f 1 2 3
+f 3 4 1
+f 5 7 6
+f 7 5 8
+f 9 11 10
+f 11 9 12
+f 13 14 15
+f 15 16 13
+f 17 18 19
+f 19 20 17
+f 21 23 22
+f 23 21 24
 [MATERIAL]
 Kd=0.8 0.8 0.5
 Ks=0 0 0
@@ -229,8 +406,43 @@ position=0 3 -10
 rotation=0 0 0
 scale=10 5 0.1
 [MESH]
-source=box
-index=0
+source=0
+v -1 -1 1 0 0 1 0 0
+v 1 -1 1 0 0 1 1 0
+v 1 1 1 0 0 1 1 1
+v -1 1 1 0 0 1 0 1
+v -1 -1 -1 0 0 -1 0 0
+v 1 -1 -1 0 0 -1 1 0
+v 1 1 -1 0 0 -1 1 1
+v -1 1 -1 0 0 -1 0 1
+v -1 -1 1 -1 0 0 0 0
+v -1 -1 -1 -1 0 0 1 0
+v -1 1 -1 -1 0 0 1 1
+v -1 1 1 -1 0 0 0 1
+v 1 -1 1 1 0 0 0 0
+v 1 -1 -1 1 0 0 1 0
+v 1 1 -1 1 0 0 1 1
+v 1 1 1 1 0 0 0 1
+v -1 1 1 0 1 0 0 0
+v 1 1 1 0 1 0 1 0
+v 1 1 -1 0 1 0 1 1
+v -1 1 -1 0 1 0 0 1
+v -1 -1 1 0 -1 0 0 0
+v 1 -1 1 0 -1 0 1 0
+v 1 -1 -1 0 -1 0 1 1
+v -1 -1 -1 0 -1 0 0 1
+f 1 2 3
+f 3 4 1
+f 5 7 6
+f 7 5 8
+f 9 11 10
+f 11 9 12
+f 13 14 15
+f 15 16 13
+f 17 18 19
+f 19 20 17
+f 21 23 22
+f 23 21 24
 [MATERIAL]
 Kd=0.8 0.8 0.5
 Ks=0 0 0

@@ -17,7 +17,8 @@ RTCapture::RTCapture(vk::raii::PhysicalDevice &phdev,
 			descriptor_pool,
 			extent,
 			swapchain.format,
-			depth_buffer.format
+			depth_buffer.format,
+			vk::AttachmentLoadOp::eClear
 		),
 		gui_layer(phdev, device,
 			command_pool,
@@ -54,11 +55,13 @@ RTCapture::RTCapture(vk::raii::PhysicalDevice &phdev,
 	// Create batch
 	// TODO: a method to generate optimal batch sizes (eg 50x50 is
 	// faster than 10x10)
-	batch = rt::Batch(800, 800, 25, 25, 100);
+	batch = rt::Batch(extent.width, extent.width, 25, 25, 100);
 
-	index = batch.make_batch_index(0, 0, 1, 100);
+	index = batch.make_batch_index(0, 0, 1, 1);
 	index.surface_samples = 1;
 	index.accumulate = true;
+
+	layer.set_batch(batch, index);
 
 	// Fonts
 	gui_layer.load_font("default", "resources/fonts/noto_sans.ttf");
@@ -71,6 +74,10 @@ RTCapture::RTCapture(vk::raii::PhysicalDevice &phdev,
 	);
 
 	gui_layer.add(text_progress);
+
+	// Laucnh RT kernels
+	// TODO: on start method
+	layer.launch();
 }
 
 // Render loop
@@ -108,15 +115,14 @@ void RTCapture::record(const vk::raii::CommandBuffer &cmd, const vk::raii::Frame
 		progress * 100.0f, time, frame_time, eta_h, eta_m, eta_s
 	);
 
+	std::cout << buffer << std::endl;
+
 	// Update and render GUI
 	text_progress->str = buffer;
 	gui_layer.render(cmd, framebuffer);
 
 	// End recording command buffer
 	cmd.end();
-
-	// Next batch
-	batch.increment(index);
 }
 
 // Treminator
@@ -124,19 +130,21 @@ void RTCapture::terminate()
 {
 	bool b = batch.completed();
 	if (term || b) {
-		glfwSetWindowShouldClose(window.handle, GLFW_TRUE);
+		// Wait for all batches to finish
+		layer.stop();
+
+		// Save image
 		const auto &buffer = layer.pixels();
+		capture::snapshot(buffer, {1000, 1000, 4}, "capture.png");
 
-		/* TODO: make an easier an more straight forward way to
-		// save a buffer to an image
-		Image img {
-			.width = 800,
-			.height = 800
-		};
+		// Log completion
+		KOBRA_LOG_FUNC(notify) << "Capture saved to capture.png\n";
 
-		Capture::snapshot(buffer, img);
-		img.write("capture.png");
-		KOBRA_LOG_FUNC(notify) << "Capture saved to capture.png\n"; */
+		// Terminate
+		glfwSetWindowShouldClose(window.handle, true);
+		terminate_now();
+
+		std::cout << "TErminated" << std::endl;
 	}
 }
 

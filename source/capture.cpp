@@ -3,8 +3,12 @@
 
 namespace kobra {
 
-/* Convert uint32_t to uint8_ts
-bytes convert(const uint *ptr, size_t size) {
+namespace capture {
+
+// Convert vec <uint32_t> to vec <uint8_t>
+// TODO: more generic image formats?
+std::vector <uint8_t> convert(const std::vector <uint32_t> &ptr, size_t size)
+{
 	std::vector <uint8_t> result(size * 4);
 	for (size_t i = 0; i < size; i++) {
 		result[i * 4 + 0] = (ptr[i] & 0x000000FF);
@@ -12,16 +16,30 @@ bytes convert(const uint *ptr, size_t size) {
 		result[i * 4 + 2] = (ptr[i] & 0x00FF0000) >> 16;
 		result[i * 4 + 3] = 255;
 	}
+
 	return result;
 }
 
-// Get a snapshot
-void Capture::snapshot(const BufferManager <uint> &pbuf, Image &image)
+void snapshot(const BufferData &buffer, const vk::Extent3D &dim, const std::string &filename)
 {
-	// Read pixels
-	const uint *pixels = pbuf.data();
-	bytes data = convert(pixels, pbuf.size());
-	image.data = data;
-} */
+	KOBRA_ASSERT(
+		buffer.size == (dim.width * dim.height * dim.depth),
+		"Buffer size does not match image dimensions"
+	);
+
+	std::vector <uint32_t> data = buffer.download <uint32_t> ();
+	std::vector <uint8_t> image = convert(data, dim.width * dim.height);
+
+	stbi_write_png(
+		filename.c_str(),
+		(size_t) dim.width,
+		(size_t) dim.height,
+		(size_t) dim.depth,
+		image.data(),
+		(size_t) dim.width * dim.depth
+	);
+}
+
+}
 
 }

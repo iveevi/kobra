@@ -3,6 +3,7 @@
 
 // Standard headers
 #include <vector>
+#include <thread>
 
 // Engine headers
 #include "../../shaders/rt/bindings.h"
@@ -54,9 +55,18 @@ protected:
 
 	// Resources for multiprocessing
 	std::vector <vk::raii::Queue>	_queues;
+	std::vector <vk::raii::CommandPool>
+					_command_pools;
 	std::vector <vk::raii::CommandBuffer>
 					_command_buffers;
 	std::vector <vk::raii::Fence>	_fences;
+
+
+	Batch				*_batch = nullptr;
+	BatchIndex			_batch_index;
+	std::thread 			*_threads = nullptr;
+	std::mutex			_mutex;
+	bool				_running = false;
 
 	// Pipelines
 	struct {
@@ -222,6 +232,7 @@ protected:
 
 	// Launch an RT batch kernel
 	void _launch_kernel(uint32_t, const Batch &, const BatchIndex &bi);
+	void _kernel(uint32_t);
 public:
 	// Default constructor
 	Layer() = default;
@@ -246,6 +257,12 @@ public:
 		_mode = mode;
 	}
 
+	// Set batch
+	void set_batch(Batch &batch, const BatchIndex &bi) {
+		_batch = &batch;
+		_batch_index = bi;
+	}
+
 	// Set environment map
 	void set_environment_map(ImageData &&);
 
@@ -267,6 +284,12 @@ public:
 
 	// Display memory footprint
 	void display_memory_footprint() const;
+
+	// Launch kernels
+	void launch();
+	
+	// Stop all kernels
+	void stop();
 
 	// Render
 	void render(const vk::raii::CommandBuffer &,

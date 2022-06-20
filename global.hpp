@@ -8,7 +8,7 @@
 
 // Engine macros
 #define KOBRA_VALIDATION_LAYERS
-#define KOBRA_VALIDATION_ERROR_ONLY
+// #define KOBRA_VALIDATION_ERROR_ONLY
 #define KOBRA_THROW_ERROR
 
 // Engine headers

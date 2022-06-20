@@ -73,7 +73,6 @@ BatchIndex Batch::make_batch_index(int x, int y, int p, int l)
 }
 
 // "Increment" batch index
-// TODO: should skip baches which are full
 void Batch::increment(BatchIndex &index)
 {
 	int iterations = 0;

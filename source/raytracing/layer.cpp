@@ -381,13 +381,20 @@ Layer::Layer(const vk::raii::PhysicalDevice &phdev,
 				}
 
 				_queues.emplace_back(_device, i, j++);
+				_command_pools.emplace_back(
+					device, vk::CommandPoolCreateInfo {
+						vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+						i
+					}
+				);
+
 				_command_buffers.emplace_back(
 					make_command_buffer(
 						_device,
-						_command_pool
+						_command_pools.back()
 					)
 				);
-				
+
 				_fences.emplace_back(_device, vk::FenceCreateInfo {
 					vk::FenceCreateFlagBits::eSignaled
 				});
@@ -865,6 +872,157 @@ void Layer::_launch_kernel(uint32_t index, const Batch &batch, const BatchIndex 
 	bi.callback();
 }
 
+// RT kernel function
+void Layer::_kernel(uint32_t index)
+{
+	// Local (unique) command buffer
+	auto &computer = _command_buffers[index];
+
+	// Prepare push constants
+	PushConstants pc {
+		.width = _extent.width,
+		.height = _extent.height,
+
+		.triangles = (uint) _host.triangles.size(),
+		.lights = (uint) _host.light_indices.size(),
+
+		// TODO: still unable to do large number of samples
+		// These are not expected to change
+		.samples_per_pixel = _batch_index.pixel_samples,
+		.samples_per_surface = _batch_index.surface_samples,
+		.samples_per_light = _batch_index.light_samples,
+		.accumulate = (_batch_index.accumulate) ? 1u : 0u,
+
+		.camera_position = _active_camera->transform.position,
+		.camera_forward = _active_camera->transform.forward(),
+		.camera_up = _active_camera->transform.up(),
+		.camera_right = _active_camera->transform.right(),
+
+		.camera_tunings = glm::vec4 {
+			active_camera()->tunings.scale,
+			active_camera()->tunings.aspect,
+			0, 0
+		}
+	};
+
+	// Loop until termination
+	while (_running) {
+		// Acquire next batch, if any
+		if (_batch->completed())
+			continue;
+
+		// Wait for the fence to be signaled
+		while (vk::Result(_device.waitForFences(
+			*_fences[index], true,
+			std::numeric_limits <uint64_t>::max()
+		)) != vk::Result::eSuccess);
+
+		// Reset the fence
+		_device.resetFences(*_fences[index]);
+
+		// Time
+		unsigned int time = static_cast <unsigned int>
+			(std::chrono::duration_cast
+				<std::chrono::milliseconds>
+				(std::chrono::system_clock::now().time_since_epoch()).count());
+
+		// Get the next batch index
+		BatchIndex local_index;
+
+		_mutex.lock();
+
+		{
+			_batch->increment(_batch_index);
+
+			pc.xoffset = _batch_index.offset_x;
+			pc.yoffset = _batch_index.offset_y;
+
+			pc.present = (uint32_t) _batch->samples(_batch_index);
+
+			pc.time = (float) time;
+
+			local_index = _batch_index;
+		}
+
+		_mutex.unlock();
+
+		// Kernel time!
+		computer.begin({});
+
+		// Run the raytracing pipeline
+		computer.bindPipeline(
+			vk::PipelineBindPoint::eCompute,
+			*_active_pipeline()
+		);
+
+		// Bind descriptor set
+		computer.bindDescriptorSets(
+			vk::PipelineBindPoint::eCompute,
+			*_pipelines.raytracing_layout,
+			0, {*_dset_raytracing}, {}
+		);
+
+		// Push constants
+		computer.pushConstants <PushConstants> (
+			*_pipelines.raytracing_layout,
+			vk::ShaderStageFlagBits::eCompute,
+			0, pc
+		);
+
+		// Dispatch the compute shader
+		computer.dispatch(local_index.width, local_index.height, 1);
+
+		// End the command buffer
+		computer.end();
+
+		// Submit the command buffer
+		vk::SubmitInfo submit_info {
+			0, nullptr, nullptr,
+			1, &*computer
+		};
+
+		_queues[index].submit(submit_info, *_fences[index]);
+
+		// Callback for batch index
+		_mutex.lock();
+		local_index.callback();
+		_mutex.unlock();
+	}
+
+	// Wait for the fence to be signaled
+	while (vk::Result(_device.waitForFences(
+		*_fences[index], true,
+		std::numeric_limits <uint64_t>::max()
+	)) != vk::Result::eSuccess);
+}
+
+// Launch RT kernels
+void Layer::launch()
+{
+	if (_threads)
+		return;
+
+	// Set running flag
+	_running = true;
+
+	// Create threads
+	_threads = new std::thread[PARALLELIZATION];
+	for (uint32_t i = 0; i < PARALLELIZATION; i++)
+		_threads[i] = std::thread(&Layer::_kernel, this, i);
+}
+
+// Stop RT kernels
+void Layer::stop()
+{
+	_running = false;
+	if (_threads) {
+		for (int i = 0; i < PARALLELIZATION; i++)
+			_threads[i].join();
+
+		delete[] _threads;
+	}
+}
+
 // Render a batch
 void Layer::render(const vk::raii::CommandBuffer &cmd,
 		const vk::raii::Framebuffer &framebuffer,
@@ -901,53 +1059,7 @@ void Layer::render(const vk::raii::CommandBuffer &cmd,
 	};
 
 	cmd.setScissor(0, scissor);
-
-	/* Transition layouts if necessary
-	if (_samplers.environment_image.layout != vk::ImageLayout::eShaderReadOnlyOptimal) {
-		_samplers.environment_image.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
-	} */
-
-	// Wait for the fence to be signaled
-	for (uint32_t i = 0; i < PARALLELIZATION; i++) {
-		// Wait for the fence to be signaled
-		while (vk::Result(_device.waitForFences(
-			*_fences[i], true,
-			std::numeric_limits <uint64_t>::max()
-		)) != vk::Result::eSuccess);
-
-		// Reset the fence
-		_device.resetFences(*_fences[i]);
-	}
-
-	// Launch RT batch kernel
-	for (uint32_t i = 0; i < PARALLELIZATION; i++) {
-		_launch_kernel(i, batch, bi);
-
-		batch.increment(bi);
-		if (batch.completed())
-			batch.reset();
-	}
-
-	// Buffer memory barrier
-	vk::BufferMemoryBarrier buffer_barrier {
-		vk::AccessFlagBits::eShaderWrite,
-		vk::AccessFlagBits::eShaderRead,
-		VK_QUEUE_FAMILY_IGNORED,
-		VK_QUEUE_FAMILY_IGNORED,
-		*_dev.pixels.buffer,
-		0, _dev.pixels.size
-	};
-
-	/* Wait for the compute shader to finish
-	cmd.pipelineBarrier(
-		vk::PipelineStageFlagBits::eComputeShader,
-		vk::PipelineStageFlagBits::eComputeShader,
-		vk::DependencyFlags {},
-		nullptr,
-		{buffer_barrier},
-		nullptr
-	); */
-
+	
 	// Post process pipeline
 	cmd.bindPipeline(
 		vk::PipelineBindPoint::eGraphics,
