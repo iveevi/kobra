@@ -111,7 +111,6 @@ public:
 		// Start timer
 		frame_timer.start();
 		while (!glfwWindowShouldClose(window.handle)) {
-			std::cout << "Frame " << frame_index << std::endl;
 			// Check if manually terminated
 			if (terminated)
 				break;

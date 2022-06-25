@@ -49,3 +49,15 @@ glass pane (transmissive, in the middle).
 <p align = "center">
 	<b>Figure 2:</b> Scene lit mostly with indirect lighting (3 hours)
 </p>
+
+The following is a more complex scene, in terms of scene geomtery and
+texture quality (assets and textures are from Quixel Megascans), that was
+rendering using bidirectional path tracing.
+
+<p align = "center">
+	<img src = "media/capture_10.png">
+</p>
+
+<p align = "center">
+	<b>Figure 3:</b> More complex scene, rendered with bidirectional path tracing (3 hours)
+</p>

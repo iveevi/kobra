@@ -21,7 +21,7 @@ position=-10 3 0
 rotation=0 0 0
 scale=0.1 5 10
 [MESH]
-source=box
+source=resources/benchmark/dragon.ply
 index=0
 [MATERIAL]
 Kd=0.8 0.8 0.5

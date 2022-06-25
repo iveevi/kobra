@@ -275,7 +275,8 @@ vec3 direct_illumination(Hit hit, Ray ray)
 			Ray shadow_ray = Ray(pos, dir, 1.0, 1.0);
 
 			Hit shadow_hit = trace(shadow_ray);
-			if (shadow_hit.id == light_object) {
+			// if (shadow_hit.id == light_object) {
+			if (distance(shadow_hit.point, light_position) < 0.001) {
 				// Light contribution directly
 				float d = distance(light_position, hit.point);
 				float cos_theta = max(0.0, dot(hit.normal, dir));

@@ -36,7 +36,7 @@ RTCapture::RTCapture(vk::raii::PhysicalDevice &phdev,
 	// Create raytracing layer
 	layer.add_scene(scene);
 	layer.set_active_camera(camera);
-	layer.set_mode(rt::Layer::Mode::MIS_PATH_TRACER);
+	layer.set_mode(rt::Layer::Mode::BIDIRECTIONAL_PATH_TRACE);
 
 	// Set background texture
 	// TODO: default arguments for this function
@@ -55,10 +55,10 @@ RTCapture::RTCapture(vk::raii::PhysicalDevice &phdev,
 	// Create batch
 	// TODO: a method to generate optimal batch sizes (eg 50x50 is
 	// faster than 10x10)
-	batch = rt::Batch(extent.width, extent.width, 25, 25, 100);
+	batch = rt::Batch(extent.width, extent.width, 50, 50, 50);
 
-	index = batch.make_batch_index(0, 0, 1, 1);
-	index.surface_samples = 1;
+	index = batch.make_batch_index(0, 0, 1, 16);
+	index.surface_samples = 16;
 	index.accumulate = true;
 
 	layer.set_batch(batch, index);

@@ -17,7 +17,7 @@
 #include "modules/bvh.glsl"
 
 // Maximum ray depth
-#define MAX_DEPTH 5
+#define MAX_DEPTH 10
 
 // Sample random point in triangle
 float u = 0.0;
@@ -29,130 +29,228 @@ vec3 sample_triangle(vec3 v1, vec3 v2, vec3 v3, float strata, float i)
 	if (pc.samples_per_light == 1)
 		return (v1 + v2 + v3) / 3.0;
 
-	// Get random point in triangle
-	vec2 uv = jitter2d(strata, i);
-	if (uv.x + uv.y > 1.0)
-		uv = vec2(1.0 - uv.x, 1.0 - uv.y);
+	// Get random vec in [0, 1]
+	vec2 r = jitter2d(strata, i);
+	float s = sqrt(r.x);
+
+	float u = 1.0 - s;
+	float v = r.y * s;
 
 	// Edge vectors
 	vec3 e1 = v2 - v1;
 	vec3 e2 = v3 - v1;
 
-	vec3 p = v1 + uv.x * e1 + uv.y * e2;
+	vec3 p = v1 + u * e1 + v * e2;
 
 	return p;
 }
 
-// Sample a light position from an area light
-vec3 sample_light_position(uint li, int sample_i)
+// Center point of an area light
+vec3 center_area_light(uint li)
 {
+	// Get light position
 	uvec4 i = VERTEX_STRIDE * floatBitsToUint(lights.data[li + 1]);
 
 	vec3 v1 = vertices.data[i.x].xyz;
 	vec3 v2 = vertices.data[i.y].xyz;
 	vec3 v3 = vertices.data[i.z].xyz;
 
-	// Sample point from triangle
+	return (v1 + v2 + v3) / 3.0;
+}
+
+// Sample random point from an area light
+vec3 sample_area_light(uint li, int si)
+{
+	// Get light position
+	uvec4 i = VERTEX_STRIDE * floatBitsToUint(lights.data[li + 1]);
+
+	vec3 v1 = vertices.data[i.x].xyz;
+	vec3 v2 = vertices.data[i.y].xyz;
+	vec3 v3 = vertices.data[i.z].xyz;
+
+	// Get random point in triangle
 	return sample_triangle(
 		v1, v2, v3,
-		sqrt(pc.samples_per_light),
-		sample_i
+		sqrt(pc.samples_per_light), si
 	);
 }
 
-// Reflect according to material and incoming ray
-bool apply_bsdf(inout Ray r, Hit hit, inout float beta, inout float ior)
+// Power heuristic
+float power_heuristic(float nf, float fpdf, float ng, float gpdf)
 {
-	// TODO: use int shading types for easy switching
-	if (hit.mat.shading == SHADING_DIFFUSE) {
-		// Lambertian BSDF
-		vec3 r_dir = random_hemi(hit.normal);
-		r.direction = r_dir;
-		r.origin = hit.point + hit.normal * 0.001;
-		
-		// Update beta
-		beta *= dot(hit.normal, r_dir);
-	} else if (hit.mat.shading == SHADING_REFLECTION) {
-		// (Perfect) Specular BSDF
-		vec3 r_dir = reflect(r.direction, hit.normal);
-		r.direction = r_dir;
-		r.origin = hit.point + hit.normal * 0.001;
+	float f = nf * fpdf;
+	float g = ng * gpdf;
 
-		// Update beta
-		beta *= dot(hit.normal, r_dir);
-	} else if (hit.mat.shading == SHADING_TRANSMISSION) {
-		// (Perfect) Transmissive BSDF
-		vec3 r_dir = refract(r.direction, hit.normal, ior/hit.mat.ior);
-		r.direction = r_dir;
-		r.origin = hit.point - hit.normal * 0.001;
-
-		// Update beta
-		ior = hit.mat.ior;
-	} else {
-		// Invalid shading type
-		return true;
-	}
-
-	return false;
+	return (f * f) / (f * f + g * g);
 }
 
-// Color value at from a ray
-vec3 color_at(Ray ray)
+// Fresnel reflectance
+float fresnel_dielectric(float cosi, float etai, float etat)
 {
-	// Light and camera paths
-	vec3 light_contrs[MAX_DEPTH];
-	vec3 camera_contr[MAX_DEPTH];
+	// Swap if necessary
+	cosi = clamp(cosi, -1.0, 1.0);
+	if (cosi < 0.0) {
+		cosi = -cosi;
 
-	vec3 light_vertices[MAX_DEPTH];
-	vec3 camera_vertices[MAX_DEPTH];
-	vec3 camera_normals[MAX_DEPTH];
-
-	int light_objects[MAX_DEPTH];
-	int camera_objects[MAX_DEPTH];
-
-	// Initialize
-	for (int i = 0; i < MAX_DEPTH; i++) {
-		light_contrs[i] = vec3(0.0);
-		camera_contr[i] = vec3(0.0);
-
-		light_vertices[i] = vec3(0.0);
-		camera_vertices[i] = vec3(0.0);
-		camera_normals[i] = vec3(0.0);
-
-		light_objects[i] = -1;
-		camera_objects[i] = -1;
+		float tmp = etai;
+		etai = etat;
+		etat = tmp;
 	}
 
-	// Generate camera path
-	Ray r = ray;
+	float sini = sqrt(max(0.0, 1.0 - cosi * cosi));
 
-	float beta = 1.0;
+	float sint = etai / etat * sini;
+	if (sint >= 1.0)
+		return 1.0;
+
+	float cost = sqrt(max(0.0, 1.0 - sint * sint));
+
+	float r_parl = ((etat * cosi) - (etai * cost)) / ((etat * cosi) + (etai * cost));
+	float r_perp = ((etai * cosi) - (etat * cost)) / ((etai * cosi) + (etat * cost));
+
+	return (r_parl * r_parl + r_perp * r_perp) / 2.0;
+}
+
+// Invidual BSDF types
+// TODO: header
+#define BSDF(ftn) void bsdf_##ftn(in Hit hit,	\
+		inout Ray ray,			\
+		inout float pdf,		\
+		inout vec3 beta,		\
+		inout float ior)
+
+BSDF(specular_reflection)
+{
+	float cosi = dot(ray.direction, hit.normal);
+	float Fr = fresnel_dielectric(cosi, hit.mat.ior, ior);
+
+	ray.direction = reflect(ray.direction, hit.normal);
+	ray.origin = hit.point + hit.normal * 0.001;
+
+	float cos_theta = abs(dot(ray.direction, hit.normal));
+
+	pdf = 1;
+
+	// TODO: fresnel conductors: if ior = 1, then
+	// Fr is always equal to 0
+	beta *= hit.mat.albedo/abs(cos_theta);
+}
+
+BSDF(specular_transmission)
+{
+	float cosi = dot(ray.direction, hit.normal);
+	float Fr = fresnel_dielectric(cosi, hit.mat.ior, ior);
+
+	float eta = ior/hit.mat.ior;
+	ray.direction = refract(ray.direction, hit.normal, eta);
+	ray.origin = hit.point - hit.normal * 0.001;
+
+	float cos_theta = abs(dot(ray.direction, hit.normal));
+
+	pdf = 1;
+	ior = hit.mat.ior;
+	beta *= (1 - Fr) * hit.mat.albedo / cos_theta;
+}
+
+BSDF(lambertian)
+{
+	// Assume diffuse
+	ray.direction = cosine_weighted_hemisphere(hit.normal);
+	ray.origin = hit.point + hit.normal * 0.001;
+
+	pdf = INV_PI * dot(ray.direction, hit.normal);
+	beta *= hit.mat.albedo * INV_PI;
+}
+
+// Sample a ray from BSDF
+void sample_bsdf(in Hit hit, inout Ray ray,
+		inout float pdf,
+		inout vec3 beta,
+		inout float ior)
+{
+	int shading = hit.mat.shading;
+	if (is_type(shading, SHADING_REFLECTION | SHADING_TRANSMISSION)) {
+		// Choose reflection or transmission randomly
+		//	based on Fresnel reflectance
+		float cosi = dot(ray.direction, hit.normal);
+		float Fr = fresnel_dielectric(cosi, hit.mat.ior, ior);
+
+		float rand = random();
+		if (rand < Fr)
+			bsdf_specular_reflection(hit, ray, pdf, beta, ior);
+		else
+			bsdf_specular_transmission(hit, ray, pdf, beta, ior);
+	} else if (is_type(shading, SHADING_REFLECTION)) {
+		bsdf_specular_reflection(hit, ray, pdf, beta, ior);
+	} else if (is_type(shading, SHADING_TRANSMISSION)) {
+		bsdf_specular_transmission(hit, ray, pdf, beta, ior);
+	} else if (is_type(shading, SHADING_DIFFUSE)) {
+		// TOOD: also microfacet diffuse is a sigma != 0
+		bsdf_lambertian(hit, ray, pdf, beta, ior);
+	} else {
+		pdf = 0.0;
+	}
+	
+	beta *= abs(dot(hit.normal, ray.direction)) / pdf;
+}
+
+// Get pdf of a direction from BSDF
+float pdf_bsdf(in Hit hit, in Ray ray, vec3 wi)
+{
+	int shading = hit.mat.shading;
+	if (is_type(shading, SHADING_DIFFUSE)) {
+		// Assume diffuse
+		// TODO: check same hemisphere
+		return INV_PI * dot(wi, hit.normal);
+	}
+	
+	return 0.0;
+}
+
+// Total color for a ray
+vec3 color_at(Ray ray)
+{
+	// Camera path
+	Ray	rays[MAX_DEPTH];
+	Hit	hits[MAX_DEPTH];
+	vec3	betas[MAX_DEPTH];
+	int	depth = 1;
+
+	// Generate camera path
+	vec3 beta = vec3(1.0);
+
+	// Index of refraction
 	float ior = 1.0;
 
-	int bounces = 0;
-	for (; bounces < MAX_DEPTH; bounces++) {
-		// Find closest object
-		Hit hit = trace(r);
-
-		// Value and position
-		camera_contr[bounces] = beta * hit.mat.albedo;
-		camera_vertices[bounces] = hit.point + hit.normal * 0.001;
-		camera_normals[bounces] = hit.normal;
-		camera_objects[bounces] = hit.object;
+	Ray r = ray;
+	for (int i = 0; i < MAX_DEPTH; i++, depth++) {
+		// Find closest object, and store hit stuff
+		hits[i] = trace(r);
+		rays[i] = r;
+		betas[i] = beta;
 
 		// Special case intersection
-		if (hit.object == -1 || hit.mat.shading == SHADING_EMISSIVE) {
-			camera_objects[bounces] = -1;
+		if (hits[i].object == -1)
+			break;
+
+		if (hits[i].mat.shading == SHADING_EMISSIVE) {
+			// Hard code the albedo for now,
+			// later retrieve properties from
+			// the light object index, etc
+			hits[i].mat.albedo = vec3(1.0);
 			break;
 		}
+		
+		// Sample BSDF
+		float pdf = 0.0;
+		sample_bsdf(hits[i], r, pdf, beta, ior);
 
-		// Generating the new ray according to BSDF
-		if (apply_bsdf(r, hit, beta, ior))
+		if (pdf == 0.0)
 			break;
 
 		// Russian roulette
-		if (bounces > 2) {
-			float q = max(1.0 - beta, 0.05);
+		if (i > 2) {
+			float q = max(1.0 - beta.y, 0.05);
 			if (random() < q)
 				break;
 			beta /= (1.0 - q);
@@ -160,160 +258,139 @@ vec3 color_at(Ray ray)
 	}
 
 	// Total contribution
-	vec3 total_contr = vec3(0.0);
+	vec3 contribution = vec3(0.0);
 
-	// Iterate over all lights
-	for (int i = 0; i < pc.lights; i++) {
-		// Iterate over requested # of shadow samples
-		uint light_index = floatBitsToUint(light_indices.data[i]);
+	// Lights
+	float bsdf_samples = pc.samples_per_surface;
+	float light_samples = pc.samples_per_light;
 
-		vec3 light_contr = vec3(0.0);
-		for (int j = 0; j < pc.samples_per_light; j++) {
-			float beta = 1.0;
-			float ior = 1.0;
+	for (int n = 0; n < pc.lights; n++) {
+		// TODO: account for samples per light (loop here)
+		uint light_index = floatBitsToUint(light_indices.data[n]);
+		int light_object = int(floatBitsToUint(lights.data[light_index + 1].w));
 
-			vec3 light_position = sample_light_position(light_index, j);
+		// Get light position
+		vec3 light_position = sample_area_light(light_index, 0);
 
-			// Reset light arrays
-			for (int k = 0; k < MAX_DEPTH; k++) {
-				light_contrs[k] = vec3(0.0);
-				light_vertices[k] = vec3(0.0);
-				light_objects[k] = -1;
-			}
+		// TODO: account for BSDF sampling
 
-			// Always a first vertex
-			light_contrs[0] = vec3(1.0);
-			light_vertices[0] = light_position;
-			light_objects[0] = -1;
+		// Light path data
+		Ray	light_rays[MAX_DEPTH];
+		Hit	light_hits[MAX_DEPTH];
+		vec3	light_betas[MAX_DEPTH];
+		int	light_depth = 1;
 
-			// Trace a light path
-			vec3 dir = random_sphere();
-			// Ray l = Ray(light_position + dir * 0.001, dir, 1.0, 1.0);
-			r.origin = light_position + dir * 0.001;
-			r.direction = dir;
+		// Generate light path
+		vec3 light_beta = vec3(1.0);
 
-			// Generate path
-			int k = 1;
-			for (; k < MAX_DEPTH; k++) {
-				// Find closest object
-				Hit hit = trace(r);
+		// Index of refraction
+		float light_ior = 1.0;
 
-				// Value and position
-				light_contrs[k] = beta * hit.mat.albedo;
-				light_vertices[k] = hit.point + hit.normal * 0.001;
-				light_objects[k] = hit.object;
+		// Staring ray
+		// TODO: maybe choose an initial direction that is cosine
+		// weighted towards the first hit?
+		Ray lr = Ray(light_position, random_sphere(), 0.0, 0.0);
 
-				// Special case intersection
-				if (hit.object == -1 || hit.mat.shading == SHADING_EMISSIVE)
+		for (int i = 0; i < 1; i++, light_depth++) {
+			// Find closest object, and store hit stuff
+			light_hits[i] = trace(lr);
+			light_rays[i] = lr;
+			light_betas[i] = light_beta;
+
+			// Sample BSDF
+			float pdf = 0.0;
+			sample_bsdf(light_hits[i], lr, pdf, light_beta, light_ior);
+
+			if (pdf == 0.0)
+				break;
+
+			// Russian roulette
+			if (i > 2) {
+				float q = max(1.0 - light_beta.y, 0.05);
+				if (random() < q)
 					break;
-
-				// Generating the new ray according to BSDF
-				if (apply_bsdf(r, hit, beta, ior))
-					break;
+				light_beta /= (1.0 - q);
 			}
-
-			// Calculate path contribution
-			vec3 path_contr = vec3(0.0);
-
-			for (int x = 0; x <= bounces; x++) {
-				for (int y = 0; y <= k; y++) {
-					// Special case
-					if (camera_objects[x] == -1)  {
-						path_contr += camera_contr[x];
-						break;
-					}
-
-					vec3 ldir = normalize(light_vertices[y] - camera_vertices[x]);
-					Ray visibility = Ray(
-						camera_vertices[x],
-						ldir,
-						1.0, 1.0
-					);
-
-					Hit hit = trace(visibility);
-
-					// TODO: use actual object id...
-					if (hit.mat.shading == SHADING_EMISSIVE
-							|| hit.object == light_objects[y]) {
-						float d = distance(light_vertices[y], camera_vertices[x]);
-						float cos_theta = max(dot(ldir, camera_normals[x]), 0.0);
-						path_contr += light_contrs[y]
-							* camera_contr[x]
-							* cos_theta
-							* (5.0/d) * (2 * INV_PI * INV_PI);
-						continue;
-					}
-
-					// TODO: special case for transmissive materials
-					if (hit.object != -1
-							&& hit.mat.shading == SHADING_TRANSMISSION) {
-						// Trace ray from light vertex
-						//	to camera vertex (to hit the object)
-						Ray light_to_camera = Ray(
-							light_vertices[y],
-							-ldir,
-							1.0, 1.0
-						);
-
-						// TODO: biaS!!
-						Hit light_hit_0 = trace(light_to_camera);
-
-						if (light_hit_0.object == hit.object) {
-							// Then connect to form caustics
-							// after one more bounce
-							// TODO: get accurate
-							// iors
-							float ior_ = 1.0;
-							float beta_ = 1.0;
-
-							apply_bsdf(visibility,
-									hit,
-									beta_,
-									ior_);
-
-							ior_ = 1.0;
-							apply_bsdf(light_to_camera,
-									light_hit_0,
-									beta_,
-									ior_);
-
-							// Hit again (inside the object)
-							Hit visibility_1 = trace(visibility);
-							Hit light_hit_1 = trace(light_to_camera);
-
-							// Distance is now a sum
-							// of three distances
-							float d1 = distance(light_vertices[y], light_hit_0.point);
-							float d2 = distance(camera_vertices[x], hit.point);
-							float d3 = distance(visibility_1.point, light_hit_1.point);
-
-							// Connect each other
-							// float d = d1 + d2 + d3;
-							float d = distance(light_vertices[y], camera_vertices[x]);
-							float cos_theta = max(dot(ldir, camera_normals[x]), 0.0);
-							path_contr += light_contrs[y]
-								* camera_contr[x]
-								* cos_theta
-								* (5.0/d) * (2 * INV_PI * INV_PI);
-						}
-					}
-				}
-			}
-
-			// Update total light contribution
-			light_contr += path_contr;
 		}
 
-		// Update total contribution
-		total_contr += light_contr/float(pc.samples_per_light);
+		// Now compute the contributions
+		for (int i = 0; i < depth; i++) {
+			// Get hit
+			Hit hit = hits[i];
+			Ray ray = rays[i];
+
+			vec3 cam_hit = hits[i].point + hits[i].normal * 0.001;
+			vec3 beta = betas[i];
+			vec3 albedo = hits[i].mat.albedo;
+
+			for (int j = 0; j < light_depth; j++) {
+				// Get light hit
+				vec3 light_hit = light_rays[j].origin;
+				
+				// Temp variables
+				float d = distance(light_hit, cam_hit);
+				vec3 lcolor = light_betas[j];
+
+				// BSDF sampling
+				float pdf = 0.0;
+				float ior = 1.0;
+
+				Ray r = ray;
+				sample_bsdf(hit, r, pdf, beta, ior);
+
+				// Trace and see if it hits close to the light
+				Hit bsdf_hit = trace(r);
+
+				float dist = distance(bsdf_hit.point, light_hit);
+				if (dist <= 0.0025) {
+					float cos_theta = max(0.0, dot(hits[i].normal, r.direction));
+
+					float mis_weight = power_heuristic(
+						bsdf_samples, pdf,
+						light_samples, 0.25 * INV_PI
+					);
+
+					contribution += lcolor * albedo
+						* cos_theta * mis_weight
+						* (1/d) * (1/pdf);
+				}
+
+				// Visibility ray (light sampling)
+				vec3 vis_dir = normalize(light_hit - cam_hit);
+				Ray vis_ray = Ray(cam_hit, vis_dir, 0.0, 0.0);
+			
+				pdf = pdf_bsdf(hit, ray, vis_dir);
+				if (pdf == 0.0)
+					continue;
+
+				// Check if visible
+				Hit vis_hit = trace(vis_ray);
+
+				// Check that the hit points are close
+				dist = distance(vis_hit.point, light_hit);
+				if (dist <= 0.0025) {
+					float cos_theta = max(0.0, dot(hits[i].normal, vis_dir));
+
+					// Compute the contribution
+					float mis_weight = power_heuristic(
+						light_samples,
+						0.25 * INV_PI,
+						bsdf_samples, pdf
+					);
+
+					contribution += lcolor * beta * albedo
+						* cos_theta * (1/d)
+						* mis_weight * (4 * PI);
+					
+					if (d < 0.001)
+						return vec3(0, 0, 1);
+				}
+			}
+		}
 	}
 
-	return clamp(total_contr, 0.0, 1.0);
+	return clamp(contribution, 0.0, 1.0);
 }
-
-// Gamma correction coefficients
-const vec3 gamma = vec3(2.2);
-const vec3 inv_gamma = vec3(1.0/2.2);
 
 void main()
 {
@@ -327,7 +404,7 @@ void main()
 
 	// Get index
 	uint index = y0 * pc.width + x0;
-
+	
 	// Set seed
 	float rx = fract(sin(x0 * 12 + y0) * PHI);
 	float ry = fract(sin(y0 * 98 + x0));
@@ -340,14 +417,8 @@ void main()
 
 	vec2 dimensions = vec2(pc.width, pc.height);
 	for (int i = 0; i < pc.samples_per_pixel; i++) {
-		// Random offset
-		vec2 offset = jitter2d(
-			sqrt(pc.total),
-			i + pc.present
-		);
-
 		// Create the ray
-		vec2 pixel = vec2(x0, y0) + offset;
+		vec2 pixel = vec2(x0, y0) + random_sphere().xy/2.0;
 		vec2 uv = pixel / dimensions;
 
 		Ray ray = make_ray(uv,
@@ -365,13 +436,13 @@ void main()
 
 	if (pc.accumulate > 0) {
 		vec3 pcolor = cast_color(frame.pixels[index]);
-		pcolor = pow(pcolor, gamma);
+		pcolor = pow(pcolor, vec3(2.2));
 		color += pcolor * pc.present;
 		color /= float(pc.present + pc.samples_per_pixel);
-		color = pow(color, inv_gamma);
+		color = pow(color, vec3(1/2.2));
 	} else {
 		color /= float(pc.samples_per_pixel);
-		color = pow(color, inv_gamma);
+		color = pow(color, vec3(1/2.2));
 	}
 
 	frame.pixels[index] = cast_color(color);

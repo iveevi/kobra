@@ -377,6 +377,8 @@ public:
 		batch_index = batch.make_batch_index(0, 0);
 		batch_index.light_samples = 1;
 
+		rt_layer.set_batch(batch, batch_index);
+
 		// TODO: m8 gotta really fix auto channels
 		ImageData background = make_image(phdev, device,
 			command_pool,
@@ -506,6 +508,7 @@ public:
 
 		// Render appropriate layer
 		if (raster) {
+			rt_layer.stop();
 			raster_layer.render(cmd, framebuffer, extent);
 		} else {
 			if (modified) {
@@ -524,11 +527,11 @@ public:
 				modified = false; */
 			}
 
+			rt_layer.launch();
 			rt_layer.render(cmd, framebuffer, extent, batch, batch_index);
 
-			/* batch.increment(batch_index);
 			if (batch.completed())
-				batch.reset(); */
+				batch.reset();
 		}
 
 		// Render GUI

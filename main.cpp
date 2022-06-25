@@ -157,13 +157,13 @@ int main()
 	auto phdev = pick_physical_device(predicate);
 		
 	auto camera = Camera {
-		Transform { {0, 3, 9}, {-0.2, 0, 0} },
+		Transform { {2, 2, 6}, {-0.2, 0.3, 0} },
 		Tunings { 45.0f, 800, 800 }
 	};
 
 	// Create a GUI app
-	// RTApp app(phdev, extensions);
-	engine::RTCapture app(phdev, {1000, 1000}, extensions, scene_path, camera);
+	RTApp app(phdev, extensions);
+	// engine::RTCapture app(phdev, {1000, 1000}, extensions, scene_path, camera);
 
 	// Run the app
 	app.run();
