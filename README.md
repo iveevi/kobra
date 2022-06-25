@@ -50,7 +50,7 @@ glass pane (transmissive, in the middle).
 	<b>Figure 2:</b> Scene lit mostly with indirect lighting (3 hours)
 </p>
 
-The following is a more complex scene, in terms of scene geomtery and
+The following is a more complex scene, in terms of scene geometry and
 texture quality (assets and textures are from Quixel Megascans), that was
 rendering using bidirectional path tracing.
 
