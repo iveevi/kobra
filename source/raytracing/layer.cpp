@@ -626,9 +626,9 @@ void Layer::add_scene(const Scene &scene)
 			kobra::Layer <_element> ::add(ptr(sphere));
 		}
 
-		if (type == kobra::Mesh::object_type) {
-			kobra::Mesh *mesh = dynamic_cast
-				<kobra::Mesh *> (obj.get());
+		if (type == kobra::KMesh::object_type) {
+			kobra::KMesh *mesh = dynamic_cast
+				<kobra::KMesh *> (obj.get());
 			Mesh *nmesh = new Mesh(*mesh);
 			kobra::Layer <_element> ::add(ptr(nmesh));
 		}

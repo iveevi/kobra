@@ -4,7 +4,7 @@
 // Engine headers
 #include "../../shaders/rt/bindings.h"
 #include "../app.hpp"
-#include "../mesh.hpp"
+#include "../kmesh.hpp"
 #include "rt.hpp"
 
 namespace kobra {
@@ -12,7 +12,7 @@ namespace kobra {
 namespace rt {
 
 // Mesh for ray tracing
-class Mesh : virtual public kobra::Mesh, virtual public _element {
+class Mesh : virtual public kobra::KMesh, virtual public _element {
 public:
 	static constexpr char object_type[] = "RT Mesh";
 
@@ -20,10 +20,10 @@ public:
 	Mesh() = default;
 
 	// constructor from mesh
-	Mesh(const kobra::Mesh &mesh)
+	Mesh(const kobra::KMesh &mesh)
 			: Object(mesh.name(), object_type, mesh.transform()),
 			Renderable(mesh.material().copy()),
-			kobra::Mesh(mesh) {}
+			kobra::KMesh(mesh) {}
 
 	// Latch to layer
 	void latch(const LatchingPacket &lp, size_t id) override {

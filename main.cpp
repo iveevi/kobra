@@ -1,6 +1,7 @@
 #include "global.hpp"
 #include "include/app.hpp"
 #include "include/backend.hpp"
+#include "include/ecs.hpp"
 #include "include/engine/rt_capture.hpp"
 #include "include/gui/button.hpp"
 #include "include/gui/layer.hpp"
@@ -13,139 +14,22 @@ using namespace kobra;
 // Scene path
 std::string scene_path = "../assets/statue.kobra";
 
-// Experimental GUI app
-class GUIApp : public BaseApp {
-	gui::Layer layer;
-
-	// Elements
-	gui::Text *text_expl;
-	gui::Text *text_input;
-
-	// Keyboard input
-	// TODO: macro to generate signature
-	static void keyboard_handler(void *user, const io::KeyboardEvent &event) {
-		// Delete key delays
-		static const int delete_key_delay_max = 2;
-		static int delete_key_delay = 0;
-
-		GUIApp *app = (GUIApp *) user;
-
-		// If escape, then terminate
-		if (event.key == GLFW_KEY_ESCAPE) {
-			app->terminate_now();
-			return;
-		}
-
-		// If the character is printable, then add it to the input
-		bool pressed_only = (event.action == GLFW_PRESS);
-
-		if (std::isprint(event.key) && pressed_only) {
-			char c = std::tolower(event.key);
-			if (event.mods == GLFW_MOD_SHIFT)
-				c = std::toupper(c);
-
-			app->text_input->str += c;
-		}
-
-		// Delete last character
-		if (event.key == GLFW_KEY_BACKSPACE) {
-			if (pressed_only) {
-				app->text_input->str.pop_back();
-				delete_key_delay = 0;
-			} else {
-				delete_key_delay++;
-				if (delete_key_delay > delete_key_delay_max) {
-					app->text_input->str.pop_back();
-					delete_key_delay = 0;
-				}
-			}
-		}
-	}
-public:
-	GUIApp(vk::raii::PhysicalDevice &phdev_,
-			const vk::Extent2D &extent_,
-			const std::vector <const char *> &extensions_)
-			: BaseApp(phdev_, extent_, extensions_) {
-		layer = std::move(gui::Layer(phdev, device,
-			command_pool, descriptor_pool, extent,
-			swapchain.format, depth_buffer.format,
-			vk::AttachmentLoadOp::eClear
-		));
-
-		// Load all fonts
-		// TODO: later add layouts to tightly pack text and other gui elements
-		layer.load_font("default", "resources/fonts/noto_sans.ttf");
-
-		// Create text
-		std::cout << "Coords: " << coordinates(10, 10).x << " " << coordinates(10, 10).y << std::endl;
-		text_expl = layer.text_render("default")->text(
-			"Input: ",
-			coordinates(100, 10),
-			{1, 1, 1, 1}, 1
-		);
-
-		text_input = layer.text_render("default")->text(
-			"",
-			coordinates(220, 10),
-			{1, 1, 1, 1}, 1
-		);
-
-		// Add elements
-		layer.add(std::vector <gui::_element *> {
-			text_expl,
-			text_input
-		});
-
-		// Bind keyboard handler
-		io.keyboard_events.subscribe(keyboard_handler, this);
-
-		// Rectangle
-		auto rect = new gui::Rect(phdev, device,
-			coordinates(0, 0),
-			coordinates(100, 100),
-			{1, 1, 1}
-		);
-
-		// layer.add(rect);
-
-		// Button
-		auto button_info = gui::Button::RectButton {
-			.pos = coordinates(400, 400),
-			.size = coordinates(100, 100),
-
-			.button = GLFW_MOUSE_BUTTON_LEFT,
-
-			.idle = {0.5, 0.5, 1},
-			.hover = {1, 0.5, 0.5},
-			.active = {1, 1, 1}
-		};
-
-		auto button = new gui::Button(phdev, device, io, button_info);
-
-		layer.add(button);
-
-		// Sprite
-		auto sprite = new gui::Sprite(phdev, device,
-			command_pool,
-			coordinates(0, 0),
-			coordinates(100, 100),
-			"resources/icons/mesh.png"
-		);
-
-		layer.add(sprite);
-	}
-
-	void record(const vk::raii::CommandBuffer &cmd,
-			const vk::raii::Framebuffer &framebuffer) override {
-		cmd.begin({});
-		layer.render(cmd, framebuffer);
-		cmd.end();
-	}
-};
-
 int main()
 {
-	auto extensions = {
+	// ECS test
+	ECS ecs;
+
+	auto e1 = ecs.make_entity("e1");
+	auto e2 = ecs.make_entity("e2");
+	auto e3 = ecs.make_entity("e3");
+
+	std::cout << "Transform.position = " << e1.get<Transform>().position.x << std::endl;
+
+	e2.get <Transform>().position = {1, 2, 3};
+
+	ecs.info <Transform> ();
+
+	/* auto extensions = {
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 	};
 
@@ -166,7 +50,7 @@ int main()
 	engine::RTCapture app(phdev, {1000, 1000}, extensions, scene_path, camera);
 
 	// Run the app
-	app.run();
+	app.run(); */
 }
 
 ////////////////////

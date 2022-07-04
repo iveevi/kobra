@@ -76,7 +76,7 @@ void Model::_process_mesh(aiMesh *mesh, const aiScene *scene)
 	}
 
 	// TODO: ignoring materials right now
-	Mesh kmesh(vertices, indices);
+	KMesh kmesh(vertices, indices);
 	kmesh._source = _filename;
 	kmesh._source_index = _meshes.size();
 
@@ -137,12 +137,12 @@ const std::string &Model::filename() const
 	return _filename;
 }
 
-Mesh &Model::operator[](size_t i)
+KMesh &Model::operator[](size_t i)
 {
 	return _meshes[i];
 }
 
-const Mesh &Model::operator[](size_t i) const
+const KMesh &Model::operator[](size_t i) const
 {
 	return _meshes[i];
 }

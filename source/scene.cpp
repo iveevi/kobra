@@ -3,7 +3,7 @@
 #include <optional>
 
 // Engine headers
-#include "../include/mesh.hpp"
+#include "../include/kmesh.hpp"
 #include "../include/model.hpp"
 #include "../include/profiler.hpp"
 #include "../include/scene.hpp"
@@ -79,14 +79,14 @@ static ObjectPtr load_object(vk::raii::PhysicalDevice &phdev,
 	if (header == "[MESH]") {
 		KOBRA_LOG_FUNC(notify) << "Loading mesh " << name << std::endl;
 		Profiler::one().frame("Loading mesh");
-		auto mesh = Mesh::from_file(phdev, device, command_pool, fin, path);
+		auto mesh = KMesh::from_file(phdev, device, command_pool, fin, path);
 		Profiler::one().end();
 
 		if (!mesh)
 			return nullptr;
 
 		KOBRA_LOG_FUNC(notify) << "Finshed loading model, creating object" << std::endl;
-		auto optr = ObjectPtr(new Mesh(*mesh, *t));
+		auto optr = ObjectPtr(new KMesh(*mesh, *t));
 		optr->set_name(name);
 		optr->transform() = *t;
 		return optr;

@@ -126,7 +126,7 @@ class RTApp :  public BaseApp {
 
 			// Add to raster and scene
 			raster_layer.add(new raster::Mesh(phdev, device, mesh));
-			scene.add(ObjectPtr(new Mesh(mesh)));
+			scene.add(ObjectPtr(new KMesh(mesh)));
 		}
 	}
 
@@ -144,10 +144,10 @@ class RTApp :  public BaseApp {
 		auto new_name = name + "_" + std::to_string(count++);
 
 		KOBRA_LOG_FILE(notify) << "Duplicating " << name << " as " << new_name << " (type = " << type << ")\n";
-		if (type == Mesh::object_type) {
-			auto ptr_mesh = std::dynamic_pointer_cast <Mesh> (raster_obj);
+		if (type == KMesh::object_type) {
+			auto ptr_mesh = std::dynamic_pointer_cast <KMesh> (raster_obj);
 
-			auto scene_mesh = new Mesh(*ptr_mesh);
+			auto scene_mesh = new KMesh(*ptr_mesh);
 			auto raster_mesh = new raster::Mesh(phdev, device, *ptr_mesh);
 
 			scene_mesh->set_name(new_name);
@@ -159,7 +159,7 @@ class RTApp :  public BaseApp {
 			auto ptr_sphere = std::dynamic_pointer_cast <Sphere> (raster_obj);
 			auto scene_sphere = new Sphere(*ptr_sphere);
 
-			auto sphere_mesh = Mesh::make_sphere(ptr_sphere->center(), ptr_sphere->radius());
+			auto sphere_mesh = KMesh::make_sphere(ptr_sphere->center(), ptr_sphere->radius());
 			auto raster_sphere = new raster::Mesh(phdev, device, sphere_mesh);
 
 			scene_sphere->set_name(new_name);
@@ -397,9 +397,9 @@ public:
 		raster_layer.add_scene(scene);
 
 		// Rotation gizmo
-		auto ring_x = Mesh::make_ring({0, 0, 0}, 1, 0.05, 0.05);
-		auto ring_y = Mesh::make_ring({0, 0, 0}, 1, 0.05, 0.05);
-		auto ring_z = Mesh::make_ring({0, 0, 0}, 1, 0.05, 0.05);
+		auto ring_x = KMesh::make_ring({0, 0, 0}, 1, 0.05, 0.05);
+		auto ring_y = KMesh::make_ring({0, 0, 0}, 1, 0.05, 0.05);
+		auto ring_z = KMesh::make_ring({0, 0, 0}, 1, 0.05, 0.05);
 
 		ring_x.transform().rotation = {90, 0, 0};
 		ring_z.transform().rotation = {0, 0, 90};
@@ -412,7 +412,7 @@ public:
 		edit.gizmo_y = new raster::Mesh(phdev, device, ring_y);
 		edit.gizmo_z = new raster::Mesh(phdev, device, ring_z);
 
-		auto s0 = Mesh::make_sphere({0, 0, 0}, 0.05);
+		auto s0 = KMesh::make_sphere({0, 0, 0}, 0.05);
 
 		edit.p0 = new raster::Mesh(phdev, device, s0);
 		edit.p0->material().Kd = {0, 0, 0};

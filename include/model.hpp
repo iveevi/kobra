@@ -12,7 +12,7 @@
 #include <assimp/postprocess.h>
 
 // Engine headers
-#include "mesh.hpp"
+#include "kmesh.hpp"
 #include "logger.hpp"
 
 namespace kobra {
@@ -25,7 +25,7 @@ protected:
 	std::string		_filename;
 
 	// Meshes
-	std::vector <Mesh>	_meshes;
+	std::vector <KMesh>	_meshes;
 
 	// Assimp helpers
 	void _process_node(aiNode *, const aiScene *);
@@ -46,8 +46,8 @@ public:
 	size_t mesh_count() const;
 	const std::string &filename() const;
 
-	Mesh &operator[](size_t);
-	const Mesh &operator[](size_t) const;
+	KMesh &operator[](size_t);
+	const KMesh &operator[](size_t) const;
 
 	// Load model
 	static const Model &load(const std::string &);

@@ -14,7 +14,7 @@
 #include "../camera.hpp"
 #include "../layer.hpp"
 #include "../logger.hpp"
-#include "../mesh.hpp"
+#include "../kmesh.hpp"
 #include "../sphere.hpp"
 #include "batch.hpp"
 #include "bvh.hpp"
@@ -130,14 +130,14 @@ protected:
 	// Device buffer data
 	struct {
 		BufferData		pixels = nullptr;
-		
+
 		BufferData		vertices = nullptr;
 		BufferData		triangles = nullptr;
 		BufferData		materials = nullptr;
-		
+
 		BufferData		lights = nullptr;
 		BufferData		light_indices = nullptr;
-		
+
 		BufferData		transforms = nullptr;
 
 		// Bind to respective descriptor set
@@ -189,7 +189,7 @@ protected:
 
 		std::vector <aligned_vec4>	lights;
 		std::vector <uint>		light_indices;
-		
+
 		std::vector <aligned_mat4>	transforms; // TODO: is this needed?
 	} _host;
 
@@ -287,7 +287,7 @@ public:
 
 	// Launch kernels
 	void launch();
-	
+
 	// Stop all kernels
 	void stop();
 

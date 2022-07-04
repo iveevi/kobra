@@ -14,10 +14,10 @@
 
 namespace kobra {
 
-// Mesh class, just holds a list of vertices and indices
-class Mesh : virtual public Object, virtual public Renderable {
+// KMesh class, just holds a list of vertices and indices
+class KMesh : virtual public Object, virtual public Renderable {
 public:
-	static constexpr char object_type[] = "Mesh";
+	static constexpr char object_type[] = "KMesh";
 protected:
 	// Potential source
 	std::string	_source;
@@ -75,10 +75,10 @@ protected:
 	}
 public:
 	// Default constructor
-	Mesh() = default;
+	KMesh() = default;
 
 	// Copy constructor
-	Mesh(const Mesh &mesh)
+	KMesh(const KMesh &mesh)
 			: Object(object_type, mesh.transform()),
 			Renderable(std::forward <Material> (mesh.material().copy())),
 			_source(mesh._source),
@@ -87,7 +87,7 @@ public:
 			_indices(mesh._indices) {}
 
 	// Copy assignment operator
-	Mesh &operator=(const Mesh &mesh) {
+	KMesh &operator=(const KMesh &mesh) {
 		// Check for self assignment
 		if (this != &mesh) {
 			// Copy the object
@@ -104,7 +104,7 @@ public:
 
 	// Simple constructor
 	// TODO: load tangent and bitangent in loading models
-	Mesh(const Mesh &mesh, const Transform &transform)
+	KMesh(const KMesh &mesh, const Transform &transform)
 			: Object(object_type, transform),
 			Renderable(mesh.material().copy()),
 			_source(mesh._source),
@@ -112,7 +112,7 @@ public:
 			_vertices(mesh._vertices),
 			_indices(mesh._indices) {}
 
-	Mesh(const VertexList &vs, const Indices &is,
+	KMesh(const VertexList &vs, const Indices &is,
 			const Transform &t = Transform(),
 			bool calculate_tangents = true)
 			: Object(object_type, t),
@@ -123,7 +123,7 @@ public:
 	}
 
 	// Copy vertex and index data from another mesh
-	void copy_data(const Mesh &mesh) {
+	void copy_data(const KMesh &mesh) {
 		_vertices = mesh._vertices;
 		_indices = mesh._indices;
 	}
@@ -219,16 +219,16 @@ public:
 	// Virtual methods
 	void save(std::ofstream &) const override;
 
-	// Mesh factories
+	// KMesh factories
 	// TODO: should formaat with struct arguments and overloads instead:
-	// Mesh make(Box{...});
-	// Mesh make(Sphere{...}); ...
-	static Mesh make_box(const glm::vec3 &, const glm::vec3 &);
-	static Mesh make_sphere(const glm::vec3 &, float, int = 16, int = 16);
-	static Mesh make_ring(const glm::vec3 &, float, float, float, int = 32);
+	// KMesh make(Box{...});
+	// KMesh make(Sphere{...}); ...
+	static KMesh make_box(const glm::vec3 &, const glm::vec3 &);
+	static KMesh make_sphere(const glm::vec3 &, float, int = 16, int = 16);
+	static KMesh make_ring(const glm::vec3 &, float, float, float, int = 32);
 
 	// Read from file
-	static std::optional <Mesh> from_file(vk::raii::PhysicalDevice &,
+	static std::optional <KMesh> from_file(vk::raii::PhysicalDevice &,
 		vk::raii::Device &,
 		vk::raii::CommandPool &,
 		std::ifstream &,
@@ -246,7 +246,7 @@ struct cd_value {
 	glm::vec3	objp;
 };
 
-inline cd_value closest_distance(const Mesh &mesh, const Ray &ray)
+inline cd_value closest_distance(const KMesh &mesh, const Ray &ray)
 {
 	const VertexList &vs = mesh.vertices();
 

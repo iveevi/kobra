@@ -3,7 +3,7 @@
 
 // Engine headers
 #include "../backend.hpp"
-#include "../mesh.hpp"
+#include "../kmesh.hpp"
 #include "raster.hpp"
 
 namespace kobra {
@@ -11,7 +11,7 @@ namespace kobra {
 namespace raster {
 
 // Mesh for rasterization
-class Mesh : public kobra::Mesh, public _element {
+class Mesh : public kobra::KMesh, public _element {
 public:
 	static constexpr char object_type[] = "Raster Mesh";
 private:
@@ -28,10 +28,10 @@ public:
 	// Constructor
 	Mesh(const vk::raii::PhysicalDevice &phdev,
 			const vk::raii::Device &device,
-			const kobra::Mesh &mesh)
+			const kobra::KMesh &mesh)
 			: Object(mesh.name(), object_type, mesh.transform()),
 			Renderable(mesh.material().copy()),
-			kobra::Mesh(mesh) {
+			kobra::KMesh(mesh) {
 		// Buffer sizes
 		vk::DeviceSize vertex_buffer_size = _vertices.size() * sizeof(Vertex);
 		vk::DeviceSize index_buffer_size = _indices.size() * sizeof(uint32_t);

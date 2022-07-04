@@ -139,9 +139,9 @@ void Layer::add_scene(const Scene &scene)
 			add(mesh);
 		}
 
-		if (obj->type() == kobra::Mesh::object_type) {
-			kobra::Mesh *mesh = dynamic_cast
-				<kobra::Mesh *> (obj.get());
+		if (obj->type() == kobra::KMesh::object_type) {
+			kobra::KMesh *mesh = dynamic_cast
+				<kobra::KMesh *> (obj.get());
 
 			raster::Mesh *raster_mesh = new raster::Mesh(
 				_physical_device, _device, *mesh
@@ -159,7 +159,7 @@ void Layer::add_scene(const Scene &scene)
 			std::cout << "\tradius = " << sphere->radius() << std::endl;
 
 			// Create a sphere mesh
-			kobra::Mesh mesh = kobra::Mesh::make_sphere(
+			kobra::KMesh mesh = kobra::KMesh::make_sphere(
 				// TODO: no center -- should always be 0,0,0
 				{0, 0, 0}, sphere->radius()
 			);

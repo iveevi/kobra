@@ -1,16 +1,16 @@
 #include "../include/common.hpp"
-#include "../include/mesh.hpp"
+#include "../include/kmesh.hpp"
 #include "../include/model.hpp"
 #include "../include/profiler.hpp"
 
 namespace kobra {
 
 ////////////////////
-// Mesh factories //
+// KMesh factories //
 ////////////////////
 
 // Create box
-Mesh Mesh::make_box(const glm::vec3 &center, const glm::vec3 &dim)
+KMesh KMesh::make_box(const glm::vec3 &center, const glm::vec3 &dim)
 {
 	float x = dim.x;
 	float y = dim.y;
@@ -66,7 +66,7 @@ Mesh Mesh::make_box(const glm::vec3 &center, const glm::vec3 &dim)
 	};
 
 	// TODO: should set source of the mesh to box, then dimensions
-	auto out = Mesh { vertices, indices };
+	auto out = KMesh { vertices, indices };
 	out._source = "box";
 	out._source_index = 0;
 
@@ -74,7 +74,7 @@ Mesh Mesh::make_box(const glm::vec3 &center, const glm::vec3 &dim)
 }
 
 // Create sphere
-Mesh Mesh::make_sphere(const glm::vec3 &center, float radius, int slices, int stacks)
+KMesh KMesh::make_sphere(const glm::vec3 &center, float radius, int slices, int stacks)
 {
 	// Vertices and indices
 	VertexList vertices;
@@ -171,12 +171,12 @@ Mesh Mesh::make_sphere(const glm::vec3 &center, float radius, int slices, int st
 	}
 
 	// Construct and return the mesh
-	return Mesh {vertices, indices};
+	return KMesh {vertices, indices};
 }
 
 // Create a ring
 // TODO: allow a normal to be specified
-Mesh Mesh::make_ring(const glm::vec3 &center, float radius, float width, float height, int slices)
+KMesh KMesh::make_ring(const glm::vec3 &center, float radius, float width, float height, int slices)
 {
 	// Vertices and indices
 	VertexList vertices;
@@ -284,14 +284,14 @@ Mesh Mesh::make_ring(const glm::vec3 &center, float radius, float width, float h
 	}
 
 	// Construct and return the mesh
-	return Mesh {vertices, indices};
+	return KMesh {vertices, indices};
 }
 
 //////////////////
-// Mesh methods //
+// KMesh methods //
 //////////////////
 
-void Mesh::save(std::ofstream &file) const
+void KMesh::save(std::ofstream &file) const
 {
 	file << "[MESH]" << std::endl;
 
@@ -329,7 +329,7 @@ void Mesh::save(std::ofstream &file) const
 }
 
 // Load raw mesh (vertex and index data)
-static std::optional <Mesh> load_raw_mesh(std::ifstream &fin)
+static std::optional <KMesh> load_raw_mesh(std::ifstream &fin)
 {
 	// Read all vertices
 	VertexList vertices;
@@ -383,11 +383,11 @@ static std::optional <Mesh> load_raw_mesh(std::ifstream &fin)
 	fin.seekg(cpos);
 
 	// Construct and return mesh
-	return Mesh(vertices, indices);
+	return KMesh(vertices, indices);
 }
 
 // Read from file
-std::optional <Mesh> Mesh::from_file
+std::optional <KMesh> KMesh::from_file
 		(vk::raii::PhysicalDevice &phdev,
 		vk::raii::Device &device,
 		vk::raii::CommandPool &command_pool,
@@ -405,7 +405,7 @@ std::optional <Mesh> Mesh::from_file
 	// Load mesh
 	Profiler::one().frame("Loading mesh contents");
 
-	Mesh mesh;
+	KMesh mesh;
 	if (source == "0") {
 		// Load raw mesh
 		auto m = load_raw_mesh(file);
@@ -420,7 +420,7 @@ std::optional <Mesh> Mesh::from_file
 		std::sscanf(line.c_str(), "index=%d", &source_index);
 
 		if (source_index < 0) {
-			KOBRA_LOG_FUNC(error) << "Mesh index should not be negative\n";
+			KOBRA_LOG_FUNC(error) << "KMesh index should not be negative\n";
 			return std::nullopt;
 		}
 

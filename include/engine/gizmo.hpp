@@ -65,9 +65,9 @@ class Gizmo {
 		// Constructor
 		TransformGizmo(const vk::raii::PhysicalDevice &phdev_,
 				const vk::raii::Device &device_) {
-			x_box = new raster::Mesh(phdev_, device_, Mesh::make_box(pos, {0.5, 0.02, 0.02}));
-			y_box = new raster::Mesh(phdev_, device_, Mesh::make_box(pos, {0.02, 0.5, 0.02}));
-			z_box = new raster::Mesh(phdev_, device_, Mesh::make_box(pos, {0.02, 0.02, 0.5}));
+			x_box = new raster::Mesh(phdev_, device_, KMesh::make_box(pos, {0.5, 0.02, 0.02}));
+			y_box = new raster::Mesh(phdev_, device_, KMesh::make_box(pos, {0.02, 0.5, 0.02}));
+			z_box = new raster::Mesh(phdev_, device_, KMesh::make_box(pos, {0.02, 0.02, 0.5}));
 
 			x_box->material().Kd = {1, 0, 0};
 			y_box->material().Kd = {0, 1, 0};
