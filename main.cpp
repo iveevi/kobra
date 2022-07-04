@@ -11,7 +11,7 @@
 using namespace kobra;
 
 // Scene path
-std::string scene_path = "scenes/room.kobra";
+std::string scene_path = "../assets/statue.kobra";
 
 // Experimental GUI app
 class GUIApp : public BaseApp {
@@ -155,15 +155,15 @@ int main()
 	// Choose a physical device
 	// TODO: static lambda (FIRST)
 	auto phdev = pick_physical_device(predicate);
-		
+
 	auto camera = Camera {
-		Transform { {2, 2, 6}, {-0.2, 0.3, 0} },
+		Transform { {2, 2, 6}, {-0.1, 0.3, 0} },
 		Tunings { 45.0f, 800, 800 }
 	};
 
 	// Create a GUI app
-	RTApp app(phdev, extensions);
-	// engine::RTCapture app(phdev, {1000, 1000}, extensions, scene_path, camera);
+	// RTApp app(phdev, extensions);
+	engine::RTCapture app(phdev, {1000, 1000}, extensions, scene_path, camera);
 
 	// Run the app
 	app.run();

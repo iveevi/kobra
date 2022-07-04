@@ -239,6 +239,8 @@ vec3 direct_illumination(Hit hit, Ray ray)
 		for (int j = 0; j < bsdf_samples; j++) {
 			// Sample BSDF
 			float ior = 1.0; // TODO: should be something else?
+
+			// TODO: need to reset ray r
 			sample_bsdf(hit, r, pdf, beta, ior);
 
 			// Get intersect

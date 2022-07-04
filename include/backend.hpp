@@ -1484,6 +1484,12 @@ inline vk::raii::RenderPass make_render_pass(const vk::raii::Device &device,
 	);
 
 	// Create color attachment
+	vk::ImageLayout color_layout;
+	if (load_op == vk::AttachmentLoadOp::eLoad)
+		color_layout = vk::ImageLayout::ePresentSrcKHR;
+	else
+		color_layout = vk::ImageLayout::eUndefined;
+
 	vk::AttachmentDescription color_attachment {
 		{}, format,
 		vk::SampleCountFlagBits::e1,
@@ -1491,7 +1497,7 @@ inline vk::raii::RenderPass make_render_pass(const vk::raii::Device &device,
 		vk::AttachmentStoreOp::eStore,
 		vk::AttachmentLoadOp::eDontCare,
 		vk::AttachmentStoreOp::eDontCare,
-		vk::ImageLayout::eUndefined,
+		color_layout,
 		vk::ImageLayout::ePresentSrcKHR
 	};
 
@@ -1500,6 +1506,12 @@ inline vk::raii::RenderPass make_render_pass(const vk::raii::Device &device,
 
 	// Create depth attachment
 	if (depth_format != vk::Format::eUndefined) {
+		vk::ImageLayout depth_layout;
+		if (load_op == vk::AttachmentLoadOp::eLoad)
+			depth_layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+		else
+			depth_layout = vk::ImageLayout::eUndefined;
+
 		vk::AttachmentDescription depth_attachment {
 			{}, depth_format,
 			vk::SampleCountFlagBits::e1,
@@ -1507,7 +1519,7 @@ inline vk::raii::RenderPass make_render_pass(const vk::raii::Device &device,
 			vk::AttachmentStoreOp::eDontCare,
 			vk::AttachmentLoadOp::eDontCare,
 			vk::AttachmentStoreOp::eDontCare,
-			vk::ImageLayout::eUndefined,
+			depth_layout,
 			vk::ImageLayout::eDepthStencilAttachmentOptimal
 		};
 

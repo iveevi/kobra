@@ -78,7 +78,7 @@ index=0
 [MATERIAL]
 Kd=0.8 0.8 0.8
 Ks=0 0 0
-shading_type=Diffuse 
+shading_type=Reflection
 index_of_refraction=1
 extinction_coefficient=0
 albedo_texture=0
@@ -95,7 +95,7 @@ index=0
 [MATERIAL]
 Kd=0.8 0.8 0.8
 Ks=0 0 0
-shading_type=Diffuse 
+shading_type=Reflection
 index_of_refraction=1
 extinction_coefficient=0
 albedo_texture=0
@@ -129,7 +129,7 @@ index=0
 [MATERIAL]
 Kd=0.8 0.8 0.8
 Ks=0 0 0
-shading_type=Diffuse 
+shading_type=Reflection
 index_of_refraction=1
 extinction_coefficient=0
 albedo_texture=0
@@ -146,7 +146,7 @@ index=0
 [MATERIAL]
 Kd=0.8 0.8 0.8
 Ks=0 0 0
-shading_type=Diffuse 
+shading_type=Reflection
 index_of_refraction=1
 extinction_coefficient=0
 albedo_texture=0
@@ -154,9 +154,9 @@ normal_texture=0
 [OBJECT]
 name=Light 2
 [TRANSFORM]
-position=0 2.4 0
+position=0 5 0
 rotation=0 0 0
-scale=0.01 1 0.01
+scale=0.05 1 0.05
 [MESH]
 source=0
 v -5 0 5 0 0 1 0 0

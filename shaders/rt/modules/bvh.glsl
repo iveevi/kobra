@@ -88,7 +88,7 @@ Hit trace(Ray ray)
 			float t = intersect_box(ray, box);
 			bool inside = in_box(ray.origin, box);
 
-			if (t > 0.0 || inside) {
+			if ((t > 0.0 && t < mini.time) || inside) {
 				// Traverse left child
 				node = hit(node);
 			} else {

@@ -4,7 +4,6 @@
 #include "bindings.h"
 
 // Import all modules
-#include "../../include/types.hpp"
 #include "modules/ray.glsl"
 #include "modules/bbox.glsl"
 #include "modules/color.glsl"
@@ -314,10 +313,18 @@ vec3 color_at(Ray ray)
 		}
 
 		// Now compute the contributions
+		int count = 0;
 		for (int i = 0; i < depth; i++) {
 			// Get hit
 			Hit hit = hits[i];
 			Ray ray = rays[i];
+
+			if (hit.mat.shading == SHADING_EMISSIVE) {
+				contribution += hit.mat.albedo;
+
+				// Should be the last one anyway
+				break;
+			}
 
 			vec3 cam_hit = hits[i].point + hits[i].normal * 0.001;
 			vec3 beta = betas[i];
@@ -352,7 +359,8 @@ vec3 color_at(Ray ray)
 
 					contribution += lcolor * albedo
 						* cos_theta * mis_weight
-						* (1/d) * (1/pdf);
+						* (1/(d * d)) * (1/pdf);
+					count++;
 				}
 
 				// Visibility ray (light sampling)
@@ -379,18 +387,64 @@ vec3 color_at(Ray ray)
 					);
 
 					contribution += lcolor * beta * albedo
-						* cos_theta * (1/d)
+						* cos_theta * (1/(d * d))
 						* mis_weight * (4 * PI);
-					
-					if (d < 0.001)
-						return vec3(0, 0, 1);
+					count++;
 				}
 			}
 		}
 	}
 
+	// TODO: clamp at the film (final), not at the camera
 	return clamp(contribution, 0.0, 1.0);
 }
+
+// Mitchell-Netravali 1D
+float mitchell_netravali(float x, float b, float c)
+{
+	x = abs(2 * x);
+	if (x > 1) {
+		return (1.0/6.0) * (x * x * x * (-b - 6 * c)
+			+ x * x * (6 * b + 30 * c)
+			+ x * (-12 * b - 48 * c)
+			+ 8 * b + 24 * c);
+	}
+
+	return (1.0/6.0) * (x * x * x * (12 - 9 * b - 6 * c)
+		+ x * x * (-18 + 12 * b + 6 * c)
+		+ 6 - 2 * b);
+}
+
+// Image reconstruction
+vec3 filter_out(vec3 color, vec2 offset)
+{
+	/* Mitchell filter
+	float a = 2.0 / 3.0;
+	float b = 1.0 / 3.0;
+	return mitchell_netravali(offset.x, a, b)
+		* mitchell_netravali(offset.y, a, b)
+		* color; */
+
+	return color;
+}
+
+/* Halton sequence
+float halton(int index, int base)
+{
+	float f = 1.0;
+	float r = 0.0;
+	while (index > 0) {
+		f = f / base;
+		r = r + f * (index % base);
+		index = floor(index / base);
+	}
+	return r;
+}
+
+vec2 roffset(int i)
+{
+	return vec2(halton(i, 2), halton(i, 3));
+} */
 
 void main()
 {
@@ -418,7 +472,8 @@ void main()
 	vec2 dimensions = vec2(pc.width, pc.height);
 	for (int i = 0; i < pc.samples_per_pixel; i++) {
 		// Create the ray
-		vec2 pixel = vec2(x0, y0) + random_sphere().xy/2.0;
+		vec2 offset = random_sphere().xy/2.0f;
+		vec2 pixel = vec2(x0, y0) + offset;
 		vec2 uv = pixel / dimensions;
 
 		Ray ray = make_ray(uv,
@@ -431,7 +486,7 @@ void main()
 		);
 
 		// Light transport
-		color += color_at(ray);
+		color += filter_out(color_at(ray), offset);
 	}
 
 	if (pc.accumulate > 0) {
