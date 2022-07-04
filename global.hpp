@@ -404,9 +404,9 @@ public:
 		ring_x.transform().rotation = {90, 0, 0};
 		ring_z.transform().rotation = {0, 0, 90};
 
-		ring_x.material().Kd = {1, 0, 0};
-		ring_y.material().Kd = {0, 1, 0};
-		ring_z.material().Kd = {0, 0, 1};
+		ring_x.material.Kd = {1, 0, 0};
+		ring_y.material.Kd = {0, 1, 0};
+		ring_z.material.Kd = {0, 0, 1};
 
 		edit.gizmo_x = new raster::Mesh(phdev, device, ring_x);
 		edit.gizmo_y = new raster::Mesh(phdev, device, ring_y);
@@ -415,10 +415,10 @@ public:
 		auto s0 = KMesh::make_sphere({0, 0, 0}, 0.05);
 
 		edit.p0 = new raster::Mesh(phdev, device, s0);
-		edit.p0->material().Kd = {0, 0, 0};
+		edit.p0->material.Kd = {0, 0, 0};
 
 		edit.p1 = new raster::Mesh(phdev, device, s0);
-		edit.p1->material().Kd = {1, 1, 1};
+		edit.p1->material.Kd = {1, 1, 1};
 
 		init_gizmo();
 

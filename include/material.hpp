@@ -7,16 +7,42 @@
 #include <optional>
 
 // Engine headers
-#include "backend.hpp"
+// #include "backend.hpp"
 #include "common.hpp"
 #include "core.hpp"
 #include "types.hpp"
-// #include "buffer_manager.hpp"
-// #include "sampler.hpp"
 
 namespace kobra {
 
-// Material
+struct Material {
+	// TODO: default should be purple, flat shading
+	std::string	albedo_source = "";
+	std::string	normal_source = "";
+
+	glm::vec3	Kd = glm::vec3(0.0f);
+	glm::vec3	Ks = glm::vec3(0.0f);
+
+	Shading		type = Shading::eDiffuse;
+
+	float		refr_eta = 1.0f;
+	float		refr_k = 0.0f;
+
+	// Properties
+	bool has_albedo() const;
+	bool has_normal() const;
+
+	// Save material to file
+	void save(std::ofstream &) const;
+
+	// Serialize to GPU buffer
+	void serialize(std::vector <aligned_vec4> &) const;
+
+	static Material from_file(std::ifstream &, const std::string &, bool &);
+};
+
+// TODO: eventually use GGX for roughness
+
+/* Material
 class Material {
 	// Textures, if any
 	vk::raii::Sampler albedo_sampler = nullptr;
@@ -43,7 +69,6 @@ public:
 
 	float		refr_eta = 1.0f;
 	float		refr_k = 0.0f;
-
 
 	// Defualt constructor
 	Material() = default;
@@ -119,7 +144,7 @@ public:
 			std::ifstream &,
 			const std::string &,
 			bool &);
-};
+}; */
 
 }
 

@@ -561,6 +561,9 @@ void Layer::add_do(const ptr &e)
 	}
 
 	LatchingPacket lp {
+		.phdev = _physical_device,
+		.device = _device,
+
 		.vertices = _host.vertices,
 		.triangles = _host.triangles,
 		.materials = _host.materials,
@@ -1059,7 +1062,7 @@ void Layer::render(const vk::raii::CommandBuffer &cmd,
 	};
 
 	cmd.setScissor(0, scissor);
-	
+
 	// Post process pipeline
 	cmd.bindPipeline(
 		vk::PipelineBindPoint::eGraphics,

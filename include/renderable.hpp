@@ -8,37 +8,19 @@ namespace kobra {
 
 // Properties that every object to be
 // 	rendered must have
-class Renderable {
-protected:
-	Material _material;
-public:
+struct Renderable {
+	Material material;
+
 	// Default constructor
 	Renderable() = default;
 
-	// Constructor
-	Renderable(Material &&material) {
-		_material = std::move(material);
-	}
+	// Copy constructor
+	Renderable(const Renderable &renderable)
+			: material(renderable.material) {}
 
-	// Move constructor and assignment operator
-	Renderable(Renderable &&other) = default;
-	Renderable &operator=(Renderable &&other) = default;
-
-	// Destructor
-	virtual ~Renderable() {}
-
-	// Properties
-	Material &material() {
-		return _material;
-	}
-
-	const Material &material() const {
-		return _material;
-	}
-
-	void set_material(Material &&material) {
-		_material = std::forward <Material> (material);
-	}
+	// Constructors
+	Renderable(const Material &material)
+			: material(material) {}
 };
 
 }

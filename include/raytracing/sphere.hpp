@@ -3,6 +3,7 @@
 
 // Engine headers
 #include "../sphere.hpp"
+#include "../texture_manager.hpp"
 #include "rt.hpp"
 
 namespace kobra {
@@ -24,7 +25,7 @@ public:
 
 	Sphere(const kobra::Sphere &sphere)
 			: Object(sphere.name(), object_type, sphere.transform()),
-			Renderable(sphere.material().copy()),
+			Renderable(sphere.material),
 			kobra::Sphere(sphere) {}
 
 	// Latching to layer
@@ -50,15 +51,25 @@ public:
 		});
 		
 		// Write the material
-		_material.serialize(lp.materials);
+		material.serialize(lp.materials);
 		
-		auto albedo_descriptor = _material.get_albedo_descriptor();
-		if (albedo_descriptor)
-			lp.albedo_samplers[id - 1] = albedo_descriptor.value();
+		if (material.has_albedo()) {
+			auto albedo_descriptor = TextureManager::make_descriptor(
+				lp.phdev, lp.device,
+				material.albedo_source
+			);
 
-		auto normal_descriptor = _material.get_normal_descriptor();
-		if (normal_descriptor)
-			lp.normal_samplers[id - 1] = normal_descriptor.value();
+			lp.albedo_samplers[id - 1] = albedo_descriptor;
+		}
+
+		if (material.has_normal()) {
+			auto normal_descriptor = TextureManager::make_descriptor(
+				lp.phdev, lp.device,
+				material.normal_source
+			);
+
+			lp.normal_samplers[id - 1] = normal_descriptor;
+		}
 
 		// Write the transform
 		// TODO: do we still need this?

@@ -1682,15 +1682,14 @@ inline vk::raii::DescriptorSetLayout make_descriptor_set_layout
 // Binding to a descriptor set
 inline void bind_ds(const vk::raii::Device &device,
 		const vk::raii::DescriptorSet &dset,
-		const vk::raii::Sampler &sampler,
-		const ImageData &img,
+		const vk::Sampler &sampler,
+		const vk::ImageView &view,
 		uint32_t binding)
 {
 	// Bind sampler to descriptor set
 	auto dset_info = std::array <vk::DescriptorImageInfo, 1> {
 		vk::DescriptorImageInfo {
-			*sampler,
-			*img.view,
+			sampler, view,
 			vk::ImageLayout::eShaderReadOnlyOptimal
 		}
 	};
@@ -1703,6 +1702,15 @@ inline void bind_ds(const vk::raii::Device &device,
 	};
 
 	device.updateDescriptorSets(dset_write, nullptr);
+}
+
+inline void bind_ds(const vk::raii::Device &device,
+		const vk::raii::DescriptorSet &dset,
+		const vk::raii::Sampler &sampler,
+		const ImageData &img,
+		uint32_t binding)
+{
+	return bind_ds(device, dset, *sampler, *img.view, binding);
 }
 
 inline void bind_ds(const vk::raii::Device &device,

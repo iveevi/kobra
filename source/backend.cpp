@@ -183,6 +183,9 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 		vk::MemoryPropertyFlags memory_properties,
 		vk::ImageAspectFlags aspect_mask)
 {
+	// Check if the file exists
+	KOBRA_ASSERT(common::file_exists(filename), "File not found: " + filename);
+	
 	// Load the image
 	int width;
 	int height;

@@ -301,7 +301,7 @@ void KMesh::save(std::ofstream &file) const
 		file << "index=" << _source_index << std::endl;
 
 		// Save material
-		_material.save(file);
+		material.save(file);
 		return;
 	}
 
@@ -325,7 +325,7 @@ void KMesh::save(std::ofstream &file) const
 	}
 
 	// Save material
-	_material.save(file);
+	material.save(file);
 }
 
 // Load raw mesh (vertex and index data)
@@ -449,17 +449,12 @@ std::optional <KMesh> KMesh::from_file
 	}
 
 	bool success;
-	Material mat = Material::from_file(
-		phdev, device,
-		command_pool,
-		file, scene_file,
-		success
-	);
+	Material mat = Material::from_file(file, scene_file, success);
 
 	if (!success)
 		return std::nullopt;
 
-	mesh.set_material(std::forward <Material> (mat));
+	mesh.material = mat;
 	Profiler::one().end();
 
 	// Return mesh

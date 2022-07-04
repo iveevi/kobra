@@ -5,6 +5,7 @@
 #include "../../shaders/rt/bindings.h"
 #include "../app.hpp"
 #include "../kmesh.hpp"
+#include "../texture_manager.hpp"
 #include "rt.hpp"
 
 namespace kobra {
@@ -22,7 +23,7 @@ public:
 	// constructor from mesh
 	Mesh(const kobra::KMesh &mesh)
 			: Object(mesh.name(), object_type, mesh.transform()),
-			Renderable(mesh.material().copy()),
+			Renderable(mesh.material),
 			kobra::KMesh(mesh) {}
 
 	// Latch to layer
@@ -79,21 +80,31 @@ public:
 		}
 
 		// Write the material
-		_material.serialize(lp.materials);
+		material.serialize(lp.materials);
 
-		auto albedo_descriptor = _material.get_albedo_descriptor();
-		if (albedo_descriptor)
-			lp.albedo_samplers[id - 1] = albedo_descriptor.value();
+		if (material.has_albedo()) {
+			auto albedo_descriptor = TextureManager::make_descriptor(
+				lp.phdev, lp.device,
+				material.albedo_source
+			);
 
-		auto normal_descriptor = _material.get_normal_descriptor();
-		if (normal_descriptor)
-			lp.normal_samplers[id - 1] = normal_descriptor.value();
+			lp.albedo_samplers[id - 1] = albedo_descriptor;
+		}
+
+		if (material.has_normal()) {
+			auto normal_descriptor = TextureManager::make_descriptor(
+				lp.phdev, lp.device,
+				material.normal_source
+			);
+
+			lp.normal_samplers[id - 1] = normal_descriptor;
+		}
 
 		// Write the transform
 		lp.transforms.push_back(transform().matrix());
 
 		// If the material is emmisive, write as a light
-		if (is_type(_material.type, eEmissive)) {
+		if (is_type(material.type, eEmissive)) {
 			for (size_t i = 0; i < triangle_count(); i++) {
 				// Write light index
 				uint index = lp.lights.size();

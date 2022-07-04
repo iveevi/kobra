@@ -1,5 +1,5 @@
-#ifndef MESH_H_
-#define MESH_H_
+#ifndef KOBRA_KMESH_H_
+#define KOBRA_KMESH_H_
 
 // Standard headers
 #include <optional>
@@ -80,7 +80,7 @@ public:
 	// Copy constructor
 	KMesh(const KMesh &mesh)
 			: Object(object_type, mesh.transform()),
-			Renderable(std::forward <Material> (mesh.material().copy())),
+			Renderable(mesh.material),
 			_source(mesh._source),
 			_source_index(mesh._source_index),
 			_vertices(mesh._vertices),
@@ -92,7 +92,7 @@ public:
 		if (this != &mesh) {
 			// Copy the object
 			Object::operator=(mesh);
-			Renderable::operator=(mesh.material().copy());
+			Renderable::operator=(mesh.material);
 			_source = mesh._source;
 			_source_index = mesh._source_index;
 			_vertices = mesh._vertices;
@@ -106,7 +106,7 @@ public:
 	// TODO: load tangent and bitangent in loading models
 	KMesh(const KMesh &mesh, const Transform &transform)
 			: Object(object_type, transform),
-			Renderable(mesh.material().copy()),
+			Renderable(mesh.material),
 			_source(mesh._source),
 			_source_index(mesh._source_index),
 			_vertices(mesh._vertices),

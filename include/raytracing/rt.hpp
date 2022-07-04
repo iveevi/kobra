@@ -50,6 +50,10 @@ struct PC_Viewport {
 
 // Latching packet
 struct LatchingPacket {
+	// Vulkan
+	const vk::raii::PhysicalDevice &phdev;
+	const vk::raii::Device &device;
+
 	// Buffers
 	std::vector <aligned_vec4>	&vertices;
 	std::vector <aligned_vec4>	&triangles;

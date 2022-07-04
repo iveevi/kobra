@@ -5,8 +5,9 @@
 #include <optional>
 
 // Engine headers
-#include "renderable.hpp"
+#include "backend.hpp"
 #include "object.hpp"
+#include "renderable.hpp"
 
 namespace kobra {
 
@@ -23,7 +24,7 @@ public:
 	// Copy constructor
 	Sphere(const Sphere &sphere)
 			: Object(object_type, Transform()),
-			Renderable(sphere.material().copy()),
+			Renderable(sphere.material),
 			_radius(sphere._radius) {}
 
 	// Constructors
@@ -33,7 +34,7 @@ public:
 
 	Sphere(const Sphere &sphere, const Transform &transform)
 			: Object(object_type, transform),
-			Renderable(sphere.material().copy()),
+			Renderable(sphere.material),
 			_radius(sphere._radius) {}
 
 	// Getters
@@ -64,7 +65,7 @@ public:
 	void save(std::ofstream &file) const override {
 		file << "[SPHERE]\n";
 		file << "radius=" << _radius << "\n";
-		_material.save(file);
+		material.save(file);
 	}
 
 	// Read sphere object from file
@@ -94,8 +95,6 @@ public:
 		// Read material
 		bool success;
 		auto mat = Material::from_file(
-			phdev, device,
-			command_pool,
 			file, scene_file,
 			success
 		);
@@ -107,7 +106,7 @@ public:
 
 		// Construct and return sphere
 		Sphere sphere(radius);
-		sphere.set_material(std::move(mat));
+		sphere.material = mat;
 
 		return sphere;
 	}

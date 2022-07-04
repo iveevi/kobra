@@ -11,6 +11,7 @@
 // Engine headers
 #include "common.hpp"
 #include "logger.hpp"
+#include "mesh.hpp"
 #include "transform.hpp"
 
 namespace kobra {
@@ -33,6 +34,12 @@ inline const char *component_string <Transform> ()
 	return "Transform";
 }
 
+template <>
+inline const char *component_string <MeshPtr> ()
+{
+	return "Mesh";
+}
+
 // Components which all entities must have
 // are stored by value
 //
@@ -41,7 +48,8 @@ template <class T>
 using Archetype = std::vector <T>;
 
 class ECS {
-	Archetype <Transform> transforms;
+	Archetype <Transform>	transforms;
+	Archetype <MeshPtr>	meshes;
 
 	// Private helpers
 	void _expand_all();

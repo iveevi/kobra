@@ -12,11 +12,11 @@
 using namespace kobra;
 
 // Scene path
-std::string scene_path = "../assets/statue.kobra";
+std::string scene_path = "scenes/room_simple.kobra";
 
 int main()
 {
-	// ECS test
+	/* ECS test
 	ECS ecs;
 
 	auto e1 = ecs.make_entity("e1");
@@ -27,9 +27,9 @@ int main()
 
 	e2.get <Transform>().position = {1, 2, 3};
 
-	ecs.info <Transform> ();
+	ecs.info <Transform> (); */
 
-	/* auto extensions = {
+	auto extensions = {
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 	};
 
@@ -46,11 +46,11 @@ int main()
 	};
 
 	// Create a GUI app
-	// RTApp app(phdev, extensions);
-	engine::RTCapture app(phdev, {1000, 1000}, extensions, scene_path, camera);
+	RTApp app(phdev, extensions);
+	// engine::RTCapture app(phdev, {1000, 1000}, extensions, scene_path, camera);
 
 	// Run the app
-	app.run(); */
+	app.run();
 }
 
 ////////////////////

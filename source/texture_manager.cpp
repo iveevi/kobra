@@ -6,15 +6,22 @@ namespace kobra {
 // Static member variables //
 /////////////////////////////
 
-TextureManager::TextureMap TextureManager::_texture_map;
-TextureManager::TextureData TextureManager::_texture_data;
-std::mutex TextureManager::_mutex;
+TextureManager::DeviceMap <vk::raii::CommandPool>
+	TextureManager::_command_pools;
+TextureManager::DeviceMap <TextureManager::ImageMap>
+	TextureManager::_image_map;
+TextureManager::DeviceMap <std::vector <ImageData>>
+	TextureManager::_images;
+TextureManager::DeviceMap <TextureManager::SamplerMap>
+	TextureManager::_samplers;
+TextureManager::DeviceMap <std::mutex>
+	TextureManager::_mutexes {};
 
 ////////////////////
 // Static methods //
 ////////////////////
 
-const ImageData &TextureManager::load(const vk::raii::PhysicalDevice &phdev,
+/* const ImageData &TextureManager::load(const vk::raii::PhysicalDevice &phdev,
 		const vk::raii::Device &dev,
 		const vk::raii::CommandPool &command_pool,
 		const std::string &path,
@@ -44,6 +51,6 @@ const ImageData &TextureManager::load(const vk::raii::PhysicalDevice &phdev,
 	_mutex.unlock();
 
 	return ret;
-}
+} */
 
 }

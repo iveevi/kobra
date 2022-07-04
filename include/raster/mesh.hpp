@@ -30,7 +30,7 @@ public:
 			const vk::raii::Device &device,
 			const kobra::KMesh &mesh)
 			: Object(mesh.name(), object_type, mesh.transform()),
-			Renderable(mesh.material().copy()),
+			Renderable(mesh.material),
 			kobra::KMesh(mesh) {
 		// Buffer sizes
 		vk::DeviceSize vertex_buffer_size = _vertices.size() * sizeof(Vertex);
@@ -61,7 +61,7 @@ public:
 
 	// Add lighting info
 	void light(const LightingPacket &lp) override {
-		if (is_type(_material.type, eEmissive)) {
+		if (is_type(material.type, eEmissive)) {
 			glm::vec3 pos = center();
 			lp.ubo_point_lights->positions
 				[lp.ubo_point_lights->number++] = pos;
@@ -102,11 +102,11 @@ public:
 
 			// TODO: Material method (also keep PC_Material there)
 			{
-				_material.Kd,
-				_material.type, // TODO: ermove this casting
+				material.Kd,
+				material.type, // TODO: ermove this casting
 				(float) rp.highlight,
-				(float) _material.has_albedo(),
-				(float) _material.has_normal(),
+				(float) material.has_albedo(),
+				(float) material.has_normal(),
 			}
 		};
 
@@ -140,11 +140,11 @@ public:
 
 			// TODO: Material method (also keep PC_Material there)
 			{
-				_material.Kd,
-				_material.type, // TODO: ermove this casting
+				material.Kd,
+				material.type, // TODO: ermove this casting
 				(float) rp.highlight,
-				(float) _material.has_albedo(),
-				(float) _material.has_normal(),
+				(float) material.has_albedo(),
+				(float) material.has_normal(),
 			}
 		};
 

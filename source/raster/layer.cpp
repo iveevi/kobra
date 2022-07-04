@@ -169,7 +169,7 @@ void Layer::add_scene(const Scene &scene)
 			);
 
 			raster_mesh->transform() = sphere->transform();
-			raster_mesh->set_material(sphere->material().copy());
+			raster_mesh->material = sphere->material;
 			raster_mesh->set_name(sphere->name());
 			add(raster_mesh);
 		}

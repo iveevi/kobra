@@ -18,7 +18,7 @@ bool Material::has_normal() const
 	return !(normal_source.empty() || normal_source == "0");
 }
 
-// Get image descriptors
+/* Get image descriptors
 std::optional <vk::DescriptorImageInfo> Material::get_albedo_descriptor() const
 {
 	if (albedo_source.empty())
@@ -83,7 +83,7 @@ void Material::set_albedo(vk::raii::PhysicalDevice &phdev_,
 {
 	std::cout << "Set albedo texture: " << path << std::endl;
 	std::cout << "\tcommand_pool = " << *command_pool_ << std::endl;
-	
+
 	phdev = &phdev_;
 	device = &device_;
 	command_pool = &command_pool_;
@@ -125,7 +125,7 @@ void Material::set_normal(vk::raii::PhysicalDevice &phdev_,
 	);
 
 	normal_sampler = make_sampler(*device, normal_image);
-}
+} */
 
 // Serialize to buffer
 void Material::serialize(std::vector <aligned_vec4> &buffer) const
@@ -154,13 +154,7 @@ void Material::save(std::ofstream &file) const
 }
 
 // Read material from file
-Material Material::from_file
-		(vk::raii::PhysicalDevice &phdev,
-		vk::raii::Device &device,
-		vk::raii::CommandPool &command_pool,
-		std::ifstream &file,
-		const std::string &scene_file,
-		bool &success)
+Material Material::from_file(std::ifstream &file, const std::string &scene_file, bool &success)
 {
 	// Material to return
 	Material mat;
@@ -269,6 +263,8 @@ Material Material::from_file
 	mat.refr_eta = refr_eta;
 	mat.refr_k = refr_k;
 
+	// The actual image data isnt loaded until absolutely necessary
+
 	// TODO: create a texture loader agent to handle multithreaded textures
 	std::thread *albdeo_loader = nullptr;
 
@@ -280,7 +276,8 @@ Material Material::from_file
 			common::get_directory(scene_file)
 		);
 
-		mat.set_albedo(phdev, device, command_pool, albedo_source);
+		mat.albedo_source = albedo_source;
+		// mat.set_albedo(phdev, device, command_pool, albedo_source);
 		Profiler::one().end();
 	}
 
@@ -291,19 +288,20 @@ Material Material::from_file
 			common::get_directory(scene_file)
 		);
 
-		mat.set_normal(phdev, device, command_pool, normal_source);
+		mat.normal_source = normal_source;
+		// mat.set_normal(phdev, device, command_pool, normal_source);
 		Profiler::one().end();
 	}
 
-	// Wait for albedo and normal to load
+	/* Wait for albedo and normal to load
 	if (albdeo_loader != nullptr) {
 		albdeo_loader->join();
 		delete albdeo_loader;
-	}
+	} */
 
 	// Return material
 	success = true;
-	return mat; 
+	return mat;
 }
 
 }
