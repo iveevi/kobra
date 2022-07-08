@@ -45,13 +45,13 @@ struct Device {
 };
 
 struct Context {
-	const vk::raii::PhysicalDevice	&phdev;
-	const vk::raii::Device		&device;
-	const vk::raii::CommandPool	&command_pool;
-	const vk::raii::DescriptorPool	&descriptor_pool;
-	const vk::Extent2D		&extent;
-	const vk::Format		&swapchain_format;
-	const vk::Format		&depth_format;
+	const vk::raii::PhysicalDevice	&phdev = nullptr;
+	const vk::raii::Device		&device = nullptr;
+	const vk::raii::CommandPool	&command_pool = nullptr;
+	const vk::raii::DescriptorPool	&descriptor_pool = nullptr;
+	const vk::Extent2D		&extent = {};
+	const vk::Format		&swapchain_format = vk::Format::eUndefined;
+	const vk::Format		&depth_format = vk::Format::eUndefined;
 };
 
 //////////////////////

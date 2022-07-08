@@ -114,7 +114,7 @@ public:
 			frame_time = frame_timer.lap()/scale;
 		}
 
-		KOBRA_LOG_FILE(notify) << "App terminated\n";
+		KOBRA_LOG_FILE(ok) << "App successfully terminated.\n";
 
 		// Idle till all frames are finished
 		device.waitIdle();
@@ -125,7 +125,6 @@ public:
 
 	// Manually terminate application
 	void terminate_now() {
-		std::cout << "Terminated..." << std::endl;
 		terminated = true;
 	}
 

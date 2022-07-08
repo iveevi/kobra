@@ -12,8 +12,10 @@ Entity ECS::make_entity(const std::string &name) {
 // Private helpers
 void ECS::_expand_all()
 {
-	transforms.push_back(Transform());
+	cameras.push_back(nullptr);
 	meshes.push_back(nullptr);
+	rasterizers.push_back(nullptr);
+	transforms.push_back(Transform());
 
 	// TODO: assert that all arrays are the same size
 }

@@ -9,9 +9,11 @@
 #include <glm/gtx/string_cast.hpp>
 
 // Engine headers
+#include "camera.hpp"
 #include "common.hpp"
 #include "logger.hpp"
 #include "mesh.hpp"
+#include "renderer.hpp"
 #include "transform.hpp"
 
 namespace kobra {
@@ -48,8 +50,10 @@ template <class T>
 using Archetype = std::vector <T>;
 
 class ECS {
-	Archetype <Transform>	transforms;
-	Archetype <MeshPtr>	meshes;
+	Archetype <Transform>		transforms;
+	Archetype <MeshPtr>		meshes;
+	Archetype <RasterizerPtr>	rasterizers;
+	Archetype <CameraPtr>		cameras;
 
 	// Private helpers
 	void _expand_all();
@@ -64,6 +68,7 @@ class ECS {
 	};
 
 	// For referencing archetypes (as a whole)
+	// TODO: combine with _constructor
 	template <class T>
 	struct _ref {
 		static T &ref(ECS *, int) {
@@ -118,6 +123,11 @@ public:
 		_ref <T> ::ref(this, i) = _constructor <T> ::make(args ...);
 	}
 
+	// Size of ECS
+	int size() const {
+		return transforms.size();
+	}
+
 	// Create a new entity
 	Entity make_entity(const std::string &name = "Entity");
 
@@ -136,12 +146,28 @@ public:
 	}
 };
 
-// _component specializations
+// _constructor specializations
 template <>
 struct ECS::_constructor <Mesh> {
 	template <class ... Args>
 	static MeshPtr make(Args ... args) {
 		return std::make_shared <Mesh> (args ...);
+	}
+};
+
+template <>
+struct ECS::_constructor <Rasterizer> {
+	template <class ... Args>
+	static RasterizerPtr make(Args ... args) {
+		return std::make_shared <Rasterizer> (args ...);
+	}
+};
+
+template <>
+struct ECS::_constructor <Camera> {
+	template <class ... Args>
+	static CameraPtr make(Args ... args) {
+		return std::make_shared <Camera> (args ...);
 	}
 };
 
@@ -186,6 +212,46 @@ struct ECS::_ref <Mesh> {
 	}
 };
 
+template <>
+struct ECS::_ref <Rasterizer> {
+	static RasterizerPtr &ref(ECS *ecs, int i) {
+		return ecs->rasterizers[i];
+	}
+
+	static Rasterizer &get(ECS *ecs, int i) {
+		return *ecs->rasterizers[i];
+	}
+
+	static const Rasterizer &get(const ECS *ecs, int i) {
+		return *ecs->rasterizers[i];
+	}
+
+	static bool exists(const ECS *ecs, int i) {
+		return (ecs->rasterizers.size() > i)
+			&& (ecs->rasterizers[i] != nullptr);
+	}
+};
+
+template <>
+struct ECS::_ref <Camera> {
+	static CameraPtr &ref(ECS *ecs, int i) {
+		return ecs->cameras[i];
+	}
+
+	static Camera &get(ECS *ecs, int i) {
+		return *ecs->cameras[i];
+	}
+
+	static const Camera &get(const ECS *ecs, int i) {
+		return *ecs->cameras[i];
+	}
+
+	static bool exists(const ECS *ecs, int i) {
+		return (ecs->cameras.size() > i)
+			&& (ecs->cameras[i] != nullptr);
+	}
+};
+
 // Specializations of info
 template <>
 inline void ECS::info <Transform> () const {
@@ -198,7 +264,7 @@ inline void ECS::info <Transform> () const {
 
 // Entity class, acts like a pointer to a component
 class Entity {
-	std::string	name;
+	std::string	name = "";
 	int32_t		id = -1;
 	ECS		*ecs = nullptr;
 
@@ -222,9 +288,29 @@ class Entity {
 	Entity(std::string name_, uint32_t id_, ECS *ecs_)
 		: name(name_), id(id_), ecs(ecs_) {}
 public:
+	// Default
+	Entity() = default;
+
 	// Non copy, id is unique
 	Entity(const Entity &) = delete;
 	Entity &operator=(const Entity &) = delete;
+
+	// Moveable
+	Entity(Entity &&other)
+			: name(std::move(other.name)),
+			id(other.id), ecs(other.ecs) {
+		other.id = -1;
+		other.ecs = nullptr;
+	}
+
+	Entity &operator=(Entity &&other) {
+		name = std::move(other.name);
+		id = other.id;
+		ecs = other.ecs;
+		other.id = -1;
+		other.ecs = nullptr;
+		return *this;
+	}
 
 	// Get for entities
 	template <class T>

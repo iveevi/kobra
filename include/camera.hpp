@@ -1,5 +1,8 @@
-#ifndef CAMERA_H_
-#define CAMERA_H_
+#ifndef KOBRA_CAMERA_H_
+#define KOBRA_CAMERA_H_
+
+// Standard headers
+#include <memory>
 
 // GLM headers
 #include <glm/glm.hpp>
@@ -10,6 +13,8 @@
 #include "transform.hpp"
 
 namespace kobra {
+
+// TODO: clean up this interface
 
 // Camera properties
 class Tunings {
@@ -82,6 +87,8 @@ struct Camera {
 		return Ray {transform.position, dir};
 	}
 };
+
+using CameraPtr = std::shared_ptr <Camera>;
 
 }
 
