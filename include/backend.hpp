@@ -35,6 +35,25 @@ const int MAX_FRAMES_IN_FLIGHT = 2;
 
 namespace kobra {
 
+////////////////////////////
+// Aliases and structures //
+////////////////////////////
+
+struct Device {
+	const vk::raii::PhysicalDevice	&phdev;
+	const vk::raii::Device		&device;
+};
+
+struct Context {
+	const vk::raii::PhysicalDevice	&phdev;
+	const vk::raii::Device		&device;
+	const vk::raii::CommandPool	&command_pool;
+	const vk::raii::DescriptorPool	&descriptor_pool;
+	const vk::Extent2D		&extent;
+	const vk::Format		&swapchain_format;
+	const vk::Format		&depth_format;
+};
+
 //////////////////////
 // Object factories //
 //////////////////////
@@ -373,9 +392,6 @@ struct Window {
 // Create a surface given a window
 inline vk::raii::SurfaceKHR make_surface(const Window &window)
 {
-	std::cout << "MAKE SURFACE: " << window.handle << std::endl;
-	std::cout << "\tinstance: " << *get_vulkan_instance() << std::endl;
-
 	// Create the surface
 	VkSurfaceKHR surface;
 	VkResult result = glfwCreateWindowSurface(
@@ -384,9 +400,6 @@ inline vk::raii::SurfaceKHR make_surface(const Window &window)
 		nullptr,
 		&surface
 	);
-
-	std::cout << "[Vulkan] Created surface!\n"
-		"Handle: " << surface << std::endl;
 
 	KOBRA_ASSERT(result == VK_SUCCESS, "Failed to create surface");
 
@@ -627,9 +640,6 @@ inline vk::SurfaceFormatKHR pick_surface_format(const vk::raii::PhysicalDevice &
 		{ vk::Format::eB8G8R8A8Unorm, vk::ColorSpaceKHR::eSrgbNonlinear },
 	};
 
-	std::cout << "DEvice:\n" << dev_info(phdev) << std::endl;
-	std::cout << "surface handle: " << *surface << std::endl;
-
 	// Get the surface formats
 	std::vector <vk::SurfaceFormatKHR> formats =
 			phdev.getSurfaceFormatsKHR(*surface);
@@ -832,8 +842,8 @@ inline void transition_image_layout(const vk::raii::CommandBuffer &cmd,
 	}
 
 	// Pipeline stage
-        vk::PipelineStageFlags source_stage;
-        switch (old_layout) {
+	vk::PipelineStageFlags source_stage;
+	switch (old_layout) {
 	case vk::ImageLayout::eGeneral:
 	case vk::ImageLayout::ePreinitialized:
 		source_stage = vk::PipelineStageFlagBits::eHost;
@@ -850,11 +860,11 @@ inline void transition_image_layout(const vk::raii::CommandBuffer &cmd,
 	default:
 		KOBRA_ASSERT(false, "Unsupported old layout " + vk::to_string(old_layout));
 		break;
-        }
+	}
 
 	// Destination stage
-        vk::AccessFlags dst_access_mask = {};
-        switch (new_layout) {
+	vk::AccessFlags dst_access_mask = {};
+	switch (new_layout) {
 	case vk::ImageLayout::eColorAttachmentOptimal:
 		dst_access_mask = vk::AccessFlagBits::eColorAttachmentWrite;
 		break;
@@ -877,11 +887,11 @@ inline void transition_image_layout(const vk::raii::CommandBuffer &cmd,
 	default:
 		KOBRA_ASSERT(false, "Unsupported new layout " + vk::to_string(new_layout));
 		break;
-        }
+	}
 
 	// Destination stage
-        vk::PipelineStageFlags destination_stage;
-        switch (new_layout) {
+	vk::PipelineStageFlags destination_stage;
+	switch (new_layout) {
 	case vk::ImageLayout::eColorAttachmentOptimal:
 		destination_stage = vk::PipelineStageFlagBits::eColorAttachmentOutput; break;
 	case vk::ImageLayout::eDepthStencilAttachmentOptimal:
@@ -898,22 +908,22 @@ inline void transition_image_layout(const vk::raii::CommandBuffer &cmd,
 	default:
 		KOBRA_ASSERT(false, "Unsupported new layout " + vk::to_string(new_layout));
 		break;
-        }
+	}
 
 	// Aspect mask
-        vk::ImageAspectFlags aspect_mask;
-        if (new_layout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
+	vk::ImageAspectFlags aspect_mask;
+	if (new_layout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
 		aspect_mask = vk::ImageAspectFlagBits::eDepth;
 		if (format == vk::Format::eD32SfloatS8Uint || format == vk::Format::eD24UnormS8Uint)
 			aspect_mask |= vk::ImageAspectFlagBits::eStencil;
-        } else {
+	} else {
 		aspect_mask = vk::ImageAspectFlagBits::eColor;
-        }
+	}
 
 	// Create the barrier
-        vk::ImageSubresourceRange image_subresource_range {
+	vk::ImageSubresourceRange image_subresource_range {
 		aspect_mask,
-		0, 1, 0, 1
+			0, 1, 0, 1
 	};
 
 	vk::ImageMemoryBarrier barrier {
@@ -958,20 +968,20 @@ struct ImageData {
 			properties {memory_properties_},
 			aspect_mask {aspect_mask_},
 			image {device_,
-				  {
-					  vk::ImageCreateFlags(),
-					  vk::ImageType::e2D,
-					  format,
-					  vk::Extent3D( extent, 1 ),
-					  1,
-					  1,
-					  vk::SampleCountFlagBits::e1,
-					  tiling,
-					  usage | vk::ImageUsageFlagBits::eSampled,
-					  vk::SharingMode::eExclusive,
-					  {},
-					  layout
-				  }
+				{
+					vk::ImageCreateFlags(),
+					vk::ImageType::e2D,
+					format,
+					vk::Extent3D( extent, 1 ),
+					1,
+					1,
+					vk::SampleCountFlagBits::e1,
+					tiling,
+					usage | vk::ImageUsageFlagBits::eSampled,
+					vk::SharingMode::eExclusive,
+					{},
+					layout
+				}
 			},
 
 			memory {
@@ -1149,7 +1159,7 @@ public:
 
 	// Upload data to buffer
 	template <class T>
-	bool upload(const std::vector <T> &data, bool auto_resize = true) {
+	bool upload(const std::vector <T> &data, const vk::DeviceSize &offset = 0, bool auto_resize = true) {
 		static constexpr char prop_msg[] = "Buffer data must be host coherent and host visible";
 		static constexpr char size_msg[] = "Buffer size is smaller than data size";
 
@@ -1167,6 +1177,7 @@ public:
 
 		KOBRA_ASSERT(smaller || auto_resize, size_msg);
 		if (!smaller) {
+
 #ifndef KOBRA_VALIDATION_ERROR_ONLY
 
 			KOBRA_LOG_FUNC(warn) << size_msg << " (size = " << size
@@ -1181,15 +1192,15 @@ public:
 		}
 
 		// Upload data
-		void *ptr = memory.mapMemory(0, size);
-		memcpy(ptr, data.data(), data.size() * sizeof(T));
+		char *ptr = (char *) memory.mapMemory(0, size);
+		memcpy(ptr + offset, data.data(), data.size() * sizeof(T));
 		memory.unmapMemory();
 
 		return resized;
 	}
 
 	template <class T>
-	bool upload(const T *const data, const vk::DeviceSize &size_, bool auto_resize = true) {
+	bool upload(const T *const data, const vk::DeviceSize &size_, const vk::DeviceSize &offset = 0, bool auto_resize = true) {
 		static constexpr char prop_msg[] = "Buffer data must be host coherent and host visible";
 		static constexpr char size_msg[] = "Buffer size is smaller than data size";
 
@@ -1220,8 +1231,8 @@ public:
 		}
 
 		// Upload data
-		void *ptr = memory.mapMemory(0, size);
-		memcpy(ptr, data, size);
+		char *ptr = (char *) memory.mapMemory(0, size);
+		memcpy(ptr + offset, data, size_);
 		memory.unmapMemory();
 
 		return resized;

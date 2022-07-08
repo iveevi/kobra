@@ -50,47 +50,33 @@ protected:
 	coordinates::Screen coordinates(float x, float y) {
 		return coordinates::Screen {x, y, extent.width, extent.height};
 	}
+
+	// Generating aux structures
+	Device get_device() const {
+		return Device {
+			.phdev = phdev,
+			.device = device
+		};
+	}
 public:
 	// Constructor
 	App(const vk::raii::PhysicalDevice &phdev_,
+			const std::string &name_,
 			const vk::Extent2D &extent_,
 			const std::vector <const char *> &extensions)
 			: phdev(phdev_),
-			window("Kobra Application", extent_),
+			window(name_, extent_),
 			extent(extent_),
 			frame_index(0) {
-		// TODO: move to source file
-		std::cout << dev_info(phdev) << std::endl;
-
-		std::cout << "Window handle: " << window.handle << std::endl;
-
-		// Create Vulkan surface
 		surface = make_surface(window);
-
-		std::cout << "Surface created" << std::endl;
-		std::cout << "Surface info: " << *surface << std::endl;
-
-		// Create Vulkan device
 		auto queue_family = find_queue_families(phdev, surface);
-
-		std::cout << "Graphics: " << queue_family.graphics << std::endl;
-		std::cout << "Present: " << queue_family.present << std::endl;
 
 		// TODO: extensions as a device
 		device = make_device(phdev, queue_family, extensions);
-
-		std::cout << "Device: " << *device << std::endl;
-		std::cout << "\tdispatcher = " << device.getDispatcher() << std::endl;
-
-		// Create swapchain
 		swapchain = Swapchain {phdev, device, surface, window.extent, queue_family};
 
-		std::cout << "Post swch" << std::endl;
-
-		// Set user pointer
+		// GLFW things
 		glfwSetWindowUserPointer(window.handle, &io);
-
-		// Set event callbacks
 		glfwSetMouseButtonCallback(window.handle, &io::mouse_button_callback);
 		glfwSetCursorPosCallback(window.handle, &io::mouse_position_callback);
 		glfwSetKeyCallback(window.handle, &io::keyboard_callback);
@@ -181,13 +167,27 @@ protected:
 	};
 
 	std::vector <FrameData>			frames;
+
+	// Generate aux structures
+	Context get_context() const {
+		return Context {
+			.phdev = phdev,
+			.device = device,
+			.command_pool = command_pool,
+			.descriptor_pool = descriptor_pool,
+			.extent = extent,
+			.swapchain_format = swapchain.format,
+			.depth_format = depth_buffer.format,
+		};
+	}
 public:
 	// TODO: is attachment load op needed?
 	BaseApp(const vk::raii::PhysicalDevice &phdev_,
+			const std::string &name_,
 			const vk::Extent2D &extent_,
 			const std::vector <const char *> &extensions,
 			const vk::AttachmentLoadOp &load = vk::AttachmentLoadOp::eClear)
-			: App(phdev_, extent_, extensions) {
+			: App(phdev_, name_, extent_, extensions) {
 		// Create the depth buffer
 		depth_buffer = DepthBuffer {
 			phdev, device,
@@ -196,6 +196,8 @@ public:
 		};
 
 		// Create render pass
+		// TODO: we dont need to create a base render pass (whos gonna
+		// use it?)
 		render_pass = make_render_pass(device,
 			swapchain.format,
 			depth_buffer.format,

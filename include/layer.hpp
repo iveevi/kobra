@@ -6,6 +6,7 @@
 #include <vector>
 
 // Engine headers
+#include "ecs.hpp"
 #include "scene.hpp"
 
 namespace kobra {
@@ -24,7 +25,7 @@ public:
 	Layer() = default;
 
 	// Constructor from vector of elements
-	Layer (const std::vector <ptr> &elements)
+	Layer(const std::vector <ptr> &elements)
 			: _elements (elements) {}
 
 	// Add action
@@ -62,7 +63,8 @@ public:
 	}
 
 	// Adding scenes
-	virtual void add_scene(const Scene &scene) = 0;
+	// virtual void add_scene(const ECS &) = 0;
+	virtual void add_scene(const Scene &) = 0;
 
 	// Indexing elements
 	ptr operator[](size_t index) const {

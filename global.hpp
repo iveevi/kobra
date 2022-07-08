@@ -7,8 +7,8 @@
 #include <thread>
 
 // Engine macros
+#define KOBRA_VALIDATION_ERROR_ONLY
 #define KOBRA_VALIDATION_LAYERS
-// #define KOBRA_VALIDATION_ERROR_ONLY
 #define KOBRA_THROW_ERROR
 
 // Engine headers
@@ -322,7 +322,7 @@ public:
 	// TODO: just remove the option of no depth buffer (always use depth buffer)
 	RTApp(const vk::raii::PhysicalDevice &phdev_,
 			const std::vector <const char *> &exts)
-			: BaseApp(phdev_, {1000, 1000}, exts),
+			: BaseApp(phdev_, "RTApp", {1000, 1000}, exts),
 			// TODO: base app method to generate the required
 			// structure for layer construction
 			rt_layer(phdev, device,

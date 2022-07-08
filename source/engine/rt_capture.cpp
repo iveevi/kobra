@@ -10,7 +10,7 @@ RTCapture::RTCapture(vk::raii::PhysicalDevice &phdev,
 		const std::vector <const char *> &extensions_,
 		const std::string &scene_file,
 		const Camera &camera)
-		: BaseApp(phdev, extent, extensions_),
+		: BaseApp(phdev, "RTCapture", extent, extensions_),
 		camera(camera),
 		layer(phdev, device,
 			command_pool,

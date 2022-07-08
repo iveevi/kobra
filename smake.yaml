@@ -1,4 +1,4 @@
-default_compiler: clang++
+default_compiler: nvcc
 default_standard: c++17
 
 definitions:
@@ -43,17 +43,17 @@ definitions:
 
 builds:
   - kobra_release:
-    - sources: main.cpp, kobra_source, tinyfd_source
+    - sources: main.cpp, glfw_input.cpp, kobra_source, tinyfd_source
     - idirs: includes
     - flags: '-O3 -std=c++17'
     - libraries: libs
   - kobra_debug:
-    - sources: main.cpp, kobra_source, tinyfd_source
+    - sources: main.cpp, glfw_input.cpp, kobra_source, tinyfd_source
     - idirs: includes
     - libraries: libs
     - flags: '-std=c++17 -g'
   - kobra_wall:
-    - sources: main.cpp, kobra_source, tinyfd_source
+    - sources: main.cpp, glfw_input.cpp, kobra_source, tinyfd_source
     - idirs: includes
     - libraries: libs
     - flags: '-std=c++17 -Wall -Werror'

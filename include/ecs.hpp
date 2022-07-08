@@ -21,7 +21,7 @@ class Entity;
 
 // Component to string
 template <typename T>
-const char *component_string()
+std::string component_string()
 {
 	return "";
 }
@@ -29,13 +29,13 @@ const char *component_string()
 // Specilizations
 // TODO: macrofy
 template <>
-inline const char *component_string <Transform> ()
+inline std::string component_string <Transform> ()
 {
 	return "Transform";
 }
 
 template <>
-inline const char *component_string <MeshPtr> ()
+inline std::string component_string <MeshPtr> ()
 {
 	return "Mesh";
 }
@@ -53,13 +53,70 @@ class ECS {
 
 	// Private helpers
 	void _expand_all();
+
+	// For construction of components
+	template <class T>
+	struct _constructor {
+		template <class ... Args>
+		static T make(Args ... args) {
+			return T(args ...);
+		}
+	};
+
+	// For referencing archetypes (as a whole)
+	template <class T>
+	struct _ref {
+		static T &ref(ECS *, int) {
+			throw std::runtime_error(
+				"_ref::ref() not implemented for type: "
+				+ component_string <T> ()
+			);
+		}
+
+		static T &get(ECS *, int) {
+			throw std::runtime_error(
+				"_ref::get() not implemented for type: "
+				+ component_string <T> ()
+			);
+		}
+
+		static const T &get(const ECS *, int) {
+			throw std::runtime_error(
+				"const _ref::get() not implemented for type: "
+				+ component_string <T> ()
+			);
+		}
+
+		static bool exists(const ECS *, int) {
+			throw std::runtime_error(
+				"_ref::exists() not implemented for type: "
+				+ component_string <T> ()
+			);
+		}
+	};
 public:
 	// The get functions will need to be specialized
 	template <class T>
-	T &get(int);
+	T &get(int i) {
+		return _ref <T> ::get(this, i);
+	}
 
 	template <class T>
-	const T &get(int) const;
+	const T &get(int i) const {
+		return _ref <T> ::get(this, i);
+	}
+
+	// Existence check
+	template <class T>
+	bool exists(int i) const {
+		return _ref <T> ::exists(this, i);
+	}
+
+	// Add a component
+	template <class T, class ... Args>
+	void add(int i, Args ... args) {
+		_ref <T> ::ref(this, i) = _constructor <T> ::make(args ...);
+	}
 
 	// Create a new entity
 	Entity make_entity(const std::string &name = "Entity");
@@ -70,7 +127,7 @@ public:
 		std::cout << "Archetype: " << component_string <T> () << std::endl;
 		for (size_t i = 0; i < transforms.size(); i++) {
 			std::cout << "\tEntity " << i << ": ";
-			if (get <T> (i) != nullptr)
+			if (_ref <T> ::exists(this, i))
 				std::cout << "yes";
 			else
 				std::cout << "no";
@@ -79,15 +136,55 @@ public:
 	}
 };
 
-// Specializations of the get functions
-#define ECS_GET(T)				\
-	template <>				\
-	T &ECS::get <T> (int i);		\
-						\
-	template <>				\
-	const T &ECS::get <T> (int i) const;
+// _component specializations
+template <>
+struct ECS::_constructor <Mesh> {
+	template <class ... Args>
+	static MeshPtr make(Args ... args) {
+		return std::make_shared <Mesh> (args ...);
+	}
+};
 
-ECS_GET(Transform)
+// _ref specializations
+// TODO: another header
+template <>
+struct ECS::_ref <Transform> {
+	static Transform &ref(ECS *ecs, int i) {
+		return ecs->transforms[i];
+	}
+
+	static Transform &get(ECS *ecs, int i) {
+		return ecs->transforms[i];
+	}
+
+	static const Transform &get(const ECS *ecs, int i) {
+		return ecs->transforms[i];
+	}
+
+	static bool exists(const ECS *ecs, int i) {
+		return ecs->transforms.size() > i;
+	}
+};
+
+template <>
+struct ECS::_ref <Mesh> {
+	static MeshPtr &ref(ECS *ecs, int i) {
+		return ecs->meshes[i];
+	}
+
+	static Mesh &get(ECS *ecs, int i) {
+		return *ecs->meshes[i];
+	}
+
+	static const Mesh &get(const ECS *ecs, int i) {
+		return *ecs->meshes[i];
+	}
+
+	static bool exists(const ECS *ecs, int i) {
+		return (ecs->meshes.size() > i)
+			&& (ecs->meshes[i] != nullptr);
+	}
+};
 
 // Specializations of info
 template <>
@@ -140,6 +237,20 @@ public:
 	const T &get() const {
 		_assert();
 		return ecs->get <T> (id);
+	}
+
+	// Existence check
+	template <class T>
+	bool exists() const {
+		_assert();
+		return ecs->exists <T> (id);
+	}
+
+	// Add a component
+	template <class T, class ... Args>
+	void add(Args ... args) {
+		_assert();
+		ecs->add <T> (id, args ...);
 	}
 
 	// Friend the ECS class

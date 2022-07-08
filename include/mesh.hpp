@@ -80,6 +80,27 @@ struct Mesh {
 	// Constructors
 	Mesh(const std::vector <Submesh> &sm)
 		: submeshes(sm) {}
+
+	// Total number of vertices
+	int vertices() const {
+		int total = 0;
+		for (const auto &submesh : submeshes)
+			total += submesh.vertices.size();
+		return total;
+	}
+
+	// Total number of indices
+	int indices() const {
+		int total = 0;
+		for (const auto &submesh : submeshes)
+			total += submesh.indices.size();
+		return total;
+	}
+
+	// Indexing
+	const Submesh &operator[](int i) const {
+		return submeshes[i];
+	}
 };
 
 using MeshPtr = std::shared_ptr <Mesh>;

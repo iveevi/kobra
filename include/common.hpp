@@ -4,6 +4,7 @@
 // Standard headers
 #include <fstream>
 #include <iostream>
+#include <stdarg.h>
 #include <string>
 #include <vector>
 
