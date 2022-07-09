@@ -13,6 +13,7 @@ Entity ECS::make_entity(const std::string &name) {
 void ECS::_expand_all()
 {
 	cameras.push_back(nullptr);
+	lights.push_back(nullptr);
 	meshes.push_back(nullptr);
 	rasterizers.push_back(nullptr);
 	transforms.push_back(Transform());

@@ -9,8 +9,10 @@
 // #include "../layer.hpp"
 
 #include "../backend.hpp"
-#include "../vertex.hpp"
 #include "../ecs.hpp"
+#include "../../shaders/raster/bindings.h"
+#include "../../shaders/raster/constants.h"
+#include "../vertex.hpp"
 
 namespace kobra {
 
@@ -21,7 +23,7 @@ class Raster {
 	struct PushConstant {
 		glm::mat4	model;
 		glm::mat4	view;
-		glm::mat4	projection;
+		glm::mat4	perspective;
 
 		glm::vec3	albedo;
 		int		type;
@@ -40,6 +42,33 @@ class Raster {
 	vk::raii::Pipeline		_p_albedo = nullptr;
 	vk::raii::Pipeline		_p_normal = nullptr;
 	vk::raii::Pipeline		_p_phong = nullptr;
+
+	// Buffer for all the lights
+	struct LightsData {
+		int count;
+
+		// TODO: different kinds of lights
+		// (its possible to use area lights for rasterization as well)
+		aligned_vec4 positions[MAX_POINT_LIGHTS];
+	};
+
+	BufferData			_b_lights = nullptr;
+
+	// Bind pipeline from raster mode
+	const vk::raii::Pipeline &get_pipeline(RasterMode mode) {
+		switch (mode) {
+		case RasterMode::eAlbedo:
+			return _p_albedo;
+		case RasterMode::eNormal:
+			return _p_normal;
+		case RasterMode::ePhong:
+			return _p_phong;
+		default:
+			break;
+		}
+
+		KOBRA_ASSERT(false, "Rasterizer: invalid raster mode");
+	}
 
 	// Descriptor set layout and bindings
 	vk::raii::DescriptorSetLayout	_dsl = nullptr;
@@ -136,6 +165,13 @@ public:
 		// Blinn-Phong
 		grp_info.fragment_shader = std::move(shaders[3]);
 		_p_phong = make_graphics_pipeline(grp_info);
+
+		// Create buffer for lights
+		_b_lights = BufferData(_ctx.phdev, _ctx.device, 1024,
+			vk::BufferUsageFlagBits::eUniformBuffer,
+			vk::MemoryPropertyFlagBits::eHostVisible |
+				vk::MemoryPropertyFlagBits::eHostCoherent
+		);
 	}
 
 	// Render
@@ -193,6 +229,10 @@ public:
 		Camera camera;
 		bool found_camera = false;
 
+		LightsData lights_data {
+			.count = 0,
+		};
+
 		for (int i = 0; i < ecs.size(); i++) {
 			// Deal with camera component
 			if (ecs.exists <Camera> (i)) {
@@ -207,6 +247,7 @@ public:
 				const Rasterizer *rasterizer = &ecs.get <Rasterizer> (i);
 				if (_ds_components.count(rasterizer) == 0) {
 					_ds_components.insert({rasterizer, _make_ds()});
+					const auto &ds = _ds_components.at(rasterizer);
 
 					Device dev {
 						_ctx.phdev,
@@ -214,18 +255,37 @@ public:
 					};
 
 					// Update descriptor set
-					rasterizer->bind_material(dev, _ds_components.at(rasterizer));
+					rasterizer->bind_material(dev, ds);
+
+					// Bind lights buffer
+					bind_ds(_ctx.device, ds, _b_lights,
+						vk::DescriptorType::eUniformBuffer,
+						RASTER_BINDING_POINT_LIGHTS
+					);
 				}
+			}
+
+			// Deal with light component
+			if (ecs.exists <Light> (i)) {
+				// Initialize corresponding descriptor
+				// set if not done yet
+				const Light *light = &ecs.get <Light> (i);
+
+				// Transform
+				const auto &transform = ecs.get <Transform> (i);
+				auto pos = transform.position;
+
+				// Update lights data
+				lights_data.positions[lights_data.count++] = pos;
 			}
 		}
 
-		// Bind pipeline
-		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *_p_normal);
+		_b_lights.upload(&lights_data, sizeof(lights_data));
 
 		// Render all rasterizer components
 		PushConstant push_constant {
 			.view = camera.view(),
-			.projection = camera.projection(),
+			.perspective = camera.perspective(),
 			.albedo = glm::vec3 {1.0f, 0.0f, 1.0f},
 			.type = Shading::eDiffuse,
 			.highlight = false,
@@ -244,6 +304,12 @@ public:
 			// Get rasterizer
 			const Rasterizer *rasterizer = &ecs.get <Rasterizer> (i);
 			const auto &ds = _ds_components.at(rasterizer);
+
+			// Bind pipeline
+			cmd.bindPipeline(
+				vk::PipelineBindPoint::eGraphics,
+				*get_pipeline(rasterizer->mode)
+			);
 
 			// Bind descriptor set
 			cmd.bindDescriptorSets(

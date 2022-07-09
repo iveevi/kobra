@@ -9,6 +9,7 @@
 #include "include/gui/sprite.hpp"
 #include "include/io/event.hpp"
 #include "include/layers/raster.hpp"
+#include "include/transform.hpp"
 #include "tinyfiledialogs.h"
 
 using namespace kobra;
@@ -20,7 +21,9 @@ std::string scene_path = "scenes/room_simple.kobra";
 struct ECSApp : public BaseApp {
 	layers::Raster	rasterizer;
 	ECS		ecs;
+
 	Entity		camera;
+	Entity		light;
 
 	ECSApp(const vk::raii::PhysicalDevice &phdev, const std::vector <const char *> &extensions)
 			: BaseApp(phdev, "ECSApp", {1000, 1000}, extensions),
@@ -31,7 +34,8 @@ struct ECSApp : public BaseApp {
 		camera = std::move(ecs.make_entity("Camera"));
 
 		// Set transforms
-		e2.get <Transform> ().position = {1, 2, 3};
+		e2.get <Transform> ().position = {0, -2, 0};
+		e2.get <Transform> ().scale = {5, 0.1, 5};
 
 		// Add meshes to e1 and e2
 		auto box = KMesh::make_box({0, 0, 0}, {1, 1, 1});
@@ -45,10 +49,17 @@ struct ECSApp : public BaseApp {
 		e1.add <Rasterizer> (get_device(), e1.get <Mesh> ());
 		e2.add <Rasterizer> (get_device(), e2.get <Mesh> ());
 
-		// Add camera to e3
-		// TODO: modify tunings interface
-		auto c = Camera(Transform({0, 3, 10}), Tunings(40.0f, 1000, 1000));
+		e1.get <Rasterizer> ().mode = RasterMode::ePhong;
+
+		// Add camera
+		auto c = Camera(Transform({0, 3, 10}), Tunings(45.0f, 1000, 1000));
 		camera.add <Camera> (c);
+
+		// Light
+		light = std::move(ecs.make_entity("Light"));
+		light.get <Transform> ().position = {0, 10, 0};
+
+		light.add <Light> (Light {.intensity = {1, 1, 1}});
 
 		// Input callbacks
 		io.mouse_events.subscribe(mouse_callback, this);

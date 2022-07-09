@@ -11,6 +11,7 @@
 // Engine headers
 #include "camera.hpp"
 #include "common.hpp"
+#include "lights.hpp"
 #include "logger.hpp"
 #include "mesh.hpp"
 #include "renderer.hpp"
@@ -50,10 +51,11 @@ template <class T>
 using Archetype = std::vector <T>;
 
 class ECS {
-	Archetype <Transform>		transforms;
+	Archetype <CameraPtr>		cameras;
+	Archetype <LightPtr>		lights;
 	Archetype <MeshPtr>		meshes;
 	Archetype <RasterizerPtr>	rasterizers;
-	Archetype <CameraPtr>		cameras;
+	Archetype <Transform>		transforms;
 
 	// Private helpers
 	void _expand_all();
@@ -171,6 +173,14 @@ struct ECS::_constructor <Camera> {
 	}
 };
 
+template <>
+struct ECS::_constructor <Light> {
+	template <class ... Args>
+	static LightPtr make(Args ... args) {
+		return std::make_shared <Light> (args ...);
+	}
+};
+
 // _ref specializations
 // TODO: another header
 template <>
@@ -249,6 +259,26 @@ struct ECS::_ref <Camera> {
 	static bool exists(const ECS *ecs, int i) {
 		return (ecs->cameras.size() > i)
 			&& (ecs->cameras[i] != nullptr);
+	}
+};
+
+template <>
+struct ECS::_ref <Light> {
+	static LightPtr &ref(ECS *ecs, int i) {
+		return ecs->lights[i];
+	}
+
+	static Light &get(ECS *ecs, int i) {
+		return *ecs->lights[i];
+	}
+
+	static const Light &get(const ECS *ecs, int i) {
+		return *ecs->lights[i];
+	}
+
+	static bool exists(const ECS *ecs, int i) {
+		return (ecs->lights.size() > i)
+			&& (ecs->lights[i] != nullptr);
 	}
 };
 

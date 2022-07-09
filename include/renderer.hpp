@@ -3,6 +3,7 @@
 
 // Engine headers
 #include "backend.hpp"
+#include "enums.hpp"
 #include "material.hpp"
 #include "mesh.hpp"
 
@@ -27,6 +28,9 @@ class Rasterizer : public Renderer {
 	BufferData	index_buffer = nullptr;
 	size_t		indices = 0;
 public:
+	// Raster mode
+	RasterMode mode = RasterMode::eAlbedo;
+
 	// No default constructor
 	Rasterizer() = delete;
 
