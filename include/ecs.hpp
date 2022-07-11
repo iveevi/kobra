@@ -57,6 +57,8 @@ class ECS {
 	Archetype <RasterizerPtr>	rasterizers;
 	Archetype <Transform>		transforms;
 
+	Archetype <std::string>		names;
+
 	// Private helpers
 	void _expand_all();
 
@@ -123,6 +125,11 @@ public:
 	template <class T, class ... Args>
 	void add(int i, Args ... args) {
 		_ref <T> ::ref(this, i) = _constructor <T> ::make(args ...);
+	}
+
+	// Get name of entity
+	std::string name(int i) const {
+		return names[i];
 	}
 
 	// Size of ECS

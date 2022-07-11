@@ -5,6 +5,7 @@ namespace kobra {
 // Creating a new entity
 Entity ECS::make_entity(const std::string &name) {
 	_expand_all();
+	names.push_back(name);
 	int32_t id = transforms.size() - 1;
 	return Entity(name, id, this);
 }

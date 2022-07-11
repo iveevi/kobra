@@ -17,14 +17,14 @@ void Rasterizer::bind_material(const Device &dev, const vk::raii::DescriptorSet 
 		normal = material.normal_source;
 
 	TextureManager::bind(
-		dev.phdev, dev.device,
+		*dev.phdev, *dev.device,
 		dset, albedo,
 		// TODO: enum like RasterBindings::eAlbedo
 		RASTER_BINDING_ALBEDO_MAP
 	);
 
 	TextureManager::bind(
-		dev.phdev, dev.device,
+		*dev.phdev, *dev.device,
 		dset, normal,
 		RASTER_BINDING_NORMAL_MAP
 	);

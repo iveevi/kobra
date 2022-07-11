@@ -52,10 +52,10 @@ protected:
 	}
 
 	// Generating aux structures
-	Device get_device() const {
+	Device get_device() {
 		return Device {
-			.phdev = phdev,
-			.device = device
+			.phdev = &phdev,
+			.device = &device
 		};
 	}
 public:
@@ -168,12 +168,12 @@ protected:
 	std::vector <FrameData>			frames;
 
 	// Generate aux structures
-	Context get_context() const {
+	Context get_context() {
 		return Context {
-			.phdev = phdev,
-			.device = device,
-			.command_pool = command_pool,
-			.descriptor_pool = descriptor_pool,
+			.phdev = &phdev,
+			.device = &device,
+			.command_pool = &command_pool,
+			.descriptor_pool = &descriptor_pool,
 			.extent = extent,
 			.swapchain_format = swapchain.format,
 			.depth_format = depth_buffer.format,

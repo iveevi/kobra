@@ -40,18 +40,18 @@ namespace kobra {
 ////////////////////////////
 
 struct Device {
-	const vk::raii::PhysicalDevice	&phdev;
-	const vk::raii::Device		&device;
+	vk::raii::PhysicalDevice	*phdev = nullptr;
+	vk::raii::Device		*device = nullptr;
 };
 
 struct Context {
-	const vk::raii::PhysicalDevice	&phdev = nullptr;
-	const vk::raii::Device		&device = nullptr;
-	const vk::raii::CommandPool	&command_pool = nullptr;
-	const vk::raii::DescriptorPool	&descriptor_pool = nullptr;
-	const vk::Extent2D		&extent = {};
-	const vk::Format		&swapchain_format = vk::Format::eUndefined;
-	const vk::Format		&depth_format = vk::Format::eUndefined;
+	vk::raii::PhysicalDevice	*phdev = nullptr;
+	vk::raii::Device		*device = nullptr;
+	vk::raii::CommandPool		*command_pool = nullptr;
+	vk::raii::DescriptorPool	*descriptor_pool = nullptr;
+	vk::Extent2D			extent = {};
+	vk::Format			swapchain_format = vk::Format::eUndefined;
+	vk::Format			depth_format = vk::Format::eUndefined;
 };
 
 //////////////////////

@@ -12,6 +12,7 @@
 #include "include/transform.hpp"
 #include "tinyfiledialogs.h"
 #include "include/layers/font_renderer.hpp"
+#include "include/engine/ecs_panel.hpp"
 
 using namespace kobra;
 
@@ -22,6 +23,7 @@ std::string scene_path = "scenes/room_simple.kobra";
 struct ECSApp : public BaseApp {
 	layers::Raster	rasterizer;
 	layers::FontRenderer font_renderer;
+	engine::ECSPanel panel;
 
 	ECS		ecs;
 
@@ -31,10 +33,11 @@ struct ECSApp : public BaseApp {
 	ECSApp(const vk::raii::PhysicalDevice &phdev, const std::vector <const char *> &extensions)
 			: BaseApp(phdev, "ECSApp", {1000, 1000}, extensions, vk::AttachmentLoadOp::eLoad),
 			rasterizer(get_context(), vk::AttachmentLoadOp::eClear),
-			font_renderer(get_context(), render_pass, "resources/fonts/noto_sans.ttf") {
+			font_renderer(get_context(), render_pass, "resources/fonts/noto_sans.ttf"),
+			panel(get_context(), ecs) {
 		// Add entities
-		auto e1 = ecs.make_entity("e1");
-		auto e2 = ecs.make_entity("e2");
+		auto e1 = ecs.make_entity("box");
+		auto e2 = ecs.make_entity("plane");
 		camera = std::move(ecs.make_entity("Camera"));
 
 		// Set transforms
@@ -101,7 +104,7 @@ struct ECSApp : public BaseApp {
 		std::vector <Text> texts {
 			Text {
 				.text ="Hello world! " + std::to_string(frame_time) + "s",
-				.anchor = {10, 10},
+				.anchor = {100, 10},
 				.size = 1.0f
 			}
 		};
@@ -144,6 +147,8 @@ struct ECSApp : public BaseApp {
 		font_renderer.render(cmd, texts);
 
 		cmd.endRenderPass();
+
+		panel.render(cmd, framebuffer, extent);
 		cmd.end();
 	}
 

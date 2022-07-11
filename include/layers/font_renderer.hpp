@@ -132,30 +132,30 @@ public:
 	// Constructor
 	FontRenderer(const Context &ctx, const vk::raii::RenderPass &render_pass, const std::string &font_path)
 			: _ctx(ctx),
-			_font(_ctx.phdev, _ctx.device,
-				_ctx.command_pool,
-				_ctx.descriptor_pool,
+			_font(*_ctx.phdev, *_ctx.device,
+				*_ctx.command_pool,
+				*_ctx.descriptor_pool,
 				font_path
 			) {
 		// Create the descriptor set layout
 		_dsl = make_descriptor_set_layout(
-			_ctx.device,
+			*_ctx.device,
 			{gui::Glyph::bitmap_binding}
 		);
 
 		// Pipline layout
 		_ppl = vk::raii::PipelineLayout {
-			_ctx.device,
+			*_ctx.device,
 			{{}, *_dsl, {}}
 		};
 
 		// Pipeline
-		auto shaders = make_shader_modules(_ctx.device, {
+		auto shaders = make_shader_modules(*_ctx.device, {
 			"shaders/bin/gui/glyph_vert.spv",
 			"shaders/bin/gui/bitmap_frag.spv"
 		});
 
-		auto pipeline_cache = vk::raii::PipelineCache {_ctx.device, {}};
+		auto pipeline_cache = vk::raii::PipelineCache {*_ctx.device, {}};
 
 		// Vertex binding and attribute descriptions
 		auto binding_description = gui::Glyph::Vertex::vertex_binding();
@@ -163,7 +163,7 @@ public:
 
 		// Create the graphics pipeline
 		GraphicsPipelineInfo grp_info {
-			.device = _ctx.device,
+			.device = *_ctx.device,
 			.render_pass = render_pass,
 
 			.vertex_shader = std::move(shaders[0]),
@@ -184,14 +184,84 @@ public:
 		// Create the buffer of glyphs
 		vk::DeviceSize size = sizeof(gui::Glyph::Vertex) * 1024;
 
-		_glyphs = BufferData(_ctx.phdev, _ctx.device, size,
+		_glyphs = BufferData(*_ctx.phdev, *_ctx.device, size,
 			vk::BufferUsageFlagBits::eVertexBuffer,
 			vk::MemoryPropertyFlagBits::eHostVisible
 				| vk::MemoryPropertyFlagBits::eHostCoherent
 		);
 	}
 
+	// Dimension of text in pixels
+	glm::vec2 size(const Text &text) {
+		static const float factor = 1/1000.0f;
+
+		glm::vec2 pos = text.anchor;
+
+		pos.x /= _ctx.extent.width;
+		pos.y /= _ctx.extent.height;
+
+		pos.x = 2 * pos.x - 1;
+		pos.y = 2 * pos.y - 1;
+
+		float scale = text.size;
+
+		/* KOBRA_LOG_FILE(notify) << "Creating text: " << text.text << " at "
+			<< pos.x << ", " << pos.y << " with scale "
+			<< scale << std::endl; */
+
+		// NOTE: pos is the origin pos, not the top-left corner
+		float x = pos.x;
+		float y = pos.y;
+
+		float minx = x, maxx = x;
+		float miny = y, maxy = y;
+
+		float iwidth = scale * factor/_ctx.extent.width;
+		float iheight = scale * factor/_ctx.extent.height;
+
+		// Array of glyphs
+		std::vector <gui::Glyph> glyphs;
+
+		// Create glyphs
+		for (char c : text.text) {
+			// If newline
+			if (c == '\n') {
+				x = pos.x;
+				y += _font.line_height();
+				continue;
+			}
+
+			// Get metrics for current character
+			FT_Glyph_Metrics metrics = _font.metrics(c);
+
+			// Get glyph top-left
+			float x0 = x + (metrics.horiBearingX * iwidth);
+			float y0 = y - (metrics.horiBearingY * iheight);
+
+			miny = std::min(miny, y0);
+
+			// Get glyph bounds
+			float w = metrics.width * iwidth;
+			float h = metrics.height * iheight;
+
+			maxy = std::max(maxy, y0 + h);
+
+			// Advance
+			x += metrics.horiAdvance * iwidth;
+		}
+
+		// Update text bounds
+		maxx = x;
+
+		// Return dimension
+		return {
+			_ctx.extent.width * (maxx - minx),
+			_ctx.extent.height * (maxy - miny)
+		};
+	}
+
 	// Render texts, assuming the render pass is active
+	// TODO: should also pass in extent
 	void render(const vk::raii::CommandBuffer &cmd, const std::vector <Text> &texts) {
 		// Map of character to glyphs
 		GlyphMap glyph_map;

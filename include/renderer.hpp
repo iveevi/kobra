@@ -42,14 +42,14 @@ public:
 		vk::DeviceSize index_buffer_size = mesh.indices() * sizeof(uint32_t);
 
 		// Create buffers
-		vertex_buffer = BufferData(dev.phdev, dev.device,
+		vertex_buffer = BufferData(*dev.phdev, *dev.device,
 			vertex_buffer_size,
 			vk::BufferUsageFlagBits::eVertexBuffer,
 			vk::MemoryPropertyFlagBits::eHostVisible
 				| vk::MemoryPropertyFlagBits::eHostCoherent
 		);
 
-		index_buffer = BufferData(dev.phdev, dev.device,
+		index_buffer = BufferData(*dev.phdev, *dev.device,
 			index_buffer_size,
 			vk::BufferUsageFlagBits::eIndexBuffer,
 			vk::MemoryPropertyFlagBits::eHostVisible

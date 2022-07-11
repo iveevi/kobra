@@ -78,8 +78,8 @@ class Raster {
 	// Create a descriptor set
 	vk::raii::DescriptorSet	_make_ds() const {
 		auto dsets = vk::raii::DescriptorSets {
-			_ctx.device,
-			{*_ctx.descriptor_pool, *_dsl}
+			*_ctx.device,
+			{**_ctx.descriptor_pool, *_dsl}
 		};
 
 		return std::move(dsets.front());
@@ -96,16 +96,16 @@ public:
 	Raster(const Context &ctx, const vk::AttachmentLoadOp &load)
 			: _ctx(ctx) {
 		// Create render pass
-		_render_pass = make_render_pass(ctx.device,
+		_render_pass = make_render_pass(*ctx.device,
 			ctx.swapchain_format,
 			ctx.depth_format, load
 		);
 
 		// Create descriptor set layout
-		_dsl = make_descriptor_set_layout(_ctx.device, _dsl_bindings);
+		_dsl = make_descriptor_set_layout(*_ctx.device, _dsl_bindings);
 
 		// Load all shaders
-		auto shaders = make_shader_modules(_ctx.device, {
+		auto shaders = make_shader_modules(*_ctx.device, {
 			"shaders/bin/raster/vertex.spv",
 			"shaders/bin/raster/color_frag.spv",
 			"shaders/bin/raster/normal_frag.spv",
@@ -120,13 +120,13 @@ public:
 
 		// Pipeline layout
 		_ppl = vk::raii::PipelineLayout(
-			_ctx.device,
+			*_ctx.device,
 			{{}, *_dsl, push_constants}
 		);
 
 		// Pipeline cache
 		vk::raii::PipelineCache pipeline_cache {
-			_ctx.device,
+			*_ctx.device,
 			vk::PipelineCacheCreateInfo()
 		};
 
@@ -135,7 +135,7 @@ public:
 		auto vertex_attributes = Vertex::vertex_attributes();
 
 		GraphicsPipelineInfo grp_info {
-			.device = _ctx.device,
+			.device = *_ctx.device,
 			.render_pass = _render_pass,
 
 			.vertex_shader = nullptr,
@@ -167,7 +167,7 @@ public:
 		_p_phong = make_graphics_pipeline(grp_info);
 
 		// Create buffer for lights
-		_b_lights = BufferData(_ctx.phdev, _ctx.device, 1024,
+		_b_lights = BufferData(*_ctx.phdev, *_ctx.device, 1024,
 			vk::BufferUsageFlagBits::eUniformBuffer,
 			vk::MemoryPropertyFlagBits::eHostVisible |
 				vk::MemoryPropertyFlagBits::eHostCoherent
@@ -258,7 +258,7 @@ public:
 					rasterizer->bind_material(dev, ds);
 
 					// Bind lights buffer
-					bind_ds(_ctx.device, ds, _b_lights,
+					bind_ds(*_ctx.device, ds, _b_lights,
 						vk::DescriptorType::eUniformBuffer,
 						RASTER_BINDING_POINT_LIGHTS
 					);
