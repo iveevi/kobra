@@ -2,17 +2,19 @@
 #include "include/app.hpp"
 #include "include/backend.hpp"
 #include "include/ecs.hpp"
+#include "include/engine/ecs_panel.hpp"
 #include "include/engine/rt_capture.hpp"
 #include "include/gui/button.hpp"
 #include "include/gui/layer.hpp"
 #include "include/gui/rect.hpp"
 #include "include/gui/sprite.hpp"
 #include "include/io/event.hpp"
+#include "include/layers/font_renderer.hpp"
 #include "include/layers/raster.hpp"
+#include "include/layers/shape_renderer.hpp"
 #include "include/transform.hpp"
 #include "tinyfiledialogs.h"
-#include "include/layers/font_renderer.hpp"
-#include "include/engine/ecs_panel.hpp"
+#include "include/button.hpp"
 
 using namespace kobra;
 
@@ -23,17 +25,20 @@ std::string scene_path = "scenes/room_simple.kobra";
 struct ECSApp : public BaseApp {
 	layers::Raster	rasterizer;
 	layers::FontRenderer font_renderer;
+	layers::ShapeRenderer shape_renderer;
 	engine::ECSPanel panel;
 
 	ECS		ecs;
 
 	Entity		camera;
 	Entity		light;
+	Button		button;
 
 	ECSApp(const vk::raii::PhysicalDevice &phdev, const std::vector <const char *> &extensions)
 			: BaseApp(phdev, "ECSApp", {1000, 1000}, extensions, vk::AttachmentLoadOp::eLoad),
 			rasterizer(get_context(), vk::AttachmentLoadOp::eClear),
 			font_renderer(get_context(), render_pass, "resources/fonts/noto_sans.ttf"),
+			shape_renderer(get_context(), render_pass),
 			panel(get_context(), ecs) {
 		// Add entities
 		auto e1 = ecs.make_entity("box");
@@ -67,6 +72,18 @@ struct ECSApp : public BaseApp {
 		light.get <Transform> ().position = {0, 10, 0};
 
 		light.add <Light> (Light {.intensity = {1, 1, 1}});
+
+		// Add button
+		auto args = Button::Args {
+			.min = {400, 300},
+			.max = {450, 350},
+
+			.idle = {0.9, 0.7, 0.7},
+			.hover = {0.7, 0.7, 0.9},
+			.pressed = {0.7, 0.9, 0.7},
+		};
+
+		button = Button(io.mouse_events, args);
 
 		// Input callbacks
 		io.mouse_events.subscribe(mouse_callback, this);
@@ -109,6 +126,11 @@ struct ECSApp : public BaseApp {
 			}
 		};
 
+		std::vector <Rect> rects {
+			Rect {.min = {500, 500}, .max = {600, 600}, .color = {1, 0, 0}},
+			button.shape()
+		};
+
 		// Move camera
 		move_camera();
 
@@ -145,6 +167,7 @@ struct ECSApp : public BaseApp {
 		);
 
 		font_renderer.render(cmd, texts);
+		shape_renderer.render(cmd, rects);
 
 		cmd.endRenderPass();
 

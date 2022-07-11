@@ -45,6 +45,19 @@ public:
 		handlers.push_back({handler, user});
 	}
 
+	// Unsubscribe from event
+	void unsubscribe(void *user) {
+		// Erase all handlers with given user
+		handlers.erase(
+			std::remove_if(handlers.begin(), handlers.end(),
+				[user](const HandlerInstance &handler) {
+					return handler.second == user;
+				}
+			),
+			handlers.end()
+		);
+	}
+
 	// Push event to handlers
 	void push(const T &event) {
 		for (auto &handler : handlers)
