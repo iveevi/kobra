@@ -11,6 +11,7 @@
 #include "include/layers/raster.hpp"
 #include "include/transform.hpp"
 #include "tinyfiledialogs.h"
+#include "include/layers/font_renderer.hpp"
 
 using namespace kobra;
 
@@ -20,14 +21,17 @@ std::string scene_path = "scenes/room_simple.kobra";
 // Test app
 struct ECSApp : public BaseApp {
 	layers::Raster	rasterizer;
+	layers::FontRenderer font_renderer;
+
 	ECS		ecs;
 
 	Entity		camera;
 	Entity		light;
 
 	ECSApp(const vk::raii::PhysicalDevice &phdev, const std::vector <const char *> &extensions)
-			: BaseApp(phdev, "ECSApp", {1000, 1000}, extensions),
-			rasterizer(get_context(), vk::AttachmentLoadOp::eClear) {
+			: BaseApp(phdev, "ECSApp", {1000, 1000}, extensions, vk::AttachmentLoadOp::eLoad),
+			rasterizer(get_context(), vk::AttachmentLoadOp::eClear),
+			font_renderer(get_context(), render_pass, "resources/fonts/noto_sans.ttf") {
 		// Add entities
 		auto e1 = ecs.make_entity("e1");
 		auto e2 = ecs.make_entity("e2");
@@ -94,12 +98,52 @@ struct ECSApp : public BaseApp {
 
 	void record(const vk::raii::CommandBuffer &cmd,
 			const vk::raii::Framebuffer &framebuffer) override {
+		std::vector <Text> texts {
+			Text {
+				.text ="Hello world! " + std::to_string(frame_time) + "s",
+				.anchor = {10, 10},
+				.size = 1.0f
+			}
+		};
+
 		// Move camera
 		move_camera();
 
 		// Begin command buffer
 		cmd.begin({});
 		rasterizer.render(cmd, framebuffer, ecs);
+
+		// Start render pass
+		std::array <vk::ClearValue, 2> clear_values = {
+			vk::ClearValue {
+				vk::ClearColorValue {
+					std::array <float, 4> {0.0f, 0.0f, 0.0f, 1.0f}
+				}
+			},
+			vk::ClearValue {
+				vk::ClearDepthStencilValue {
+					1.0f, 0
+				}
+			}
+		};
+
+		cmd.beginRenderPass(
+			vk::RenderPassBeginInfo {
+				*render_pass,
+				*framebuffer,
+				vk::Rect2D {
+					vk::Offset2D {0, 0},
+					extent,
+				},
+				static_cast <uint32_t> (clear_values.size()),
+				clear_values.data()
+			},
+			vk::SubpassContents::eInline
+		);
+
+		font_renderer.render(cmd, texts);
+
+		cmd.endRenderPass();
 		cmd.end();
 	}
 

@@ -15,6 +15,8 @@ namespace kobra {
 
 namespace engine {
 
+// TODO: custom render pass, albedo shader, renderable for the lines
+
 // Gizmo class handles displaying
 // 	gizmos in the scene (could be multiple)
 class Gizmo {
