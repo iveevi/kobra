@@ -38,7 +38,7 @@ public:
 		size_t y = 10;
 
 		for (int i = 0; i < ecs->size(); i++) {
-			std::string name = ecs->name(i);
+			std::string name = ecs->get_entity(i).name;
 
 			// TODO: method to calculate text dimensions (font
 			// renderer method)

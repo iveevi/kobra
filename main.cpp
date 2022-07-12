@@ -28,11 +28,11 @@ struct ECSApp : public BaseApp {
 	layers::ShapeRenderer shape_renderer;
 	engine::ECSPanel panel;
 
-	ECS		ecs;
+	ECS ecs;
 
-	Entity		camera;
-	Entity		light;
-	Button		button;
+	Entity camera;
+	Entity light;
+	Button button;
 
 	ECSApp(const vk::raii::PhysicalDevice &phdev, const std::vector <const char *> &extensions)
 			: BaseApp(phdev, "ECSApp", {1000, 1000}, extensions, vk::AttachmentLoadOp::eLoad),
@@ -43,7 +43,7 @@ struct ECSApp : public BaseApp {
 		// Add entities
 		auto e1 = ecs.make_entity("box");
 		auto e2 = ecs.make_entity("plane");
-		camera = std::move(ecs.make_entity("Camera"));
+		camera = ecs.make_entity("Camera");
 
 		// Set transforms
 		e2.get <Transform> ().position = {0, -2, 0};
@@ -68,12 +68,16 @@ struct ECSApp : public BaseApp {
 		camera.add <Camera> (c);
 
 		// Light
-		light = std::move(ecs.make_entity("Light"));
+		light = ecs.make_entity("Light");
 		light.get <Transform> ().position = {0, 10, 0};
 
 		light.add <Light> (Light {.intensity = {1, 1, 1}});
 
 		// Add button
+		auto handler = [](void *user) {
+			std::cout << "Clicked" << std::endl;
+		};
+
 		auto args = Button::Args {
 			.min = {400, 300},
 			.max = {450, 350},
@@ -81,6 +85,8 @@ struct ECSApp : public BaseApp {
 			.idle = {0.9, 0.7, 0.7},
 			.hover = {0.7, 0.7, 0.9},
 			.pressed = {0.7, 0.9, 0.7},
+
+			.handlers = {{nullptr, handler}}
 		};
 
 		button = Button(io.mouse_events, args);

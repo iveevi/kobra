@@ -3,11 +3,13 @@
 namespace kobra {
 
 // Creating a new entity
-Entity ECS::make_entity(const std::string &name) {
+Entity &ECS::make_entity(const std::string &name) {
 	_expand_all();
-	names.push_back(name);
 	int32_t id = transforms.size() - 1;
-	return Entity(name, id, this);
+
+	Entity e(name, id, this);
+	entities.push_back(e);
+	return entities.back();
 }
 
 // Private helpers

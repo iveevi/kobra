@@ -57,7 +57,7 @@ class ECS {
 	Archetype <RasterizerPtr>	rasterizers;
 	Archetype <Transform>		transforms;
 
-	Archetype <std::string>		names;
+	Archetype <Entity>		entities;
 
 	// Private helpers
 	void _expand_all();
@@ -127,18 +127,22 @@ public:
 		_ref <T> ::ref(this, i) = _constructor <T> ::make(args ...);
 	}
 
-	// Get name of entity
-	std::string name(int i) const {
-		return names[i];
-	}
-
 	// Size of ECS
 	int size() const {
 		return transforms.size();
 	}
 
+	// Get entity
+	Entity &get_entity(int i) {
+		return entities[i];
+	}
+
+	const Entity &get_entity(int i) const {
+		return entities[i];
+	}
+
 	// Create a new entity
-	Entity make_entity(const std::string &name = "Entity");
+	Entity &make_entity(const std::string &name = "Entity");
 
 	// Display info for one component
 	template <class T>
@@ -301,7 +305,6 @@ inline void ECS::info <Transform> () const {
 
 // Entity class, acts like a pointer to a component
 class Entity {
-	std::string	name = "";
 	int32_t		id = -1;
 	ECS		*ecs = nullptr;
 
@@ -325,29 +328,18 @@ class Entity {
 	Entity(std::string name_, uint32_t id_, ECS *ecs_)
 		: name(name_), id(id_), ecs(ecs_) {}
 public:
+	std::string	name = "";
+
 	// Default
 	Entity() = default;
 
-	// Non copy, id is unique
-	Entity(const Entity &) = delete;
-	Entity &operator=(const Entity &) = delete;
+	// Copy
+	Entity(const Entity &) = default;
+	Entity &operator=(const Entity &) = default;
 
-	// Moveable
-	Entity(Entity &&other)
-			: name(std::move(other.name)),
-			id(other.id), ecs(other.ecs) {
-		other.id = -1;
-		other.ecs = nullptr;
-	}
-
-	Entity &operator=(Entity &&other) {
-		name = std::move(other.name);
-		id = other.id;
-		ecs = other.ecs;
-		other.id = -1;
-		other.ecs = nullptr;
-		return *this;
-	}
+	// Unmoveable
+	Entity(Entity &&) = delete;
+	Entity &operator=(Entity &&) = delete;
 
 	// Get for entities
 	template <class T>
