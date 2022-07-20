@@ -35,7 +35,7 @@ class Raster {
 	// Vulkan context
 	Context				_ctx;
 
-	// Other vulkan structures
+	// Other Vulkan structures
 	vk::raii::RenderPass		_render_pass = nullptr;
 
 	vk::raii::PipelineLayout	_ppl = nullptr;

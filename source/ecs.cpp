@@ -19,6 +19,7 @@ void ECS::_expand_all()
 	lights.push_back(nullptr);
 	meshes.push_back(nullptr);
 	rasterizers.push_back(nullptr);
+	raytracers.push_back(nullptr);
 	transforms.push_back(Transform());
 
 	// TODO: assert that all arrays are the same size

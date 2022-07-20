@@ -38,8 +38,9 @@ private:
 	// TODO: make a more general button class
 	// (i.e. area and shape)
 	Rect			_rect;
-	glm::vec3		_idle;
+	bool			_is_pressed = false;
 	glm::vec3		_hover;
+	glm::vec3		_idle;
 	glm::vec3		_pressed;
 	int			_button = GLFW_MOUSE_BUTTON_LEFT;
 	std::vector <Handler> _handlers = {};
@@ -56,16 +57,22 @@ private:
 				button->_rect.max.y >= event.ypos;
 
 		if (in_bounds) {
-			if (event.button == button->_button && event.action == GLFW_PRESS) {
-				button->_rect.color = button->_pressed;
+			if (event.button == button->_button && (event.action == GLFW_PRESS)) {
+				if (!button->_is_pressed) {
+					button->_rect.color = button->_pressed;
 
-				for (auto &handler : button->_handlers)
-					handler.second(handler.first);
+					for (auto &handler : button->_handlers)
+						handler.second(handler.first);
+
+					button->_is_pressed = true;
+				}
 			} else {
 				button->_rect.color = button->_hover;
+				button->_is_pressed = false;
 			}
 		} else {
 			button->_rect.color = button->_idle;
+			button->_is_pressed = false;
 		}
 	}
 public:

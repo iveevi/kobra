@@ -5,6 +5,9 @@
 #include <vector>
 
 // Engine headers
+#include "bbox.hpp"
+#include "raytracing/bvh.hpp"
+#include "transform.hpp"
 #include "vertex.hpp"
 
 namespace kobra {
@@ -70,6 +73,44 @@ public:
 		if (calculate_tangents)
 			_process_vertex_data();
 	}
+
+	// Number of triangles
+	int triangles() const {
+		return indices.size()/3;
+	}
+
+	// Generate a BVH for this submesh
+	rt::BVHPtr bvh(const Transform &transform) const {
+		// Generate list of bounding boxes
+		std::vector <BoundingBox> boxes;
+
+		for (int i = 0; i < indices.size(); i += 3) {
+			// Get the triangle
+			int a = indices[i];
+			int b = indices[i + 1];
+			int c = indices[i + 2];
+
+			// Get the vertices
+			const auto &v1 = vertices[a];
+			const auto &v2 = vertices[b];
+			const auto &v3 = vertices[c];
+
+			// Get the transformed vertices
+			glm::vec3 p1 = transform * v1.position;
+			glm::vec3 p2 = transform * v2.position;
+			glm::vec3 p3 = transform * v3.position;
+
+			// Create the bounding box
+			glm::vec3 min = glm::min(p1, glm::min(p2, p3));
+			glm::vec3 max = glm::max(p1, glm::max(p2, p3));
+
+			// Add the bounding box
+			boxes.push_back(BoundingBox {min, max});
+		}
+
+		// Generate the BVH
+		return rt::partition(boxes);
+	}
 };
 
 // A mesh is a collection of submeshes
@@ -97,9 +138,31 @@ struct Mesh {
 		return total;
 	}
 
+	// Total number of triangles
+	int triangles() const {
+		int total = 0;
+		for (const auto &submesh : submeshes)
+			total += submesh.triangles();
+		return total;
+	}
+
 	// Indexing
 	const Submesh &operator[](int i) const {
 		return submeshes[i];
+	}
+
+	// Generate a BVH for this mesh
+	rt::BVHPtr bvh(const Transform &transform) const {
+		if (submeshes.size() == 1)
+			return submeshes[0].bvh(transform);
+
+		// Generate list of partial BVHs
+		std::vector <rt::BVHPtr> bvhs;
+		for (const auto &submesh : submeshes)
+			bvhs.push_back(submesh.bvh(transform));
+
+		// Generate the BVH
+		return rt::partition(bvhs);
 	}
 };
 

@@ -13,6 +13,7 @@ namespace kobra {
 namespace layers {
 
 class Raster;
+class Raytracer;
 
 }
 
@@ -86,6 +87,129 @@ public:
 };
 
 using RasterizerPtr = std::shared_ptr <Rasterizer>;
+
+// Raytracer component
+// 	Wrapper around methods for raytracing
+// 	a mesh entity
+class Raytracer : public Renderer {
+	struct HostBuffers {
+		std::vector <aligned_vec4>	bvh;
+
+		std::vector <aligned_vec4>	vertices;
+		std::vector <aligned_vec4>	triangles;
+		std::vector <aligned_vec4>	materials;
+
+		std::vector <aligned_vec4>	lights;
+		std::vector <uint>		light_indices;
+
+		std::vector <aligned_mat4>	transforms;
+
+		int id;
+	};
+
+	Mesh	*mesh = nullptr;
+
+	// Serialize submesh data to host buffers
+	void serialize_submesh(const Submesh &submesh, const Transform &transform, HostBuffers &hb) const {
+		// Offset for triangle indices
+		uint offset = hb.vertices.size()/VERTEX_STRIDE;
+
+		// Vertices
+		for (size_t i = 0; i < submesh.vertices.size(); i++) {
+			const Vertex &v = submesh.vertices[i];
+
+			// No need to push normals, they are computed
+			//	in the shader
+			glm::vec3 position = v.position;
+			glm::vec3 normal = v.normal;
+			glm::vec3 tangent = v.tangent;
+			glm::vec3 bitangent = v.bitangent;
+			glm::vec2 uv = v.tex_coords;
+
+			position = transform.apply(position);
+			normal = transform.apply_vector(normal);
+			tangent = transform.apply_vector(tangent);
+			bitangent = transform.apply_vector(bitangent);
+
+			std::vector <aligned_vec4> vbuf = {
+				position,
+				glm::vec4 {uv, 0.0f, 0.0f},
+				normal, tangent, bitangent,
+			};
+
+			hb.vertices.insert(hb.vertices.end(), vbuf.begin(), vbuf.end());
+		}
+
+		// Triangles
+		uint obj_id = hb.id - 1;
+		for (size_t i = 0; i < submesh.triangles(); i++) {
+			uint ia = submesh.indices[3 * i] + offset;
+			uint ib = submesh.indices[3 * i + 1] + offset;
+			uint ic = submesh.indices[3 * i + 2] + offset;
+
+			// The shader will assume that all elements
+			// 	are triangles, no need for header info:
+			// 	also, material and transform
+			// 	will be a push constant...
+			glm::vec4 tri {
+				*(reinterpret_cast <float *> (&ia)),
+				*(reinterpret_cast <float *> (&ib)),
+				*(reinterpret_cast <float *> (&ic)),
+				*(reinterpret_cast <float *> (&obj_id))
+			};
+
+			hb.triangles.push_back(tri);
+		}
+
+		// Write the material
+		material.serialize(hb.materials);
+
+		/* if (material.has_albedo()) {
+			auto albedo_descriptor = TextureManager::make_descriptor(
+				hb.phdev, lp.device,
+				material.albedo_source
+			);
+
+			hb.albedo_samplers[id - 1] = albedo_descriptor;
+		}
+
+		if (material.has_normal()) {
+			auto normal_descriptor = TextureManager::make_descriptor(
+				hb.phdev, lp.device,
+				material.normal_source
+			);
+
+			hb.normal_samplers[id - 1] = normal_descriptor;
+		} */
+
+		// Write the transform
+		hb.transforms.push_back(transform.matrix());
+
+		// NOTE: emission does not count as a light source (it will
+		// still be taken care of in path tracing)
+	}
+public:
+	// No default constructor
+	Raytracer() = delete;
+
+	// Constructor sets mesh reference
+	Raytracer(Mesh *mesh_) : mesh(mesh_) {}
+
+	// Serialize
+	void serialize(const Transform &transform, HostBuffers &hb) const {
+		for (size_t i = 0; i < mesh->submeshes.size(); i++)
+			serialize_submesh(mesh->submeshes[i], transform, hb);
+
+		// Increment ID per whole mesh
+		hb.id++;
+	}
+
+	// TODO: build bvh
+
+	friend class layers::Raytracer;
+};
+
+using RaytracerPtr = std::shared_ptr <Raytracer>;
 
 }
 

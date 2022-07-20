@@ -10,6 +10,7 @@
 #define GLM_PERSPECTIVE_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/string_cast.hpp>
 
 namespace kobra {
 
@@ -75,6 +76,11 @@ struct Transform {
 		return glm::normalize(glm::vec3(q * glm::vec4(0.0f, 1.0f, 0.0f, 0.0f)));
 	}
 
+	// Arithmetic
+	glm::vec3 operator*(const glm::vec3 &v) const {
+		return apply(v);
+	}
+
 	// Save to file
 	void save(std::ofstream &file) const {
 		file << "[TRANSFORM]" << std::endl;
@@ -112,6 +118,11 @@ struct Transform {
 		return Transform(position, rotation, scale);
 	}
 };
+
+inline std::ostream &operator<<(std::ostream &os, const Transform &t)
+{
+	return os << glm::to_string(t.matrix());
+}
 
 }
 

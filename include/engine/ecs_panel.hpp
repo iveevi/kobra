@@ -2,8 +2,11 @@
 #define KOBRA_ENGINE_ECS_PANEL_H_
 
 // Engine headers
+#include "../app.hpp"
+#include "../button.hpp"
 #include "../ecs.hpp"
 #include "../layers/font_renderer.hpp"
+#include "../layers/shape_renderer.hpp"
 
 namespace kobra {
 
@@ -12,13 +15,16 @@ namespace engine {
 class ECSPanel {
 	const ECS		*ecs;
 	layers::FontRenderer	font_renderer;
+	layers::ShapeRenderer	shape_renderer;
+	std::vector <Button>	buttons;
+	App::IO			*io;
 
 	// Vulkan resources
 	vk::raii::RenderPass	render_pass = nullptr;
 public:
 	// Constructor
-	ECSPanel(const Context &ctx, const ECS &ecs_, vk::AttachmentLoadOp load = vk::AttachmentLoadOp::eLoad)
-			: ecs(&ecs_) {
+	ECSPanel(const Context &ctx, const ECS &ecs_, App::IO &app_io, vk::AttachmentLoadOp load = vk::AttachmentLoadOp::eLoad)
+			: ecs(&ecs_), io(&app_io) {
 		// Create render pass
 		render_pass = make_render_pass(*ctx.device,
 			ctx.swapchain_format,
@@ -27,18 +33,24 @@ public:
 
 		// Create font renderer
 		font_renderer = layers::FontRenderer(ctx, render_pass, "resources/fonts/noto_sans.ttf");
+		shape_renderer = layers::ShapeRenderer(ctx, render_pass);
 	}
 
 	// Render
 	void render(const vk::raii::CommandBuffer &cmd, const vk::raii::Framebuffer &framebuffer, const vk::Extent2D &extent) {
 		std::vector <Text> texts;
+		std::vector <Rect> rects;
 
 		// Add all names
 		size_t x = 10;
 		size_t y = 10;
 
+		if (buttons.size() < ecs->size())
+			buttons.resize(ecs->size());
+
 		for (int i = 0; i < ecs->size(); i++) {
 			std::string name = ecs->get_entity(i).name;
+			size_t cy = y;
 
 			// TODO: method to calculate text dimensions (font
 			// renderer method)
@@ -47,6 +59,27 @@ public:
 			y += font_renderer.size(text).y;
 
 			texts.push_back(text);
+
+			// Button
+			auto handler = [name](void *user) {
+				std::cout << "Clicked on (text) entitiy \"" << name << "\"" << std::endl;
+			};
+
+			Button::Args bargs {
+				.min = {x, cy},
+				.max = {x + font_renderer.size(text).x, y},
+
+				.idle = {0.5, 0.5, 0.5},
+				.hover = {0.7, 0.7, 0.9},
+				.pressed = {0.9, 0.9, 0.9},
+
+				.handlers = {{nullptr, handler}}
+			};
+
+			buttons[i] = Button(io->mouse_events, bargs);
+			rects.push_back(buttons[i].shape());
+
+			y += 10;
 		}
 
 		// Start render pass
@@ -77,6 +110,7 @@ public:
 			vk::SubpassContents::eInline
 		);
 
+		shape_renderer.render(cmd, rects);
 		font_renderer.render(cmd, texts);
 
 		cmd.endRenderPass();

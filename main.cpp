@@ -15,6 +15,7 @@
 #include "include/transform.hpp"
 #include "tinyfiledialogs.h"
 #include "include/button.hpp"
+#include "include/layers/raytracer.hpp"
 
 using namespace kobra;
 
@@ -24,6 +25,7 @@ std::string scene_path = "scenes/room_simple.kobra";
 // Test app
 struct ECSApp : public BaseApp {
 	layers::Raster	rasterizer;
+	layers::Raytracer raytracer;
 	layers::FontRenderer font_renderer;
 	layers::ShapeRenderer shape_renderer;
 	engine::ECSPanel panel;
@@ -37,9 +39,10 @@ struct ECSApp : public BaseApp {
 	ECSApp(const vk::raii::PhysicalDevice &phdev, const std::vector <const char *> &extensions)
 			: BaseApp(phdev, "ECSApp", {1000, 1000}, extensions, vk::AttachmentLoadOp::eLoad),
 			rasterizer(get_context(), vk::AttachmentLoadOp::eClear),
+			raytracer(get_context(), vk::AttachmentLoadOp::eClear),
 			font_renderer(get_context(), render_pass, "resources/fonts/noto_sans.ttf"),
 			shape_renderer(get_context(), render_pass),
-			panel(get_context(), ecs) {
+			panel(get_context(), ecs, io) {
 		// Add entities
 		auto e1 = ecs.make_entity("box");
 		auto e2 = ecs.make_entity("plane");
@@ -61,7 +64,14 @@ struct ECSApp : public BaseApp {
 		e1.add <Rasterizer> (get_device(), e1.get <Mesh> ());
 		e2.add <Rasterizer> (get_device(), e2.get <Mesh> ());
 
-		e1.get <Rasterizer> ().mode = RasterMode::ePhong;
+		std::cout << "Ref e1 <Mesh> = " << &e1.get <Mesh> () << std::endl;
+		std::cout << "Ref e2 <Mesh> = " << &e2.get <Mesh> () << std::endl;
+
+		e1.get <Rasterizer> ().mode = RasterMode::eNormal;
+
+		// Add raytracers for e1 and e2
+		e1.add <Raytracer> (&e1.get <Mesh> ());
+		e2.add <Raytracer> (&e2.get <Mesh> ());
 
 		// Add camera
 		auto c = Camera(Transform({0, 3, 10}), Tunings(45.0f, 1000, 1000));
@@ -142,42 +152,10 @@ struct ECSApp : public BaseApp {
 
 		// Begin command buffer
 		cmd.begin({});
-		rasterizer.render(cmd, framebuffer, ecs);
 
-		// Start render pass
-		std::array <vk::ClearValue, 2> clear_values = {
-			vk::ClearValue {
-				vk::ClearColorValue {
-					std::array <float, 4> {0.0f, 0.0f, 0.0f, 1.0f}
-				}
-			},
-			vk::ClearValue {
-				vk::ClearDepthStencilValue {
-					1.0f, 0
-				}
-			}
-		};
+		// rasterizer.render(cmd, framebuffer, ecs);
+		raytracer.render(cmd, framebuffer, ecs);
 
-		cmd.beginRenderPass(
-			vk::RenderPassBeginInfo {
-				*render_pass,
-				*framebuffer,
-				vk::Rect2D {
-					vk::Offset2D {0, 0},
-					extent,
-				},
-				static_cast <uint32_t> (clear_values.size()),
-				clear_values.data()
-			},
-			vk::SubpassContents::eInline
-		);
-
-		font_renderer.render(cmd, texts);
-		shape_renderer.render(cmd, rects);
-
-		cmd.endRenderPass();
-
-		panel.render(cmd, framebuffer, extent);
 		cmd.end();
 	}
 

@@ -23,6 +23,7 @@ definitions:
     source/gui/sprite.cpp,
     source/gui/text.cpp,
     source/layers/raster.cpp,
+    source/layers/raytracer.cpp,
     source/io/event.cpp,
     source/raster/layer.cpp,
     source/raster/mesh.cpp,

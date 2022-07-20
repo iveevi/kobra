@@ -26,22 +26,24 @@ class Entity;
 template <typename T>
 std::string component_string()
 {
-	return "";
+	return "<Undefined>";
 }
 
 // Specilizations
 // TODO: macrofy
-template <>
-inline std::string component_string <Transform> ()
-{
-	return "Transform";
-}
+#define KOBRA_COMPONENT_STRING(T)			\
+	template <>					\
+	inline std::string component_string <T> ()	\
+	{						\
+		return #T;				\
+	}
 
-template <>
-inline std::string component_string <MeshPtr> ()
-{
-	return "Mesh";
-}
+KOBRA_COMPONENT_STRING(Camera)
+KOBRA_COMPONENT_STRING(Light)
+KOBRA_COMPONENT_STRING(Mesh)
+KOBRA_COMPONENT_STRING(Rasterizer)
+KOBRA_COMPONENT_STRING(Raytracer)
+KOBRA_COMPONENT_STRING(Transform)
 
 // Components which all entities must have
 // are stored by value
@@ -55,6 +57,7 @@ class ECS {
 	Archetype <LightPtr>		lights;
 	Archetype <MeshPtr>		meshes;
 	Archetype <RasterizerPtr>	rasterizers;
+	Archetype <RaytracerPtr>	raytracers;
 	Archetype <Transform>		transforms;
 
 	Archetype <Entity>		entities;
@@ -160,6 +163,7 @@ public:
 };
 
 // _constructor specializations
+// TODO: macros?
 template <>
 struct ECS::_constructor <Mesh> {
 	template <class ... Args>
@@ -173,6 +177,14 @@ struct ECS::_constructor <Rasterizer> {
 	template <class ... Args>
 	static RasterizerPtr make(Args ... args) {
 		return std::make_shared <Rasterizer> (args ...);
+	}
+};
+
+template <>
+struct ECS::_constructor <Raytracer> {
+	template <class ... Args>
+	static RaytracerPtr make(Args ... args) {
+		return std::make_shared <Raytracer> (args ...);
 	}
 };
 
@@ -250,6 +262,26 @@ struct ECS::_ref <Rasterizer> {
 	static bool exists(const ECS *ecs, int i) {
 		return (ecs->rasterizers.size() > i)
 			&& (ecs->rasterizers[i] != nullptr);
+	}
+};
+
+template <>
+struct ECS::_ref <Raytracer> {
+	static RaytracerPtr &ref(ECS *ecs, int i) {
+		return ecs->raytracers[i];
+	}
+
+	static Raytracer &get(ECS *ecs, int i) {
+		return *ecs->raytracers[i];
+	}
+
+	static const Raytracer &get(const ECS *ecs, int i) {
+		return *ecs->raytracers[i];
+	}
+
+	static bool exists(const ECS *ecs, int i) {
+		return (ecs->raytracers.size() > i)
+			&& (ecs->raytracers[i] != nullptr);
 	}
 };
 
