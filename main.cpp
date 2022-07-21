@@ -2,6 +2,7 @@
 #include "include/app.hpp"
 #include "include/backend.hpp"
 #include "include/button.hpp"
+#include "include/common.hpp"
 #include "include/ecs.hpp"
 #include "include/engine/ecs_panel.hpp"
 #include "include/engine/rt_capture.hpp"
@@ -16,6 +17,7 @@
 #include "include/layers/shape_renderer.hpp"
 #include "include/renderer.hpp"
 #include "include/transform.hpp"
+#include "include/types.hpp"
 #include "tinyfiledialogs.h"
 
 using namespace kobra;
@@ -46,11 +48,16 @@ struct ECSApp : public BaseApp {
 		// Add entities
 		auto e1 = ecs.make_entity("box");
 		auto e2 = ecs.make_entity("plane");
+		auto e3 = ecs.make_entity("mirror");
 		camera = ecs.make_entity("Camera");
 
 		// Set transforms
 		e2.get <Transform> ().position = {0, -2, 0};
 		e2.get <Transform> ().scale = {5, 0.1, 5};
+
+		e3.get <Transform> ().position = {-2, 1, 0};
+		e3.get <Transform> ().scale = {1, 0.1, 1};
+		e3.get <Transform> ().rotation = {45, 0, 0};
 
 		// Add meshes to e1 and e2
 		auto box = KMesh::make_box({0, 0, 0}, {1, 1, 1});
@@ -59,6 +66,7 @@ struct ECSApp : public BaseApp {
 
 		e1.add <Mesh> (mesh);
 		e2.add <Mesh> (mesh);
+		e3.add <Mesh> (mesh);
 
 		// Add rasterizers for e1 and e2
 		e1.add <Rasterizer> (get_device(), e1.get <Mesh> ());
@@ -66,15 +74,23 @@ struct ECSApp : public BaseApp {
 
 		e1.get <Rasterizer> ().mode = RasterMode::ePhong;
 		e2.get <Rasterizer> ().mode = RasterMode::ePhong;
-		
+
 		e1.get <Rasterizer> ().material.Kd = {0.5, 0.5, 0.5};
 
 		e2.get <Rasterizer> ().material.albedo_source = "resources/wood_floor_albedo.jpg";
 		e2.get <Rasterizer> ().material.normal_source = "resources/wood_floor_normal.jpg";
 
-		// Add raytracers for e1 and e2
+		// Add raytracers for e1, e2 and e3
 		e1.add <Raytracer> (&e1.get <Mesh> ());
 		e2.add <Raytracer> (&e2.get <Mesh> ());
+		e3.add <Raytracer> (&e3.get <Mesh> ());
+
+		e1.get <Raytracer> ().material.Kd = {0.5, 0.5, 0.5};
+		e2.get <Raytracer> ().material.Kd = {0.8, 0.6, 0.4};
+		e3.get <Raytracer> ().material = {
+			.Kd = {0.5, 1, 1},
+			.type = eReflection
+		};
 
 		// Add camera
 		auto c = Camera(Transform({0, 3, 10}), Tunings(45.0f, 1000, 1000));
@@ -139,12 +155,17 @@ struct ECSApp : public BaseApp {
 			cam.transform.move(-up * speed);
 	}
 
+	float fps = 0;
+
 	void record(const vk::raii::CommandBuffer &cmd,
 			const vk::raii::Framebuffer &framebuffer) override {
+		if (frame_time > 0)
+			fps = (fps + 1.0f/frame_time) / 2.0f;
+
 		std::vector <Text> texts {
 			Text {
-				.text ="Hello world! " + std::to_string(frame_time) + "s",
-				.anchor = {100, 10},
+				.text = common::sprintf("%.2f fps", fps),
+				.anchor = {10, 10},
 				.size = 1.0f
 			}
 		};
@@ -160,8 +181,40 @@ struct ECSApp : public BaseApp {
 		// Begin command buffer
 		cmd.begin({});
 
-		rasterizer.render(cmd, framebuffer, ecs);
-		// raytracer.render(cmd, framebuffer, ecs);
+		// rasterizer.render(cmd, framebuffer, ecs);
+		raytracer.render(cmd, framebuffer, ecs);
+
+		// Start render pass
+		std::array <vk::ClearValue, 2> clear_values = {
+			vk::ClearValue {
+				vk::ClearColorValue {
+					std::array <float, 4> {0.0f, 0.0f, 0.0f, 1.0f}
+				}
+			},
+			vk::ClearValue {
+				vk::ClearDepthStencilValue {
+					1.0f, 0
+				}
+			}
+		};
+
+		cmd.beginRenderPass(
+			vk::RenderPassBeginInfo {
+				*render_pass,
+				*framebuffer,
+				vk::Rect2D {
+					vk::Offset2D {0, 0},
+					extent,
+				},
+				static_cast <uint32_t> (clear_values.size()),
+				clear_values.data()
+			},
+			vk::SubpassContents::eInline
+		);
+
+		font_renderer.render(cmd, texts);
+
+		cmd.endRenderPass();
 
 		cmd.end();
 	}

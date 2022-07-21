@@ -19,9 +19,10 @@ struct Material {
 	std::string	albedo_source = "";
 	std::string	normal_source = "";
 
-	glm::vec3	Kd = glm::vec3(0.0f);
-	glm::vec3	Ks = glm::vec3(0.0f);
+	glm::vec3	Kd {1, 0, 1};
+	glm::vec3	Ks {0.0f};
 
+	// TODO: emissive termm, reafctor eEmissive to eLight?
 	Shading		type = Shading::eDiffuse;
 
 	float		refr_eta = 1.0f;

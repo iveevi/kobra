@@ -81,6 +81,17 @@ struct Transform {
 		return apply(v);
 	}
 
+	// Boolean operators
+	bool operator==(const Transform &t) const {
+		return position == t.position
+			&& rotation == t.rotation
+			&& scale == t.scale;
+	}
+
+	bool operator!=(const Transform &t) const {
+		return !(*this == t);
+	}
+
 	// Save to file
 	void save(std::ofstream &file) const {
 		file << "[TRANSFORM]" << std::endl;

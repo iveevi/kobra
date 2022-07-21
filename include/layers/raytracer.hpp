@@ -20,6 +20,8 @@ class Raytracer {
 		alignas(16)
 		uint width;
 		uint height;
+
+		uint skip;
 		uint xoffset;
 		uint yoffset;
 
@@ -162,7 +164,7 @@ class Raytracer {
 
 		// Load all shaders
 		auto shaders = make_shader_modules(*_ctx.device, {
-			"shaders/bin/generic/normal.spv",
+			"shaders/bin/generic/progressive_path_tracer.spv",
 			"shaders/bin/generic/postproc_vert.spv",
 			"shaders/bin/generic/postproc_frag.spv"
 		});
@@ -313,6 +315,13 @@ class Raytracer {
 
 		_ctx.device->updateDescriptorSets(dset_write, nullptr);
 	}
+
+	// Accumulation status
+	int		_accumulated = 0;
+	Transform	_ptransform;
+	int		_skip = 2;	// Skip batch size (per dim)
+	int		_offsetx = 0;
+	int		_offsety = 0;
 public:
 	// Default constructor
 	Raytracer() = default;
@@ -478,7 +487,130 @@ public:
 
 				raytracer->serialize(transform, host_buffers);
 			}
+
+			// Deal with light
+			if (ecs.exists <Light> (i)) {
+				const Light &light = ecs.get <Light> (i);
+				const Transform &transform = ecs.get <Transform> (i);
+
+				// TODO: account for light type
+				// TODO: helper method to push this data
+				Material mat {.Kd = {1, 1, 1}, .type = eEmissive};
+				mat.serialize(host_buffers.materials);
+
+				// New vertices (square 1x1 in center)
+				glm::vec3 v1 {-0.5f, 0, -0.5f};
+				glm::vec3 v2 {0.5f, 0, -0.5f};
+				glm::vec3 v3 {0.5f, 0, 0.5f};
+				glm::vec3 v4 {-0.5f, 0, 0.5f};
+
+				v1 = transform.apply(v1);
+				v2 = transform.apply(v2);
+				v3 = transform.apply(v3);
+				v4 = transform.apply(v4);
+
+				// New indices
+				uint offset = host_buffers.vertices.size()/VERTEX_STRIDE;
+
+				// TODO: clean singleton raytracer component to
+				// TODO: use more optimal layout for lights
+				// (emissive mesh != area light)
+				host_buffers.vertices.push_back(v1);
+				host_buffers.vertices.push_back(v1);
+				host_buffers.vertices.push_back(v1);
+				host_buffers.vertices.push_back(v1);
+				host_buffers.vertices.push_back(v1);
+
+				host_buffers.vertices.push_back(v2);
+				host_buffers.vertices.push_back(v2);
+				host_buffers.vertices.push_back(v2);
+				host_buffers.vertices.push_back(v2);
+				host_buffers.vertices.push_back(v2);
+
+				host_buffers.vertices.push_back(v3);
+				host_buffers.vertices.push_back(v3);
+				host_buffers.vertices.push_back(v3);
+				host_buffers.vertices.push_back(v3);
+				host_buffers.vertices.push_back(v3);
+
+				host_buffers.vertices.push_back(v4);
+				host_buffers.vertices.push_back(v4);
+				host_buffers.vertices.push_back(v4);
+				host_buffers.vertices.push_back(v4);
+				host_buffers.vertices.push_back(v4);
+
+				// TODO: store area light struct with indices
+				// and other propreties
+				uint ia = offset, ib = offset + 1, ic = offset + 2, id = host_buffers.id - 1;
+
+				glm::vec4 header {LIGHT_TYPE_AREA, 0, 0, 0};
+
+				// TODO: uvec4
+				glm::vec4 h1 {
+					*reinterpret_cast <float *> (&ia),
+					*reinterpret_cast <float *> (&ib),
+					*reinterpret_cast <float *> (&ic),
+					*reinterpret_cast <float *> (&id)
+				};
+
+				ia = offset; ib = offset + 2; ic = offset + 3;
+
+				glm::vec4 h2 {
+					*reinterpret_cast <float *> (&ia),
+					*reinterpret_cast <float *> (&ib),
+					*reinterpret_cast <float *> (&ic),
+					*reinterpret_cast <float *> (&id)
+				};
+
+				host_buffers.id++;
+
+				// TODO: fixed offset for lights, no need for
+				host_buffers.light_indices.push_back(host_buffers.lights.size());
+				host_buffers.lights.push_back(header);
+				host_buffers.lights.push_back(h1);
+				host_buffers.triangles.push_back(h1);
+
+				host_buffers.light_indices.push_back(host_buffers.lights.size());
+				host_buffers.lights.push_back(header);
+				host_buffers.lights.push_back(h2);
+				host_buffers.triangles.push_back(h2);
+			}
 		}
+
+		/* std::cout << "Triangles: " << host_buffers.triangles.size() << std::endl;
+		std::cout << "Vertices: " << host_buffers.vertices.size()/VERTEX_STRIDE << std::endl;
+		for (auto &triangle : host_buffers.triangles) {
+			glm::uvec4 t = *reinterpret_cast <glm::uvec4 *> (&triangle);
+			std::cout << "\t" << t.x << " " << t.y << " " << t.z << " " << t.w << std::endl;
+
+			glm::vec3 v1 = host_buffers.vertices[VERTEX_STRIDE * t.x].data;
+			glm::vec3 v2 = host_buffers.vertices[VERTEX_STRIDE * t.y].data;
+			glm::vec3 v3 = host_buffers.vertices[VERTEX_STRIDE * t.z].data;
+
+			std::cout << "\t\t" << glm::to_string(v1) << std::endl;
+			std::cout << "\t\t" << glm::to_string(v2) << std::endl;
+			std::cout << "\t\t" << glm::to_string(v3) << std::endl;
+		}
+
+		std::cout << "Lights: " << host_buffers.lights.size() << std::endl;
+		std::cout << "Light indices: " << host_buffers.light_indices.size() << std::endl;
+		for (int i = 0; i < host_buffers.light_indices.size(); i++) {
+			std::cout << "\t" << host_buffers.light_indices[i] << std::endl;
+
+			glm::uvec4 l = *reinterpret_cast <glm::uvec4 *> (&host_buffers.lights[host_buffers.light_indices[i]]);
+			std::cout << "\t\t" << l.x << " " << l.y << " " << l.z << " " << l.w << std::endl;
+
+			glm::uvec4 v = *reinterpret_cast <glm::uvec4 *> (&host_buffers.lights[host_buffers.light_indices[i] + 1].data);
+			std::cout << "\t\t" << v.x << " " << v.y << " " << v.z << " " << v.w << std::endl;
+
+			glm::vec3 v1 = host_buffers.vertices[VERTEX_STRIDE * v.x].data;
+			glm::vec3 v2 = host_buffers.vertices[VERTEX_STRIDE * v.y].data;
+			glm::vec3 v3 = host_buffers.vertices[VERTEX_STRIDE * v.z].data;
+
+			std::cout << "\t\t\t" << glm::to_string(v1) << std::endl;
+			std::cout << "\t\t\t" << glm::to_string(v2) << std::endl;
+			std::cout << "\t\t\t" << glm::to_string(v3) << std::endl;
+		} */
 
 		if (!found_camera) {
 			// Actually just skip
@@ -494,11 +626,9 @@ public:
 
 		// Upload to device buffers
 		_dev.bvh.upload(host_buffers.bvh, 0, false);
-
 		_dev.vertices.upload(host_buffers.vertices, 0, false);
 		_dev.triangles.upload(host_buffers.triangles, 0, false);
 		_dev.materials.upload(host_buffers.materials, 0, false);
-
 		_dev.lights.upload(host_buffers.lights, 0, false);
 		_dev.light_indices.upload(host_buffers.light_indices, 0, false);
 
@@ -513,14 +643,26 @@ public:
 				<std::chrono::milliseconds>
 				(std::chrono::system_clock::now().time_since_epoch()).count());
 
+		// Dirty means reset samples
+		bool dirty = (_ptransform != camera.transform);
+		if (dirty)
+			_accumulated = 0;
+
+		_ptransform = camera.transform;
+
+		// TODO: using progressive rendering, we can skip pixels (every
+		// other) and then increment samples after each complete pass.
+
 		// Prepare push constants
 		// TODO: method for generating this structure
 		PushConstants pc {
 			.width = _ctx.extent.width,
 			.height = _ctx.extent.height,
 
-			.xoffset = 0,
-			.yoffset = 0,
+			// TODO: pass skpi size
+			.skip = (uint) _skip,
+			.xoffset = (uint) _offsetx,
+			.yoffset = (uint) _offsety,
 
 			.triangles = (uint) host_buffers.triangles.size(),
 			.lights = (uint) host_buffers.light_indices.size(),
@@ -531,7 +673,7 @@ public:
 			.samples_per_light = 1,
 
 			.accumulate = 0,
-			.present = 0,
+			.present = (uint) _accumulated,
 			.total = 1,
 
 			// Pass current time (as float)
@@ -564,7 +706,19 @@ public:
 		);
 
 		// Dispatch the compute shader
-		cmd.dispatch(_ctx.extent.width, _ctx.extent.height, 1);
+		cmd.dispatch(_ctx.extent.width/_skip, _ctx.extent.height/_skip, 1);
+
+		// Update accumulation status'
+		_offsetx++;
+		if (_offsetx >= _skip) {
+			_offsetx = 0;
+			_offsety++;
+		}
+
+		if (_offsety >= _skip) {
+			_offsety = 0;
+			_accumulated++;
+		}
 
 		// Transition the result image to transfer destination
 		// TODO: pass extent

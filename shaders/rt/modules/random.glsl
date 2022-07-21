@@ -20,6 +20,12 @@ uvec3 pcg3d(uvec3 v)
 	return v;
 }
 
+uint randuint(uvec3 s, uint max)
+{
+	uvec3 v = pcg3d(s);
+	return v.x % max;
+}
+
 vec3 random3(vec3 f)
 {
 	return uintBitsToFloat((pcg3d(floatBitsToUint(f)) & 0x007FFFFFu) | 0x3F800000u) - 1.0;
@@ -39,7 +45,7 @@ vec2 jitter2d(float strata, float i)
 
 	// Get into the range [-0.5, 0.5]
 	vec2 r = 0.5 * random_seed.xy;
-	
+
 	float inv_strata = 1.0/strata;
 	float ix = floor(i * inv_strata);
 	

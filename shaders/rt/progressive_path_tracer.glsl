@@ -3,12 +3,114 @@
 // Import bindings
 #include "bindings.h"
 
+layout (set = 0, binding = MESH_BINDING_PIXELS, std430) buffer Pixels
+{
+	uint pixels[];
+} frame;
+
+layout (set = 0, binding = MESH_BINDING_VERTICES, std430) buffer Vertices
+{
+	vec4 data[];
+} vertices;
+
+layout (set = 0, binding = MESH_BINDING_TRIANGLES, std430) buffer Triangles
+{
+	vec4 data[];
+} triangles;
+
+// Mesh transforms
+// TODO: is this even needed? its too slow to compute every frame
+layout (set = 0, binding = MESH_BINDING_TRANSFORMS, std430) buffer Transforms
+{
+	mat4 data[];
+} transforms;
+
+// Acceleration structure
+layout (set = 0, binding = MESH_BINDING_BVH, std430) buffer BVH
+{
+	vec4 data[];
+} bvh;
+
+// Materials
+layout (set = 0, binding = MESH_BINDING_MATERIALS, std430) buffer Materials
+{
+	vec4 data[];
+} materials;
+
+// Area lights
+struct AreaLight {
+	vec3 a;
+	vec3 ab;
+	vec3 ac; // d = a + ab + ac
+	vec3 intensity;
+};
+
+// Lights
+layout (set = 0, binding = MESH_BINDING_LIGHTS, std430) buffer Lights
+{
+	vec4 data[];
+} lights;
+
+// Light indices
+layout (set = 0, binding = MESH_BINDING_LIGHT_INDICES, std430) buffer LightIndices
+{
+	uint data[];
+} light_indices;
+
+// Textures
+layout (set = 0, binding = MESH_BINDING_ALBEDOS)
+uniform sampler2D s2_albedo[MAX_TEXTURES];
+
+layout (set = 0, binding = MESH_BINDING_NORMAL_MAPS)
+uniform sampler2D s2_normals[MAX_TEXTURES];
+
+layout (set = 0, binding = MESH_BINDING_ENVIRONMENT)
+uniform sampler2D s2_environment;
+
+// Push constants
+layout (push_constant) uniform PushConstants
+{
+	// Viewport
+	uint	width;
+	uint	height;
+
+	uint	skip;
+	uint	xoffset;
+	uint	yoffset;
+
+	// Size variables
+	uint	triangles;
+	uint	lights;
+
+	// Sample counts
+	// TODO: make floats
+	uint	samples_per_pixel;
+	uint	samples_per_surface;
+	uint	samples_per_light;
+
+	// Other options
+	uint	accumulate;	// TODO: replace with just present
+	uint	present;
+	uint	total;
+
+	// Other variables
+	float	time;
+
+	// Camera
+	vec3	camera_position;
+	vec3	camera_forward;
+	vec3	camera_up;
+	vec3	camera_right;
+
+	// scale, aspect
+	vec4	properties;
+} pc;
+
 // Import all modules
 #include "../../include/types.hpp"
 #include "modules/ray.glsl"
 #include "modules/bbox.glsl"
 #include "modules/color.glsl"
-#include "modules/layouts.glsl"
 #include "modules/random.glsl"
 #include "modules/material.glsl"
 #include "modules/primitives.glsl"
@@ -19,16 +121,8 @@
 // Maximum ray depth
 #define MAX_DEPTH 10
 
-// Sample random point in triangle
-float u = 0.0;
-float v = 0.0;
-
 vec3 sample_triangle(vec3 v1, vec3 v2, vec3 v3, float strata, float i)
 {
-	// Ignore random-ness if only 1 sample
-	if (pc.samples_per_light == 1)
-		return (v1 + v2 + v3) / 3.0;
-
 	// Get random vec in [0, 1]
 	vec2 r = jitter2d(strata, i);
 	float s = sqrt(r.x);
@@ -43,19 +137,6 @@ vec3 sample_triangle(vec3 v1, vec3 v2, vec3 v3, float strata, float i)
 	vec3 p = v1 + u * e1 + v * e2;
 
 	return p;
-}
-
-// Center point of an area light
-vec3 center_area_light(uint li)
-{
-	// Get light position
-	uvec4 i = VERTEX_STRIDE * floatBitsToUint(lights.data[li + 1]);
-
-	vec3 v1 = vertices.data[i.x].xyz;
-	vec3 v2 = vertices.data[i.y].xyz;
-	vec3 v3 = vertices.data[i.z].xyz;
-
-	return (v1 + v2 + v3) / 3.0;
 }
 
 // Sample random point from an area light
@@ -189,7 +270,7 @@ void sample_bsdf(in Hit hit, inout Ray ray,
 	} else {
 		pdf = 0.0;
 	}
-	
+
 	beta *= abs(dot(hit.normal, ray.direction)) / pdf;
 }
 
@@ -202,7 +283,7 @@ float pdf_bsdf(in Hit hit, in Ray ray, vec3 wi)
 		// TODO: check same hemisphere
 		return INV_PI * dot(wi, hit.normal);
 	}
-	
+
 	return 0.0;
 }
 
@@ -214,157 +295,43 @@ vec3 direct_illumination(Hit hit, Ray ray)
 	vec3 beta = vec3(0.0);
 
 	// Direct illumination
-	for (int i = 0; i < pc.lights; i++) {
-		uint light_index = floatBitsToUint(light_indices.data[i]);
-		int light_object = int(floatBitsToUint(lights.data[light_index + 1].w));
+	uvec3 seed = floatBitsToUint(vec3(pc.time, hit.point.x, hit.point.y));
+	uint i = randuint(seed, pc.lights);
 
-		// TODO: progressively use fewer light samples
-		// 	and sources as beta goes to 0
+	uint light_index = light_indices.data[i];
+	int light_object = int(floatBitsToUint(lights.data[light_index + 1].w));
 
-		// Ray to use
-		Ray r = ray;
+	// Ray to use
+	Ray r = ray;
 
-		//////////////////////////////////
-		// Multiple importance sampling //
-		//////////////////////////////////
+	float inv_lsamples = 1.0/pc.samples_per_light;
+	for (int j = 0; j < pc.samples_per_light; j++) {
+		vec3 light_position = sample_area_light(light_index, j);
 
-		// Sampled on BSDF
-		float bsdf_samples = pc.samples_per_surface;
-		// if (hit.mat.shading == SHADING_REFLECTION)
-		//	bsdf_samples = 1.0;
+		// Try to connect to the light
+		vec3 pos = hit.point + hit.normal * 0.001;
+		vec3 dir = normalize(light_position - pos);
 
-		float pdf = 0.0;
+		float pdf = pdf_bsdf(hit, r, dir);
+		if (pdf == 0.0)
+			continue;
 
-		// Itetrate over samples
-		for (int j = 0; j < bsdf_samples; j++) {
-			// Sample BSDF
-			float ior = 1.0; // TODO: should be something else?
+		// TODO: remove the extra arguments
+		Ray shadow_ray = Ray(pos, dir, 1.0, 1.0);
 
-			// TODO: need to reset ray r
-			sample_bsdf(hit, r, pdf, beta, ior);
+		Hit shadow_hit = trace(shadow_ray);
+		// if (shadow_hit.id == light_object) {
+		if (distance(shadow_hit.point, light_position) < 0.001) {
+			// Light contribution directly
+			float d = distance(light_position, hit.point);
+			float cos_theta = max(0.0, dot(hit.normal, dir));
+			vec3 lcolor = vec3(1.0);
 
-			// Get intersect
-			Hit shadow_hit = trace(r);
-
-			// Assume success if emissive
-			vec3 bsdf_contr = vec3(1.0);
-			if (shadow_hit.id != light_object)
-				continue;
-
-			float d = distance(shadow_hit.point, hit.point);
-			float cos_theta = dot(hit.normal, r.direction);
-			direct_contr += bsdf_contr * hit.mat.albedo
+			// TODO: get the pdf from anotehr function
+			direct_contr += lcolor * hit.mat.albedo
 				* cos_theta * (1/d)
-				* power_heuristic(bsdf_samples, pdf, float(pc.samples_per_light), 0.25 * INV_PI)
-				* (1/pdf);
-			
-			// TODO: caustics from here
-		}
-
-		float inv_lsamples = 1.0/pc.samples_per_light;
-		for (int j = 0; j < pc.samples_per_light; j++) {
-			vec3 light_position = sample_area_light(light_index, j);
-
-			// Try to connect to the light
-			vec3 pos = hit.point + hit.normal * 0.001;
-			vec3 dir = normalize(light_position - pos);
-
-			float pdf = pdf_bsdf(hit, r, dir);
-			if (pdf == 0.0)
-				continue;
-
-			// TODO: remove the extra arguments
-			Ray shadow_ray = Ray(pos, dir, 1.0, 1.0);
-
-			Hit shadow_hit = trace(shadow_ray);
-			// if (shadow_hit.id == light_object) {
-			if (distance(shadow_hit.point, light_position) < 0.001) {
-				// Light contribution directly
-				float d = distance(light_position, hit.point);
-				float cos_theta = max(0.0, dot(hit.normal, dir));
-				vec3 lcolor = vec3(1.0);
-
-				// TODO: get the pdf from anotehr function
-				direct_contr += lcolor * hit.mat.albedo
-					* cos_theta * (1/d)
-					* power_heuristic(float(pc.samples_per_light), 0.25 * INV_PI, bsdf_samples, pdf)
-					* inv_lsamples * (4 * PI);
-			}
-		}
-	}
-
-	// Plus environment
-	// TODO: enable/disable feature
-	if (true) {
-		// Ray to use
-		Ray r = ray;
-
-		//////////////////////////////////
-		// Multiple importance sampling //
-		//////////////////////////////////
-		
-		// Sampled on BSDF
-		float bsdf_samples = pc.samples_per_surface;
-		// if (hit.mat.shading == SHADING_REFLECTION)
-		//	bsdf_samples = 1.0;
-
-		float pdf = 0.0;
-
-		// Itetrate over samples
-		for (int j = 0; j < bsdf_samples; j++) {
-			// Sample BSDF
-			float ior = 1.0;
-			sample_bsdf(hit, r, pdf, beta, ior);
-
-			// Get intersect
-			Hit shadow_hit = trace(r);
-
-			// Assume success if emissive
-			if (shadow_hit.object != -1)
-				continue;
-			
-			vec3 bsdf_contr = sample_environment(r);
-			float d = distance(shadow_hit.point, hit.point);
-			float cos_theta = dot(hit.normal, r.direction);
-			direct_contr += bsdf_contr * hit.mat.albedo
-				* cos_theta * (1/d)
-				* power_heuristic(bsdf_samples, pdf, float(pc.samples_per_light), 0.25 * INV_PI)
-				* (1/pdf);
-			
-			// TODO: caustics from here
-		}
-
-		float samples = pc.samples_per_light;
-		float inv_lsamples = 1.0/samples;
-		for (int j = 0; j < samples; j++) {
-			// Fixed distance away
-			const float d = 100;
-
-			// Try to connect to the light
-			vec3 pos = hit.point + hit.normal * 0.001;
-			vec3 dir = random_sphere();
-
-			float pdf = pdf_bsdf(hit, r, dir);
-			if (pdf == 0.0)
-				continue;
-
-			// TODO: remove the extra arguments
-			Ray shadow_ray = Ray(pos, dir, 1.0, 1.0);
-
-			Hit shadow_hit = trace(shadow_ray);
-			if (shadow_hit.object != -1) {
-				// Light contribution directly
-				float cos_theta = max(0.0, dot(hit.normal, dir));
-				vec3 lcolor = vec3(1.0);
-
-				// TODO: get the pdf from anotehr function
-				direct_contr += lcolor * hit.mat.albedo
-					* cos_theta * (1/d)
-					* power_heuristic(samples, 0.25 * INV_PI, bsdf_samples, pdf)
-					* inv_lsamples * (4 * PI);
-			}
-
-			// TODO: caustics later
+				* power_heuristic(float(pc.samples_per_light), 0.25 * INV_PI, 1, pdf)
+				* inv_lsamples * (4 * PI);
 		}
 	}
 
@@ -385,7 +352,6 @@ vec3 color_at(Ray ray)
 		// Find closest object
 		// TODO: refactor to trace
 		Hit hit = trace(r);
-		return hit.mat.albedo;
 
 		// Special case intersection
 		// TODO: deal with in the direct lighting function
@@ -394,13 +360,11 @@ vec3 color_at(Ray ray)
 			contribution += hit.mat.albedo;
 			break;
 		}
-		
-		return hit.mat.albedo;
 
 		// Direct illumination
 		vec3 direct_contr = direct_illumination(hit, r);
 		contribution += beta * direct_contr;
-		
+
 		// Sample BSDF
 		float pdf = 0.0;
 		sample_bsdf(hit, r, pdf, beta, ior);
@@ -423,8 +387,8 @@ vec3 color_at(Ray ray)
 void main()
 {
 	// Offset from space origin
-	uint y0 = gl_WorkGroupID.y + pc.xoffset;
-	uint x0 = gl_WorkGroupID.x + pc.yoffset;
+	uint y0 = pc.skip * gl_WorkGroupID.y + pc.xoffset;
+	uint x0 = pc.skip * gl_WorkGroupID.x + pc.yoffset;
 
 	// Return if out of bounds
 	if (y0 >= pc.height || x0 >= pc.width)
@@ -432,46 +396,34 @@ void main()
 
 	// Get index
 	uint index = y0 * pc.width + x0;
-	
+
 	// Set seed
 	float rx = fract(sin(x0 * 12 + y0) * PHI);
 	float ry = fract(sin(y0 * 98 + x0));
 
 	// Initialiize the random seed
 	random_seed = vec3(rx, ry, fract((rx + ry)/pc.time));
-
-	// Accumulate color
-	vec3 color = vec3(0.0);
-
 	vec2 dimensions = vec2(pc.width, pc.height);
-	for (int i = 0; i < pc.samples_per_pixel; i++) {
-		// Create the ray
-		vec2 pixel = vec2(x0, y0) + random_sphere().xy/2.0;
-		vec2 uv = pixel / dimensions;
 
-		Ray ray = make_ray(uv,
-			pc.camera_position,
-			pc.camera_forward,
-			pc.camera_up,
-			pc.camera_right,
-			pc.properties.x,
-			pc.properties.y
-		);
+	// Create the ray
+	vec2 pixel = vec2(x0, y0) + random_sphere().xy/2.0;
+	vec2 uv = pixel / dimensions;
 
-		// Light transport
-		color += color_at(ray);
-	}
+	Ray ray = make_ray(uv,
+		pc.camera_position,
+		pc.camera_forward,
+		pc.camera_up,
+		pc.camera_right,
+		pc.properties.x,
+		pc.properties.y
+	);
 
-	if (pc.accumulate > 0) {
-		vec3 pcolor = cast_color(frame.pixels[index]);
-		pcolor = pow(pcolor, vec3(2.2));
-		color += pcolor * pc.present;
-		color /= float(pc.present + pc.samples_per_pixel);
-		color = pow(color, vec3(1/2.2));
-	} else {
-		color /= float(pc.samples_per_pixel);
-		color = pow(color, vec3(1/2.2));
-	}
-
+	// Progressive rendering
+	vec3 color = color_at(ray);
+	vec3 pcolor = cast_color(frame.pixels[index]);
+	pcolor = pow(pcolor, vec3(2.2));
+	float t = 1.0f/(1.0f + pc.present);
+	color = mix(pcolor, color, t);
+	color = pow(color, vec3(1.0/2.2));
 	frame.pixels[index] = cast_color(color);
 }
