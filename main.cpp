@@ -1,6 +1,7 @@
 #include "global.hpp"
 #include "include/app.hpp"
 #include "include/backend.hpp"
+#include "include/button.hpp"
 #include "include/ecs.hpp"
 #include "include/engine/ecs_panel.hpp"
 #include "include/engine/rt_capture.hpp"
@@ -11,11 +12,11 @@
 #include "include/io/event.hpp"
 #include "include/layers/font_renderer.hpp"
 #include "include/layers/raster.hpp"
+#include "include/layers/raytracer.hpp"
 #include "include/layers/shape_renderer.hpp"
+#include "include/renderer.hpp"
 #include "include/transform.hpp"
 #include "tinyfiledialogs.h"
-#include "include/button.hpp"
-#include "include/layers/raytracer.hpp"
 
 using namespace kobra;
 
@@ -33,7 +34,6 @@ struct ECSApp : public BaseApp {
 	ECS ecs;
 
 	Entity camera;
-	Entity light;
 	Button button;
 
 	ECSApp(const vk::raii::PhysicalDevice &phdev, const std::vector <const char *> &extensions)
@@ -64,10 +64,13 @@ struct ECSApp : public BaseApp {
 		e1.add <Rasterizer> (get_device(), e1.get <Mesh> ());
 		e2.add <Rasterizer> (get_device(), e2.get <Mesh> ());
 
-		std::cout << "Ref e1 <Mesh> = " << &e1.get <Mesh> () << std::endl;
-		std::cout << "Ref e2 <Mesh> = " << &e2.get <Mesh> () << std::endl;
+		e1.get <Rasterizer> ().mode = RasterMode::ePhong;
+		e2.get <Rasterizer> ().mode = RasterMode::ePhong;
+		
+		e1.get <Rasterizer> ().material.Kd = {0.5, 0.5, 0.5};
 
-		e1.get <Rasterizer> ().mode = RasterMode::eNormal;
+		e2.get <Rasterizer> ().material.albedo_source = "resources/wood_floor_albedo.jpg";
+		e2.get <Rasterizer> ().material.normal_source = "resources/wood_floor_normal.jpg";
 
 		// Add raytracers for e1 and e2
 		e1.add <Raytracer> (&e1.get <Mesh> ());
@@ -77,11 +80,15 @@ struct ECSApp : public BaseApp {
 		auto c = Camera(Transform({0, 3, 10}), Tunings(45.0f, 1000, 1000));
 		camera.add <Camera> (c);
 
-		// Light
-		light = ecs.make_entity("Light");
-		light.get <Transform> ().position = {0, 10, 0};
+		// Lights
+		Entity light1 = ecs.make_entity("Light 1");
+		Entity light2 = ecs.make_entity("Light 2");
 
-		light.add <Light> (Light {.intensity = {1, 1, 1}});
+		light1.get <Transform> ().position = {-5, 10, 0};
+		light2.get <Transform> ().position = {5, 10, 0};
+
+		light1.add <Light> (Light {.type = Light::Type::eArea, .color = {1, 0, 0}, .power = 3});
+		light2.add <Light> (Light {.type = Light::Type::eArea, .color = {0, 0, 1}, .power = 5});
 
 		// Add button
 		auto handler = [](void *user) {
@@ -153,8 +160,8 @@ struct ECSApp : public BaseApp {
 		// Begin command buffer
 		cmd.begin({});
 
-		// rasterizer.render(cmd, framebuffer, ecs);
-		raytracer.render(cmd, framebuffer, ecs);
+		rasterizer.render(cmd, framebuffer, ecs);
+		// raytracer.render(cmd, framebuffer, ecs);
 
 		cmd.end();
 	}

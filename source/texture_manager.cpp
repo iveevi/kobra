@@ -21,36 +21,114 @@ TextureManager::DeviceMap <std::mutex>
 // Static methods //
 ////////////////////
 
-/* const ImageData &TextureManager::load(const vk::raii::PhysicalDevice &phdev,
+// Load a texture
+const ImageData &TextureManager::load_texture
+		(const vk::raii::PhysicalDevice &phdev,
 		const vk::raii::Device &dev,
-		const vk::raii::CommandPool &command_pool,
-		const std::string &path,
-		int channels)
-{
-	_mutex.lock();
-	if (_texture_map.find(path) != _texture_map.end()) {
-		_mutex.unlock();
-		size_t index = _texture_map[path];
-		return _texture_data[index];
+		const std::string &path) {
+	// Get corresponding command pool
+	auto &command_pool = get_command_pool(phdev, dev);
+	auto &image_map = _image_map[*dev];
+	auto &images = _images[*dev];
+	auto &mutex = _mutexes[*dev];
+
+	mutex.lock();
+	if (image_map.find(path) != image_map.end()) {
+		mutex.unlock();
+		size_t index = image_map[path];
+		return images[index];
 	}
-	_mutex.unlock();
+	mutex.unlock();
 
 	// TODO: convert channels to image format
-	ImageData img = make_image(phdev, dev,
-		command_pool, path,
-		vk::ImageTiling::eOptimal,
-		vk::ImageUsageFlagBits::eSampled,
-		vk::MemoryPropertyFlagBits::eDeviceLocal,
-		vk::ImageAspectFlagBits::eColor
-	);
+	ImageData img = nullptr;
 
-	_mutex.lock();
-	_texture_data.emplace_back(std::move(img));
-	_texture_map[path] = _texture_data.size() - 1;
-	const ImageData &ret = _texture_data.back();
-	_mutex.unlock();
+	if (path == "blank") {
+		KOBRA_LOG_FUNC(ok) << "Loading blank texture\n";
+		img = ImageData::blank(phdev, dev);
+		img.transition_layout(
+			dev, command_pool,
+			vk::ImageLayout::eShaderReadOnlyOptimal
+		);
+	} else{
+		KOBRA_LOG_FUNC(ok) << "Loading texture from file: " << path << "\n";
+		img = make_image(phdev, dev,
+			command_pool, path,
+			vk::ImageTiling::eOptimal,
+			vk::ImageUsageFlagBits::eSampled
+				| vk::ImageUsageFlagBits::eTransferDst
+				| vk::ImageUsageFlagBits::eTransferSrc,
+			vk::MemoryPropertyFlagBits::eDeviceLocal,
+			vk::ImageAspectFlagBits::eColor
+		);
+	}
+
+	mutex.lock();
+	images.emplace_back(std::move(img));
+	image_map[path] = images.size() - 1;
+	const ImageData &ret = images.back();
+	mutex.unlock();
 
 	return ret;
-} */
+}
+
+// Create a sampler
+const vk::raii::Sampler &TextureManager::load_sampler
+		(const vk::raii::PhysicalDevice &phdev,
+		const vk::raii::Device &dev,
+		const std::string &path) {
+	auto &sampler_map = _samplers[*dev];
+	auto &mutex = _mutexes[*dev];
+
+	mutex.lock();
+	if (sampler_map.find(path) != sampler_map.end()) {
+		mutex.unlock();
+		return sampler_map.at(path);
+	}
+	mutex.unlock();
+
+	auto sampler = make_sampler(dev, load_texture(phdev, dev, path));
+
+	mutex.lock();
+	sampler_map.insert({path, std::move(sampler)});
+	const vk::raii::Sampler &ret = sampler_map.at(path);
+	mutex.unlock();
+
+	return ret;
+}
+
+// Create an image descriptor for an image
+vk::DescriptorImageInfo TextureManager::make_descriptor
+		(const vk::raii::PhysicalDevice &phdev,
+		const vk::raii::Device &dev,
+		const std::string &path) {
+	const vk::raii::Sampler &sampler = load_sampler(phdev, dev, path);
+	const ImageData &img = load_texture(phdev, dev, path);
+
+	return vk::DescriptorImageInfo {
+		*sampler,
+		*img.view,
+		vk::ImageLayout::eShaderReadOnlyOptimal
+	};
+}
+
+// Bind an image to a descriptor set
+void TextureManager::bind(const vk::raii::PhysicalDevice &phdev,
+		const vk::raii::Device &device,
+		const vk::raii::DescriptorSet &dset,
+		const std::string &path,
+		uint32_t binding) {
+	KOBRA_LOG_FUNC(notify) << "Binding texture: " << path << "\n";
+	auto descriptor = make_descriptor(phdev, device, path);
+
+	vk::WriteDescriptorSet dset_write {
+		*dset,
+		binding, 0,
+		vk::DescriptorType::eCombinedImageSampler,
+		descriptor
+	};
+
+	device.updateDescriptorSets(dset_write, nullptr);
+}
 
 }

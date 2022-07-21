@@ -1173,10 +1173,10 @@ public:
 			prop_msg
 		);
 
-		bool smaller = (data.size() * sizeof(T) <= size);
+		bool smaller = (data.size() * sizeof(T) > size);
 
 		KOBRA_ASSERT(smaller || auto_resize, size_msg);
-		if (!smaller) {
+		if (smaller) {
 
 #ifndef KOBRA_VALIDATION_ERROR_ONLY
 
@@ -1214,13 +1214,14 @@ public:
 			prop_msg
 		);
 
-		bool smaller = (size_ <= size);
+		bool smaller = (size_ > size);
 		KOBRA_ASSERT(smaller || auto_resize, size_msg);
 
-		if (!smaller) {
+		if (smaller) {
+
 #ifndef KOBRA_VALIDATION_ERROR_ONLY
 
-			KOBRA_LOG_FUNC(warn) << size_msg << " (size = " << size
+			KOBRA_LOG_FUNC(warn) << size_msg << " (size = " << size_
 				<< ", buffer size = " << size << ")" << std::endl;
 
 #endif

@@ -9,7 +9,7 @@
 // Fixed ambient light
 const float ambience = 0.1;
 
-// TODO: move to light_set module
+/* TODO: move to light_set module
 vec3 point_light(vec3 light_position, vec3 position, vec3 albedo, vec3 normal)
 {
 	// Blinn Phong
@@ -19,23 +19,25 @@ vec3 point_light(vec3 light_position, vec3 position, vec3 albedo, vec3 normal)
 	float intensity = 5/distance(light_position, position);
 
 	float diffuse = max(dot(light_dir, n), 0.0);
-	/* float specular = pow(
+	float specular = pow(
 		max(
 			dot(light_dir, reflect(-light_dir, n)),
 			0.0
 		), 32
-	); */
+	);
 
 	return albedo * intensity * (diffuse + ambience);
-}
+} */
 
 void main()
 {
+	// TODO: Kd anbd Ks interface
 	vec3 albedo = material.albedo;
 	vec3 n = normalize(normal);
 	
 	if (material.has_albedo > 0.5)
 		albedo = texture(albedo_map, tex_coord).rgb;
+
 	if (material.has_normal > 0.5) {
 		n = texture(normal_map, tex_coord).rgb;
 		n = 2 * n - 1;
@@ -52,12 +54,24 @@ void main()
 	// Sum up the light contributions
 	vec3 color = vec3(0.0);
 
-	for (int i = 0; i < point_lights.number; i++) {
-		color += point_light(
-			point_lights.positions[i],
-			position,
-			albedo, n
+	for (int i = 0; i < light_count; i++) {
+		Light light = lights[i];
+
+		// TODO: attenuation
+		vec3 ldir = normalize(light.position - position);
+		float d = distance(light.position, position);
+
+		vec3 Li = light.intensity/d;
+
+		float diffuse = max(dot(ldir, n), 0.0);
+		float specular = pow(
+			max(
+				dot(ldir, reflect(-ldir, n)),
+				0.0
+			), 1 // TODO: shininess
 		);
+
+		color += Li * (diffuse + specular) + ambience;
 	}
 
 	// Gamma correction

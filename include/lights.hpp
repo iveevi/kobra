@@ -11,9 +11,19 @@ namespace kobra {
 
 // General light class
 struct Light {
-	// TODO: light type (if area light, then transform describes scale)
-	// position is determined by transform
-	glm::vec3 intensity;
+	enum Type {
+		ePoint,
+		eSpot,
+		eDirectional,
+		eArea // TODO: rect, disk, etc.
+	};
+
+	// Light type
+	Type		type = ePoint;
+
+	// Inteisty: color and power
+	glm::vec3	color {1.0f};
+	float		power {1.0f};
 };
 
 using LightPtr = std::shared_ptr <Light>;
