@@ -4,6 +4,7 @@
 // Standard headers
 #include <cstdio>
 #include <fstream>
+#include <memory>
 #include <optional>
 
 // Engine headers
@@ -46,7 +47,7 @@ struct Material {
 	static Material from_file(std::ifstream &, const std::string &, bool &);
 };
 
-// TODO: eventually use GGX for roughness
+using MaterialPtr = std::shared_ptr <Material>;
 
 }
 

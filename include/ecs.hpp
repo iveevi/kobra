@@ -40,6 +40,7 @@ std::string component_string()
 
 KOBRA_COMPONENT_STRING(Camera)
 KOBRA_COMPONENT_STRING(Light)
+KOBRA_COMPONENT_STRING(Material)
 KOBRA_COMPONENT_STRING(Mesh)
 KOBRA_COMPONENT_STRING(Rasterizer)
 KOBRA_COMPONENT_STRING(Raytracer)
@@ -55,6 +56,7 @@ using Archetype = std::vector <T>;
 class ECS {
 	Archetype <CameraPtr>		cameras;
 	Archetype <LightPtr>		lights;
+	Archetype <MaterialPtr>		materials;
 	Archetype <MeshPtr>		meshes;
 	Archetype <RasterizerPtr>	rasterizers;
 	Archetype <RaytracerPtr>	raytracers;
@@ -110,11 +112,22 @@ public:
 	// The get functions will need to be specialized
 	template <class T>
 	T &get(int i) {
+		// TODO: check index and show warningi with name
+		if (!_ref <T>::exists(this, i)) {
+			KOBRA_LOG_FUNC(warn) << "Entity " << i << " does not have component "
+				<< component_string <T> () << ".\n";
+		}
+
 		return _ref <T> ::get(this, i);
 	}
 
 	template <class T>
 	const T &get(int i) const {
+		if (!_ref <T>::exists(this, i)) {
+			KOBRA_LOG_FUNC(warn) << "Entity " << i << " does not have component "
+				<< component_string <T> () << ".\n";
+		}
+
 		return _ref <T> ::get(this, i);
 	}
 
@@ -201,6 +214,14 @@ struct ECS::_constructor <Light> {
 	template <class ... Args>
 	static LightPtr make(Args ... args) {
 		return std::make_shared <Light> (args ...);
+	}
+};
+
+template <>
+struct ECS::_constructor <Material> {
+	template <class ... Args>
+	static MaterialPtr make(Args ... args) {
+		return std::make_shared <Material> (args ...);
 	}
 };
 
@@ -322,6 +343,26 @@ struct ECS::_ref <Light> {
 	static bool exists(const ECS *ecs, int i) {
 		return (ecs->lights.size() > i)
 			&& (ecs->lights[i] != nullptr);
+	}
+};
+
+template <>
+struct ECS::_ref <Material> {
+	static MaterialPtr &ref(ECS *ecs, int i) {
+		return ecs->materials[i];
+	}
+
+	static Material &get(ECS *ecs, int i) {
+		return *ecs->materials[i];
+	}
+
+	static const Material &get(const ECS *ecs, int i) {
+		return *ecs->materials[i];
+	}
+
+	static bool exists(const ECS *ecs, int i) {
+		return (ecs->materials.size() > i)
+			&& (ecs->materials[i] != nullptr);
 	}
 };
 

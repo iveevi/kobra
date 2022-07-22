@@ -19,7 +19,13 @@ class Raytracer;
 
 // Handles the rendering of an entity
 struct Renderer {
-	Material material;
+	Material *material = nullptr;
+
+	// No default constructor
+	Renderer() = delete;
+
+	// Constructor
+	Renderer(Material *material_) : material(material_) {}
 };
 
 // Rasterizer component
@@ -36,7 +42,7 @@ public:
 	Rasterizer() = delete;
 
 	// Constructor initializes the buffers
-	Rasterizer(const Device &, const Mesh &);
+	Rasterizer(const Device &, const Mesh &, Material *);
 
 	// Bind resources to a descriptor set
 	void bind_buffers(const vk::raii::CommandBuffer &) const;
@@ -79,7 +85,7 @@ public:
 	Raytracer() = delete;
 
 	// Constructor sets mesh reference
-	Raytracer(Mesh *);
+	Raytracer(Mesh *, Material *);
 
 	// Serialize
 	void serialize(const Device &, const Transform &, HostBuffers &) const;

@@ -6,8 +6,8 @@
 namespace kobra {
 
 // Rasterizer
-Rasterizer::Rasterizer(const Device &dev, const Mesh &mesh)
-		: indices(mesh.indices())
+Rasterizer::Rasterizer(const Device &dev, const Mesh &mesh, Material *mat)
+		: Renderer(mat), indices(mesh.indices())
 {
 	// Buffer sizes
 	vk::DeviceSize vertex_buffer_size = mesh.vertices() * sizeof(Vertex);
@@ -54,12 +54,12 @@ void Rasterizer::bind_buffers(const vk::raii::CommandBuffer &cmd) const
 void Rasterizer::bind_material(const Device &dev, const vk::raii::DescriptorSet &dset) const
 {
 	std::string albedo = "blank";
-	if (material.has_albedo())
-		albedo = material.albedo_texture;
+	if (material->has_albedo())
+		albedo = material->albedo_texture;
 
 	std::string normal = "blank";
-	if (material.has_normal())
-		normal = material.normal_texture;
+	if (material->has_normal())
+		normal = material->normal_texture;
 
 	TextureManager::bind(
 		*dev.phdev, *dev.device,
@@ -76,7 +76,8 @@ void Rasterizer::bind_material(const Device &dev, const vk::raii::DescriptorSet 
 }
 
 // Raytracer
-Raytracer::Raytracer(Mesh *mesh_) : mesh(mesh_) {}
+Raytracer::Raytracer(Mesh *mesh_, Material *material_)
+		: Renderer(material_), mesh(mesh_) {}
 
 void Raytracer::serialize_submesh(const Device &dev, const Submesh &submesh, const Transform &transform, HostBuffers &hb) const
 {
@@ -131,21 +132,21 @@ void Raytracer::serialize_submesh(const Device &dev, const Submesh &submesh, con
 	}
 
 	// Write the material
-	material.serialize(hb.materials);
+	material->serialize(hb.materials);
 
-	if (material.has_albedo()) {
+	if (material->has_albedo()) {
 		auto albedo_descriptor = TextureManager::make_descriptor(
 			*dev.phdev, *dev.device,
-			material.albedo_texture
+			material->albedo_texture
 		);
 
 		hb.albedo_textures[obj_id] = albedo_descriptor;
 	}
 
-	if (material.has_normal()) {
+	if (material->has_normal()) {
 		auto normal_descriptor = TextureManager::make_descriptor(
 			*dev.phdev, *dev.device,
-			material.normal_texture
+			material->normal_texture
 		);
 
 		hb.normal_textures[obj_id] = normal_descriptor;

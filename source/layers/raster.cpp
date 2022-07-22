@@ -152,7 +152,7 @@ Raster::Raster(const Context &ctx, const vk::AttachmentLoadOp &load)
 	{
 		auto box = Mesh::box({0, 0, 0}, {0.5, 0.5, 0.5});
 
-		_area_light = new Rasterizer({_ctx.phdev, _ctx.device}, box);
+		_area_light = new Rasterizer({_ctx.phdev, _ctx.device}, box, new Material());
 
 		// Setup descriptor set for area light
 		_ds_components.insert({_area_light, _make_ds()});
@@ -331,9 +331,9 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 		rasterizer->bind_buffers(cmd);
 
 		// Update push constants
-		push_constants.albedo = rasterizer->material.diffuse;
-		push_constants.has_albedo = rasterizer->material.has_albedo();
-		push_constants.has_normal = rasterizer->material.has_normal();
+		push_constants.albedo = rasterizer->material->diffuse;
+		push_constants.has_albedo = rasterizer->material->has_albedo();
+		push_constants.has_normal = rasterizer->material->has_normal();
 
 		// Push constant
 		cmd.pushConstants <PushConstants> (

@@ -67,32 +67,32 @@ struct ECSApp : public BaseApp {
 		e2.add <Mesh> (mesh);
 		e3.add <Mesh> (mesh);
 
-		// Add rasterizers for e1 and e2
-		e1.add <Rasterizer> (get_device(), e1.get <Mesh> ());
-		e2.add <Rasterizer> (get_device(), e2.get <Mesh> ());
+		// Materials
+		e1.add <Material> ();
+		e2.add <Material> ();
+		e3.add <Material> ();
 
-		e1.get <Rasterizer> ().mode = RasterMode::ePhong;
-		e2.get <Rasterizer> ().mode = RasterMode::ePhong;
-
-		e1.get <Rasterizer> ().material.diffuse = {0.5, 0.5, 0.5};
-
-		e2.get <Rasterizer> ().material.albedo_texture = "resources/wood_floor_albedo.jpg";
-		e2.get <Rasterizer> ().material.normal_texture = "resources/wood_floor_normal.jpg";
-
-		// Add raytracers for e1, e2 and e3
-		e1.add <Raytracer> (&e1.get <Mesh> ());
-		e2.add <Raytracer> (&e2.get <Mesh> ());
-		e3.add <Raytracer> (&e3.get <Mesh> ());
-
-		e1.get <Raytracer> ().material.diffuse = {0.5, 0.5, 0.5};
-		e2.get <Raytracer> ().material.diffuse = {0.8, 0.6, 0.4};
-		e3.get <Raytracer> ().material = {
+		e1.get <Material> ().diffuse = {0.5, 0.5, 0.5};
+		e2.get <Material> ().diffuse = {0.8, 0.6, 0.4};
+		e3.get <Material> () = {
 			.diffuse = {0.8, 0.8, 0.8},
 			.type = eReflection
 		};
 
-		e2.get <Raytracer> ().material.albedo_texture = "resources/wood_floor_albedo.jpg";
-		e2.get <Raytracer> ().material.normal_texture = "resources/wood_floor_normal.jpg";
+		e2.get <Material> ().albedo_texture = "resources/wood_floor_albedo.jpg";
+		e2.get <Material> ().normal_texture = "resources/wood_floor_normal.jpg";
+
+		// Add rasterizers for e1 and e2
+		e1.add <Rasterizer> (get_device(), e1.get <Mesh> (), &e1.get <Material> ());
+		e2.add <Rasterizer> (get_device(), e2.get <Mesh> (), &e2.get <Material> ());
+
+		e1.get <Rasterizer> ().mode = RasterMode::ePhong;
+		e2.get <Rasterizer> ().mode = RasterMode::ePhong;
+
+		// Add raytracers for e1, e2 and e3
+		e1.add <Raytracer> (&e1.get <Mesh> (), &e1.get <Material> ());
+		e2.add <Raytracer> (&e2.get <Mesh> (), &e2.get <Material> ());
+		e3.add <Raytracer> (&e3.get <Mesh> (), &e3.get <Material> ());
 
 		// Add camera
 		auto c = Camera(Transform({0, 3, 10}), Tunings(45.0f, 1000, 1000));
