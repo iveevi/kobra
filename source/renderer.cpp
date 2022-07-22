@@ -55,11 +55,11 @@ void Rasterizer::bind_material(const Device &dev, const vk::raii::DescriptorSet 
 {
 	std::string albedo = "blank";
 	if (material.has_albedo())
-		albedo = material.albedo_source;
+		albedo = material.albedo_texture;
 
 	std::string normal = "blank";
 	if (material.has_normal())
-		normal = material.normal_source;
+		normal = material.normal_texture;
 
 	TextureManager::bind(
 		*dev.phdev, *dev.device,
@@ -136,7 +136,7 @@ void Raytracer::serialize_submesh(const Device &dev, const Submesh &submesh, con
 	if (material.has_albedo()) {
 		auto albedo_descriptor = TextureManager::make_descriptor(
 			*dev.phdev, *dev.device,
-			material.albedo_source
+			material.albedo_texture
 		);
 
 		hb.albedo_textures[obj_id] = albedo_descriptor;
@@ -145,7 +145,7 @@ void Raytracer::serialize_submesh(const Device &dev, const Submesh &submesh, con
 	if (material.has_normal()) {
 		auto normal_descriptor = TextureManager::make_descriptor(
 			*dev.phdev, *dev.device,
-			material.normal_source
+			material.normal_texture
 		);
 
 		hb.normal_textures[obj_id] = normal_descriptor;

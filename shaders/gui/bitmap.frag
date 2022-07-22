@@ -13,5 +13,8 @@ layout (location = 0) out vec4 fragment;
 void main()
 {
 	float t = texture(tex, fpos).r;
+	if (t < 0.01)
+		discard;
+
 	fragment = vec4(fcolor, 1.0) * t;
 }

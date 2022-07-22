@@ -331,7 +331,7 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 		rasterizer->bind_buffers(cmd);
 
 		// Update push constants
-		push_constants.albedo = rasterizer->material.Kd;
+		push_constants.albedo = rasterizer->material.diffuse;
 		push_constants.has_albedo = rasterizer->material.has_albedo();
 		push_constants.has_normal = rasterizer->material.has_normal();
 

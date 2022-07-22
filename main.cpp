@@ -1,4 +1,3 @@
-#include "global.hpp"
 #include "include/app.hpp"
 #include "include/backend.hpp"
 #include "include/button.hpp"
@@ -75,25 +74,25 @@ struct ECSApp : public BaseApp {
 		e1.get <Rasterizer> ().mode = RasterMode::ePhong;
 		e2.get <Rasterizer> ().mode = RasterMode::ePhong;
 
-		e1.get <Rasterizer> ().material.Kd = {0.5, 0.5, 0.5};
+		e1.get <Rasterizer> ().material.diffuse = {0.5, 0.5, 0.5};
 
-		e2.get <Rasterizer> ().material.albedo_source = "resources/wood_floor_albedo.jpg";
-		e2.get <Rasterizer> ().material.normal_source = "resources/wood_floor_normal.jpg";
+		e2.get <Rasterizer> ().material.albedo_texture = "resources/wood_floor_albedo.jpg";
+		e2.get <Rasterizer> ().material.normal_texture = "resources/wood_floor_normal.jpg";
 
 		// Add raytracers for e1, e2 and e3
 		e1.add <Raytracer> (&e1.get <Mesh> ());
 		e2.add <Raytracer> (&e2.get <Mesh> ());
 		e3.add <Raytracer> (&e3.get <Mesh> ());
 
-		e1.get <Raytracer> ().material.Kd = {0.5, 0.5, 0.5};
-		e2.get <Raytracer> ().material.Kd = {0.8, 0.6, 0.4};
+		e1.get <Raytracer> ().material.diffuse = {0.5, 0.5, 0.5};
+		e2.get <Raytracer> ().material.diffuse = {0.8, 0.6, 0.4};
 		e3.get <Raytracer> ().material = {
-			.Kd = {0.8, 0.8, 0.8},
+			.diffuse = {0.8, 0.8, 0.8},
 			.type = eReflection
 		};
-		
-		e2.get <Raytracer> ().material.albedo_source = "resources/wood_floor_albedo.jpg";
-		e2.get <Raytracer> ().material.normal_source = "resources/wood_floor_normal.jpg";
+
+		e2.get <Raytracer> ().material.albedo_texture = "resources/wood_floor_albedo.jpg";
+		e2.get <Raytracer> ().material.normal_texture = "resources/wood_floor_normal.jpg";
 
 		// Add camera
 		auto c = Camera(Transform({0, 3, 10}), Tunings(45.0f, 1000, 1000));
@@ -131,7 +130,10 @@ struct ECSApp : public BaseApp {
 		io.mouse_events.subscribe(mouse_callback, this);
 	}
 
-	void move_camera() {
+	int mode = 0;	// 0 for raster, 1 for raytracer
+	bool tab_pressed = false;
+
+	void active_input() {
 		float speed = 20.0f * frame_time;
 
 		// Camera movement
@@ -156,6 +158,16 @@ struct ECSApp : public BaseApp {
 			cam.transform.move(up * speed);
 		else if (io.input.is_key_down(GLFW_KEY_Q))
 			cam.transform.move(-up * speed);
+
+		// Switch mode on tab
+		if (io.input.is_key_down(GLFW_KEY_TAB)) {
+			if (!tab_pressed) {
+				tab_pressed = true;
+				mode = (mode + 1) % 2;
+			}
+		} else {
+			tab_pressed = false;
+		}
 	}
 
 	float fps = 0;
@@ -181,14 +193,16 @@ struct ECSApp : public BaseApp {
 
 		time += frame_time;
 
-		// Move camera
-		move_camera();
+		// Input
+		active_input();
 
 		// Begin command buffer
 		cmd.begin({});
 
-		// rasterizer.render(cmd, framebuffer, ecs);
-		raytracer.render(cmd, framebuffer, ecs);
+		if (mode == 1)
+			raytracer.render(cmd, framebuffer, ecs);
+		else
+			rasterizer.render(cmd, framebuffer, ecs);
 
 		// Start render pass
 		std::array <vk::ClearValue, 2> clear_values = {

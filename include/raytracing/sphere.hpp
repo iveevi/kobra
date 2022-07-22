@@ -56,7 +56,7 @@ public:
 		if (material.has_albedo()) {
 			auto albedo_descriptor = TextureManager::make_descriptor(
 				lp.phdev, lp.device,
-				material.albedo_source
+				material.albedo_texture
 			);
 
 			lp.albedo_samplers[id - 1] = albedo_descriptor;
@@ -65,7 +65,7 @@ public:
 		if (material.has_normal()) {
 			auto normal_descriptor = TextureManager::make_descriptor(
 				lp.phdev, lp.device,
-				material.normal_source
+				material.normal_texture
 			);
 
 			lp.normal_samplers[id - 1] = normal_descriptor;

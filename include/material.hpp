@@ -14,19 +14,24 @@
 
 namespace kobra {
 
+// Materials, in GGX form
 struct Material {
 	// TODO: default should be purple, flat shading
-	std::string	albedo_source = "";
-	std::string	normal_source = "";
+	glm::vec3	diffuse {1, 0, 1};
+	glm::vec3	specular {0.0f};
+	glm::vec3	emission {0.0f};
+	glm::vec3	ambient {0.2f};
+	float		shininess {0.0f};
+	float		roughness {0.0f};
+	float		refraction {1.0f};
 
-	glm::vec3	Kd {1, 0, 1};
-	glm::vec3	Ks {0.0f};
+	// TODO: extinction, absorption, etc.
+
+	std::string	albedo_texture = "";
+	std::string	normal_texture = "";
 
 	// TODO: emissive termm, reafctor eEmissive to eLight?
 	Shading		type = Shading::eDiffuse;
-
-	float		refr_eta = 1.0f;
-	float		refr_k = 0.0f;
 
 	// Properties
 	bool has_albedo() const;

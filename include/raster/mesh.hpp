@@ -102,7 +102,7 @@ public:
 
 			// TODO: Material method (also keep PC_Material there)
 			{
-				material.Kd,
+				material.diffuse,
 				material.type, // TODO: ermove this casting
 				(float) rp.highlight,
 				(float) material.has_albedo(),
@@ -140,7 +140,7 @@ public:
 
 			// TODO: Material method (also keep PC_Material there)
 			{
-				material.Kd,
+				material.diffuse,
 				material.type, // TODO: ermove this casting
 				(float) rp.highlight,
 				(float) material.has_albedo(),

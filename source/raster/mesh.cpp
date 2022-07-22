@@ -14,11 +14,11 @@ void Mesh::latch(const LatchingPacket &lp)
 
 	std::string albedo = "blank";
 	if (material.has_albedo())
-		albedo = material.albedo_source;
+		albedo = material.albedo_texture;
 
 	std::string normal = "blank";
 	if (material.has_normal())
-		normal = material.normal_source;
+		normal = material.normal_texture;
 
 	TextureManager::bind(
 		lp.phdev, lp.device,

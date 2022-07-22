@@ -71,9 +71,9 @@ class Gizmo {
 			y_box = new raster::Mesh(phdev_, device_, KMesh::make_box(pos, {0.02, 0.5, 0.02}));
 			z_box = new raster::Mesh(phdev_, device_, KMesh::make_box(pos, {0.02, 0.02, 0.5}));
 
-			x_box->material.Kd = {1, 0, 0};
-			y_box->material.Kd = {0, 1, 0};
-			z_box->material.Kd = {0, 0, 1};
+			x_box->material.diffuse = {1, 0, 0};
+			y_box->material.diffuse = {0, 1, 0};
+			z_box->material.diffuse = {0, 0, 1};
 
 			set_position({0, 0, 0});
 		}
