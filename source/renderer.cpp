@@ -78,7 +78,7 @@ void Rasterizer::bind_material(const Device &dev, const vk::raii::DescriptorSet 
 // Raytracer
 Raytracer::Raytracer(Mesh *mesh_) : mesh(mesh_) {}
 
-void Raytracer::serialize_submesh(const Submesh &submesh, const Transform &transform, HostBuffers &hb) const
+void Raytracer::serialize_submesh(const Device &dev, const Submesh &submesh, const Transform &transform, HostBuffers &hb) const
 {
 	// Offset for triangle indices
 	uint offset = hb.vertices.size()/VERTEX_STRIDE;
@@ -133,23 +133,23 @@ void Raytracer::serialize_submesh(const Submesh &submesh, const Transform &trans
 	// Write the material
 	material.serialize(hb.materials);
 
-	/* if (material.has_albedo()) {
+	if (material.has_albedo()) {
 		auto albedo_descriptor = TextureManager::make_descriptor(
-			hb.phdev, lp.device,
+			*dev.phdev, *dev.device,
 			material.albedo_source
 		);
 
-		hb.albedo_samplers[id - 1] = albedo_descriptor;
+		hb.albedo_textures[obj_id] = albedo_descriptor;
 	}
 
 	if (material.has_normal()) {
 		auto normal_descriptor = TextureManager::make_descriptor(
-			hb.phdev, lp.device,
+			*dev.phdev, *dev.device,
 			material.normal_source
 		);
 
-		hb.normal_samplers[id - 1] = normal_descriptor;
-	} */
+		hb.normal_textures[obj_id] = normal_descriptor;
+	}
 
 	// Write the transform
 	hb.transforms.push_back(transform.matrix());
@@ -159,10 +159,10 @@ void Raytracer::serialize_submesh(const Submesh &submesh, const Transform &trans
 }
 
 // Serialize
-void Raytracer::serialize(const Transform &transform, HostBuffers &hb) const
+void Raytracer::serialize(const Device &dev, const Transform &transform, HostBuffers &hb) const
 {
 	for (size_t i = 0; i < mesh->submeshes.size(); i++)
-		serialize_submesh(mesh->submeshes[i], transform, hb);
+		serialize_submesh(dev, mesh->submeshes[i], transform, hb);
 
 	// Increment ID per whole mesh
 	hb.id++;

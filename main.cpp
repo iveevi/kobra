@@ -91,6 +91,9 @@ struct ECSApp : public BaseApp {
 			.Kd = {0.8, 0.8, 0.8},
 			.type = eReflection
 		};
+		
+		e2.get <Raytracer> ().material.albedo_source = "resources/wood_floor_albedo.jpg";
+		e2.get <Raytracer> ().material.normal_source = "resources/wood_floor_normal.jpg";
 
 		// Add camera
 		auto c = Camera(Transform({0, 3, 10}), Tunings(45.0f, 1000, 1000));

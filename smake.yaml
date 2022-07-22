@@ -6,6 +6,7 @@ definitions:
   - kobra_source: 'source/backend.cpp,
     source/capture.cpp,
     source/ecs.cpp,
+    source/extensions.cpp,
     source/formats.cpp,
     source/kmesh.cpp,
     source/logger.cpp,

@@ -118,6 +118,40 @@ struct _area_light_info {
 	_area_light lights[32];
 };
 
+struct PushConstants {
+	alignas(16)
+	uint width;
+	uint height;
+
+	uint skip;
+	uint xoffset;
+	uint yoffset;
+
+	uint triangles;
+	uint lights;
+	uint samples_per_pixel;
+	uint samples_per_surface;
+	uint samples_per_light;
+
+	uint accumulate;
+	uint present;
+	uint total;
+
+	float time;
+
+	aligned_vec4 camera_position;
+	aligned_vec4 camera_forward;
+	aligned_vec4 camera_up;
+	aligned_vec4 camera_right;
+
+	aligned_vec4 camera_tunings;
+};
+
+struct Viewport {
+	uint width;
+	uint height;
+};
+
 /////////////////
 // Constructor //
 /////////////////
@@ -152,8 +186,9 @@ Raytracer::Raytracer(const Context &ctx, SyncQueue *sq, const vk::AttachmentLoad
 	_dev.materials = BufferData(phdev, device, vec4_size, usage, mem_props);
 
 	_dev.area_lights = BufferData(phdev, device, sizeof(_area_light_info), usage, mem_props);
-	_dev.lights = BufferData(phdev, device, vec4_size, usage, mem_props);
-	_dev.light_indices = BufferData(phdev, device, uint_size, usage, mem_props);
+
+	// _dev.lights = BufferData(phdev, device, vec4_size, usage, mem_props);
+	// _dev.light_indices = BufferData(phdev, device, uint_size, usage, mem_props);
 
 	_dev.transforms = BufferData(phdev, device, mat4_size, usage, mem_props);
 
@@ -265,7 +300,11 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 	Camera camera;
 	bool found_camera = false;
 
-	kobra::Raytracer::HostBuffers host_buffers {.id = 1};
+	kobra::Raytracer::HostBuffers host_buffers {
+		.albedo_textures = _albedo_image_descriptors,
+		.normal_textures = _normal_image_descriptors,
+		.id = 1
+	};
 
 	int light_index = 0;
 	bool dirty_lights = false;
@@ -292,14 +331,17 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 			const kobra::Raytracer *raytracer = &ecs.get <kobra::Raytracer> (i);
 			const Transform &transform = ecs.get <Transform> (i);
 
-			raytracer->serialize(transform, host_buffers);
+			raytracer->serialize({_ctx.phdev, _ctx.device}, transform, host_buffers);
 		}
 
 		// Deal with light
+		// TODO: methods...
 		if (ecs.exists <Light> (i)) {
 			const Light &light = ecs.get <Light> (i);
 
 			const Transform &transform = ecs.get <Transform> (i);
+
+			// Check if lights have moved
 			if (light_index >= _plight_transforms.size())
 				dirty_lights = true;
 			else if (transform != _plight_transforms[light_index])
@@ -308,134 +350,29 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 			light_transforms.push_back(transform);
 			light_index++;
 
-			// TODO: account for light type
-			// TODO: helper method to push this data
-			Material mat {.Kd = {1, 1, 1}, .type = eEmissive};
-			mat.serialize(host_buffers.materials);
+			// Area light
+			if (light.type == Light::Type::eArea) {
+				// New vertices (square 1x1 in center)
+				glm::vec3 a {-0.5f, 0, -0.5f};
+				glm::vec3 b {0.5f, 0, -0.5f};
+				glm::vec3 c {-0.5f, 0, 0.5f};
 
-			// New vertices (square 1x1 in center)
-			glm::vec3 v1 {-0.5f, 0, -0.5f};
-			glm::vec3 v2 {0.5f, 0, -0.5f};
-			glm::vec3 v3 {0.5f, 0, 0.5f};
-			glm::vec3 v4 {-0.5f, 0, 0.5f};
+				a = transform.apply(a);
+				b = transform.apply(b);
+				c = transform.apply(c);
 
-			v1 = transform.apply(v1);
-			v2 = transform.apply(v2);
-			v3 = transform.apply(v3);
-			v4 = transform.apply(v4);
+				// TODO: this only applies if the light is an area light
+				_area_light alight;
+				alight.a = a;
+				alight.ab = b - a;
+				alight.ac = c - a;
+				alight.color = light.color;
+				alight.power = light.power;
 
-			// TODO: this only applies if the light is an area light
-			_area_light alight;
-			alight.a = v1;
-			alight.ab = v2 - v1;
-			alight.ac = v4 - v1;
-			alight.color = light.color;
-			alight.power = light.power;
-
-			alight_info.lights[alight_info.count++] = alight;
-
-			/* New indices
-			uint offset = host_buffers.vertices.size()/VERTEX_STRIDE;
-
-			// TODO: clean singleton raytracer component to
-			// TODO: use more optimal layout for lights
-			// (emissive mesh != area light)
-			host_buffers.vertices.push_back(v1);
-			host_buffers.vertices.push_back(v1);
-			host_buffers.vertices.push_back(v1);
-			host_buffers.vertices.push_back(v1);
-			host_buffers.vertices.push_back(v1);
-
-			host_buffers.vertices.push_back(v2);
-			host_buffers.vertices.push_back(v2);
-			host_buffers.vertices.push_back(v2);
-			host_buffers.vertices.push_back(v2);
-			host_buffers.vertices.push_back(v2);
-
-			host_buffers.vertices.push_back(v3);
-			host_buffers.vertices.push_back(v3);
-			host_buffers.vertices.push_back(v3);
-			host_buffers.vertices.push_back(v3);
-			host_buffers.vertices.push_back(v3);
-
-			host_buffers.vertices.push_back(v4);
-			host_buffers.vertices.push_back(v4);
-			host_buffers.vertices.push_back(v4);
-			host_buffers.vertices.push_back(v4);
-			host_buffers.vertices.push_back(v4);
-
-			// TODO: store area light struct with indices
-			// and other propreties
-			uint ia = offset, ib = offset + 1, ic = offset + 2, id = host_buffers.id - 1;
-
-			glm::vec4 header {LIGHT_TYPE_AREA, 0, 0, 0};
-
-			// TODO: uvec4
-			glm::vec4 h1 {
-				*reinterpret_cast <float *> (&ia),
-				*reinterpret_cast <float *> (&ib),
-				*reinterpret_cast <float *> (&ic),
-				*reinterpret_cast <float *> (&id)
-			};
-
-			ia = offset; ib = offset + 2; ic = offset + 3;
-
-			glm::vec4 h2 {
-				*reinterpret_cast <float *> (&ia),
-				*reinterpret_cast <float *> (&ib),
-				*reinterpret_cast <float *> (&ic),
-				*reinterpret_cast <float *> (&id)
-			};
-
-			host_buffers.id++;
-
-			// TODO: fixed offset for lights, no need for
-			host_buffers.light_indices.push_back(host_buffers.lights.size());
-			host_buffers.lights.push_back(header);
-			host_buffers.lights.push_back(h1);
-			host_buffers.triangles.push_back(h1);
-
-			host_buffers.light_indices.push_back(host_buffers.lights.size());
-			host_buffers.lights.push_back(header);
-			host_buffers.lights.push_back(h2);
-			host_buffers.triangles.push_back(h2); */
+				alight_info.lights[alight_info.count++] = alight;
+			}
 		}
 	}
-
-	/* std::cout << "Triangles: " << host_buffers.triangles.size() << std::endl;
-	std::cout << "Vertices: " << host_buffers.vertices.size()/VERTEX_STRIDE << std::endl;
-	for (auto &triangle : host_buffers.triangles) {
-		glm::uvec4 t = *reinterpret_cast <glm::uvec4 *> (&triangle);
-		std::cout << "\t" << t.x << " " << t.y << " " << t.z << " " << t.w << std::endl;
-
-		glm::vec3 v1 = host_buffers.vertices[VERTEX_STRIDE * t.x].data;
-		glm::vec3 v2 = host_buffers.vertices[VERTEX_STRIDE * t.y].data;
-		glm::vec3 v3 = host_buffers.vertices[VERTEX_STRIDE * t.z].data;
-
-		std::cout << "\t\t" << glm::to_string(v1) << std::endl;
-		std::cout << "\t\t" << glm::to_string(v2) << std::endl;
-		std::cout << "\t\t" << glm::to_string(v3) << std::endl;
-	}
-
-	std::cout << "Lights: " << host_buffers.lights.size() << std::endl;
-	std::cout << "Light indices: " << host_buffers.light_indices.size() << std::endl;
-	for (int i = 0; i < host_buffers.light_indices.size(); i++) {
-		std::cout << "\t" << host_buffers.light_indices[i] << std::endl;
-
-		glm::uvec4 l = *reinterpret_cast <glm::uvec4 *> (&host_buffers.lights[host_buffers.light_indices[i]]);
-		std::cout << "\t\t" << l.x << " " << l.y << " " << l.z << " " << l.w << std::endl;
-
-		glm::uvec4 v = *reinterpret_cast <glm::uvec4 *> (&host_buffers.lights[host_buffers.light_indices[i] + 1].data);
-		std::cout << "\t\t" << v.x << " " << v.y << " " << v.z << " " << v.w << std::endl;
-
-		glm::vec3 v1 = host_buffers.vertices[VERTEX_STRIDE * v.x].data;
-		glm::vec3 v2 = host_buffers.vertices[VERTEX_STRIDE * v.y].data;
-		glm::vec3 v3 = host_buffers.vertices[VERTEX_STRIDE * v.z].data;
-
-		std::cout << "\t\t\t" << glm::to_string(v1) << std::endl;
-		std::cout << "\t\t\t" << glm::to_string(v2) << std::endl;
-		std::cout << "\t\t\t" << glm::to_string(v3) << std::endl;
-	} */
 
 	if (!found_camera) {
 		// Actually just skip
@@ -457,8 +394,6 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 	rebinding |= _dev.triangles.upload(host_buffers.triangles, 0);
 	rebinding |= _dev.materials.upload(host_buffers.materials, 0);
 	rebinding |= _dev.area_lights.upload(&alight_info, sizeof(alight_info));
-	rebinding |= _dev.lights.upload(host_buffers.lights, 0);
-	rebinding |= _dev.light_indices.upload(host_buffers.light_indices, 0);
 	rebinding |= _dev.transforms.upload(host_buffers.transforms, 0);
 
 	if (rebinding) {
@@ -468,6 +403,14 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 			}
 		);
 	}
+
+	// TODO: check if desciptors actually changed
+	_sync_queue->push(
+		[&]() {
+			_update_samplers(_albedo_image_descriptors, MESH_BINDING_ALBEDOS);
+			_update_samplers(_normal_image_descriptors, MESH_BINDING_NORMAL_MAPS);
+		}
+	);
 
 	// Compute shader
 	cmd.bindPipeline(vk::PipelineBindPoint::eCompute, *_p_raytracing);

@@ -53,7 +53,7 @@ layout (set = 0, binding = MESH_BINDING_AREA_LIGHTS, std430) buffer AreaLights
 	AreaLight data[];
 } area_lights;
 
-// Lights
+/* Lights
 layout (set = 0, binding = MESH_BINDING_LIGHTS, std430) buffer Lights
 {
 	vec4 data[];
@@ -63,7 +63,7 @@ layout (set = 0, binding = MESH_BINDING_LIGHTS, std430) buffer Lights
 layout (set = 0, binding = MESH_BINDING_LIGHT_INDICES, std430) buffer LightIndices
 {
 	uint data[];
-} light_indices;
+} light_indices; */
 
 // Textures
 layout (set = 0, binding = MESH_BINDING_ALBEDOS)
@@ -338,41 +338,6 @@ Hit trace(Ray ray)
 // Maximum ray depth
 #define MAX_DEPTH 10
 
-vec3 sample_triangle(vec3 v1, vec3 v2, vec3 v3, float strata, float i)
-{
-	// Get random vec in [0, 1]
-	vec2 r = jitter2d(strata, i);
-	float s = sqrt(r.x);
-
-	float u = 1.0 - s;
-	float v = r.y * s;
-
-	// Edge vectors
-	vec3 e1 = v2 - v1;
-	vec3 e2 = v3 - v1;
-
-	vec3 p = v1 + u * e1 + v * e2;
-
-	return p;
-}
-
-// Sample random point from an area light
-vec3 sample_area_light(uint li, int si)
-{
-	// Get light position
-	uvec4 i = VERTEX_STRIDE * floatBitsToUint(lights.data[li + 1]);
-
-	vec3 v1 = vertices.data[i.x].xyz;
-	vec3 v2 = vertices.data[i.y].xyz;
-	vec3 v3 = vertices.data[i.z].xyz;
-
-	// Get random point in triangle
-	return sample_triangle(
-		v1, v2, v3,
-		sqrt(pc.samples_per_light), si
-	);
-}
-
 // Power heuristic
 float power_heuristic(float nf, float fpdf, float ng, float gpdf)
 {
@@ -557,37 +522,6 @@ vec3 direct_illumination(Hit hit, Ray ray)
 			* power_heuristic(float(pc.samples_per_light), 0.25 * INV_PI, 1, pdf)
 			* (4 * PI);
 	}
-
-	/* float inv_lsamples = 1.0/pc.samples_per_light;
-	for (int j = 0; j < pc.samples_per_light; j++) {
-		vec3 light_position = sample_area_light(light_index, j);
-
-		// Try to connect to the light
-		vec3 pos = hit.point + hit.normal * 0.001;
-		vec3 dir = normalize(light_position - pos);
-
-		float pdf = pdf_bsdf(hit, r, dir);
-		if (pdf == 0.0)
-			continue;
-
-		// TODO: remove the extra arguments
-		Ray shadow_ray = Ray(pos, dir, 1.0, 1.0);
-
-		Hit shadow_hit = trace(shadow_ray);
-		// if (shadow_hit.id == light_object) {
-		if (distance(shadow_hit.point, light_position) < 0.001) {
-			// Light contribution directly
-			float d = distance(light_position, hit.point);
-			float cos_theta = max(0.0, dot(hit.normal, dir));
-			vec3 lcolor = vec3(1.0);
-
-			// TODO: get the pdf from anotehr function
-			direct_contr += lcolor * hit.mat.albedo
-				* cos_theta * (1/d)
-				* power_heuristic(float(pc.samples_per_light), 0.25 * INV_PI, 1, pdf)
-				* inv_lsamples * (4 * PI);
-		}
-	} */
 
 	return direct_contr;
 }

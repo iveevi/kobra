@@ -64,13 +64,16 @@ class Raytracer : public Renderer {
 
 		std::vector <aligned_mat4>	transforms;
 
+		std::vector <vk::DescriptorImageInfo> &albedo_textures;
+		std::vector <vk::DescriptorImageInfo> &normal_textures;
+
 		int id;
 	};
 
 	Mesh	*mesh = nullptr;
 
 	// Serialize submesh data to host buffers
-	void serialize_submesh(const Submesh &, const Transform &, HostBuffers &) const;
+	void serialize_submesh(const Device &dev, const Submesh &, const Transform &, HostBuffers &) const;
 public:
 	// No default constructor
 	Raytracer() = delete;
@@ -79,7 +82,7 @@ public:
 	Raytracer(Mesh *);
 
 	// Serialize
-	void serialize(const Transform &, HostBuffers &) const;
+	void serialize(const Device &, const Transform &, HostBuffers &) const;
 
 	// TODO: build bvh
 

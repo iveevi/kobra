@@ -14,42 +14,6 @@ namespace kobra {
 namespace layers {
 
 class Raytracer {
-	// Push constant structures
-	// TODO: goes into source file
-	struct PushConstants {
-		alignas(16)
-		uint width;
-		uint height;
-
-		uint skip;
-		uint xoffset;
-		uint yoffset;
-
-		uint triangles;
-		uint lights;
-		uint samples_per_pixel;
-		uint samples_per_surface;
-		uint samples_per_light;
-
-		uint accumulate;
-		uint present;
-		uint total;
-
-		float time;
-
-		aligned_vec4 camera_position;
-		aligned_vec4 camera_forward;
-		aligned_vec4 camera_up;
-		aligned_vec4 camera_right;
-
-		aligned_vec4 camera_tunings;
-	};
-
-	struct Viewport {
-		uint width;
-		uint height;
-	};
-
 	// Vulkan context
 	Context _ctx;
 
@@ -63,6 +27,7 @@ class Raytracer {
 	vk::raii::Pipeline		_p_postprocess = nullptr;
 
 	// Device buffer data
+	struct DeviceBufferData;
 	struct {
 		BufferData		pixels = nullptr;
 
@@ -73,8 +38,6 @@ class Raytracer {
 		BufferData		materials = nullptr;
 
 		BufferData		area_lights = nullptr;
-		BufferData		lights = nullptr;
-		BufferData		light_indices = nullptr;
 
 		// TODO: We have a use for this now
 		BufferData		transforms = nullptr;
@@ -110,18 +73,6 @@ class Raytracer {
 				dset_raytracing, area_lights,
 				vk::DescriptorType::eStorageBuffer,
 				MESH_BINDING_AREA_LIGHTS
-			);
-
-			bind_ds(device,
-				dset_raytracing, lights,
-				vk::DescriptorType::eStorageBuffer,
-				MESH_BINDING_LIGHTS
-			);
-
-			bind_ds(device,
-				dset_raytracing, light_indices,
-				vk::DescriptorType::eStorageBuffer,
-				MESH_BINDING_LIGHT_INDICES
 			);
 
 			bind_ds(device,
