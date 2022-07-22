@@ -177,6 +177,7 @@ Raster::Raster(const Context &ctx, const vk::AttachmentLoadOp &load)
 ////////////
 // Render //
 ////////////
+
 void Raster::render(const vk::raii::CommandBuffer &cmd,
 		const vk::raii::Framebuffer &framebuffer,
 		const ECS &ecs)

@@ -42,8 +42,16 @@ struct AreaLight {
 	vec3 a;
 	vec3 ab;
 	vec3 ac; // d = a + ab + ac
-	vec3 intensity;
+	vec3 color;
+	float power;
 };
+
+layout (set = 0, binding = MESH_BINDING_AREA_LIGHTS, std430) buffer AreaLights
+{
+	int count;
+
+	AreaLight data[];
+} area_lights;
 
 // Lights
 layout (set = 0, binding = MESH_BINDING_LIGHTS, std430) buffer Lights
@@ -106,6 +114,26 @@ layout (push_constant) uniform PushConstants
 	vec4	properties;
 } pc;
 
+// Sample environment map
+vec3 sample_environment(vec3 dir)
+{
+	vec3 white = vec3(1.0);
+	vec3 blue = vec3(0.5, 0.7, 1.0);
+	return 0.5 * mix(white, blue, clamp(pow(dir.y, 0.5), 0.0, 1.0));
+
+	/* Get uv coordinates
+	const float PI = 3.14159265358979323846;
+
+	vec2 uv = vec2(0.0);
+	uv.x = atan(dir.x, dir.z) / (2.0 * PI) + 0.5;
+	uv.y = asin(dir.y) / PI + 0.5;
+
+	// Get the color
+	vec3 tex = texture(s2_environment, uv).rgb;
+
+	return tex; */
+}
+
 // Import all modules
 #include "../../include/types.hpp"
 #include "modules/ray.glsl"
@@ -114,9 +142,198 @@ layout (push_constant) uniform PushConstants
 #include "modules/random.glsl"
 #include "modules/material.glsl"
 #include "modules/primitives.glsl"
-#include "modules/environment.glsl"
 #include "modules/intersect.glsl"
-#include "modules/bvh.glsl"
+
+vec3 sample_environment(Ray ray)
+{
+	return sample_environment(ray.direction);
+}
+
+// Sample environment map wih blur
+vec3 sample_environment_blur(Ray ray)
+{
+	int samples = 16;
+
+	vec3 color = vec3(0.0);
+	for (int i = 0; i < samples; i++) {
+		vec2 uv = vec2(0.0);
+		uv.x = atan(ray.direction.x, ray.direction.z) / (2.0 * PI) + 0.5;
+		uv.y = asin(ray.direction.y) / PI + 0.5;
+
+		vec2 j = jitter2d(samples, i);
+		vec3 tex = texture(s2_environment, uv + 0.025 * j).rgb;
+		color += tex;
+	}
+
+	return color / float(samples);
+}
+
+// Ray-area light intersection
+float _intersect_t(AreaLight light, Ray ray)
+{
+	// Create the two triangles, then intersect
+	vec3 v1 = light.a;
+	vec3 v2 = light.a + light.ab;
+	vec3 v3 = light.a + light.ac;
+	vec3 v4 = light.a + light.ab + light.ac;
+
+	Triangle ta = Triangle(v1, v2, v3);
+	Triangle tb = Triangle(v2, v3, v4);
+
+	float t1 = _intersect_t(ta, ray);
+	float t2 = _intersect_t(tb, ray);
+
+	if (t1 < 0.0 && t2 < 0.0)
+		return -1.0;
+	if (t1 < 0.0)
+		return t2;
+	if (t2 < 0.0)
+		return t1;
+
+	return min(t1, t2);
+}
+
+Intersection intersection_light(Ray r, AreaLight light)
+{
+	float time = _intersect_t(light, r);
+
+	Intersection it = Intersection(-1.0, vec3(0.0), mat_default());
+	if (time < 0.0)
+		return it;
+
+	it.time = time;
+	it.mat.albedo = light.color;
+	it.mat.shading = SHADING_EMISSIVE;
+	return it;
+}
+
+// Get left and right child of the node
+int hit(int node)
+{
+	vec4 prop = bvh.data[node];
+	return floatBitsToInt(prop.z);
+}
+
+int miss(int node)
+{
+	vec4 prop = bvh.data[node];
+	return floatBitsToInt(prop.w);
+}
+
+int object(int node)
+{
+	vec4 prop = bvh.data[node];
+	return floatBitsToInt(prop.y);
+}
+
+int id(int node)
+{
+	vec4 prop = bvh.data[node];
+	return floatBitsToInt(prop.x);
+}
+
+bool leaf(int node)
+{
+	vec4 prop = bvh.data[node];
+	return prop.x == 0x1;
+}
+
+BoundingBox bbox(int node)
+{
+	vec3 min = bvh.data[node + 1].xyz;
+	vec3 max = bvh.data[node + 2].xyz;
+	return BoundingBox(min, max);
+}
+
+// Closest object information
+struct Hit {
+	int	object;
+	int	id;
+
+	float	time;
+	vec3	point;
+	vec3	normal;
+
+	Material mat;
+};
+
+// Get closest object
+Hit trace(Ray ray)
+{
+	int min_index = -1;
+	int min_id = -1;
+
+	// Starting intersection
+	Intersection mini = Intersection(
+		1.0/0.0, vec3(0.0),
+		mat_default()
+	);
+
+	// Traverse BVH as a threaded binary tree
+	int node = 0;
+	while (node != -1) {
+		if (object(node) != -1) {
+			// Get object index
+			int index = object(node);
+
+			// Get object
+			Intersection it = ray_intersect(ray, index);
+
+			// If intersection is valid, update minimum
+			if (it.time > 0.0 && it.time < mini.time) {
+				min_index = index;
+				min_id = id(node);
+				mini = it;
+			}
+
+			// Go to next node (ame as miss)
+			node = miss(node);
+		} else {
+			// Get bounding box
+			BoundingBox box = bbox(node);
+
+			// Check if ray intersects (or is inside)
+			// the bounding box
+			float t = intersect_box(ray, box);
+			bool inside = in_box(ray.origin, box);
+
+			if ((t > 0.0 && t < mini.time) || inside) {
+				// Traverse left child
+				node = hit(node);
+			} else {
+				// Traverse right child
+				node = miss(node);
+			}
+		}
+	}
+
+	// Check area lights
+	for (int i = 0; i < area_lights.count; i++) {
+		AreaLight light = area_lights.data[i];
+		Intersection it = intersection_light(ray, light);
+		if (it.time > 0.0 && it.time < mini.time) {
+			min_index = i;
+			min_id = i;
+			mini = it;
+		}
+	}
+
+	// Color of closest object
+	vec3 color = vec3(0.0);	// TODO: sample from either texture or gradient
+	if (min_index < 0)
+		mini.mat.albedo = sample_environment(ray);
+
+	vec3 point = ray.origin + ray.direction * mini.time;
+
+	return Hit(
+		min_index,
+		min_id,
+		mini.time,
+		point,
+		mini.normal,
+		mini.mat
+	);
+}
 
 // Maximum ray depth
 #define MAX_DEPTH 10
@@ -296,15 +513,52 @@ vec3 direct_illumination(Hit hit, Ray ray)
 
 	// Direct illumination
 	uvec3 seed = floatBitsToUint(vec3(pc.time, hit.point.x, hit.point.y));
-	uint i = randuint(seed, pc.lights);
+	uint i = randuint(seed, area_lights.count);
 
-	uint light_index = light_indices.data[i];
-	int light_object = int(floatBitsToUint(lights.data[light_index + 1].w));
+	// TODO: some way to check ray-light intersection (can be independent of
+	// trace :))
+	// uint light_index = light_indices.data[i];
+	// int light_object = int(floatBitsToUint(lights.data[light_index + 1].w));
+
+	AreaLight light = area_lights.data[i];
 
 	// Ray to use
 	Ray r = ray;
 
-	float inv_lsamples = 1.0/pc.samples_per_light;
+	// Random 2D point on light
+	vec3 rand = random_sphere();
+	float u = fract(rand.x);
+	float v = fract(rand.y);
+
+	vec3 lpos = light.a + u * light.ab + v * light.ac;
+
+	// Try to connect to the light
+	vec3 pos = hit.point + hit.normal * 0.001;
+	vec3 dir = normalize(lpos - pos);
+
+	float pdf = pdf_bsdf(hit, r, dir);
+	if (pdf == 0.0)
+		return vec3(0.0);
+
+	// TODO: remove the extra arguments
+	Ray shadow_ray = Ray(pos, dir, 1.0, 1.0);
+
+	Hit shadow_hit = trace(shadow_ray);
+
+	// if (shadow_hit.id == light_object) {
+	if (distance(shadow_hit.point, lpos) < 0.001) {
+		// Light contribution directly
+		float d = distance(lpos, hit.point);
+		float cos_theta = max(0.0, dot(hit.normal, dir));
+
+		// TODO: get the pdf from anotehr function
+		direct_contr += light.color * light.power * hit.mat.albedo
+			* cos_theta * (1/d)
+			* power_heuristic(float(pc.samples_per_light), 0.25 * INV_PI, 1, pdf)
+			* (4 * PI);
+	}
+
+	/* float inv_lsamples = 1.0/pc.samples_per_light;
 	for (int j = 0; j < pc.samples_per_light; j++) {
 		vec3 light_position = sample_area_light(light_index, j);
 
@@ -333,7 +587,7 @@ vec3 direct_illumination(Hit hit, Ray ray)
 				* power_heuristic(float(pc.samples_per_light), 0.25 * INV_PI, 1, pdf)
 				* inv_lsamples * (4 * PI);
 		}
-	}
+	} */
 
 	return direct_contr;
 }
@@ -357,7 +611,7 @@ vec3 color_at(Ray ray)
 		// TODO: deal with in the direct lighting function
 		// TODO: shading emissive --> shading light
 		if (hit.object == -1 || hit.mat.shading == SHADING_EMISSIVE) {
-			contribution += hit.mat.albedo;
+			contribution += beta * hit.mat.albedo;
 			break;
 		}
 

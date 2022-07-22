@@ -45,6 +45,11 @@ definitions:
     freetype'
 
 builds:
+  - kobra:
+    - sources: main.cpp, glfw_input.cpp, kobra_source, tinyfd_source
+    - idirs: includes
+    - flags: '-std=c++17'
+    - libraries: libs
   - kobra_release:
     - sources: main.cpp, glfw_input.cpp, kobra_source, tinyfd_source
     - idirs: includes
@@ -73,11 +78,12 @@ builds:
 
 targets:
   - kobra:
-    - modes: 'gdb, wall'
+    - modes: 'gdb, wall, release'
     - builds:
-      - default: kobra_release
+      - default: kobra
       - gdb: kobra_debug
       - wall: kobra_wall
+      - release: kobra_release
     - postbuilds:
       - default: '{}'
       - gdb: 'gdb {}'

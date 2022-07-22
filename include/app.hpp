@@ -179,6 +179,9 @@ protected:
 			.depth_format = depth_buffer.format,
 		};
 	}
+
+	// Sync queue for between-frames operations
+	SyncQueue			sync_queue;
 public:
 	// TODO: is attachment load op needed?
 	BaseApp(const vk::raii::PhysicalDevice &phdev_,
@@ -269,6 +272,14 @@ public:
 	void present() {
 		// Stage flags
 		static const vk::PipelineStageFlags stage_flags = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+
+		// Perform sync tasks if needed
+		if (sync_queue.size() > 0) {
+			graphics_queue.waitIdle();
+
+			while (sync_queue.size() > 0)
+				sync_queue.do_pop();
+		}
 
 		// Result from Vulkan functions
 		vk::Result result;

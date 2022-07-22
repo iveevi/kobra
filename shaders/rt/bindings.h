@@ -15,6 +15,7 @@ const int MESH_BINDING_MATERIALS	= 5;
 // Buffers for lights
 const int MESH_BINDING_LIGHTS		= 6;
 const int MESH_BINDING_LIGHT_INDICES	= 7;
+const int MESH_BINDING_AREA_LIGHTS	= 12;
 
 // Samplers
 const int MESH_BINDING_ALBEDOS		= 8;

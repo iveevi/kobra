@@ -9,10 +9,10 @@
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <queue>
 #include <string>
 #include <utility>
 #include <vector>
-#include <execinfo.h>
 
 // Vulkan and GLFW
 #include <vulkan/vulkan.hpp>
@@ -52,6 +52,33 @@ struct Context {
 	vk::Extent2D			extent = {};
 	vk::Format			swapchain_format = vk::Format::eUndefined;
 	vk::Format			depth_format = vk::Format::eUndefined;
+};
+
+using SyncTask = std::function <void ()>;
+
+class SyncQueue {
+	std::queue <SyncTask>	_handlers;
+	std::mutex			_mutex;
+public:
+	SyncQueue() = default;
+
+	void push(const SyncTask &task) {
+		std::lock_guard <std::mutex> lock(_mutex);
+		_handlers.push(task);
+	}
+
+	void do_pop() {
+		std::lock_guard <std::mutex> lock(_mutex);
+		if (!_handlers.empty()) {
+			_handlers.front()();
+			_handlers.pop();
+		}
+	}
+
+	size_t size() {
+		std::lock_guard <std::mutex> lock(_mutex);
+		return _handlers.size();
+	}
 };
 
 //////////////////////

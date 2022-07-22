@@ -41,7 +41,7 @@ struct ECSApp : public BaseApp {
 	ECSApp(const vk::raii::PhysicalDevice &phdev, const std::vector <const char *> &extensions)
 			: BaseApp(phdev, "ECSApp", {1000, 1000}, extensions, vk::AttachmentLoadOp::eLoad),
 			rasterizer(get_context(), vk::AttachmentLoadOp::eClear),
-			raytracer(get_context(), vk::AttachmentLoadOp::eClear),
+			raytracer(get_context(), &sync_queue, vk::AttachmentLoadOp::eClear),
 			font_renderer(get_context(), render_pass, "resources/fonts/noto_sans.ttf"),
 			shape_renderer(get_context(), render_pass),
 			panel(get_context(), ecs, io) {
@@ -56,8 +56,8 @@ struct ECSApp : public BaseApp {
 		e2.get <Transform> ().scale = {5, 0.1, 5};
 
 		e3.get <Transform> ().position = {-2, 1, 0};
-		e3.get <Transform> ().scale = {1, 0.1, 1};
-		e3.get <Transform> ().rotation = {45, 0, 0};
+		e3.get <Transform> ().scale = {1, 0.01, 1};
+		e3.get <Transform> ().rotation = {0, 0, 70};
 
 		// Add meshes to e1 and e2
 		auto box = KMesh::make_box({0, 0, 0}, {1, 1, 1});
@@ -88,7 +88,7 @@ struct ECSApp : public BaseApp {
 		e1.get <Raytracer> ().material.Kd = {0.5, 0.5, 0.5};
 		e2.get <Raytracer> ().material.Kd = {0.8, 0.6, 0.4};
 		e3.get <Raytracer> ().material = {
-			.Kd = {0.5, 1, 1},
+			.Kd = {0.8, 0.8, 0.8},
 			.type = eReflection
 		};
 
@@ -103,8 +103,8 @@ struct ECSApp : public BaseApp {
 		light1.get <Transform> ().position = {-5, 10, 0};
 		light2.get <Transform> ().position = {5, 10, 0};
 
-		light1.add <Light> (Light {.type = Light::Type::eArea, .color = {1, 0, 0}, .power = 3});
-		light2.add <Light> (Light {.type = Light::Type::eArea, .color = {0, 0, 1}, .power = 5});
+		light1.add <Light> (Light {.type = Light::Type::eArea, .color = {1, 0, 0}, .power = 8});
+		light2.add <Light> (Light {.type = Light::Type::eArea, .color = {1, 1, 1}, .power = 3});
 
 		// Add button
 		auto handler = [](void *user) {
@@ -156,6 +156,7 @@ struct ECSApp : public BaseApp {
 	}
 
 	float fps = 0;
+	float time = 0;
 
 	void record(const vk::raii::CommandBuffer &cmd,
 			const vk::raii::Framebuffer &framebuffer) override {
@@ -174,6 +175,8 @@ struct ECSApp : public BaseApp {
 			Rect {.min = {500, 500}, .max = {600, 600}, .color = {1, 0, 0}},
 			button.shape()
 		};
+
+		time += frame_time;
 
 		// Move camera
 		move_camera();
