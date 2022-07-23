@@ -43,6 +43,7 @@ struct ECSApp : public BaseApp {
 			panel(get_context(), scene.ecs, io) {
 		scene.load(get_device(), scene_path);
 		raytracer.environment_map(scene.p_environment_map);
+		// raytracer.environment_map("resources/skies/background_1.jpg");
 		camera = scene.ecs.get_entity("Camera");
 
 		// Input callbacks
@@ -51,7 +52,7 @@ struct ECSApp : public BaseApp {
 		scene.ecs.info <Mesh> ();
 	}
 
-	int mode = 0;	// 0 for raster, 1 for raytracer
+	int mode = 1;	// 0 for raster, 1 for raytracer
 	bool tab_pressed = false;
 
 	void active_input() {

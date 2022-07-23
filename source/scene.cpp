@@ -260,6 +260,9 @@ void load_material(Entity &e, std::ifstream &fin)
 		buf_albedo, buf_normal
 	);
 
+	material.shininess = glm::clamp(material.shininess, 0.0f, 1.0f);
+	material.roughness = glm::clamp(material.roughness, 0.0f, 1.0f);
+
 	std::string line;
 	std::getline(fin, line);
 

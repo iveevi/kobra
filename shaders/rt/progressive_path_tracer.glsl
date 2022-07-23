@@ -17,238 +17,294 @@
 // Maximum ray depth
 #define MAX_DEPTH 10
 
-// Power heuristic
-float power_heuristic(float nf, float fpdf, float ng, float gpdf)
-{
-	float f = nf * fpdf;
-	float g = ng * gpdf;
+const float eps = 1e-3f;
+const float p = 2.0f;
 
-	return (f * f) / (f * f + g * g);
+// GGX microfacet distribution function
+float ggx_d(vec3 n, vec3 h, Material mat)
+{
+	float alpha = mat.roughness;
+	float theta = acos(clamp(dot(n, h), 0, 1));
+	if (dot(n, h) >= 1.0f)
+		theta = 0.0f;
+
+	return (alpha * alpha)
+		/ (PI * pow(theta, 4)
+		* pow(alpha * alpha + tan(theta) * tan(theta), 2.0f));
 }
 
-// Fresnel reflectance
-float fresnel_dielectric(float cosi, float etai, float etat)
+// Smith shadow-masking function (single)
+float G1(vec3 n, vec3 v, Material mat)
 {
-	// Swap if necessary
-	cosi = clamp(cosi, -1.0, 1.0);
-	if (cosi < 0.0) {
-		cosi = -cosi;
+	if (dot(v, n) <= 0.0f)
+		return 0.0f;
 
-		float tmp = etai;
-		etai = etat;
-		etat = tmp;
+	float alpha = mat.roughness;
+	float theta = acos(clamp(dot(n, v), 0, 1));
+	if (dot(n, v) >= 1.0f)
+		theta = 0.0f;
+
+	float tan_theta = tan(theta);
+
+	float denom = 1 + sqrt(1 + alpha * alpha * tan_theta * tan_theta);
+	return 2.0f/denom;
+}
+
+// Smith shadow-masking function (double)
+float G(vec3 n, vec3 wi, vec3 wo, Material mat)
+{
+	return G1(n, wo, mat) * G1(n, wi, mat);
+}
+
+// Shlicks approximation to the Fresnel reflectance
+vec3 ggx_f(vec3 wi, vec3 h, Material mat)
+{
+	float k = pow(1 - dot(wi, h), 5);
+	return mat.specular + (1 - mat.specular) * k;
+}
+
+// GGX specular brdf
+vec3 ggx_brdf(Material mat, vec3 n, vec3 wi, vec3 wo)
+{
+	if (dot(wi, n) <= 0.0f || dot(wo, n) <= 0.0f)
+		return vec3(0.0f);
+
+	vec3 h = normalize(wi + wo);
+
+	vec3 f = ggx_f(wi, h, mat);
+	float g = G(n, wi, wo, mat);
+	float d = ggx_d(n, h, mat);
+
+	vec3 num = f * g * d;
+	float denom = 4 * dot(wi, n) * dot(wo, n);
+
+	return num / denom;
+}
+
+// GGX pdf
+float ggx_pdf(Material mat, vec3 n, vec3 wi, vec3 wo)
+{
+	if (dot(wi, n) <= 0.0f || dot(wo, n) < 0.0f)
+		return 0.0f;
+
+	vec3 h = normalize(wi + wo);
+
+	float avg_Kd = (mat.diffuse.x + mat.diffuse.y + mat.diffuse.z) / 3.0f;
+	float avg_Ks = (mat.specular.x + mat.specular.y + mat.specular.z) / 3.0f;
+
+	float t = 1.0f;
+	if (avg_Kd + avg_Ks > 0.0f)
+		t = max(avg_Ks/(avg_Kd + avg_Ks), 0.25f);
+
+	float term1 = dot(n, wi)/PI;
+	float term2 = ggx_d(n, h, mat) * dot(n, h)/(4.0f * dot(wi, h));
+
+	return (1 - t) * term1 + t * term2;
+}
+
+// Sample from GGX distribution
+vec3 rotate(vec3 s, vec3 n)
+{
+	vec3 w = n;
+	vec3 a = vec3(0.0f, 1.0f, 0.0f);
+
+	if (dot(w, a) > 0.999f)
+		a = vec3(0.0f, 0.0f, 1.0f);
+
+	vec3 u = normalize(cross(w, a));
+	vec3 v = normalize(cross(w, u));
+
+	return u * s.x + v * s.y + w * s.z;
+}
+
+vec3 ggx_sample(vec3 n, vec3 wo, Material mat)
+{
+	float avg_Kd = (mat.diffuse.x + mat.diffuse.y + mat.diffuse.z) / 3.0f;
+	float avg_Ks = (mat.specular.x + mat.specular.y + mat.specular.z) / 3.0f;
+
+	float t = 1.0f;
+	if (avg_Kd + avg_Ks > 0.0f)
+		t = max(avg_Ks/(avg_Kd + avg_Ks), 0.25f);
+
+	vec3 eta = fract(random_sphere());
+
+	if (eta.x < t) {
+		// Specular sampling
+		float k = sqrt(eta.y/(1 - eta.y));
+		float theta = atan(k * mat.roughness);
+		float phi = 2.0f * PI * eta.z;
+
+		vec3 h = vec3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta));
+		h = rotate(h, n);
+
+		return reflect(-wo, h);
 	}
 
-	float sini = sqrt(max(0.0, 1.0 - cosi * cosi));
+	// Diffuse sampling
+	float theta = acos(sqrt(eta.y));
+	float phi = 2.0f * PI * eta.z;
 
-	float sint = etai / etat * sini;
-	if (sint >= 1.0)
-		return 1.0;
-
-	float cost = sqrt(max(0.0, 1.0 - sint * sint));
-
-	float r_parl = ((etat * cosi) - (etai * cost)) / ((etat * cosi) + (etai * cost));
-	float r_perp = ((etai * cosi) - (etat * cost)) / ((etai * cosi) + (etat * cost));
-
-	return (r_parl * r_parl + r_perp * r_perp) / 2.0;
+	vec3 s = vec3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta));
+	return rotate(s, n);
 }
 
-// Invidual BSDF types
-#define BSDF(ftn) void bsdf_##ftn(in Hit hit,	\
-		inout Ray ray,			\
-		inout float pdf,		\
-		inout vec3 beta,		\
-		inout float ior)
-
-BSDF(specular_reflection)
+// BRDF of material
+vec3 brdf(Material mat, vec3 n, vec3 wi, vec3 wo)
 {
-	float cosi = dot(ray.direction, hit.normal);
-	float Fr = fresnel_dielectric(cosi, hit.mat.refraction, ior);
-
-	ray.direction = reflect(ray.direction, hit.normal);
-	ray.origin = hit.point + hit.normal * 0.001;
-
-	float cos_theta = abs(dot(ray.direction, hit.normal));
-
-	pdf = 1;
-
-	// TODO: fresnel conductors: if ior = 1, then
-	// Fr is always equal to 0
-	beta *= hit.mat.diffuse/abs(cos_theta);
+	return ggx_brdf(mat, n, wi, wo) + mat.diffuse/PI;
 }
 
-BSDF(specular_transmission)
+// Power heurestic
+float power(float pdf_f, float pdf_g)
 {
-	float cosi = dot(ray.direction, hit.normal);
-	float Fr = fresnel_dielectric(cosi, hit.mat.refraction, ior);
+	float f = pow(pdf_f, p);
+	float g = pow(pdf_g, p);
 
-	float eta = ior/hit.mat.refraction;
-	ray.direction = refract(ray.direction, hit.normal, eta);
-	ray.origin = hit.point - hit.normal * 0.001;
-
-	float cos_theta = abs(dot(ray.direction, hit.normal));
-
-	pdf = 1;
-	ior = hit.mat.refraction;
-	beta *= (1 - Fr) * hit.mat.diffuse / cos_theta;
+	return f/(f + g);
 }
 
-BSDF(lambertian)
+// Area light methods
+vec3 normal(AreaLight light)
 {
-	// Assume diffuse
-	ray.direction = cosine_weighted_hemisphere(hit.normal);
-	ray.origin = hit.point + hit.normal * 0.001;
-
-	pdf = INV_PI * dot(ray.direction, hit.normal);
-	beta *= hit.mat.diffuse * INV_PI;
+	// TODO: precompute this
+	return normalize(cross(light.ab, light.ac));
 }
 
-// Sample a ray from BSDF
-void sample_bsdf(in Hit hit, inout Ray ray,
-		inout float pdf,
-		inout vec3 beta,
-		inout float ior)
+float area(AreaLight light)
 {
-	int shading = hit.mat.type;
-	if (is_type(shading, SHADING_REFLECTION | SHADING_TRANSMISSION)) {
-		// Choose reflection or transmission randomly
-		//	based on Fresnel reflectance
-		float cosi = dot(ray.direction, hit.normal);
-		float Fr = fresnel_dielectric(cosi, hit.mat.refraction, ior);
-
-		float rand = random();
-		if (rand < Fr)
-			bsdf_specular_reflection(hit, ray, pdf, beta, ior);
-		else
-			bsdf_specular_transmission(hit, ray, pdf, beta, ior);
-	} else if (is_type(shading, SHADING_REFLECTION)) {
-		bsdf_specular_reflection(hit, ray, pdf, beta, ior);
-	} else if (is_type(shading, SHADING_TRANSMISSION)) {
-		bsdf_specular_transmission(hit, ray, pdf, beta, ior);
-	} else if (is_type(shading, SHADING_DIFFUSE)) {
-		// TOOD: also microfacet diffuse is a sigma != 0
-		bsdf_lambertian(hit, ray, pdf, beta, ior);
-	} else {
-		pdf = 0.0;
-	}
-
-	beta *= abs(dot(hit.normal, ray.direction)) / pdf;
+	// TODO: precompute this
+	return length(cross(light.ab, light.ac));
 }
 
-// Get pdf of a direction from BSDF
-float pdf_bsdf(in Hit hit, in Ray ray, vec3 wi)
+vec3 sample_area_light(AreaLight light)
 {
-	int shading = hit.mat.type;
-	if (is_type(shading, SHADING_DIFFUSE)) {
-		// Assume diffuse
-		// TODO: check same hemisphere
-		return INV_PI * dot(wi, hit.normal);
-	}
-
-	return 0.0;
-}
-
-// Direct illumination
-vec3 direct_illumination(Hit hit, Ray ray)
-{
-	// Direct light contribution
-	vec3 direct_contr = vec3(0.0);
-	vec3 beta = vec3(0.0);
-
-	// Direct illumination
-	uvec3 seed = floatBitsToUint(vec3(pc.time, hit.point.x, hit.point.y));
-	uint i = randuint(seed, area_lights.count);
-
-	// TODO: some way to check ray-light intersection (can be independent of
-	// trace :))
-	// uint light_index = light_indices.data[i];
-	// int light_object = int(floatBitsToUint(lights.data[light_index + 1].w));
-
-	AreaLight light = area_lights.data[i];
-
-	// Ray to use
-	Ray r = ray;
-
-	// Random 2D point on light
 	vec3 rand = random_sphere();
 	float u = fract(rand.x);
 	float v = fract(rand.y);
-
-	vec3 lpos = light.a + u * light.ab + v * light.ac;
-
-	// Try to connect to the light
-	vec3 pos = hit.point + hit.normal * 0.001;
-	vec3 dir = normalize(lpos - pos);
-
-	float pdf = pdf_bsdf(hit, r, dir);
-	if (pdf == 0.0)
-		return vec3(0.0);
-
-	// TODO: remove the extra arguments
-	Ray shadow_ray = Ray(pos, dir, 1.0, 1.0);
-
-	Hit shadow_hit = trace(shadow_ray);
-
-	// if (shadow_hit.id == light_object) {
-	if (distance(shadow_hit.point, lpos) < 0.001) {
-		// Light contribution directly
-		float d = distance(lpos, hit.point);
-		float cos_theta = max(0.0, dot(hit.normal, dir));
-
-		// TODO: get the pdf from anotehr function
-		direct_contr += light.color * light.power * hit.mat.diffuse
-			* cos_theta * (1/d)
-			* power_heuristic(float(pc.samples_per_light), 0.25 * INV_PI, 1, pdf)
-			* (4 * PI);
-	}
-
-	return direct_contr;
+	return light.a + u * light.ab + v * light.ac;
 }
 
-// Total color for a ray
-vec3 color_at(Ray ray)
+// Direct lighting
+vec3 Ld(vec3 x, vec3 wo, vec3 n, Material mat)
 {
-	vec3 contribution = vec3(0.0);
-	vec3 beta = vec3(1.0);
+	if (mat.type == SHADING_EMISSIVE)
+		return vec3(0.0f);
 
-	// Index of refraction
-	float ior = 1.0;
+	vec3 contr_nee = vec3(0.0f);
+	vec3 contr_brdf = vec3(0.0f);
 
-	Ray r = ray;
-	for (int i = 0; i < MAX_DEPTH; i++) {
-		// Find closest object
-		// TODO: refactor to trace
-		Hit hit = trace(r);
+	// Random area light for NEE
+	uvec3 seed = floatBitsToUint(vec3(pc.time, x.x, wo.y));
+	uint i = randuint(seed, area_lights.count);
+	int light_id = int(i + pc.triangles);
+	AreaLight light = area_lights.data[i];
 
-		// Special case intersection
-		// TODO: deal with in the direct lighting function
-		// TODO: shading emissive --> shading light
-		if (hit.object == -1 || hit.mat.type == SHADING_EMISSIVE) {
-			contribution += beta * hit.mat.diffuse;
-			break;
-		}
+	// NEE
+	vec3 lpos = sample_area_light(light);
+	vec3 wi = normalize(lpos - x);
+	float R = length(lpos - x);
 
-		// Direct illumination
-		vec3 direct_contr = direct_illumination(hit, r);
-		contribution += beta * direct_contr;
+	vec3 f = brdf(mat, n, wi, wo) * dot(n, wi);
 
-		// Sample BSDF
-		float pdf = 0.0;
-		sample_bsdf(hit, r, pdf, beta, ior);
+	float ldot = abs(dot(normal(light), wi));
+	if (ldot > 1e-6) {
+		float pdf_light = (R * R)/(area(light) * ldot);
+		float pdf_brdf = ggx_pdf(mat, n, wi, wo);
 
-		if (pdf == 0.0)
-			break;
+		Ray ray_light = Ray(x, wi, 0, 0);
+		Hit hit_light = trace(ray_light);
 
-		// Russian roulette
-		if (i > 2) {
-			float q = max(1.0 - beta.y, 0.05);
-			if (random() < q)
-				break;
-			beta /= (1.0 - q);
+		if (pdf_light > 1e-9 && hit_light.id == light_id) {
+			float weight = power(pdf_light, pdf_brdf);
+			weight = 1.0f;
+
+			vec3 intensity = light.color * light.power;
+			contr_nee += weight * f * intensity/pdf_light;
 		}
 	}
 
-	return clamp(contribution, 0.0, 1.0);
+	// BRDF
+	wi = ggx_sample(n, wo, mat);
+	if (dot(wi, n) <= 0.0f)
+		return contr_nee;
+
+	f = brdf(mat, n, wi, wo) * dot(n, wi);
+
+	float pdf_brdf = ggx_pdf(mat, n, wi, wo);
+	float pdf_light = 0.0f;
+
+	Ray ray_light = Ray(x, wi, 0, 0);
+	Intersection it = intersection_light(ray_light, light);
+
+	if (it.time != -1) {
+		float R = it.time;
+		pdf_light = (R * R)/(area(light) * abs(dot(normal(light), wi)));
+	}
+
+	if (pdf_light > 1e-9 && trace(ray_light).id == light_id) {
+		float weight = power(pdf_light, pdf_brdf);
+		vec3 intensity = light.color * light.power;
+		contr_brdf += weight * f * intensity/pdf_light;
+	}
+
+	return contr_nee + contr_brdf;
+}
+
+// Indirect lighting
+vec3 Lo(vec3 x, vec3 wo, vec3 n, Material mat, int depth)
+{
+	vec3 contr = vec3(0.0f);
+	vec3 throughput = vec3(1.0f);
+
+	for (int i = 0; i < depth; i++) {
+		// Fix normal
+		n = normalize(n);
+		if (dot(n, wo) <= 0.0f)
+			n = -n;
+
+		// Get direct lighting
+		vec3 Ld = Ld(x, wo, n, mat);
+		contr += throughput * Ld;
+
+		// Generate random direction
+		vec3 wi = ggx_sample(n, wo, mat);
+		float pdf = ggx_pdf(mat, n, wi, wo);
+
+		vec3 f = brdf(mat, n, wi, wo) * abs(dot(n, wi));
+		vec3 T = f/pdf;
+
+		// Get next point
+		Ray ray = Ray(x, wi, 0, 0);
+		Hit hit = trace(ray);
+
+		if (hit.id == -1) {
+			// TODO: should use diffuse instead
+			contr += throughput * T * hit.mat.diffuse;
+			break;
+		}
+
+		// Setup next point
+		x = hit.point + hit.normal * 1e-3f;
+		n = hit.normal;
+		mat = hit.mat;
+		throughput *= T;
+	}
+
+	return contr;
+}
+
+vec3 pathtracer(Ray ray, int depth)
+{
+	Hit hit = trace(ray);
+	if (hit.id == -1)
+		return hit.mat.diffuse;
+
+	// Get point and direction
+	vec3 x = hit.point + hit.normal * eps;
+	vec3 wo = -ray.direction;
+
+	vec3 color = hit.mat.emission + Lo(x, wo, hit.normal, hit.mat, 5);
+	return clamp(color, 0.0f, 1.0f);
 }
 
 void main()
@@ -286,7 +342,7 @@ void main()
 	);
 
 	// Progressive rendering
-	vec3 color = color_at(ray);
+	vec3 color = pathtracer(ray, MAX_DEPTH);
 	vec3 pcolor = cast_color(frame.pixels[index]);
 	pcolor = pow(pcolor, vec3(2.2));
 	float t = 1.0f/(1.0f + pc.present);

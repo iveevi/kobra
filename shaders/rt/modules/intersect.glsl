@@ -121,7 +121,7 @@ Intersection intersection_light(Ray r, AreaLight light)
 		return it;
 
 	it.time = time;
-	it.mat.diffuse = light.color;
+	it.mat.emission = light.color;
 	it.mat.type = SHADING_EMISSIVE;
 	return it;
 }

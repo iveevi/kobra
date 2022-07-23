@@ -11,11 +11,11 @@ scale: 1.000000 1.000000 1.000000
 
 [MATERIAL]
 diffuse: 0.500000 0.500000 0.500000
-specular: 0.000000 0.000000 0.000000
+specular: 0.500000 0.500000 0.500000
 emission: 0.000000 0.000000 0.000000
 ambient: 0.200000 0.200000 0.200000
-shininess: 0.000000
-roughness: 0.000000
+shininess: 0.500000
+roughness: 0.050000
 refraction: 1.000000
 albedo_texture: 0
 normal_texture: 0
@@ -39,11 +39,11 @@ scale: 10.000000 0.100000 10.000000
 
 [MATERIAL]
 diffuse: 0.800000 0.600000 0.400000
-specular: 0.000000 0.000000 0.000000
+specular: 0.500000 0.500000 0.500000
 emission: 0.000000 0.000000 0.000000
 ambient: 0.200000 0.200000 0.200000
-shininess: 0.000000
-roughness: 0.000000
+shininess: 0.000000000
+roughness: 0.00000
 refraction: 1.000000
 albedo_texture: resources/wood_floor_albedo.jpg
 normal_texture: resources/wood_floor_normal.jpg
@@ -66,11 +66,11 @@ rotation: 0.000000 0.000000 70.000000
 scale: 2.000000 0.010000 2.000000
 
 [MATERIAL]
-diffuse: 0.800000 0.800000 0.800000
-specular: 0.000000 0.000000 0.000000
+diffuse: 0.00000 0.00000 0.00000
+specular: 1.000000 1.000000 1.000000
 emission: 0.000000 0.000000 0.000000
 ambient: 0.200000 0.200000 0.200000
-shininess: 0.000000
+shininess: 1.000000
 roughness: 0.000000
 refraction: 1.000000
 albedo_texture: 0

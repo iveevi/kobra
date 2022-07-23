@@ -104,7 +104,7 @@ Hit trace(Ray ray)
 		Intersection it = intersection_light(ray, light);
 		if (it.time > 0.0 && it.time < mini.time) {
 			min_index = i;
-			min_id = i;
+			min_id = int(pc.triangles + i);
 			mini = it;
 		}
 	}
