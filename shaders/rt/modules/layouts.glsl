@@ -27,9 +27,37 @@ layout (set = 0, binding = MESH_BINDING_BVH, std430) buffer BVH
 } bvh;
 
 // Materials
+struct Material {
+	vec3 diffuse;
+	vec3 specular;
+	vec3 emission;
+	vec3 ambient;
+	float shininess;
+	float roughness;
+	float refraction;
+	int albedo;
+	int normal;
+	int type;
+};
+
+Material def_mat()
+{
+	Material m;
+	m.diffuse = vec3(0.0);
+	m.specular = vec3(0.0);
+	m.emission = vec3(0.0);
+	m.ambient = vec3(0.0);
+	m.shininess = 0.0;
+	m.roughness = 0.0;
+	m.refraction = 0.0;
+	m.albedo = 0;
+	m.normal = 0;
+	return m;
+}
+
 layout (set = 0, binding = MESH_BINDING_MATERIALS, std430) buffer Materials
 {
-	vec4 data[];
+	Material data[];
 } materials;
 
 // Area lights
@@ -57,6 +85,19 @@ uniform sampler2D s2_normals[MAX_TEXTURES];
 
 layout (set = 0, binding = MESH_BINDING_ENVIRONMENT)
 uniform sampler2D s2_environment;
+
+// Get material and sample if needed
+Material get_material(uint i, vec2 uv)
+{
+	Material m = materials.data[i];
+
+	// TODO: .albedo should be index to texture,
+	// so we dont have to waste it on blanks
+	if (m.albedo == 1)
+		m.diffuse = texture(s2_albedo[i], uv).rgb;
+
+	return m;
+}
 
 // Push constants
 layout (push_constant) uniform PushConstants

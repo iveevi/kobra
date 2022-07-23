@@ -58,12 +58,25 @@ using RasterizerPtr = std::shared_ptr <Rasterizer>;
 // 	Wrapper around methods for raytracing
 // 	a mesh entity
 class Raytracer : public Renderer {
+	struct alignas(16) _material {
+		alignas(16) glm::vec3 diffuse;
+		alignas(16) glm::vec3 specular;
+		alignas(16) glm::vec3 emission;
+		alignas(16) glm::vec3 ambient;
+		float shininess;
+		float roughness;
+		float refraction;
+		int albedo;
+		int normal;
+		int type;
+	};
+
 	struct HostBuffers {
 		std::vector <aligned_vec4>	bvh;
 
 		std::vector <aligned_vec4>	vertices;
 		std::vector <aligned_vec4>	triangles;
-		std::vector <aligned_vec4>	materials;
+		std::vector <_material>		materials;
 
 		std::vector <aligned_vec4>	lights;
 		std::vector <uint>		light_indices;

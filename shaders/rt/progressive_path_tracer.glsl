@@ -8,7 +8,7 @@
 #include "modules/bbox.glsl"
 #include "modules/color.glsl"
 #include "modules/random.glsl"
-#include "modules/material.glsl"
+// #include "modules/material.glsl"
 #include "modules/primitives.glsl"
 #include "modules/intersect.glsl"
 #include "modules/environment.glsl"
@@ -63,7 +63,7 @@ float fresnel_dielectric(float cosi, float etai, float etat)
 BSDF(specular_reflection)
 {
 	float cosi = dot(ray.direction, hit.normal);
-	float Fr = fresnel_dielectric(cosi, hit.mat.ior, ior);
+	float Fr = fresnel_dielectric(cosi, hit.mat.refraction, ior);
 
 	ray.direction = reflect(ray.direction, hit.normal);
 	ray.origin = hit.point + hit.normal * 0.001;
@@ -74,23 +74,23 @@ BSDF(specular_reflection)
 
 	// TODO: fresnel conductors: if ior = 1, then
 	// Fr is always equal to 0
-	beta *= hit.mat.albedo/abs(cos_theta);
+	beta *= hit.mat.diffuse/abs(cos_theta);
 }
 
 BSDF(specular_transmission)
 {
 	float cosi = dot(ray.direction, hit.normal);
-	float Fr = fresnel_dielectric(cosi, hit.mat.ior, ior);
+	float Fr = fresnel_dielectric(cosi, hit.mat.refraction, ior);
 
-	float eta = ior/hit.mat.ior;
+	float eta = ior/hit.mat.refraction;
 	ray.direction = refract(ray.direction, hit.normal, eta);
 	ray.origin = hit.point - hit.normal * 0.001;
 
 	float cos_theta = abs(dot(ray.direction, hit.normal));
 
 	pdf = 1;
-	ior = hit.mat.ior;
-	beta *= (1 - Fr) * hit.mat.albedo / cos_theta;
+	ior = hit.mat.refraction;
+	beta *= (1 - Fr) * hit.mat.diffuse / cos_theta;
 }
 
 BSDF(lambertian)
@@ -100,7 +100,7 @@ BSDF(lambertian)
 	ray.origin = hit.point + hit.normal * 0.001;
 
 	pdf = INV_PI * dot(ray.direction, hit.normal);
-	beta *= hit.mat.albedo * INV_PI;
+	beta *= hit.mat.diffuse * INV_PI;
 }
 
 // Sample a ray from BSDF
@@ -109,12 +109,12 @@ void sample_bsdf(in Hit hit, inout Ray ray,
 		inout vec3 beta,
 		inout float ior)
 {
-	int shading = hit.mat.shading;
+	int shading = hit.mat.type;
 	if (is_type(shading, SHADING_REFLECTION | SHADING_TRANSMISSION)) {
 		// Choose reflection or transmission randomly
 		//	based on Fresnel reflectance
 		float cosi = dot(ray.direction, hit.normal);
-		float Fr = fresnel_dielectric(cosi, hit.mat.ior, ior);
+		float Fr = fresnel_dielectric(cosi, hit.mat.refraction, ior);
 
 		float rand = random();
 		if (rand < Fr)
@@ -138,7 +138,7 @@ void sample_bsdf(in Hit hit, inout Ray ray,
 // Get pdf of a direction from BSDF
 float pdf_bsdf(in Hit hit, in Ray ray, vec3 wi)
 {
-	int shading = hit.mat.shading;
+	int shading = hit.mat.type;
 	if (is_type(shading, SHADING_DIFFUSE)) {
 		// Assume diffuse
 		// TODO: check same hemisphere
@@ -196,7 +196,7 @@ vec3 direct_illumination(Hit hit, Ray ray)
 		float cos_theta = max(0.0, dot(hit.normal, dir));
 
 		// TODO: get the pdf from anotehr function
-		direct_contr += light.color * light.power * hit.mat.albedo
+		direct_contr += light.color * light.power * hit.mat.diffuse
 			* cos_theta * (1/d)
 			* power_heuristic(float(pc.samples_per_light), 0.25 * INV_PI, 1, pdf)
 			* (4 * PI);
@@ -223,8 +223,8 @@ vec3 color_at(Ray ray)
 		// Special case intersection
 		// TODO: deal with in the direct lighting function
 		// TODO: shading emissive --> shading light
-		if (hit.object == -1 || hit.mat.shading == SHADING_EMISSIVE) {
-			contribution += beta * hit.mat.albedo;
+		if (hit.object == -1 || hit.mat.type == SHADING_EMISSIVE) {
+			contribution += beta * hit.mat.diffuse;
 			break;
 		}
 

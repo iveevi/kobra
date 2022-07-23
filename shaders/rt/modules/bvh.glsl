@@ -57,7 +57,7 @@ Hit trace(Ray ray)
 	// Starting intersection
 	Intersection mini = Intersection(
 		1.0/0.0, vec3(0.0),
-		mat_default()
+		def_mat()
 	);
 
 	// Traverse BVH as a threaded binary tree
@@ -112,7 +112,7 @@ Hit trace(Ray ray)
 	// Color of closest object
 	vec3 color = vec3(0.0);	// TODO: sample from either texture or gradient
 	if (min_index < 0)
-		mini.mat.albedo = sample_environment(ray);
+		mini.mat.diffuse = sample_environment(ray);
 
 	vec3 point = ray.origin + ray.direction * mini.time;
 

@@ -82,7 +82,7 @@ Intersection intersect_shape(Ray r, Triangle t)
 	vec3 n = vec3(0.0);
 
 	if (time < 0.0)
-		return Intersection(-1.0, n, mat_default());
+		return Intersection(-1.0, n, def_mat());
 
 	// Calculate the normal
 	vec3 e1 = t.v2 - t.v1;
@@ -94,7 +94,7 @@ Intersection intersect_shape(Ray r, Triangle t)
 	if (dot(n, r.direction) > 0.0)
 		n = -n;
 
-	return Intersection(time, n, mat_default());
+	return Intersection(time, n, def_mat());
 }
 
 Intersection intersect_shape(Ray r, Sphere s)
@@ -104,25 +104,25 @@ Intersection intersect_shape(Ray r, Sphere s)
 
 	// If no, intersection, dont bother with normal
 	if (t < 0.0)
-		return Intersection(t, n, mat_default());
+		return Intersection(t, n, def_mat());
 
 	// Calculate the normal
 	n = normalize(r.origin + r.direction * t - s.center);
 
-	return Intersection(t, n, mat_default());
+	return Intersection(t, n, def_mat());
 }
 
 Intersection intersection_light(Ray r, AreaLight light)
 {
 	float time = _intersect_t(light, r);
 
-	Intersection it = Intersection(-1.0, vec3(0.0), mat_default());
+	Intersection it = Intersection(-1.0, vec3(0.0), def_mat());
 	if (time < 0.0)
 		return it;
 
 	it.time = time;
-	it.mat.albedo = light.color;
-	it.mat.shading = SHADING_EMISSIVE;
+	it.mat.diffuse = light.color;
+	it.mat.type = SHADING_EMISSIVE;
 	return it;
 }
 
@@ -145,10 +145,10 @@ Intersection ray_sphere_intersect(Ray ray, uint a, uint d)
 		uv.y = asin(ray.direction.y) / PI + 0.5;
 
 		// Get the color
-		it.mat.albedo = texture(s2_albedo[0], uv).rgb;
+		it.mat.diffuse = texture(s2_albedo[0], uv).rgb;
 
 		// Get material index at the second element
-		it.mat = mat_at(d, uv);
+		it.mat = get_material(d, uv);
 	}
 
 	return it;
@@ -183,7 +183,7 @@ Intersection ray_intersect(Ray ray, uint index)
 		tex_coord.y = 1.0 - tex_coord.y;
 
 		// Transfer albedo
-		it.mat = mat_at(i.w, tex_coord);
+		it.mat = get_material(i.w, tex_coord);
 
 		// Transfer normal
 		vec3 n1 = vertices.data[VERTEX_STRIDE * i.x + 2].xyz;
@@ -197,7 +197,7 @@ Intersection ray_intersect(Ray ray, uint index)
 		it.normal = normalize(n);
 
 		// Transfer normal
-		if (it.mat.has_normal < 0.5) {
+		if (it.mat.normal == 1) {
 			vec3 n = texture(s2_normals[i.w], tex_coord).xyz;
 			n = 2 * n - 1;
 

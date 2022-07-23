@@ -132,7 +132,19 @@ void Raytracer::serialize_submesh(const Device &dev, const Submesh &submesh, con
 	}
 
 	// Write the material
-	material->serialize(hb.materials);
+	_material smat;
+	smat.diffuse = material->diffuse;
+	smat.specular = material->specular;
+	smat.emission = material->emission;
+	smat.ambient = material->ambient;
+	smat.shininess = material->shininess;
+	smat.roughness = material->roughness;
+	smat.refraction = material->refraction;
+	smat.albedo = material->has_albedo();
+	smat.normal = material->has_normal();
+	smat.type = material->type;
+
+	hb.materials.push_back(smat);
 
 	if (material->has_albedo()) {
 		auto albedo_descriptor = TextureManager::make_descriptor(
