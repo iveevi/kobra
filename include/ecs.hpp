@@ -18,13 +18,11 @@
 #include "renderer.hpp"
 #include "transform.hpp"
 
-// TODO: move inside the namespace
-class Scene;
-
 namespace kobra {
 
 // Forward declarations
 class Entity;
+class Scene;
 
 // Component to string
 template <typename T>
@@ -438,7 +436,7 @@ public:
 
 	// Friend the ECS class
 	friend class ECS;
-	friend class ::Scene;
+	friend class Scene;
 };
 
 template <class T>

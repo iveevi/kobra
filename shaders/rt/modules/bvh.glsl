@@ -98,6 +98,17 @@ Hit trace(Ray ray)
 		}
 	}
 
+	// Check area lights
+	for (int i = 0; i < area_lights.count; i++) {
+		AreaLight light = area_lights.data[i];
+		Intersection it = intersection_light(ray, light);
+		if (it.time > 0.0 && it.time < mini.time) {
+			min_index = i;
+			min_id = i;
+			mini = it;
+		}
+	}
+
 	// Color of closest object
 	vec3 color = vec3(0.0);	// TODO: sample from either texture or gradient
 	if (min_index < 0)
@@ -114,3 +125,4 @@ Hit trace(Ray ray)
 		mini.mat
 	);
 }
+

@@ -50,6 +50,31 @@ float _intersect_t(Sphere s, Ray r)
 	return min(t1, t2);
 }
 
+// Ray-area light intersection
+float _intersect_t(AreaLight light, Ray ray)
+{
+	// Create the two triangles, then intersect
+	vec3 v1 = light.a;
+	vec3 v2 = light.a + light.ab;
+	vec3 v3 = light.a + light.ac;
+	vec3 v4 = light.a + light.ab + light.ac;
+
+	Triangle ta = Triangle(v1, v2, v3);
+	Triangle tb = Triangle(v2, v3, v4);
+
+	float t1 = _intersect_t(ta, ray);
+	float t2 = _intersect_t(tb, ray);
+
+	if (t1 < 0.0 && t2 < 0.0)
+		return -1.0;
+	if (t1 < 0.0)
+		return t2;
+	if (t2 < 0.0)
+		return t1;
+
+	return min(t1, t2);
+}
+
 Intersection intersect_shape(Ray r, Triangle t)
 {
 	// Get intersection time
@@ -85,6 +110,20 @@ Intersection intersect_shape(Ray r, Sphere s)
 	n = normalize(r.origin + r.direction * t - s.center);
 
 	return Intersection(t, n, mat_default());
+}
+
+Intersection intersection_light(Ray r, AreaLight light)
+{
+	float time = _intersect_t(light, r);
+
+	Intersection it = Intersection(-1.0, vec3(0.0), mat_default());
+	if (time < 0.0)
+		return it;
+
+	it.time = time;
+	it.mat.albedo = light.color;
+	it.mat.shading = SHADING_EMISSIVE;
+	return it;
 }
 
 Intersection ray_sphere_intersect(Ray ray, uint a, uint d)

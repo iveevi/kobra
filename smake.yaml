@@ -3,7 +3,9 @@ default_standard: c++17
 
 definitions:
   - tinyfd_source: 'thirdparty/tinyfiledialogs/tinyfiledialogs.c'
-  - kobra_source: 'source/backend.cpp,
+  - kobra_source: 'source/app.cpp,
+    source/backend.cpp,
+    source/bvh.cpp,
     source/capture.cpp,
     source/ecs.cpp,
     source/extensions.cpp,
@@ -15,6 +17,7 @@ definitions:
     source/material.cpp,
     source/mesh.cpp,
     source/renderer.cpp,
+    source/scene.cpp,
     source/texture_manager.cpp,
     source/timer.cpp,
     source/vertex.cpp'

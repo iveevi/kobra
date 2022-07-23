@@ -80,7 +80,7 @@ public:
 	}
 
 	// Generate a BVH for this submesh
-	rt::BVHPtr bvh(const Transform &transform) const {
+	BVHPtr bvh(const Transform &transform) const {
 		// Generate list of bounding boxes
 		std::vector <BoundingBox> boxes;
 
@@ -109,7 +109,7 @@ public:
 		}
 
 		// Generate the BVH
-		return rt::partition(boxes);
+		return partition(boxes);
 	}
 };
 
@@ -160,17 +160,17 @@ public:
 	}
 
 	// Generate a BVH for this mesh
-	rt::BVHPtr bvh(const Transform &transform) const {
+	BVHPtr bvh(const Transform &transform) const {
 		if (submeshes.size() == 1)
 			return submeshes[0].bvh(transform);
 
 		// Generate list of partial BVHs
-		std::vector <rt::BVHPtr> bvhs;
+		std::vector <BVHPtr> bvhs;
 		for (const auto &submesh : submeshes)
 			bvhs.push_back(submesh.bvh(transform));
 
 		// Generate the BVH
-		return rt::partition(bvhs);
+		return partition(bvhs);
 	}
 
 	// Mesh factories

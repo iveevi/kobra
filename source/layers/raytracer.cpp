@@ -460,9 +460,9 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 		// clashing...)
 		profiler.frame("Constructing BVH");
 		auto bboxes = _get_bboxes(host_buffers);
-		auto bvh = rt::partition(bboxes);
+		auto bvh = partition(bboxes);
 
-		rt::serialize(host_buffers.bvh, bvh);
+		serialize(host_buffers.bvh, bvh);
 		profiler.end();
 
 		rebinding |= _dev.bvh.upload(host_buffers.bvh, 0);

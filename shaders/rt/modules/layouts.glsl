@@ -32,17 +32,21 @@ layout (set = 0, binding = MESH_BINDING_MATERIALS, std430) buffer Materials
 	vec4 data[];
 } materials;
 
-// Lights
-layout (set = 0, binding = MESH_BINDING_LIGHTS, std430) buffer Lights
-{
-	vec4 data[];
-} lights;
+// Area lights
+struct AreaLight {
+	vec3 a;
+	vec3 ab;
+	vec3 ac; // d = a + ab + ac
+	vec3 color;
+	float power;
+};
 
-// Light indices
-layout (set = 0, binding = MESH_BINDING_LIGHT_INDICES, std430) buffer LightIndices
+layout (set = 0, binding = MESH_BINDING_AREA_LIGHTS, std430) buffer AreaLights
 {
-	uint data[];
-} light_indices;
+	int count;
+
+	AreaLight data[];
+} area_lights;
 
 // Textures
 layout (set = 0, binding = MESH_BINDING_ALBEDOS)
@@ -60,6 +64,8 @@ layout (push_constant) uniform PushConstants
 	// Viewport
 	uint	width;
 	uint	height;
+
+	uint	skip;
 	uint	xoffset;
 	uint	yoffset;
 
