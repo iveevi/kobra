@@ -6,7 +6,7 @@
 
 // Engine headers
 #include "bbox.hpp"
-#include "raytracing/bvh.hpp"
+#include "bvh.hpp"
 #include "transform.hpp"
 #include "vertex.hpp"
 
@@ -177,6 +177,7 @@ public:
 	// TODO: should make a 1x1x1, then transform will do the rest
 	// TODO: clean up and put into source file
 	static Mesh box(const glm::vec3 &, const glm::vec3 &);
+	static Mesh sphere(const glm::vec3 &, float, int = 16, int = 16);
 	static std::optional <Mesh> load(const std::string &);
 };
 

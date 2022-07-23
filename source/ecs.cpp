@@ -9,6 +9,8 @@ Entity &ECS::make_entity(const std::string &name) {
 
 	Entity e(name, id, this);
 	entities.push_back(e);
+
+	name_map[name] = id;
 	return entities.back();
 }
 

@@ -2,8 +2,9 @@
 #define KOBRA_ECS_H_
 
 // Standard headers
-#include <vector>
+#include <map>
 #include <memory>
+#include <vector>
 
 // GLM headers
 #include <glm/gtx/string_cast.hpp>
@@ -66,6 +67,8 @@ class ECS {
 	Archetype <Transform>		transforms;
 
 	Archetype <Entity>		entities;
+
+	std::map <std::string, int>	name_map;
 
 	// Private helpers
 	void _expand_all();
@@ -158,6 +161,15 @@ public:
 
 	const Entity &get_entity(int i) const {
 		return entities[i];
+	}
+
+	// Get entity by name
+	Entity &get_entity(const std::string &name) {
+		return entities[name_map.at(name)];
+	}
+
+	const Entity &get_entity(const std::string &name) const {
+		return entities[name_map.at(name)];
 	}
 
 	// Create a new entity

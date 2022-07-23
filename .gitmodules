@@ -7,6 +7,3 @@
 [submodule "thirdparty/stb"]
 	path = thirdparty/stb
 	url = https://github.com/nothings/stb
-[submodule "thirdparty/nabu"]
-	path = thirdparty/nabu
-	url = https://github.com/vedavamadathil/nabu

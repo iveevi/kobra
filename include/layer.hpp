@@ -7,7 +7,6 @@
 
 // Engine headers
 #include "ecs.hpp"
-#include "scene.hpp"
 
 namespace kobra {
 
@@ -61,10 +60,6 @@ public:
 			add_do(p);
 		}
 	}
-
-	// Adding scenes
-	// virtual void add_scene(const ECS &) = 0;
-	virtual void add_scene(const Scene &) = 0;
 
 	// Indexing elements
 	ptr operator[](size_t index) const {

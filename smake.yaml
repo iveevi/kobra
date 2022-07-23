@@ -6,28 +6,15 @@ definitions:
   - kobra_source: 'source/backend.cpp,
     source/capture.cpp,
     source/ecs.cpp,
-    source/engine/rt_capture.cpp,
     source/extensions.cpp,
     source/formats.cpp,
-    source/gui/gui.cpp,
-    source/gui/layer.cpp,
-    source/gui/sprite.cpp,
-    source/gui/text.cpp,
     source/io/event.cpp,
-    source/kmesh.cpp,
     source/layers/raster.cpp,
     source/layers/raytracer.cpp,
     source/logger.cpp,
     source/material.cpp,
     source/mesh.cpp,
-    source/model.cpp,
-    source/object.cpp,
-    source/raster/layer.cpp,
-    source/raster/mesh.cpp,
-    source/raytracing/batch.cpp,
-    source/raytracing/layer.cpp,
     source/renderer.cpp,
-    source/scene.cpp,
     source/texture_manager.cpp,
     source/timer.cpp,
     source/vertex.cpp'
@@ -48,22 +35,22 @@ definitions:
 
 builds:
   - kobra:
-    - sources: main.cpp, glfw_input.cpp, kobra_source, tinyfd_source
+    - sources: main.cpp, kobra_source, tinyfd_source
     - idirs: includes
     - flags: '-std=c++17'
     - libraries: libs
   - kobra_release:
-    - sources: main.cpp, glfw_input.cpp, kobra_source, tinyfd_source
+    - sources: main.cpp, kobra_source, tinyfd_source
     - idirs: includes
     - flags: '-O3 -std=c++17'
     - libraries: libs
   - kobra_debug:
-    - sources: main.cpp, glfw_input.cpp, kobra_source, tinyfd_source
+    - sources: main.cpp, kobra_source, tinyfd_source
     - idirs: includes
     - libraries: libs
     - flags: '-std=c++17 -g'
   - kobra_wall:
-    - sources: main.cpp, glfw_input.cpp, kobra_source, tinyfd_source
+    - sources: main.cpp, kobra_source, tinyfd_source
     - idirs: includes
     - libraries: libs
     - flags: '-std=c++17 -Wall -Werror'

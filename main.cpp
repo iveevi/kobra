@@ -4,11 +4,6 @@
 #include "include/common.hpp"
 #include "include/ecs.hpp"
 #include "include/engine/ecs_panel.hpp"
-#include "include/engine/rt_capture.hpp"
-#include "include/gui/button.hpp"
-#include "include/gui/layer.hpp"
-#include "include/gui/rect.hpp"
-#include "include/gui/sprite.hpp"
 #include "include/io/event.hpp"
 #include "include/layers/font_renderer.hpp"
 #include "include/layers/raster.hpp"
@@ -58,124 +53,14 @@ struct ECSApp : public BaseApp {
 			shape_renderer(get_context(), render_pass),
 			panel(get_context(), scene.ecs, io) {
 		scene.load(get_device(), scene_path);
-		/* Add entities
-		auto e1 = scene.ecs.make_entity("box");
-		auto e2 = scene.ecs.make_entity("plane");
-		auto e3 = scene.ecs.make_entity("mirror");
-		auto e4 = scene.ecs.make_entity("glass");
-
-		camera = scene.ecs.make_entity("Camera");
-
-		// Set transforms
-		e1.get <Transform> ().position = {0.5, -1, 0.5};
-
-		e2.get <Transform> ().position = {0, -2, 0};
-		e2.get <Transform> ().scale = {5, 0.1, 5};
-
-		e3.get <Transform> ().position = {-3, 2, 0};
-		e3.get <Transform> ().scale = {2, 0.01, 2};
-		e3.get <Transform> ().rotation = {0, 0, 70};
-
-		e4.get <Transform> ().position = {5, 3, 0};
-		e4.get <Transform> ().scale = {0.01, 3, 3};
-
-		// Add meshes to e1 and e2
-		auto mesh = Mesh::box({0, 0, 0}, {0.5, 0.5, 0.5});
-
-		e1.add <Mesh> (*Mesh::load("resources/benchmark/teapot.obj"));
-		e2.add <Mesh> (mesh);
-		e3.add <Mesh> (mesh);
-		e4.add <Mesh> (mesh);
-
-		// Materials
-		e1.add <Material> ();
-		e2.add <Material> ();
-		e3.add <Material> ();
-		e4.add <Material> ();
-
-		e1.get <Material> ().diffuse = {0.5, 0.5, 0.5};
-		e2.get <Material> ().diffuse = {0.8, 0.6, 0.4};
-
-		e3.get <Material> () = Material {
-			.diffuse = {0.8, 0.8, 0.8},
-			.type = eReflection
-		};
-
-		e4.get <Material> () = Material {
-			.diffuse = {0.9, 0.8, 0.8},
-			.refraction = 1.5,
-			.type = Shading(eTransmission | eReflection)
-		};
-
-		e2.get <Material> ().albedo_texture = "resources/wood_floor_albedo.jpg";
-		e2.get <Material> ().normal_texture = "resources/wood_floor_normal.jpg";
-
-		// Add rasterizers for e1 and e2
-		e1.add <Rasterizer> (get_device(), e1.get <Mesh> (), &e1.get <Material> ());
-		e2.add <Rasterizer> (get_device(), e2.get <Mesh> (), &e2.get <Material> ());
-		e3.add <Rasterizer> (get_device(), e3.get <Mesh> (), &e3.get <Material> ());
-		e4.add <Rasterizer> (get_device(), e4.get <Mesh> (), &e4.get <Material> ());
-
-		e1.get <Rasterizer> ().mode = RasterMode::ePhong;
-		e2.get <Rasterizer> ().mode = RasterMode::ePhong;
-		e3.get <Rasterizer> ().mode = RasterMode::ePhong;
-		e4.get <Rasterizer> ().mode = RasterMode::ePhong;
-
-		// Add raytracers for e1, e2 and e3
-		e1.add <Raytracer> (&e1.get <Mesh> (), &e1.get <Material> ());
-		e2.add <Raytracer> (&e2.get <Mesh> (), &e2.get <Material> ());
-		e3.add <Raytracer> (&e3.get <Mesh> (), &e3.get <Material> ());
-		e4.add <Raytracer> (&e4.get <Mesh> (), &e4.get <Material> ());
-
-		// TODO: IBL for rasterization
-		// raytracer.environment_map("resources/skies/background_3.jpg");
-		scene.p_environment_map = "/home/venki/downloads/095_hdrmaps_com_free.png";
-		// raytracer.environment_map(scene.p_environment_map);
-
-		// Add camera
-		auto c = Camera(Transform({0, 3, 10}), Tunings(45.0f, 1000, 1000));
-		camera.add <Camera> (c);
-
-		// Lights
-		Entity light = scene.ecs.make_entity("Light 2");
-		light.get <Transform> ().position = {5, 10, 0};
-		light.add <Light> (Light {.type = Light::Type::eArea, .color = {1, 1, 0.9}, .power = 3}); */
-
 		raytracer.environment_map(scene.p_environment_map);
-		camera = scene.ecs.get_entity(4);
-
-		// Add button
-		auto handler = [](void *user) {
-			std::cout << "Clicked" << std::endl;
-		};
-
-		auto args = Button::Args {
-			.min = {400, 300},
-			.max = {450, 350},
-
-			.idle = {0.9, 0.7, 0.7},
-			.hover = {0.7, 0.7, 0.9},
-			.pressed = {0.7, 0.9, 0.7},
-
-			.handlers = {{nullptr, handler}}
-		};
-
-		button = Button(io.mouse_events, args);
+		camera = scene.ecs.get_entity("Camera");
 
 		// Input callbacks
 		io.mouse_events.subscribe(mouse_callback, this);
 
 		scene.ecs.info <Mesh> ();
 	}
-
-	/* Save scene upon exit
-	~ECSApp() {
-		scene.save("scenes/scene.kobra");
-
-		KOBRA_LOG_FILE(notify) << "Now loading scene...\n";
-		::Scene s;
-		s.load(get_device(), "scenes/scene.kobra");
-	} */
 
 	int mode = 0;	// 0 for raster, 1 for raytracer
 	bool tab_pressed = false;
@@ -662,8 +547,6 @@ void load_transform(Entity &e, std::ifstream &fin)
 		&transform.rotation.x, &transform.rotation.y, &transform.rotation.z,
 		&transform.scale.x, &transform.scale.y, &transform.scale.z
 	);
-
-	std::cout << "Transform: " << transform << std::endl;
 }
 
 void load_material(Entity &e, std::ifstream &fin)
@@ -705,12 +588,6 @@ void load_material(Entity &e, std::ifstream &fin)
 		material.normal_texture = buf_normal;
 
 	material.type = *shading_from_str(value);
-
-	std::cout << "Material: " << glm::to_string(material.diffuse)
-		<< ", " << glm::to_string(material.ambient) << std::endl;
-	std::cout << "albedo: " << material.albedo_texture << std::endl;
-	std::cout << "normal: " << material.normal_texture << std::endl;
-	std::cout << "type: " << value << std::endl;
 }
 
 void load_mesh(Entity &e, std::ifstream &fin)
@@ -724,7 +601,6 @@ void load_mesh(Entity &e, std::ifstream &fin)
 	sscanf(line.c_str(), "source: %s", buf_source);
 
 	if (std::string(buf_source) != "0") {
-		std::cout << "Loading mesh: " << buf_source << std::endl;
 		auto mptr = Mesh::load(buf_source);
 
 		if (!mptr.has_value()) {
@@ -735,8 +611,6 @@ void load_mesh(Entity &e, std::ifstream &fin)
 		e.add <Mesh> (*mptr);
 	} else {
 		// Raw mesh
-		std::cout << "Raw mesh" << std::endl;
-
 		std::vector <Submesh> submeshes;
 		while (true) {
 			// Iterate over submeshes
@@ -787,9 +661,6 @@ void load_mesh(Entity &e, std::ifstream &fin)
 			}
 
 			// Append submesh
-			for (int i = 0; i < indices.size(); i += 3)
-				std::cout << "f: " << indices[i] << " " << indices[i + 1] << " " << indices[i + 2] << std::endl;
-
 			submeshes.push_back({vertices, indices});
 		}
 
@@ -821,8 +692,6 @@ void load_rasterizer(Entity &e, std::ifstream &fin, const Device &dev)
 
 	sscanf(line.c_str(), "mode: %s", buf_mode);
 
-	std::cout << "Rasterizer mode: " << buf_mode << std::endl;
-
 	// Get index
 	int index = 0;
 	while (rasterizer_modes[index] != buf_mode)
@@ -851,8 +720,6 @@ void load_raytracer(Entity &e, std::ifstream &fin)
 	}
 
 	e.add <Raytracer> (&e.get <Mesh> (), &e.get <Material> ());
-
-	std::cout << "GOT Raytracer" << std::endl;
 }
 
 void load_camera(Entity &e, std::ifstream &fin)
@@ -866,11 +733,6 @@ void load_camera(Entity &e, std::ifstream &fin)
 		&camera.transform.scale.x, &camera.transform.scale.y, &camera.transform.scale.z,
 		&camera.tunings.fov, &camera.tunings.scale, &camera.tunings.aspect
 	);
-
-	std::cout << "Camera: " << camera.transform.position.x << " " << camera.transform.position.y << " " << camera.transform.position.z << std::endl;
-	std::cout << "\tfov " << camera.tunings.fov << std::endl;
-	std::cout << "\tscale " << camera.tunings.scale << std::endl;
-	std::cout << "\taspect " << camera.tunings.aspect << std::endl;
 }
 
 void load_light(Entity &e, std::ifstream &fin)
@@ -896,10 +758,6 @@ void load_light(Entity &e, std::ifstream &fin)
 	}
 
 	light.type = Light::Type(index);
-
-	std::cout << "Light: " << light.color.x << " " << light.color.y << " " << light.color.z << std::endl;
-	std::cout << "\tpower " << light.power << std::endl;
-	std::cout << "\ttype " << light_types[light.type] << std::endl;
 }
 
 std::string load_components(Entity &e, std::ifstream &fin, const Device &dev)
@@ -965,12 +823,10 @@ void ::Scene::load(const Device &dev, const std::string &path)
 	}
 
 	field_reader <std::string> ::read(fin, "environment_map: %s", p_environment_map);
-	std::cout << "Environment map: " << p_environment_map << std::endl;
 
 	// Load entities
 	std::string header = get_header(fin);
 	while (fin.good()) {
-		std::cout << "HEADER = " << header << std::endl;
 		if (header != "[ENTITY]") {
 			KOBRA_LOG_FUNC(error) << "Invalid header: " << header << std::endl;
 			return;
@@ -979,7 +835,6 @@ void ::Scene::load(const Device &dev, const std::string &path)
 		std::string name;
 		field_reader <std::string> ::read(fin, "name: %s", name);
 		Entity &e = ecs.make_entity(name);
-		std::cout << "Entity: " << name << std::endl;
 
 		header = load_components(e, fin, dev);
 	}
