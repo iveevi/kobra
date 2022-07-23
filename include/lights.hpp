@@ -1,5 +1,5 @@
-#ifndef KOBRA_LIGHT_H_
-#define KOBRA_LIGHT_H_
+#ifndef KOBRA_LIGHTS_H_
+#define KOBRA_LIGHTS_H_
 
 // Standard headers
 #include <memory>

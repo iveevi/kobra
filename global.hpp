@@ -62,7 +62,7 @@ class RTApp :  public BaseApp {
 	std::thread		*capturer_thread = nullptr;
 
 	// Current scene
-	Scene			scene;
+	kobra::Scene			scene;
 
 	// Raster state
 	int			highlight = -1;
@@ -359,7 +359,7 @@ public:
 		// Load scene
 		// create_scene();
 		Profiler::one().frame("Loading scene");
-		scene = Scene(phdev, device, command_pool, scene_path);
+		scene = kobra::Scene(phdev, device, command_pool, scene_path);
 		Profiler::one().end();
 
 		for (auto &obj : scene)

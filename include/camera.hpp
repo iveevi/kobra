@@ -47,6 +47,7 @@ struct Camera {
         Transform transform;
 
         // Constructors
+	// TODO: should not have anything to do with the camera
         Camera() {}
         Camera(const Transform& trans, const Tunings& tns)
                         : transform(trans), tunings(tns) {}
@@ -61,6 +62,7 @@ struct Camera {
 	};
 
 	// Get perspective matrix
+	// TODO: should be dealt with in the rasterizer, not here
 	glm::mat4 perspective() const {
 		return glm::perspective(
 			glm::radians(tunings.fov),

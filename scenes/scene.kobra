@@ -1,240 +1,143 @@
-[OBJECT]
-name=Sphere A
+[PROPERTIES]
+environment_map: /home/venki/downloads/095_hdrmaps_com_free.png
+
+[ENTITY]
+name: teapot
+
 [TRANSFORM]
-position=-0.69753 1.66162 0.445055
-rotation=0 0 0
-scale=1 1 1
-[SPHERE]
-radius=0.5
+position: 0.500000 -1.000000 0.500000
+rotation: 0.000000 0.000000 0.000000
+scale: 1.000000 1.000000 1.000000
+
 [MATERIAL]
-Kd=1 1 1
-Ks=0 0 0
-shading_type=Transmission 
-index_of_refraction=1.5
-extinction_coefficient=0
-albedo_texture=0
-normal_texture=0
-[OBJECT]
-name=Sphere B
-[TRANSFORM]
-position=-0.230044 0.811069 -0.696417
-rotation=0 0 0
-scale=1 1 1
-[SPHERE]
-radius=0.3
-[MATERIAL]
-Kd=1 1 1
-Ks=0 0 0
-shading_type=Reflection 
-index_of_refraction=1
-extinction_coefficient=0
-albedo_texture=0
-normal_texture=0
-[OBJECT]
-name=Floor
-[TRANSFORM]
-position=0 -2 0
-rotation=0 0 0
-scale=10 0.1 10
+diffuse: 0.500000 0.500000 0.500000
+specular: 0.000000 0.000000 0.000000
+emission: 0.000000 0.000000 0.000000
+ambient: 0.200000 0.200000 0.200000
+shininess: 0.000000
+roughness: 0.000000
+refraction: 1.000000
+albedo_texture: 0
+normal_texture: 0
+shading_type: Diffuse 
+
 [MESH]
-source=box
-index=0
-[MATERIAL]
-Kd=0.7 0.7 0.7
-Ks=0 0 0
-shading_type=Diffuse 
-index_of_refraction=1
-extinction_coefficient=0
-albedo_texture=resources/wood_floor_albedo.jpg
-normal_texture=resources/wood_floor_normal.jpg
-[OBJECT]
-name=Monkey
+source: resources/benchmark/teapot.obj
+
+[RASTERIZER]
+mode: Phong
+
+[RAYTRACER]
+
+[ENTITY]
+name: plane
+
 [TRANSFORM]
-position=1.1812 0.466907 0.721303
-rotation=0 -126.578 0
-scale=0.5 0.5 0.5
+position: 0.000000 -2.000000 0.000000
+rotation: 0.000000 0.000000 0.000000
+scale: 10.000000 0.100000 10.000000
+
+[MATERIAL]
+diffuse: 0.800000 0.600000 0.400000
+specular: 0.000000 0.000000 0.000000
+emission: 0.000000 0.000000 0.000000
+ambient: 0.200000 0.200000 0.200000
+shininess: 0.000000
+roughness: 0.000000
+refraction: 1.000000
+albedo_texture: resources/wood_floor_albedo.jpg
+normal_texture: resources/wood_floor_normal.jpg
+shading_type: Diffuse 
+
 [MESH]
-source=resources/benchmark/teapot.obj
-index=0
-[MATERIAL]
-Kd=0.9 0.6 0.3
-Ks=0 0 0
-shading_type=Reflection Transmission 
-index_of_refraction=1.5
-extinction_coefficient=0
-albedo_texture=0
-normal_texture=0
-[OBJECT]
-name=Object 6
+source: box
+
+[RASTERIZER]
+mode: Phong
+
+[RAYTRACER]
+
+[ENTITY]
+name: mirror
+
 [TRANSFORM]
-position=-10 3 0
-rotation=0 0 0
-scale=0.1 5 10
+position: -3.000000 2.000000 0.000000
+rotation: 0.000000 0.000000 70.000000
+scale: 2.000000 0.010000 2.000000
+
+[MATERIAL]
+diffuse: 0.800000 0.800000 0.800000
+specular: 0.000000 0.000000 0.000000
+emission: 0.000000 0.000000 0.000000
+ambient: 0.200000 0.200000 0.200000
+shininess: 0.000000
+roughness: 0.000000
+refraction: 1.000000
+albedo_texture: 0
+normal_texture: 0
+shading_type: Reflection 
+
 [MESH]
-source=box
-index=0
-[MATERIAL]
-Kd=0.8 0.8 0.5
-Ks=0 0 0
-shading_type=Diffuse 
-index_of_refraction=1
-extinction_coefficient=0
-albedo_texture=0
-normal_texture=0
-[OBJECT]
-name=Object 7
+source: box
+
+[RASTERIZER]
+mode: Phong
+
+[RAYTRACER]
+
+[ENTITY]
+name: glass
+
 [TRANSFORM]
-position=10 3 0
-rotation=0 0 0
-scale=0.1 5 10
+position: 5.000000 3.000000 0.000000
+rotation: 0.000000 0.000000 0.000000
+scale: 0.010000 3.000000 3.000000
+
+[MATERIAL]
+diffuse: 0.900000 0.800000 0.800000
+specular: 0.000000 0.000000 0.000000
+emission: 0.000000 0.000000 0.000000
+ambient: 0.200000 0.200000 0.200000
+shininess: 0.000000
+roughness: 0.000000
+refraction: 1.500000
+albedo_texture: 0
+normal_texture: 0
+shading_type: Reflection Transmission 
+
 [MESH]
-source=box
-index=0
-[MATERIAL]
-Kd=0.8 0.8 0.5
-Ks=0 0 0
-shading_type=Diffuse 
-index_of_refraction=1
-extinction_coefficient=0
-albedo_texture=0
-normal_texture=0
-[OBJECT]
-name=Object 4_1
+source: box
+
+[RASTERIZER]
+mode: Phong
+
+[RAYTRACER]
+
+[ENTITY]
+name: Camera
+
 [TRANSFORM]
-position=0.00781733 -0.74535 0.209645
-rotation=0 -137.158 0
-scale=2.25 1.25 2.25
-[MESH]
-source=box
-index=0
-[MATERIAL]
-Kd=1 0.9 0.5
-Ks=0 0 0
-shading_type=Diffuse 
-index_of_refraction=1
-extinction_coefficient=0
-albedo_texture=0
-normal_texture=0
-[OBJECT]
-name=Sphere B_1
+position: 0.000000 0.000000 0.000000
+rotation: 0.000000 0.000000 0.000000
+scale: 1.000000 1.000000 1.000000
+
+[CAMERA]
+position: 0.000000 3.000000 10.000000
+rotation: 0.000000 0.000000 0.000000
+scale: 1.000000 1.000000 1.000000
+fov: 45.000000
+scale: 0.414214
+aspect: 1.000000
+
+[ENTITY]
+name: Light 2
+
 [TRANSFORM]
-position=-2.07492 0.856449 0
-rotation=0 0 0
-scale=1 1 1
-[SPHERE]
-radius=0.4
-[MATERIAL]
-Kd=1 0.5 0.5
-Ks=0 0 0
-shading_type=Reflection 
-index_of_refraction=1
-extinction_coefficient=0
-albedo_texture=0
-normal_texture=0
-[OBJECT]
-name=Roof
-[TRANSFORM]
-position=0 8.09929 0
-rotation=0 0 0
-scale=10 0.1 10
-[MESH]
-source=box
-index=0
-[MATERIAL]
-Kd=0.7 0.7 0.7
-Ks=0 0 0
-shading_type=Diffuse 
-index_of_refraction=1
-extinction_coefficient=0
-albedo_texture=0
-normal_texture=0
-[OBJECT]
-name=Object 6_1
-[TRANSFORM]
-position=0 3 10
-rotation=0 0 0
-scale=10 5 0.1
-[MESH]
-source=box
-index=0
-[MATERIAL]
-Kd=0.8 0.8 0.5
-Ks=0 0 0
-shading_type=Diffuse 
-index_of_refraction=1
-extinction_coefficient=0
-albedo_texture=0
-normal_texture=0
-[OBJECT]
-name=Object 4_1_1
-[TRANSFORM]
-position=0 16 -21.9503
-rotation=-38.6181 0 0
-scale=0.45 0.02 0.45
-[MESH]
-source=0
-v -5 0 5 0 0 1 0 0
-v -5 0 -5 0 0 1 1 0
-v 5 0 -5 0 0 1 1 1
-v 5 0 5 0 0 1 0 1
-f 1 2 3
-f 3 4 1
-[MATERIAL]
-Kd=1 1 1
-Ks=0 0 0
-shading_type=Emissive 
-index_of_refraction=1
-extinction_coefficient=0
-albedo_texture=0
-normal_texture=0
-[OBJECT]
-name=Glass Window
-[TRANSFORM]
-position=0 3 -10
-rotation=0 0 0
-scale=4 5 0.1
-[MESH]
-source=box
-index=0
-[MATERIAL]
-Kd=1 1 1
-Ks=0 0 0
-shading_type=Reflection Transmission 
-index_of_refraction=1.5
-extinction_coefficient=0
-albedo_texture=0
-normal_texture=0
-[OBJECT]
-name=Panel 1
-[TRANSFORM]
-position=7 3 -10
-rotation=0 0 0
-scale=3 5 0.1
-[MESH]
-source=box
-index=0
-[MATERIAL]
-Kd=0.8 0.8 0.5
-Ks=0 0 0
-shading_type=Diffuse 
-index_of_refraction=1.5
-extinction_coefficient=0
-albedo_texture=0
-normal_texture=0
-[OBJECT]
-name=Panel 2
-[TRANSFORM]
-position=-7 3 -10
-rotation=0 0 0
-scale=3 5 0.1
-[MESH]
-source=box
-index=0
-[MATERIAL]
-Kd=0.8 0.8 0.5
-Ks=0 0 0
-shading_type=Diffuse 
-index_of_refraction=1
-extinction_coefficient=0
-albedo_texture=0
-normal_texture=0
+position: 5.000000 10.000000 0.000000
+rotation: 0.000000 0.000000 0.000000
+scale: 1.000000 1.000000 1.000000
+
+[LIGHT]
+color: 1.000000 1.000000 0.900000
+power: 3.000000
+type: Area

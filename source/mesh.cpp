@@ -68,12 +68,9 @@ Mesh Mesh::box(const glm::vec3 &center, const glm::vec3 &dim)
 
 	// TODO: should set source of the mesh to box, then dimensions
 	auto out = Submesh { vertices, indices };
-
-	// TODO: source?
-	/* out._source = "box";
-	out._source_index = 0; */
-
-	return std::vector <Submesh> {out};
+	Mesh m = std::vector <Submesh> {out};
+	m._source = "box";
+	return m;
 }
 
 static Submesh process_mesh(aiMesh *mesh, const aiScene *scene)
@@ -151,6 +148,10 @@ static Mesh process_node(aiNode *node, const aiScene *scene)
 
 std::optional <Mesh> Mesh::load(const std::string &path)
 {
+	// Special cases
+	if (path == "box")
+		return box({0, 0, 0}, {0.5, 0.5, 0.5});
+
 	// Check if the file exists
 	std::ifstream file(path);
 	if (!file.is_open()) {
@@ -176,7 +177,9 @@ std::optional <Mesh> Mesh::load(const std::string &path)
 	}
 
 	// Process the scene (root node)
-	return process_node(scene->mRootNode, scene);
+	Mesh m = process_node(scene->mRootNode, scene);
+	m._source = path;
+	return m;
 }
 
 }

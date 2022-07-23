@@ -114,7 +114,10 @@ public:
 };
 
 // A mesh is a collection of submeshes
-struct Mesh {
+class Mesh {
+	// Source file
+	std::string _source = "";
+public:
 	// Data
 	std::vector <Submesh> submeshes;
 
@@ -144,6 +147,11 @@ struct Mesh {
 		for (const auto &submesh : submeshes)
 			total += submesh.triangles();
 		return total;
+	}
+
+	// Get the source file
+	const std::string &source() const {
+		return _source;
 	}
 
 	// Indexing
