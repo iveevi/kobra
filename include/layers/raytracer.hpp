@@ -122,7 +122,7 @@ class Raytracer {
 	// Accumulation status
 	int		_accumulated = 0;
 	Transform	_ptransform;
-	int		_skip = 2;	// Skip batch size (per dim)
+	int		_skip = 10;	// Skip batch size (per dim)
 	int		_offsetx = 0;
 	int		_offsety = 0;
 

@@ -168,69 +168,8 @@ struct Mesh {
 	// Mesh factories
 	// TODO: should make a 1x1x1, then transform will do the rest
 	// TODO: clean up and put into source file
-	static Mesh box(const glm::vec3 &center, const glm::vec3 &dim) {
-		float x = dim.x;
-		float y = dim.y;
-		float z = dim.z;
-
-		// All 24 vertices, with correct normals
-		VertexList vertices {
-			// Front
-			Vertex {{ center.x - x, center.y - y, center.z + z }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 0.0f }},
-			Vertex {{ center.x + x, center.y - y, center.z + z }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f }},
-			Vertex {{ center.x + x, center.y + y, center.z + z }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f }},
-			Vertex {{ center.x - x, center.y + y, center.z + z }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f }},
-
-			// Back
-			Vertex {{ center.x - x, center.y - y, center.z - z }, { 0.0f, 0.0f, -1.0f }, { 0.0f, 0.0f }},
-			Vertex {{ center.x + x, center.y - y, center.z - z }, { 0.0f, 0.0f, -1.0f }, { 1.0f, 0.0f }},
-			Vertex {{ center.x + x, center.y + y, center.z - z }, { 0.0f, 0.0f, -1.0f }, { 1.0f, 1.0f }},
-			Vertex {{ center.x - x, center.y + y, center.z - z }, { 0.0f, 0.0f, -1.0f }, { 0.0f, 1.0f }},
-
-			// Left
-			Vertex {{ center.x - x, center.y - y, center.z + z }, { -1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f }},
-			Vertex {{ center.x - x, center.y - y, center.z - z }, { -1.0f, 0.0f, 0.0f }, { 1.0f, 0.0f }},
-			Vertex {{ center.x - x, center.y + y, center.z - z }, { -1.0f, 0.0f, 0.0f }, { 1.0f, 1.0f }},
-			Vertex {{ center.x - x, center.y + y, center.z + z }, { -1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f }},
-
-			// Right
-			Vertex {{ center.x + x, center.y - y, center.z + z }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f }},
-			Vertex {{ center.x + x, center.y - y, center.z - z }, { 1.0f, 0.0f, 0.0f }, { 1.0f, 0.0f }},
-			Vertex {{ center.x + x, center.y + y, center.z - z }, { 1.0f, 0.0f, 0.0f }, { 1.0f, 1.0f }},
-			Vertex {{ center.x + x, center.y + y, center.z + z }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f }},
-
-			// Top
-			Vertex {{ center.x - x, center.y + y, center.z + z }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f }},
-			Vertex {{ center.x + x, center.y + y, center.z + z }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f }},
-			Vertex {{ center.x + x, center.y + y, center.z - z }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 1.0f }},
-			Vertex {{ center.x - x, center.y + y, center.z - z }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 1.0f }},
-
-			// Bottom
-			Vertex {{ center.x - x, center.y - y, center.z + z }, { 0.0f, -1.0f, 0.0f }, { 0.0f, 0.0f }},
-			Vertex {{ center.x + x, center.y - y, center.z + z }, { 0.0f, -1.0f, 0.0f }, { 1.0f, 0.0f }},
-			Vertex {{ center.x + x, center.y - y, center.z - z }, { 0.0f, -1.0f, 0.0f }, { 1.0f, 1.0f }},
-			Vertex {{ center.x - x, center.y - y, center.z - z }, { 0.0f, -1.0f, 0.0f }, { 0.0f, 1.0f }}
-		};
-
-		// All 36 indices
-		IndexList indices {
-			0, 1, 2,	2, 3, 0,	// Front
-			4, 6, 5,	6, 4, 7,	// Back
-			8, 10, 9,	10, 8, 11,	// Left
-			12, 13, 14,	14, 15, 12,	// Right
-			16, 17, 18,	18, 19, 16,	// Top
-			20, 22, 21,	22, 20, 23	// Bottom
-		};
-
-		// TODO: should set source of the mesh to box, then dimensions
-		auto out = Submesh { vertices, indices };
-
-		// TODO: source?
-		/* out._source = "box";
-		out._source_index = 0; */
-
-		return std::vector <Submesh> {out};
-	}
+	static Mesh box(const glm::vec3 &, const glm::vec3 &);
+	static std::optional <Mesh> load(const std::string &);
 };
 
 using MeshPtr = std::shared_ptr <Mesh>;

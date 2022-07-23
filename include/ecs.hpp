@@ -145,7 +145,7 @@ public:
 
 	// Size of ECS
 	int size() const {
-		return transforms.size();
+		return entities.size();
 	}
 
 	// Get entity
@@ -162,17 +162,7 @@ public:
 
 	// Display info for one component
 	template <class T>
-	void info() const {
-		std::cout << "Archetype: " << component_string <T> () << std::endl;
-		for (size_t i = 0; i < transforms.size(); i++) {
-			std::cout << "\tEntity " << i << ": ";
-			if (_ref <T> ::exists(this, i))
-				std::cout << "yes";
-			else
-				std::cout << "no";
-			std::cout << std::endl;
-		}
-	}
+	void info() const;
 };
 
 // _constructor specializations
@@ -366,16 +356,6 @@ struct ECS::_ref <Material> {
 	}
 };
 
-// Specializations of info
-template <>
-inline void ECS::info <Transform> () const {
-	std::cout << "Archetype: " << component_string <Transform> () << std::endl;
-	for (size_t i = 0; i < transforms.size(); i++) {
-		std::cout << "\tEntity " << i << ": .pos = "
-			<< glm::to_string(transforms[i].position) << std::endl;
-	}
-}
-
 // Entity class, acts like a pointer to a component
 class Entity {
 	int32_t		id = -1;
@@ -444,6 +424,31 @@ public:
 	// Friend the ECS class
 	friend class ECS;
 };
+
+template <class T>
+void ECS::info() const
+{
+	std::cout << "Archetype: " << component_string <T> () << std::endl;
+	for (size_t i = 0; i < size(); i++) {
+		std::cout << "\tEntity " << entities[i].name << ": ";
+		if (_ref <T> ::exists(this, i))
+			std::cout << "yes";
+		else
+			std::cout << "no";
+		std::cout << std::endl;
+	}
+}
+
+// Specializations of info
+template <>
+inline void ECS::info <Transform> () const
+{
+	std::cout << "Archetype: " << component_string <Transform> () << std::endl;
+	for (size_t i = 0; i < transforms.size(); i++) {
+		std::cout << "\tEntity " << i << ": .pos = "
+			<< glm::to_string(transforms[i].position) << std::endl;
+	}
+}
 
 }
 

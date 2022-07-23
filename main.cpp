@@ -48,13 +48,14 @@ struct ECSApp : public BaseApp {
 		auto e1 = ecs.make_entity("box");
 		auto e2 = ecs.make_entity("plane");
 		auto e3 = ecs.make_entity("mirror");
+
 		camera = ecs.make_entity("Camera");
 
 		// Set transforms
 		e2.get <Transform> ().position = {0, -2, 0};
 		e2.get <Transform> ().scale = {5, 0.1, 5};
 
-		e3.get <Transform> ().position = {-2, 1, 0};
+		e3.get <Transform> ().position = {-3, 2, 0};
 		e3.get <Transform> ().scale = {1, 0.01, 1};
 		e3.get <Transform> ().rotation = {0, 0, 70};
 
@@ -63,7 +64,7 @@ struct ECSApp : public BaseApp {
 		auto submesh = Submesh(box.vertices(), box.indices());
 		auto mesh = Mesh({submesh});
 
-		e1.add <Mesh> (mesh);
+		e1.add <Mesh> (*Mesh::load("resources/benchmark/teapot.obj"));
 		e2.add <Mesh> (mesh);
 		e3.add <Mesh> (mesh);
 
@@ -85,9 +86,11 @@ struct ECSApp : public BaseApp {
 		// Add rasterizers for e1 and e2
 		e1.add <Rasterizer> (get_device(), e1.get <Mesh> (), &e1.get <Material> ());
 		e2.add <Rasterizer> (get_device(), e2.get <Mesh> (), &e2.get <Material> ());
+		e3.add <Rasterizer> (get_device(), e3.get <Mesh> (), &e3.get <Material> ());
 
 		e1.get <Rasterizer> ().mode = RasterMode::ePhong;
 		e2.get <Rasterizer> ().mode = RasterMode::ePhong;
+		e3.get <Rasterizer> ().mode = RasterMode::ePhong;
 
 		// Add raytracers for e1, e2 and e3
 		e1.add <Raytracer> (&e1.get <Mesh> (), &e1.get <Material> ());
@@ -128,6 +131,8 @@ struct ECSApp : public BaseApp {
 
 		// Input callbacks
 		io.mouse_events.subscribe(mouse_callback, this);
+
+		ecs.info <Mesh> ();
 	}
 
 	int mode = 0;	// 0 for raster, 1 for raytracer

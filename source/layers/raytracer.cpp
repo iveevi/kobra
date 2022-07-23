@@ -1,5 +1,6 @@
 // Engine headers
 #include "../../include/layers/raytracer.hpp"
+#include "../../include/profiler.hpp"
 
 namespace kobra {
 
@@ -187,9 +188,6 @@ Raytracer::Raytracer(const Context &ctx, SyncQueue *sq, const vk::AttachmentLoad
 
 	_dev.area_lights = BufferData(phdev, device, sizeof(_area_light_info), usage, mem_props);
 
-	// _dev.lights = BufferData(phdev, device, vec4_size, usage, mem_props);
-	// _dev.light_indices = BufferData(phdev, device, uint_size, usage, mem_props);
-
 	_dev.transforms = BufferData(phdev, device, mat4_size, usage, mem_props);
 
 	// Bind to descriptor sets
@@ -296,6 +294,8 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 		const vk::raii::Framebuffer &framebuffer,
 		const ECS &ecs)
 {
+	Profiler profiler;
+
 	// Initialization phase
 	Camera camera;
 	bool found_camera = false;
@@ -312,6 +312,8 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 
 	_area_light_info alight_info {.count = 0};
 
+	profiler.frame("Raytracer frame");
+	profiler.frame("Iterating through entities");
 	for (int i = 0; i < ecs.size(); i++) {
 		// TODO: how to avoid constructing BVH every single
 		// frame?
@@ -326,12 +328,16 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 
 		// Deal with raytracer component
 		if (ecs.exists <kobra::Raytracer> (i)) {
+			profiler.frame("Serializing raytracer component");
+
 			// TODO: raytracer component with these methods
 			// (private)
 			const kobra::Raytracer *raytracer = &ecs.get <kobra::Raytracer> (i);
 			const Transform &transform = ecs.get <Transform> (i);
 
 			raytracer->serialize({_ctx.phdev, _ctx.device}, transform, host_buffers);
+
+			profiler.end();
 		}
 
 		// Deal with light
@@ -352,6 +358,8 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 
 			// Area light
 			if (light.type == Light::Type::eArea) {
+				profiler.frame("Serializing area light");
+
 				// New vertices (square 1x1 in center)
 				glm::vec3 a {-0.5f, 0, -0.5f};
 				glm::vec3 b {0.5f, 0, -0.5f};
@@ -370,9 +378,13 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 				alight.power = light.power;
 
 				alight_info.lights[alight_info.count++] = alight;
+
+				profiler.end();
 			}
 		}
 	}
+
+	profiler.end();
 
 	if (!found_camera) {
 		// Actually just skip
@@ -381,36 +393,48 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 
 	// TODO: some way to combine bvhs of multiple objects (id
 	// clashing...)
+	profiler.frame("Constructing BVH");
 	auto bboxes = _get_bboxes(host_buffers);
 	auto bvh = rt::partition(bboxes);
 
 	rt::serialize(host_buffers.bvh, bvh);
+	profiler.end();
 
 	// Upload to device buffers
 	bool rebinding = false;
 
+	profiler.frame("Uploading to device buffers");
 	rebinding |= _dev.bvh.upload(host_buffers.bvh, 0);
 	rebinding |= _dev.vertices.upload(host_buffers.vertices, 0);
 	rebinding |= _dev.triangles.upload(host_buffers.triangles, 0);
 	rebinding |= _dev.materials.upload(host_buffers.materials, 0);
 	rebinding |= _dev.area_lights.upload(&alight_info, sizeof(alight_info));
 	rebinding |= _dev.transforms.upload(host_buffers.transforms, 0);
-
-	if (rebinding) {
-		_sync_queue->push(
-			[&]() {
-				_dev.bind(*_ctx.device, _ds_raytracing);
-			}
-		);
-	}
+	profiler.end();
 
 	// TODO: check if desciptors actually changed
+	profiler.frame("Updating samplers");
 	_sync_queue->push(
 		[&]() {
 			_update_samplers(_albedo_image_descriptors, MESH_BINDING_ALBEDOS);
 			_update_samplers(_normal_image_descriptors, MESH_BINDING_NORMAL_MAPS);
 		}
 	);
+	profiler.end();
+
+	if (rebinding) {
+		KOBRA_LOG_FILE(warn) << "Rebinding device buffers\n";
+		_sync_queue->push(
+			[&]() {
+				_dev.bind(*_ctx.device, _ds_raytracing);
+			}
+		);
+
+		return;
+	}
+
+	profiler.end();
+	std::cout << profiler.pretty(profiler.pop()) << std::endl;
 
 	// Compute shader
 	cmd.bindPipeline(vk::PipelineBindPoint::eCompute, *_p_raytracing);
