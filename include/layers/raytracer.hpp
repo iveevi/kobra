@@ -120,13 +120,16 @@ class Raytracer {
 	SyncQueue			*_sync_queue;
 
 	// Accumulation status
+	// TODO: struct, then methods to reset
 	int		_accumulated = 0;
 	Transform	_ptransform;
-	int		_skip = 10;	// Skip batch size (per dim)
+	int		_skip = 3;	// Skip batch size (per dim)
 	int		_offsetx = 0;
 	int		_offsety = 0;
 
-	std::vector <Transform> _plight_transforms;
+	// TODO: the following should be kept in a cache structure
+	std::vector <Transform> _p_light_transforms;
+	std::vector <const kobra::Raytracer *> _p_raytracers;
 
 	// Helper functions
 	void _initialize_vuklan_structures(const vk::AttachmentLoadOp &);
@@ -138,6 +141,9 @@ public:
 
 	// Constructors
 	Raytracer(const Context &, SyncQueue *, const vk::AttachmentLoadOp &);
+
+	// Methods
+	void environment_map(const std::string &);
 
 	// Render
 	void render(const vk::raii::CommandBuffer &,

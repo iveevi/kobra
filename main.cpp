@@ -97,19 +97,16 @@ struct ECSApp : public BaseApp {
 		e2.add <Raytracer> (&e2.get <Mesh> (), &e2.get <Material> ());
 		e3.add <Raytracer> (&e3.get <Mesh> (), &e3.get <Material> ());
 
+		raytracer.environment_map("resources/skies/background_3.jpg");
+
 		// Add camera
 		auto c = Camera(Transform({0, 3, 10}), Tunings(45.0f, 1000, 1000));
 		camera.add <Camera> (c);
 
 		// Lights
-		Entity light1 = ecs.make_entity("Light 1");
-		Entity light2 = ecs.make_entity("Light 2");
-
-		light1.get <Transform> ().position = {-5, 10, 0};
-		light2.get <Transform> ().position = {5, 10, 0};
-
-		light1.add <Light> (Light {.type = Light::Type::eArea, .color = {1, 0, 0}, .power = 8});
-		light2.add <Light> (Light {.type = Light::Type::eArea, .color = {1, 1, 1}, .power = 3});
+		Entity light = ecs.make_entity("Light 2");
+		light.get <Transform> ().position = {5, 10, 0};
+		light.add <Light> (Light {.type = Light::Type::eArea, .color = {1, 1, 1}, .power = 3});
 
 		// Add button
 		auto handler = [](void *user) {

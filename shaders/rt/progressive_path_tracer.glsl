@@ -117,11 +117,7 @@ layout (push_constant) uniform PushConstants
 // Sample environment map
 vec3 sample_environment(vec3 dir)
 {
-	vec3 white = vec3(1.0);
-	vec3 blue = vec3(0.5, 0.7, 1.0);
-	return 0.5 * mix(white, blue, clamp(pow(dir.y, 0.5), 0.0, 1.0));
-
-	/* Get uv coordinates
+	// Get uv coordinates
 	const float PI = 3.14159265358979323846;
 
 	vec2 uv = vec2(0.0);
@@ -129,9 +125,7 @@ vec3 sample_environment(vec3 dir)
 	uv.y = asin(dir.y) / PI + 0.5;
 
 	// Get the color
-	vec3 tex = texture(s2_environment, uv).rgb;
-
-	return tex; */
+	return texture(s2_environment, uv).rgb;
 }
 
 // Import all modules

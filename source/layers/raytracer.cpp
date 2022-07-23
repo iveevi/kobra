@@ -1,6 +1,7 @@
 // Engine headers
 #include "../../include/layers/raytracer.hpp"
 #include "../../include/profiler.hpp"
+#include "../../include/texture_manager.hpp"
 
 namespace kobra {
 
@@ -286,6 +287,30 @@ Raytracer::Raytracer(const Context &ctx, SyncQueue *sq, const vk::AttachmentLoad
 	_update_samplers(_normal_image_descriptors, MESH_BINDING_NORMAL_MAPS);
 }
 
+/////////////
+// Methods //
+/////////////
+
+// TODO: also HDR maps
+void Raytracer::environment_map(const std::string &path)
+{
+	// Reset accumulation status
+	_accumulated = 0;
+	_offsetx = 0;
+	_offsety = 0;
+
+	// Load environment map
+	// TODO: remove sampler stuff and rely on texturemanage
+	/* _samplers.environment_image = TextureManager::load_texture(
+		*_ctx.phdev, *_ctx.device, path); */
+
+	TextureManager::bind(
+		*_ctx.phdev, *_ctx.device,
+		_ds_raytracing,
+		path, MESH_BINDING_ENVIRONMENT
+	);
+}
+
 ////////////
 // Render //
 ////////////
@@ -307,13 +332,19 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 	};
 
 	int light_index = 0;
+	int raytracers_index = 0;
 	bool dirty_lights = false;
+	bool dirty_raytracers = false;
 	std::vector <Transform> light_transforms;
+	std::vector <const kobra::Raytracer *> raytracers;
+	std::vector <Transform> raytracer_transforms;
 
 	_area_light_info alight_info {.count = 0};
 
 	profiler.frame("Raytracer frame");
 	profiler.frame("Iterating through entities");
+
+	// TODO: this loop ccan be parallelised
 	for (int i = 0; i < ecs.size(); i++) {
 		// TODO: how to avoid constructing BVH every single
 		// frame?
@@ -326,18 +357,21 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 			found_camera = true;
 		}
 
-		// Deal with raytracer component
 		if (ecs.exists <kobra::Raytracer> (i)) {
-			profiler.frame("Serializing raytracer component");
-
-			// TODO: raytracer component with these methods
-			// (private)
+			// TODO: account for changing transforms
 			const kobra::Raytracer *raytracer = &ecs.get <kobra::Raytracer> (i);
+
+			if (raytracers_index >= _p_raytracers.size())
+				dirty_raytracers = true;
+			else if (_p_raytracers[raytracers_index] != raytracer)
+				dirty_raytracers = true;
+
+			raytracers.push_back(raytracer);
+
 			const Transform &transform = ecs.get <Transform> (i);
 
-			raytracer->serialize({_ctx.phdev, _ctx.device}, transform, host_buffers);
-
-			profiler.end();
+			raytracer_transforms.push_back(transform);
+			raytracers_index++;
 		}
 
 		// Deal with light
@@ -348,9 +382,11 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 			const Transform &transform = ecs.get <Transform> (i);
 
 			// Check if lights have moved
-			if (light_index >= _plight_transforms.size())
+			// TODO: also check if color has changed (i.e. same
+			// strategy as for raytracers)
+			if (light_index >= _p_light_transforms.size())
 				dirty_lights = true;
-			else if (transform != _plight_transforms[light_index])
+			else if (transform != _p_light_transforms[light_index])
 				dirty_lights = true;
 
 			light_transforms.push_back(transform);
@@ -391,25 +427,50 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 		throw std::runtime_error("No camera found");
 	}
 
-	// TODO: some way to combine bvhs of multiple objects (id
-	// clashing...)
-	profiler.frame("Constructing BVH");
-	auto bboxes = _get_bboxes(host_buffers);
-	auto bvh = rt::partition(bboxes);
-
-	rt::serialize(host_buffers.bvh, bvh);
-	profiler.end();
-
 	// Upload to device buffers
 	bool rebinding = false;
 
-	profiler.frame("Uploading to device buffers");
-	rebinding |= _dev.bvh.upload(host_buffers.bvh, 0);
-	rebinding |= _dev.vertices.upload(host_buffers.vertices, 0);
-	rebinding |= _dev.triangles.upload(host_buffers.triangles, 0);
-	rebinding |= _dev.materials.upload(host_buffers.materials, 0);
+	profiler.frame("Updating buffers");
+	if (dirty_raytracers) {
+		KOBRA_LOG_FILE(warn) << "Raytracer components have been modified, rebuilding...\n";
+
+		profiler.frame("Rebuilding raytracers");
+
+		profiler.frame("Serializing");
+
+		for (int i = 0; i < raytracers.size(); i++) {
+			profiler.frame("Serializing raytracer component");
+
+			raytracers[i]->serialize({_ctx.phdev, _ctx.device},
+				raytracer_transforms[i],
+				host_buffers
+			);
+
+			profiler.end();
+		}
+
+		profiler.end();
+
+		rebinding |= _dev.vertices.upload(host_buffers.vertices, 0);
+		rebinding |= _dev.triangles.upload(host_buffers.triangles, 0);
+		rebinding |= _dev.materials.upload(host_buffers.materials, 0);
+		rebinding |= _dev.transforms.upload(host_buffers.transforms, 0);
+
+		// TODO: some way to combine bvhs of multiple objects (id
+		// clashing...)
+		profiler.frame("Constructing BVH");
+		auto bboxes = _get_bboxes(host_buffers);
+		auto bvh = rt::partition(bboxes);
+
+		rt::serialize(host_buffers.bvh, bvh);
+		profiler.end();
+
+		rebinding |= _dev.bvh.upload(host_buffers.bvh, 0);
+
+		profiler.end();
+	}
+
 	rebinding |= _dev.area_lights.upload(&alight_info, sizeof(alight_info));
-	rebinding |= _dev.transforms.upload(host_buffers.transforms, 0);
 	profiler.end();
 
 	// TODO: check if desciptors actually changed
@@ -422,6 +483,9 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 	);
 	profiler.end();
 
+	profiler.end();
+	// std::cout << profiler.pretty(profiler.pop()) << std::endl;
+
 	if (rebinding) {
 		KOBRA_LOG_FILE(warn) << "Rebinding device buffers\n";
 		_sync_queue->push(
@@ -432,9 +496,6 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 
 		return;
 	}
-
-	profiler.end();
-	std::cout << profiler.pretty(profiler.pop()) << std::endl;
 
 	// Compute shader
 	cmd.bindPipeline(vk::PipelineBindPoint::eCompute, *_p_raytracing);
@@ -447,11 +508,16 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 
 	// Dirty means reset samples
 	bool dirty = (_ptransform != camera.transform);
-	if (dirty || dirty_lights)
+	if (dirty || dirty_lights) {
 		_accumulated = 0;
+		_offsetx = 0;
+		_offsety = 0;
+	}
 
 	_ptransform = camera.transform;
-	_plight_transforms = light_transforms;
+
+	_p_light_transforms = light_transforms;
+	_p_raytracers = raytracers;
 
 	// TODO: using progressive rendering, we can skip pixels (every
 	// other) and then increment samples after each complete pass.
