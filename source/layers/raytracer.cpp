@@ -473,16 +473,6 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 	rebinding |= _dev.area_lights.upload(&alight_info, sizeof(alight_info));
 	profiler.end();
 
-	// TODO: check if desciptors actually changed
-	profiler.frame("Updating samplers");
-	_sync_queue->push(
-		[&]() {
-			_update_samplers(_albedo_image_descriptors, MESH_BINDING_ALBEDOS);
-			_update_samplers(_normal_image_descriptors, MESH_BINDING_NORMAL_MAPS);
-		}
-	);
-	profiler.end();
-
 	profiler.end();
 	// std::cout << profiler.pretty(profiler.pop()) << std::endl;
 
@@ -491,6 +481,14 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 		_sync_queue->push(
 			[&]() {
 				_dev.bind(*_ctx.device, _ds_raytracing);
+			}
+		);
+
+		// TODO: check if desciptors actually changed
+		_sync_queue->push(
+			[&]() {
+				_update_samplers(_albedo_image_descriptors, MESH_BINDING_ALBEDOS);
+				_update_samplers(_normal_image_descriptors, MESH_BINDING_NORMAL_MAPS);
 			}
 		);
 

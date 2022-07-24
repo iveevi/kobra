@@ -10,6 +10,15 @@ namespace kobra {
 namespace layers {
 
 class ShapeRenderer {
+	// Push constants
+	struct PushConstants {
+		glm::vec2 center;
+		float width;
+		float height;
+		float radius;
+		float border_width;
+	};
+
 	// Vulkan context
 	Context				_ctx;
 
@@ -47,10 +56,16 @@ public:
 	// Constructor
 	ShapeRenderer(const Context &ctx, const vk::raii::RenderPass &render_pass)
 			: _ctx(ctx) {
+		// Push constants
+		auto pcr = vk::PushConstantRange {
+			vk::ShaderStageFlagBits::eFragment,
+			0, sizeof(PushConstants)
+		};
+
 		// Pipline layout
 		_ppl = vk::raii::PipelineLayout {
 			*_ctx.device,
-			{{}, {}, {}}
+			{{}, {}, pcr}
 		};
 
 		// Pipeline
@@ -111,6 +126,12 @@ public:
 		// Render to the vectors
 		// TODO: helper method for each shape
 		// TODO: need some alpha as well
+
+		std::vector <vk::DeviceSize> v_offsets;
+		std::vector <vk::DeviceSize> i_offsets;
+		std::vector <int> counts;
+		std::vector <PushConstants> push_constants;
+
 		for (const auto &rect : rects) {
 			glm::vec2 min = rect.min;
 			glm::vec2 max = rect.max;
@@ -135,6 +156,21 @@ public:
 				Vertex {glm::vec2 {max.x, min.y},	color}
 			};
 
+			// Offsets and centers
+			v_offsets.push_back(vertices.size() * sizeof(Vertex));
+			i_offsets.push_back(indices.size() * sizeof(uint32_t));
+			counts.push_back(r_indices.size());
+
+			PushConstants pc {
+				.center = (min + max) / 2.0f,
+				.width = (max - min).x,
+				.height = (max - min).y,
+				.radius = rect.radius,
+				.border_width = rect.border_width
+			};
+
+			push_constants.push_back(pc);
+
 			// Append to the vectors
 			vertices.insert(vertices.end(), r_vertices.begin(), r_vertices.end());
 			indices.insert(indices.end(), r_indices.begin(), r_indices.end());
@@ -147,13 +183,21 @@ public:
 		// Bind the pipeline
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *_pipeline);
 
-		// Bind the buffers
-		vk::DeviceSize offset = 0;
-		cmd.bindVertexBuffers(0, *_b_vertices.buffer, {offset});
-		cmd.bindIndexBuffer(*_b_indices.buffer, 0, vk::IndexType::eUint32);
+		// Draw each rectangle
+		for (int i = 0; i < push_constants.size(); i++) {
+			// Bind the buffers
+			cmd.bindVertexBuffers(0, *_b_vertices.buffer, {v_offsets[i]});
+			cmd.bindIndexBuffer(*_b_indices.buffer, i_offsets[i], vk::IndexType::eUint32);
 
-		// Draw
-		cmd.drawIndexed(indices.size(), 1, 0, 0, 0);
+			// Bind the push constants
+			cmd.pushConstants <PushConstants> (*_ppl,
+				vk::ShaderStageFlagBits::eFragment,
+				0, push_constants[i]
+			);
+
+			// Draw
+			cmd.drawIndexed(counts[i], 1, 0, 0, 0);
+		}
 	}
 };
 

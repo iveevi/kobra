@@ -1,3 +1,5 @@
+echo "Compiling shaders..."
+
 # Create binary directories
 mkdir -p bin bin/gui bin/generic bin/raster
 

@@ -23,6 +23,8 @@ App::App(const vk::raii::PhysicalDevice &phdev_,
 	device = make_device(phdev, queue_family, extensions);
 	swapchain = Swapchain {phdev, device, surface, window.extent, queue_family};
 
+	KOBRA_LOG_FUNC(ok) << "Swapchain format: " << vk::to_string(swapchain.format) << std::endl;
+
 	// GLFW things
 	glfwSetWindowUserPointer(window.handle, &io);
 	glfwSetMouseButtonCallback(window.handle, &io::mouse_button_callback);

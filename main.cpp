@@ -31,8 +31,8 @@ struct ECSApp : public BaseApp {
 
 	Scene scene;
 
-	Entity camera;
 	Button button;
+	Entity camera;
 
 	ECSApp(const vk::raii::PhysicalDevice &phdev, const std::vector <const char *> &extensions)
 			: BaseApp(phdev, "ECSApp", {1000, 1000}, extensions, vk::AttachmentLoadOp::eLoad),
@@ -42,9 +42,41 @@ struct ECSApp : public BaseApp {
 			shape_renderer(get_context(), render_pass),
 			panel(get_context(), scene.ecs, io) {
 		scene.load(get_device(), scene_path);
-		raytracer.environment_map(scene.p_environment_map);
-		// raytracer.environment_map("resources/skies/background_1.jpg");
+		// raytracer.environment_map(scene.p_environment_map);
+		raytracer.environment_map("resources/skies/background_1.jpg");
+
+		// Camera
 		camera = scene.ecs.get_entity("Camera");
+
+		// Button
+		auto main_handler = [](void *) {
+			std::cout << "Button pressed (main handler)" << std::endl;
+		};
+
+		auto drag_handler = [](void *user, glm::vec2 dpos) {
+			auto *app = static_cast <ECSApp *> (user);
+			Button &button = app->button;
+
+			button.shape().min -= dpos;
+			button.shape().max -= dpos;
+		};
+
+		Button::Args button_args {
+			.min = {100, 100},
+			.max = {200, 200},
+			.radius = 0.01f,
+			.border_width = 0.01f,
+
+			.idle = {1.0f, 0.0f, 0.0f},
+			.hover = {0.0f, 1.0f, 0.0f},
+			.pressed = {0.0f, 0.0f, 1.0f},
+
+			.on_click = {{nullptr, main_handler}},
+			.on_drag = {{this, drag_handler}}
+		};
+
+		// TODO: ui namespace and directory
+		button = Button(io.mouse_events, button_args);
 
 		// Input callbacks
 		io.mouse_events.subscribe(mouse_callback, this);
@@ -52,7 +84,7 @@ struct ECSApp : public BaseApp {
 		scene.ecs.info <Mesh> ();
 	}
 
-	int mode = 1;	// 0 for raster, 1 for raytracer
+	int mode = 0;	// 0 for raster, 1 for raytracer
 	bool tab_pressed = false;
 
 	void active_input() {
@@ -109,7 +141,6 @@ struct ECSApp : public BaseApp {
 		};
 
 		std::vector <Rect> rects {
-			Rect {.min = {500, 500}, .max = {600, 600}, .color = {1, 0, 0}},
 			button.shape()
 		};
 
@@ -155,6 +186,7 @@ struct ECSApp : public BaseApp {
 		);
 
 		font_renderer.render(cmd, texts);
+		shape_renderer.render(cmd, rects);
 
 		cmd.endRenderPass();
 

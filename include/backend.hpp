@@ -1333,14 +1333,20 @@ inline vk::raii::Pipeline make_graphics_pipeline(const GraphicsPipelineInfo &inf
 	};
 
 	// Color blend state
-	vk::PipelineColorBlendAttachmentState color_blend_attachment {
-		VK_FALSE, vk::BlendFactor::eZero, vk::BlendFactor::eZero,
-		vk::BlendOp::eAdd, vk::BlendFactor::eZero, vk::BlendFactor::eZero,
-		vk::BlendOp::eAdd, vk::ColorComponentFlagBits::eR |
-			vk::ColorComponentFlagBits::eG |
-			vk::ColorComponentFlagBits::eB |
-			vk::ColorComponentFlagBits::eA
-	};
+	vk::PipelineColorBlendAttachmentState color_blend_attachment;
+
+	color_blend_attachment.colorWriteMask = vk::ColorComponentFlagBits::eR
+			| vk::ColorComponentFlagBits::eG
+			| vk::ColorComponentFlagBits::eB
+			| vk::ColorComponentFlagBits::eA;
+
+	color_blend_attachment.blendEnable = VK_TRUE;
+	color_blend_attachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+	color_blend_attachment.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+	color_blend_attachment.colorBlendOp = vk::BlendOp::eAdd;
+	color_blend_attachment.srcAlphaBlendFactor = vk::BlendFactor::eSrcAlpha;
+	color_blend_attachment.dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+	color_blend_attachment.alphaBlendOp = vk::BlendOp::eSubtract;
 
 	vk::PipelineColorBlendStateCreateInfo color_blend_info {
 		{}, VK_FALSE, vk::LogicOp::eCopy, 1, &color_blend_attachment,

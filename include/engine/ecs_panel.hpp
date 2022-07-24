@@ -73,7 +73,7 @@ public:
 				.hover = {0.7, 0.7, 0.9},
 				.pressed = {0.9, 0.9, 0.9},
 
-				.handlers = {{nullptr, handler}}
+				.on_click = {{nullptr, handler}}
 			};
 
 			buttons[i] = Button(io->mouse_events, bargs);

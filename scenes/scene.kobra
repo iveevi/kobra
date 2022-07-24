@@ -66,12 +66,12 @@ rotation: 0.000000 0.000000 70.000000
 scale: 2.000000 0.010000 2.000000
 
 [MATERIAL]
-diffuse: 0.00000 0.00000 0.00000
-specular: 1.000000 1.000000 1.000000
+diffuse: 0.50000 0.50000 0.50000
+specular: 0.500000 0.500000 0.500000
 emission: 0.000000 0.000000 0.000000
 ambient: 0.200000 0.200000 0.200000
 shininess: 1.000000
-roughness: 0.000000
+roughness: 0.001000
 refraction: 1.000000
 albedo_texture: 0
 normal_texture: 0
