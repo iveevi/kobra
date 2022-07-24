@@ -1,5 +1,5 @@
-#ifndef KOBRA_BUTTON_H_
-#define KOBRA_BUTTON_H_
+#ifndef KOBRA_UI_BUTTON_H_
+#define KOBRA_UI_BUTTON_H_
 
 // Standard headers
 #include <memory>
@@ -9,10 +9,12 @@
 #include <glm/gtx/string_cast.hpp>
 
 // Engine headers
-#include "io/event.hpp"
+#include "../io/event.hpp"
 #include "shapes.hpp"
 
 namespace kobra {
+
+namespace ui {
 
 // Button class
 // TODO: template on shapes?
@@ -168,7 +170,9 @@ public:
 	}
 };
 
-using ButtonPtr = std::shared_ptr <Button>;
+}
+
+using ButtonPtr = std::shared_ptr <ui::Button>;
 
 }
 

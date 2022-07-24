@@ -3,7 +3,7 @@
 
 // Engine headers
 #include "../app.hpp"
-#include "../button.hpp"
+#include "../ui/button.hpp"
 #include "../ecs.hpp"
 #include "../layers/font_renderer.hpp"
 #include "../layers/shape_renderer.hpp"
@@ -16,7 +16,7 @@ class ECSPanel {
 	const ECS		*ecs;
 	layers::FontRenderer	font_renderer;
 	layers::ShapeRenderer	shape_renderer;
-	std::vector <Button>	buttons;
+	std::vector <ui::Button>	buttons;
 	App::IO			*io;
 
 	// Vulkan resources
@@ -38,8 +38,8 @@ public:
 
 	// Render
 	void render(const vk::raii::CommandBuffer &cmd, const vk::raii::Framebuffer &framebuffer, const vk::Extent2D &extent) {
-		std::vector <Text> texts;
-		std::vector <Rect> rects;
+		std::vector <ui::Text> texts;
+		std::vector <ui::Rect> rects;
 
 		// Add all names
 		size_t x = 10;
@@ -54,7 +54,7 @@ public:
 
 			// TODO: method to calculate text dimensions (font
 			// renderer method)
-			Text text {.text = name, .anchor = {x, y}, .size = 0.6f};
+			ui::Text text {.text = name, .anchor = {x, y}, .size = 0.6f};
 			text.color = {0.7, 0.7, 0.9};
 			y += font_renderer.size(text).y;
 
@@ -65,7 +65,7 @@ public:
 				std::cout << "Clicked on (text) entitiy \"" << name << "\"" << std::endl;
 			};
 
-			Button::Args bargs {
+			ui::Button::Args bargs {
 				.min = {x, cy},
 				.max = {x + font_renderer.size(text).x, y},
 
@@ -76,7 +76,7 @@ public:
 				.on_click = {{nullptr, handler}}
 			};
 
-			buttons[i] = Button(io->mouse_events, bargs);
+			buttons[i] = ui::Button(io->mouse_events, bargs);
 			rects.push_back(buttons[i].shape());
 
 			y += 10;

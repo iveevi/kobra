@@ -10,7 +10,7 @@
 // Engine headers
 #include "../backend.hpp"
 #include "../gui/font.hpp" // TODO: bring to this directory
-#include "../text.hpp"
+#include "../ui/text.hpp"
 
 namespace kobra {
 
@@ -42,7 +42,7 @@ class FontRenderer {
 	// Construct text
 	using GlyphMap = std::map <char, std::vector <gui::Glyph>>;
 
-	void construct(GlyphMap &gmap, const Text &text) {
+	void construct(GlyphMap &gmap, const ui::Text &text) {
 		static const float factor = 1/1000.0f;
 
 		glm::vec2 pos = text.anchor;
@@ -192,7 +192,7 @@ public:
 	}
 
 	// Dimension of text in pixels
-	glm::vec2 size(const Text &text) {
+	glm::vec2 size(const ui::Text &text) {
 		static const float factor = 1/1000.0f;
 
 		glm::vec2 pos = text.anchor;
@@ -262,10 +262,10 @@ public:
 
 	// Render texts, assuming the render pass is active
 	// TODO: should also pass in extent
-	void render(const vk::raii::CommandBuffer &cmd, const std::vector <Text> &texts) {
+	void render(const vk::raii::CommandBuffer &cmd, const std::vector <ui::Text> &texts) {
 		// Map of character to glyphs
 		GlyphMap glyph_map;
-		for (const Text &text : texts)
+		for (const ui::Text &text : texts)
 			construct(glyph_map, text);
 
 		// Process each character set

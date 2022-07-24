@@ -1,6 +1,6 @@
 #include "include/app.hpp"
 #include "include/backend.hpp"
-#include "include/button.hpp"
+#include "include/ui/button.hpp"
 #include "include/common.hpp"
 #include "include/ecs.hpp"
 #include "include/engine/ecs_panel.hpp"
@@ -31,7 +31,7 @@ struct ECSApp : public BaseApp {
 
 	Scene scene;
 
-	Button button;
+	ui::Button button;
 	Entity camera;
 
 	ECSApp(const vk::raii::PhysicalDevice &phdev, const std::vector <const char *> &extensions)
@@ -55,13 +55,13 @@ struct ECSApp : public BaseApp {
 
 		auto drag_handler = [](void *user, glm::vec2 dpos) {
 			auto *app = static_cast <ECSApp *> (user);
-			Button &button = app->button;
+			ui::Button &button = app->button;
 
 			button.shape().min -= dpos;
 			button.shape().max -= dpos;
 		};
 
-		Button::Args button_args {
+		ui::Button::Args button_args {
 			.min = {100, 100},
 			.max = {200, 200},
 			.radius = 0.01f,
@@ -76,7 +76,7 @@ struct ECSApp : public BaseApp {
 		};
 
 		// TODO: ui namespace and directory
-		button = Button(io.mouse_events, button_args);
+		button = ui::Button(io.mouse_events, button_args);
 
 		// Input callbacks
 		io.mouse_events.subscribe(mouse_callback, this);
@@ -132,15 +132,15 @@ struct ECSApp : public BaseApp {
 		if (frame_time > 0)
 			fps = (fps + 1.0f/frame_time) / 2.0f;
 
-		std::vector <Text> texts {
-			Text {
+		std::vector <ui::Text> texts {
+			ui::Text {
 				.text = common::sprintf("%.2f fps", fps),
 				.anchor = {10, 10},
 				.size = 1.0f
 			}
 		};
 
-		std::vector <Rect> rects {
+		std::vector <ui::Rect> rects {
 			button.shape()
 		};
 

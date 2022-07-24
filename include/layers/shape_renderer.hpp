@@ -3,7 +3,7 @@
 
 // Engine headers
 #include "../backend.hpp"
-#include "../shapes.hpp"
+#include "../ui/shapes.hpp"
 
 namespace kobra {
 
@@ -119,7 +119,7 @@ public:
 
 	// Render
 	// TODO: pass extent
-	void render(const vk::raii::CommandBuffer &cmd, const std::vector <Rect> &rects) {
+	void render(const vk::raii::CommandBuffer &cmd, const std::vector <ui::Rect> &rects) {
 		std::vector <Vertex> vertices;
 		std::vector <uint32_t> indices;
 

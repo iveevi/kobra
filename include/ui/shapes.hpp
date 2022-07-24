@@ -1,10 +1,12 @@
-#ifndef KOBRA_SHAPES_H_
-#define KOBRA_SHAPES_H_
+#ifndef KOBRA_UI_SHAPES_H_
+#define KOBRA_UI_SHAPES_H_
 
 // GLM headers
 #include <glm/glm.hpp>
 
 namespace kobra {
+
+namespace ui {
 
 // Rectangle
 struct Rect {
@@ -14,6 +16,8 @@ struct Rect {
 	float radius {0.0f};
 	float border_width {0.0f};
 };
+
+}
 
 }
 

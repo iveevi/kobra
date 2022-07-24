@@ -1,5 +1,5 @@
-#ifndef KOBRA_TEXT_H_
-#define KOBRA_TEXT_H_
+#ifndef KOBRA_UI_TEXT_H_
+#define KOBRA_UI_TEXT_H_
 
 // Standard headers
 #include <string>
@@ -17,6 +17,8 @@ class FontRenderer;
 
 }
 
+namespace ui {
+
 // Text object
 struct Text {
 	std::string	text = "text";
@@ -28,7 +30,9 @@ struct Text {
 	friend class layers::FontRenderer;
 };
 
-using TextPtr = std::shared_ptr <Text>;
+}
+
+using TextPtr = std::shared_ptr <ui::Text>;
 
 }
 
