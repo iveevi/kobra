@@ -256,8 +256,8 @@ public:
 
 		// Return dimension
 		return {
-			_ctx.extent.width * (maxx - minx),
-			_ctx.extent.height * (maxy - miny)
+			_ctx.extent.width * (maxx - minx)/2.0f,
+			_ctx.extent.height * (maxy - miny)/2.0f
 		};
 	}
 

@@ -33,11 +33,7 @@ struct ECSApp : public BaseApp {
 	Scene scene;
 
 	// TODO: will later also need a project manager
-
-	ui::Button button;
 	Entity camera;
-
-	ui::Slider slider;
 
 	static constexpr glm::vec2 window_size {1920, 1200};
 	static constexpr float scene_graph_width = 400;
@@ -49,6 +45,114 @@ struct ECSApp : public BaseApp {
 		window_size.y - project_explorer_height
 	};
 
+	// Scene graph
+	struct SceneGraph {
+		ui::Rect r_background;
+
+		std::vector <ui::Button> b_entities;
+
+		ECS &ecs;
+		layers::FontRenderer &fr;
+		io::MouseEventQueue &mouse_events;
+
+		SceneGraph(ECS &ecs_, layers::FontRenderer &fr_, io::MouseEventQueue &mouse_events_)
+				: ecs(ecs_), fr(fr_), mouse_events(mouse_events_) {
+			r_background = ui::Rect {
+				.min = {5, 5},
+				.max = {scene_graph_width - 5, window_size.y - 5},
+				.color = glm::vec3 {0.6f, 0.7, 0.6f},
+				.radius = 0.01f
+			};
+		}
+
+		int selected_entity = -1;
+		std::vector <ui::Rect> shapes() {
+			// TODO: rectangle border color
+			std::vector <ui::Rect> shapes {r_background};
+
+			// TODO: assuming that ECS didnt change if the size
+			// didnt
+			if (b_entities.size() != ecs.size()) {
+				b_entities.resize(ecs.size());
+
+				float x = 10;
+				float y = 10;
+
+				for (int i = 0; i < ecs.size(); i++) {
+					auto &e = ecs.get_entity(i);
+
+					struct _on_click {
+						int index;
+
+						void operator()(void *user) {
+							int *i = (int *) user;
+							*i = index;
+						}
+					};
+
+					ui::Button::Args button_args {
+						.min = {10, y},
+						.max = {scene_graph_width - 10, y + 30.0f},
+						.radius = 0.005f,
+
+						.idle = glm::vec3 {0.6, 0.7, 0.6},
+						.hover = glm::vec3 {0.7, 0.8, 0.7},
+						.pressed = glm::vec3 {0.65, 0.8, 0.65},
+
+						.on_click = {{&selected_entity, _on_click {i}}},
+					};
+
+					b_entities[i] = ui::Button(mouse_events, button_args);
+
+					y += 40.0f;
+				}
+			}
+
+			for (int i = 0; i < b_entities.size(); i++) {
+				auto s = b_entities[i].shape();
+
+				if (i == selected_entity)
+					s.color = glm::vec3 {0.65, 0.8, 0.65};
+
+				shapes.push_back(s);
+			}
+
+			return shapes;
+		}
+
+		std::vector <ui::Text> texts() {
+			std::vector <ui::Text> texts;
+
+			float x = 10;
+			float y = 10;
+
+			float minh = 30.0f;
+
+			for (int i = 0; i < ecs.size(); i++) {
+				auto &e = ecs.get_entity(i);
+
+				auto t = ui::Text {
+					.text = e.name,
+					.anchor = {x + 5.0f, y},
+					.color = glm::vec3 {0.5, 0.5, 1.0},
+					.size = 0.4f
+				};
+
+				// Center from y to y + minh
+				float h = fr.size(t).y;
+				t.anchor.y = y + (minh - h) / 2.0f;
+
+				y += 40.0f;
+
+				texts.push_back(t);
+			}
+
+			return texts;
+		}
+	};
+
+	SceneGraph scene_graph;
+
 	ECSApp(const vk::raii::PhysicalDevice &phdev, const std::vector <const char *> &extensions)
 			: BaseApp(phdev, "ECSApp",
 				vk::Extent2D {(uint32_t) window_size.x, (uint32_t) window_size.y},
@@ -58,57 +162,14 @@ struct ECSApp : public BaseApp {
 			raytracer(get_context(), &sync_queue, vk::AttachmentLoadOp::eClear),
 			font_renderer(get_context(), render_pass, "resources/fonts/noto_sans.ttf"),
 			shape_renderer(get_context(), render_pass),
-			panel(get_context(), scene.ecs, io) {
+			panel(get_context(), scene.ecs, io),
+			scene_graph(scene.ecs, font_renderer, io.mouse_events) {
 		scene.load(get_device(), scene_path);
 		// raytracer.environment_map(scene.p_environment_map);
 		raytracer.environment_map("resources/skies/background_1.jpg");
 
 		// Camera
 		camera = scene.ecs.get_entity("Camera");
-
-		// Button
-		auto main_handler = [](void *) {
-			std::cout << "Button pressed (main handler)" << std::endl;
-		};
-
-		auto drag_handler = [](void *user, glm::vec2 dpos) {
-			auto *app = static_cast <ECSApp *> (user);
-			ui::Button &button = app->button;
-
-			button.shape().min += dpos;
-			button.shape().max += dpos;
-		};
-
-		ui::Button::Args button_args {
-			.min = {100, 100},
-			.max = {200, 200},
-			.radius = 0.01f,
-			.border_width = 0.01f,
-
-			.idle = {1.0f, 0.0f, 0.0f},
-			.hover = {0.0f, 1.0f, 0.0f},
-			.pressed = {0.0f, 0.0f, 1.0f},
-
-			.on_click = {{nullptr, main_handler}},
-			.on_drag = {{this, drag_handler}}
-		};
-
-		// TODO: ui namespace and directory
-		button = ui::Button(io.mouse_events, button_args);
-
-		// Slider
-		ui::Slider::Args slider_args {
-			.percent = 0.5f,
-			.max = {400, 360},
-			.min = {100, 340},
-			.name = "Slider",
-			.font_renderer = &font_renderer,
-			.value_func = [](float x) {
-				return log(x);
-			}
-		};
-
-		slider = ui::Slider(io.mouse_events, slider_args);
 
 		// Input callbacks
 		io.mouse_events.subscribe(mouse_callback, this);
@@ -161,28 +222,29 @@ struct ECSApp : public BaseApp {
 
 	void record(const vk::raii::CommandBuffer &cmd,
 			const vk::raii::Framebuffer &framebuffer) override {
+		// Time things
 		if (frame_time > 0)
 			fps = (fps + 1.0f/frame_time) / 2.0f;
 
+		time += frame_time;
+
+		// Text things
 		std::vector <ui::Text> texts {
 			ui::Text {
 				.text = common::sprintf("%.2f fps", fps),
-				.anchor = {10, 10},
+				.anchor = {extent.width - 200, 10},
 				.size = 1.0f
 			},
 		};
 
-		for (auto &s : slider.texts())
-			texts.push_back(s);
+		for (auto &t : scene_graph.texts())
+			texts.push_back(t);
 
-		std::vector <ui::Rect> rects {
-			button.shape(),
-		};
+		// Shape things
+		std::vector <ui::Rect> rects {};
 
-		for (auto &r : slider.shapes())
-			rects.push_back(r);
-
-		time += frame_time;
+		for (auto &s : scene_graph.shapes())
+			rects.push_back(s);
 
 		// Input
 		active_input();
@@ -223,8 +285,8 @@ struct ECSApp : public BaseApp {
 			vk::SubpassContents::eInline
 		);
 
-		font_renderer.render(cmd, texts);
 		shape_renderer.render(cmd, rects);
+		font_renderer.render(cmd, texts);
 
 		// TODO: ui layer  will have a push interface each frame
 

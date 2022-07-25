@@ -151,14 +151,20 @@ public:
 		_button = other._button;
 		_on_click = std::move(other._on_click);
 		_on_drag = std::move(other._on_drag);
-		_queue = other._queue;
 
-		if (_queue) {
-			// Unsubscribe from other's mouse events
-			_queue->unsubscribe(&other);
+		// If queues are the same, only unsubscribe from the other
+		other._queue->unsubscribe(&other);
+
+		if (other._queue != _queue) {
+			// If also has a queue, first unsubscribe
+			if (_queue)
+				_queue->unsubscribe(this);
+
+			_queue = other._queue;
 
 			// Subscribe to this's mouse events
-			_queue->subscribe(_event_handler, this);
+			if (_queue)
+				_queue->subscribe(_event_handler, this);
 		}
 
 		return *this;
