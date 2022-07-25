@@ -107,7 +107,13 @@ public:
 
 	// Constructor
 	Button(io::MouseEventQueue &mouse_events, Args args)
-			: _rect {args.min, args.max, args.idle, args.radius, args.border_width},
+			: _rect {
+				.min = args.min,
+				.max = args.max,
+				.color = args.idle,
+				.radius = args.radius,
+				.border_width = args.border_width
+			},
 			_idle {args.idle},
 			_hover {args.hover},
 			_pressed {args.pressed},
@@ -186,12 +192,12 @@ public:
 	}
 
 	// Get the button's shape
-	Rect &shape() {
-		return _rect;
+	Rect *shape() {
+		return &_rect;
 	}
 
-	const Rect &shape() const {
-		return _rect;
+	const Rect *shape() const {
+		return &_rect;
 	}
 };
 

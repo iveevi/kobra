@@ -39,7 +39,7 @@ public:
 	// Render
 	void render(const vk::raii::CommandBuffer &cmd, const vk::raii::Framebuffer &framebuffer, const vk::Extent2D &extent) {
 		std::vector <ui::Text> texts;
-		std::vector <ui::Rect> rects;
+		std::vector <ui::Rect *> rects;
 
 		// Add all names
 		size_t x = 10;

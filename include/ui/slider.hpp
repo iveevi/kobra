@@ -61,8 +61,8 @@ private:
 		slider->_value += dpos.x/(max.x - min.x);
 		slider->_value = glm::clamp(slider->_value, 0.0f, 1.0f);
 
-		button.shape().min.x = min.x + slider->_value * (max.x - min.x) - width/2.0f;
-		button.shape().max.x = min.x + slider->_value * (max.x - min.x) + width/2.0f;
+		button.shape()->min.x = min.x + slider->_value * (max.x - min.x) - width/2.0f;
+		button.shape()->max.x = min.x + slider->_value * (max.x - min.x) + width/2.0f;
 
 		slider->_t_value.text = common::sprintf("%.2f", slider->_value_func(slider->_value));
 		slider->_t_value.anchor.x = max.x - slider->_fr->size(slider->_t_value).x/2.0f + width/2.0f;
@@ -198,11 +198,8 @@ public:
 	}
 
 	// Shapes
-	std::vector <ui::Rect> shapes() {
-		std::vector <ui::Rect> shapes;
-		shapes.push_back(_rect);
-		shapes.push_back(_button.shape());
-		return shapes;
+	std::vector <ui::Rect *> shapes() {
+		return {&_rect, _button.shape()};
 	}
 
 	// Text

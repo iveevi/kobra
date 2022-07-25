@@ -2,7 +2,6 @@ default_compiler: nvcc
 default_standard: c++17
 
 definitions:
-  - tinyfd_source: 'thirdparty/tinyfiledialogs/tinyfiledialogs.c'
   - kobra_source: 'source/app.cpp,
     source/backend.cpp,
     source/bvh.cpp,
@@ -21,6 +20,9 @@ definitions:
     source/texture_manager.cpp,
     source/timer.cpp,
     source/vertex.cpp'
+  - tinyfd_source: 'thirdparty/tinyfiledialogs/tinyfiledialogs.c'
+  - glslang_source: 'thirdparty/glslang/SPIRV/GlslangToSpv.cpp,
+    thirdparty/glslang/StandAlone/ResourceLimits.cpp'
   - includes: 'thirdparty,
     thirdparty/freetype/include,
     thirdparty/glm,
@@ -34,26 +36,33 @@ definitions:
     avcodec,
     avformat,
     avutil,
-    freetype'
+    freetype,
+    glslang,
+    SPIRV,
+    OSDependent,
+    OGLCompiler'
+
+# TODO: compile glslang into shader library berfore any of the next steps
+# i.e. prebuild section
 
 builds:
   - kobra:
-    - sources: main.cpp, kobra_source, tinyfd_source
+    - sources: main.cpp, kobra_source, tinyfd_source, glslang_source
     - idirs: includes
     - flags: '-std=c++17'
     - libraries: libs
   - kobra_release:
-    - sources: main.cpp, kobra_source, tinyfd_source
+    - sources: main.cpp, kobra_source, tinyfd_source, glslang_source
     - idirs: includes
     - flags: '-O3 -std=c++17'
     - libraries: libs
   - kobra_debug:
-    - sources: main.cpp, kobra_source, tinyfd_source
+    - sources: main.cpp, kobra_source, tinyfd_source, glslang_source
     - idirs: includes
     - libraries: libs
     - flags: '-std=c++17 -g'
   - kobra_wall:
-    - sources: main.cpp, kobra_source, tinyfd_source
+    - sources: main.cpp, kobra_source, tinyfd_source, glslang_source
     - idirs: includes
     - libraries: libs
     - flags: '-std=c++17 -Wall -Werror'

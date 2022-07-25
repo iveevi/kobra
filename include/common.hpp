@@ -25,6 +25,15 @@ inline bool file_exists(const std::string &file)
 	return f.good();
 }
 
+// Read file into a string
+inline std::string read_file(const std::string &file)
+{
+	std::ifstream f(file);
+	std::stringstream s;
+	s << f.rdbuf();
+	return s.str();
+}
+
 // Read file glob
 inline std::vector <unsigned int> read_glob(const std::string &path)
 {

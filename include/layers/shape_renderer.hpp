@@ -22,9 +22,51 @@ class ShapeRenderer {
 	// Vulkan context
 	Context				_ctx;
 
+	const vk::raii::RenderPass	*_render_pass = nullptr;
+
 	// Pipline and descriptor set layout
 	vk::raii::Pipeline		_pipeline = nullptr;
 	vk::raii::PipelineLayout	_ppl = nullptr;
+
+	// Custom pipelines
+	std::vector <vk::raii::Pipeline>
+					_custom_pipelines;
+
+	// Create new custom pipeline
+	vk::raii::Pipeline *_mk_custom_pipeline(ShaderProgram &shader_program) {
+		// Load the shaders
+		auto vertex_shader = make_shader_module(*_ctx.device, "shaders/bin/ui/basic_vert.spv");
+		auto fragment_shader = shader_program.compile(*_ctx.device);
+		if (!fragment_shader)
+			return nullptr;
+
+		auto pipeline_cache = vk::raii::PipelineCache {*_ctx.device, {}};
+
+		// Vertex binding and attribute descriptions
+		auto binding_description = Vertex::vertex_binding();
+		auto attribute_descriptions = Vertex::vertex_attributes();
+
+		// Create the graphics pipeline
+		GraphicsPipelineInfo grp_info {
+			.device = *_ctx.device,
+			.render_pass = *_render_pass,
+
+			.vertex_shader = std::move(vertex_shader),
+			.fragment_shader = std::move(*fragment_shader),
+
+			.vertex_binding = binding_description,
+			.vertex_attributes = attribute_descriptions,
+
+			.pipeline_layout = _ppl,
+			.pipeline_cache = pipeline_cache,
+
+			.depth_test = false,
+			.depth_write = false,
+		};
+
+		_custom_pipelines.emplace_back(make_graphics_pipeline(grp_info));
+		return &_custom_pipelines.back();
+	}
 
 	// Vertex type
 	struct Vertex {
@@ -55,7 +97,7 @@ public:
 
 	// Constructor
 	ShapeRenderer(const Context &ctx, const vk::raii::RenderPass &render_pass)
-			: _ctx(ctx) {
+			: _ctx(ctx), _render_pass(&render_pass) {
 		// Push constants
 		auto pcr = vk::PushConstantRange {
 			vk::ShaderStageFlagBits::eFragment,
@@ -119,7 +161,7 @@ public:
 
 	// Render
 	// TODO: pass extent
-	void render(const vk::raii::CommandBuffer &cmd, const std::vector <ui::Rect> &rects, const RenderArea &ra = {{-1, -1}, {-1, -1}}) {
+	void render(const vk::raii::CommandBuffer &cmd, const std::vector <ui::Rect *> &rects, const RenderArea &ra = {{-1, -1}, {-1, -1}}) {
 		// Apply render area
 		ra.apply(cmd, _ctx.extent);
 
@@ -136,16 +178,16 @@ public:
 		std::vector <int> counts;
 		std::vector <PushConstants> push_constants;
 
-		for (const auto &rect : rects) {
-			glm::vec2 min = rect.min;
-			glm::vec2 max = rect.max;
+		for (auto *rect : rects) {
+			glm::vec2 min = rect->min;
+			glm::vec2 max = rect->max;
 			glm::vec2 dim = {_ctx.extent.width, _ctx.extent.height};
 
 			// Conver to NDC
 			min = 2.0f * min/dim - 1.0f;
 			max = 2.0f * max/dim - 1.0f;
 
-			glm::vec3 color = rect.color;
+			glm::vec3 color = rect->color;
 
 			std::vector <uint32_t> r_indices {0, 1, 2, 0, 2, 3};
 			std::vector <Vertex> r_vertices {
@@ -164,8 +206,8 @@ public:
 				.center = (min + max) / 2.0f,
 				.width = (max - min).x,
 				.height = (max - min).y,
-				.radius = rect.radius,
-				.border_width = rect.border_width
+				.radius = rect->radius,
+				.border_width = rect->border_width
 			};
 
 			push_constants.push_back(pc);
@@ -173,17 +215,39 @@ public:
 			// Append to the vectors
 			vertices.insert(vertices.end(), r_vertices.begin(), r_vertices.end());
 			indices.insert(indices.end(), r_indices.begin(), r_indices.end());
+
+			auto &sp = rect->shader_program;
+			if (sp.valid() && !sp.failed() && sp._pipeline == nullptr) {
+				KOBRA_LOG_FUNC(warn) << "Rect has custom shader, creating pipeline for it...\n";
+				auto *ppl = _mk_custom_pipeline(sp);
+				sp._pipeline = ppl;
+			}
 		}
 
 		// Upload to the buffers
 		_b_vertices.upload(vertices);
 		_b_indices.upload(indices);
 
-		// Bind the pipeline
-		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *_pipeline);
-
 		// Draw each rectangle
-		for (int i = 0; i < push_constants.size(); i++) {
+		for (int i = 0; i < rects.size(); i++) {
+			// Bind the correct pipeline
+			auto &sp = rects[i]->shader_program;
+			if (sp.failed())
+				continue;
+
+			if (sp.valid() && sp._pipeline != nullptr) {
+				if (!sp._pipeline) {
+					KOBRA_LOG_FUNC(error) << "Rect has custom shader, but its pipeline is invalid!\n";
+					continue;
+				}
+
+				// Custom pipeline
+				cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, **sp._pipeline);
+			} else {
+				// Default pipeline
+				cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *_pipeline);
+			}
+
 			// Bind the buffers
 			cmd.bindVertexBuffers(0, *_b_vertices.buffer, {v_offsets[i]});
 			cmd.bindIndexBuffer(*_b_indices.buffer, i_offsets[i], vk::IndexType::eUint32);

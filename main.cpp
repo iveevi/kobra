@@ -16,11 +16,36 @@
 #include "include/ui/button.hpp"
 #include "include/ui/slider.hpp"
 #include "tinyfiledialogs.h"
+#include <glslang/Public/ShaderLang.h>
 
 using namespace kobra;
 
 // Scene path
 std::string scene_path = "scenes/scene.kobra";
+
+constexpr char color_shader[] = R"(
+#version 450
+
+layout (location = 0) in vec3 in_color;
+layout (location = 1) in vec2 in_uv;
+
+layout(location = 0) out vec4 fragment;
+
+layout (push_constant) uniform PushConstant {
+	vec2 center;
+	float width;
+	float height;
+	float radius;
+	float thickness;
+};
+
+// Main function
+void main()
+{
+	vec2 uv = (in_uv - center);
+	fragment = vec4(1, 0, 0, 1);
+}
+)";
 
 // Test app
 struct ECSApp : public BaseApp {
@@ -35,7 +60,7 @@ struct ECSApp : public BaseApp {
 	// TODO: will later also need a project manager
 	Entity camera;
 
-	static constexpr glm::vec2 window_size {1920, 1200};
+	static constexpr glm::vec2 window_size {1900, 1100};
 	static constexpr float scene_graph_width = 400;
 	static constexpr float component_panel_width = 400;
 	static constexpr float project_explorer_height = 300;
@@ -66,9 +91,9 @@ struct ECSApp : public BaseApp {
 		}
 
 		int selected_entity = -1;
-		std::vector <ui::Rect> shapes() {
+		std::vector <ui::Rect *> shapes() {
 			// TODO: rectangle border color
-			std::vector <ui::Rect> shapes {r_background};
+			std::vector <ui::Rect *> shapes {&r_background};
 
 			// TODO: assuming that ECS didnt change if the size
 			// didnt
@@ -112,7 +137,7 @@ struct ECSApp : public BaseApp {
 				auto s = b_entities[i].shape();
 
 				if (i == selected_entity)
-					s.color = glm::vec3 {0.65, 0.8, 0.65};
+					s->color = glm::vec3 {0.65, 0.8, 0.65};
 
 				shapes.push_back(s);
 			}
@@ -151,6 +176,7 @@ struct ECSApp : public BaseApp {
 		}
 	};
 
+	ui::Rect color_rect;
 	SceneGraph scene_graph;
 
 	ECSApp(const vk::raii::PhysicalDevice &phdev, const std::vector <const char *> &extensions)
@@ -170,6 +196,22 @@ struct ECSApp : public BaseApp {
 
 		// Camera
 		camera = scene.ecs.get_entity("Camera");
+
+		// TODO: set camera properties (aspect)
+		camera.get <Camera> ().tunings.aspect = (render_max.x - render_min.x)/(render_max.y - render_min.y);
+
+		// Rect with custom shader program
+		ShaderProgram program;
+		program.set_source(color_shader);
+
+		color_rect = ui::Rect {
+			.min = {1000, 200},
+			.max = {1100, 300},
+			.color = glm::vec3 {0.6f, 0.7, 0.6f},
+			.radius = 0.01f
+		};
+
+		color_rect.shader_program = program;
 
 		// Input callbacks
 		io.mouse_events.subscribe(mouse_callback, this);
@@ -232,8 +274,8 @@ struct ECSApp : public BaseApp {
 		std::vector <ui::Text> texts {
 			ui::Text {
 				.text = common::sprintf("%.2f fps", fps),
-				.anchor = {extent.width - 200, 10},
-				.size = 1.0f
+				.anchor = {scene_graph_width + 5, 5},
+				.size = 0.4f
 			},
 		};
 
@@ -241,7 +283,9 @@ struct ECSApp : public BaseApp {
 			texts.push_back(t);
 
 		// Shape things
-		std::vector <ui::Rect> rects {};
+		std::vector <ui::Rect *> rects {
+			&color_rect
+		};
 
 		for (auto &s : scene_graph.shapes())
 			rects.push_back(s);

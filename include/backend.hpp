@@ -81,6 +81,7 @@ public:
 	}
 };
 
+// Render area, takes care of viewport and scissors
 struct RenderArea {
 	glm::vec2 min;
 	glm::vec2 max;
