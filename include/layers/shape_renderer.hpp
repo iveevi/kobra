@@ -29,7 +29,7 @@ class ShapeRenderer {
 	vk::raii::PipelineLayout	_ppl = nullptr;
 
 	// Custom pipelines
-	std::vector <vk::raii::Pipeline>
+	std::list <vk::raii::Pipeline>
 					_custom_pipelines;
 
 	// Create new custom pipeline
@@ -64,26 +64,26 @@ class ShapeRenderer {
 			.depth_write = false,
 		};
 
-		_custom_pipelines.emplace_back(make_graphics_pipeline(grp_info));
+		_custom_pipelines.push_back(make_graphics_pipeline(grp_info));
 		return &_custom_pipelines.back();
 	}
 
 	// Vertex type
 	struct Vertex {
 		glm::vec2 pos;
+		glm::vec2 uv;
 		glm::vec3 color;
 
 		// Get Vulkan info for vertex
-		static vk::VertexInputBindingDescription
-				vertex_binding() {
+		static vk::VertexInputBindingDescription vertex_binding() {
 			return {0, sizeof(Vertex), vk::VertexInputRate::eVertex};
 		}
 
-		static std::vector <vk::VertexInputAttributeDescription>
-				vertex_attributes() {
+		static std::vector <vk::VertexInputAttributeDescription> vertex_attributes() {
 			return {
 				{0, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, pos)},
-				{1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color)},
+				{1, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, uv)},
+				{2, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color)}
 			};
 		}
 	};
@@ -191,10 +191,10 @@ public:
 
 			std::vector <uint32_t> r_indices {0, 1, 2, 0, 2, 3};
 			std::vector <Vertex> r_vertices {
-				Vertex {min,				color},
-				Vertex {glm::vec2 {min.x, max.y},	color},
-				Vertex {max,				color},
-				Vertex {glm::vec2 {max.x, min.y},	color}
+				Vertex {min,				{0, 0}, color},
+				Vertex {glm::vec2 {min.x, max.y},	{0, 1}, color},
+				Vertex {max,			   	{1, 1}, color},
+				Vertex {glm::vec2 {max.x, min.y},	{1, 0}, color}
 			};
 
 			// Offsets and centers
@@ -235,8 +235,8 @@ public:
 			if (sp.failed())
 				continue;
 
-			if (sp.valid() && sp._pipeline != nullptr) {
-				if (!sp._pipeline) {
+			if (sp.valid()) {
+				if (sp._pipeline == nullptr) {
 					KOBRA_LOG_FUNC(error) << "Rect has custom shader, but its pipeline is invalid!\n";
 					continue;
 				}

@@ -2,7 +2,7 @@
 
 // Inputs
 layout (location = 0) in vec3 in_color;
-layout (location = 1) in vec2 in_uv;
+layout (location = 2) in vec2 in_position;
 
 // Outputs
 layout(location = 0) out vec4 fragment;
@@ -30,7 +30,7 @@ float sdf_round_box(in vec2 p, in vec2 b, in vec4 r)
 // Main function
 void main()
 {
-	vec2 uv = (in_uv - center);
+	vec2 uv = (in_position - center);
 
 	float d = sdf_round_box(uv, vec2(width, height)/2, vec4(radius));
 	if (d > 0.0f)

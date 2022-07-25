@@ -2,11 +2,13 @@
 
 // Vertex inputs
 layout (location = 0) in vec2 position;
-layout (location = 1) in vec3 color;
+layout (location = 1) in vec2 uv;
+layout (location = 2) in vec3 color;
 
 // Outputs
 layout (location = 0) out vec3 out_color;
 layout (location = 1) out vec2 out_uv;
+layout (location = 2) out vec2 out_position;
 
 // Main function
 void main()
@@ -16,5 +18,6 @@ void main()
 	
 	// Set the outputs
 	out_color = color;
-	out_uv = position;
+	out_uv = uv;
+	out_position = position;
 }

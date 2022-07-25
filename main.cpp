@@ -23,30 +23,6 @@ using namespace kobra;
 // Scene path
 std::string scene_path = "scenes/scene.kobra";
 
-constexpr char color_shader[] = R"(
-#version 450
-
-layout (location = 0) in vec3 in_color;
-layout (location = 1) in vec2 in_uv;
-
-layout(location = 0) out vec4 fragment;
-
-layout (push_constant) uniform PushConstant {
-	vec2 center;
-	float width;
-	float height;
-	float radius;
-	float thickness;
-};
-
-// Main function
-void main()
-{
-	vec2 uv = (in_uv - center);
-	fragment = vec4(1, 0, 0, 1);
-}
-)";
-
 // Test app
 struct ECSApp : public BaseApp {
 	layers::Raster	rasterizer;
@@ -86,7 +62,7 @@ struct ECSApp : public BaseApp {
 				.min = {5, 5},
 				.max = {scene_graph_width - 5, window_size.y - 5},
 				.color = glm::vec3 {0.6f, 0.7, 0.6f},
-				.radius = 0.01f
+				.radius = 0.005f
 			};
 		}
 
@@ -177,6 +153,8 @@ struct ECSApp : public BaseApp {
 	};
 
 	ui::Rect color_rect;
+	ui::Rect hue_rect;
+
 	SceneGraph scene_graph;
 
 	ECSApp(const vk::raii::PhysicalDevice &phdev, const std::vector <const char *> &extensions)
@@ -202,16 +180,25 @@ struct ECSApp : public BaseApp {
 
 		// Rect with custom shader program
 		ShaderProgram program;
-		program.set_source(color_shader);
+		program.set_file("./shaders/ui/color_picker_square.frag", true);
 
 		color_rect = ui::Rect {
-			.min = {1000, 200},
-			.max = {1100, 300},
-			.color = glm::vec3 {0.6f, 0.7, 0.6f},
+			.min = {1600, 200},
+			.max = {1800, 400},
+			.color = glm::vec3 {0, 0, 1},
 			.radius = 0.01f
 		};
 
 		color_rect.shader_program = program;
+
+		hue_rect = ui::Rect {
+			.min = {1600, 400},
+			.max = {1800, 600},
+			.color = glm::vec3 {0, 0, 1},
+			.radius = 0.01f
+		};
+
+		hue_rect.shader_program.set_file("./shaders/ui/color_picker_hue.frag", true);
 
 		// Input callbacks
 		io.mouse_events.subscribe(mouse_callback, this);
@@ -284,7 +271,7 @@ struct ECSApp : public BaseApp {
 
 		// Shape things
 		std::vector <ui::Rect *> rects {
-			&color_rect
+			&color_rect, &hue_rect
 		};
 
 		for (auto &s : scene_graph.shapes())

@@ -29,6 +29,11 @@ inline bool file_exists(const std::string &file)
 inline std::string read_file(const std::string &file)
 {
 	std::ifstream f(file);
+	if (!f.good()) {
+		KOBRA_LOG_FUNC(error) << "Could not open file: " << file << std::endl;
+		return "";
+	}
+
 	std::stringstream s;
 	s << f.rdbuf();
 	return s.str();
