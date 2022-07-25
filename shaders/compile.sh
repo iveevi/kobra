@@ -1,7 +1,7 @@
 echo "Compiling shaders..."
 
 # Create binary directories
-mkdir -p bin bin/gui bin/generic bin/raster
+mkdir -p bin bin/ui bin/generic bin/raster
 
 # Compile GENERIC mode shaders
 # glslc -fshader-stage=compute rt/normal.glsl -o bin/generic/normal.spv
@@ -12,16 +12,16 @@ glslc -fshader-stage=vertex rt/postproc/postproc.vert -o bin/generic/postproc_ve
 glslc -fshader-stage=fragment rt/postproc/postproc.frag -o bin/generic/postproc_frag.spv
 
 # Compile GUI mode shaders
-glslc -fshader-stage=vertex gui/basic.vert -o bin/gui/basic_vert.spv
-glslc -fshader-stage=fragment gui/basic.frag -o bin/gui/basic_frag.spv
+glslc -fshader-stage=vertex ui/basic.vert -o bin/ui/basic_vert.spv
+glslc -fshader-stage=fragment ui/basic.frag -o bin/ui/basic_frag.spv
 
-glslc -fshader-stage=vertex gui/sprite.vert -o bin/gui/sprite_vert.spv
-glslc -fshader-stage=fragment gui/sprite.frag -o bin/gui/sprite_frag.spv
+glslc -fshader-stage=vertex ui/sprite.vert -o bin/ui/sprite_vert.spv
+glslc -fshader-stage=fragment ui/sprite.frag -o bin/ui/sprite_frag.spv
 
-glslc -fshader-stage=vertex gui/glyph.vert -o bin/gui/glyph_vert.spv
-glslc -fshader-stage=fragment gui/glyph.frag -o bin/gui/glyph_frag.spv
+glslc -fshader-stage=vertex ui/glyph.vert -o bin/ui/glyph_vert.spv
+glslc -fshader-stage=fragment ui/glyph.frag -o bin/ui/glyph_frag.spv
 
-glslc -fshader-stage=fragment gui/bitmap.frag -o bin/gui/bitmap_frag.spv
+glslc -fshader-stage=fragment ui/bitmap.frag -o bin/ui/bitmap_frag.spv
 
 # Compile rasteization shaders
 glslc -fshader-stage=vertex raster/vertex.vert -o bin/raster/vertex.spv

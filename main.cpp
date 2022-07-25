@@ -1,6 +1,5 @@
 #include "include/app.hpp"
 #include "include/backend.hpp"
-#include "include/ui/button.hpp"
 #include "include/common.hpp"
 #include "include/ecs.hpp"
 #include "include/engine/ecs_panel.hpp"
@@ -14,6 +13,8 @@
 #include "include/scene.hpp"
 #include "include/transform.hpp"
 #include "include/types.hpp"
+#include "include/ui/button.hpp"
+#include "include/ui/slider.hpp"
 #include "tinyfiledialogs.h"
 
 using namespace kobra;
@@ -33,6 +34,8 @@ struct ECSApp : public BaseApp {
 
 	ui::Button button;
 	Entity camera;
+
+	ui::Slider slider;
 
 	ECSApp(const vk::raii::PhysicalDevice &phdev, const std::vector <const char *> &extensions)
 			: BaseApp(phdev, "ECSApp", {1000, 1000}, extensions, vk::AttachmentLoadOp::eLoad),
@@ -57,8 +60,8 @@ struct ECSApp : public BaseApp {
 			auto *app = static_cast <ECSApp *> (user);
 			ui::Button &button = app->button;
 
-			button.shape().min -= dpos;
-			button.shape().max -= dpos;
+			button.shape().min += dpos;
+			button.shape().max += dpos;
 		};
 
 		ui::Button::Args button_args {
@@ -77,6 +80,20 @@ struct ECSApp : public BaseApp {
 
 		// TODO: ui namespace and directory
 		button = ui::Button(io.mouse_events, button_args);
+
+		// Slider
+		ui::Slider::Args slider_args {
+			.percent = 0.5f,
+			.max = {400, 360},
+			.min = {100, 340},
+			.name = "Slider",
+			.font_renderer = &font_renderer,
+			.value_func = [](float x) {
+				return log(x);
+			}
+		};
+
+		slider = ui::Slider(io.mouse_events, slider_args);
 
 		// Input callbacks
 		io.mouse_events.subscribe(mouse_callback, this);
@@ -137,12 +154,18 @@ struct ECSApp : public BaseApp {
 				.text = common::sprintf("%.2f fps", fps),
 				.anchor = {10, 10},
 				.size = 1.0f
-			}
+			},
 		};
 
+		for (auto &s : slider.texts())
+			texts.push_back(s);
+
 		std::vector <ui::Rect> rects {
-			button.shape()
+			button.shape(),
 		};
+
+		for (auto &r : slider.shapes())
+			rects.push_back(r);
 
 		time += frame_time;
 
@@ -188,9 +211,14 @@ struct ECSApp : public BaseApp {
 		font_renderer.render(cmd, texts);
 		shape_renderer.render(cmd, rects);
 
+		// TODO: ui layer  will have a push interface each frame
+
 		cmd.endRenderPass();
 
 		cmd.end();
+
+		// V-sync
+		sync_queue.push([]() {});
 	}
 
 	void terminate() override {

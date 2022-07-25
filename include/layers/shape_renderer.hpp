@@ -70,8 +70,8 @@ public:
 
 		// Pipeline
 		auto shaders = make_shader_modules(*_ctx.device, {
-			"shaders/bin/gui/basic_vert.spv",
-			"shaders/bin/gui/basic_frag.spv"
+			"shaders/bin/ui/basic_vert.spv",
+			"shaders/bin/ui/basic_frag.spv"
 		});
 
 		auto pipeline_cache = vk::raii::PipelineCache {*_ctx.device, {}};
@@ -143,12 +143,7 @@ public:
 
 			glm::vec3 color = rect.color;
 
-			uint32_t i = vertices.size();
-			std::vector <uint32_t> r_indices {
-				i + 0, i + 1, i + 2,
-				i + 2, i + 3, i + 0
-			};
-
+			std::vector <uint32_t> r_indices {0, 1, 2, 0, 2, 3};
 			std::vector <Vertex> r_vertices {
 				Vertex {min,				color},
 				Vertex {glm::vec2 {min.x, max.y},	color},

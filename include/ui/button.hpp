@@ -90,7 +90,7 @@ private:
 
 				glm::vec2 pos = {event.xpos, event.ypos};
 				for (auto &handler : button->_on_drag)
-					handler.second(handler.first, button->_drag_start - pos);
+					handler.second(handler.first, pos - button->_drag_start);
 
 				button->_drag_start = pos;
 			} else if (in_bounds) {
@@ -133,11 +133,13 @@ public:
 			_on_click(std::move(other._on_click)),
 			_on_drag(std::move(other._on_drag)),
 			_queue(other._queue) {
-		// Unsubscribe from other's mouse events
-		_queue->unsubscribe(&other);
+		if (_queue) {
+			// Unsubscribe from other's mouse events
+			_queue->unsubscribe(&other);
 
-		// Subscribe to this's mouse events
-		_queue->subscribe(_event_handler, this);
+			// Subscribe to this's mouse events
+			_queue->subscribe(_event_handler, this);
+		}
 	}
 
 	// Move assignment
@@ -151,13 +153,30 @@ public:
 		_on_drag = std::move(other._on_drag);
 		_queue = other._queue;
 
-		// Unsubscribe from other's mouse events
-		_queue->unsubscribe(&other);
+		if (_queue) {
+			// Unsubscribe from other's mouse events
+			_queue->unsubscribe(&other);
 
-		// Subscribe to this's mouse events
-		_queue->subscribe(_event_handler, this);
+			// Subscribe to this's mouse events
+			_queue->subscribe(_event_handler, this);
+		}
 
 		return *this;
+	}
+
+	// Add handlers
+	void add_on_click(OnClick handler) {
+		_on_click.push_back(handler);
+	}
+
+	void add_on_drag(OnDrag handler) {
+		_on_drag.push_back(handler);
+	}
+
+	// Clear all handlers
+	void clear_handlers() {
+		_on_click.clear();
+		_on_drag.clear();
 	}
 
 	// Get the button's shape
