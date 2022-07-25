@@ -263,7 +263,11 @@ public:
 
 	// Render texts, assuming the render pass is active
 	// TODO: should also pass in extent
-	void render(const vk::raii::CommandBuffer &cmd, const std::vector <ui::Text> &texts) {
+	void render(const vk::raii::CommandBuffer &cmd, const std::vector <ui::Text> &texts,
+			const RenderArea &ra = {{-1, -1}, {-1, -1}}) {
+		// Apply render area
+		ra.apply(cmd, _ctx.extent);
+
 		// Map of character to glyphs
 		GlyphMap glyph_map;
 		for (const ui::Text &text : texts)

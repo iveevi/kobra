@@ -317,8 +317,52 @@ void Raytracer::environment_map(const std::string &path)
 
 void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 		const vk::raii::Framebuffer &framebuffer,
-		const ECS &ecs)
+		const ECS &ecs, const RenderArea &ra)
 {
+	// Check if we need to resize pixel buffer
+	uint32_t csize = ra.pixels() * sizeof(uint);
+	if (_dev.pixels.size != csize) {
+		KOBRA_LOG_FUNC(warn) << "Pixel buffer size changed, resizing...\n";
+
+		// Resize buffer
+		_dev.pixels.resize(csize);
+
+		// Resize result image
+		_samplers.result_image = ImageData(
+			*_ctx.phdev, *_ctx.device,
+			vk::Format::eR8G8B8A8Unorm, {ra.width(), ra.height()},
+			vk::ImageTiling::eOptimal,
+			vk::ImageUsageFlagBits::eSampled
+				| vk::ImageUsageFlagBits::eTransferDst,
+			vk::ImageLayout::ePreinitialized,
+			vk::MemoryPropertyFlagBits::eDeviceLocal,
+			vk::ImageAspectFlagBits::eColor
+		);
+
+		_samplers.result = make_sampler(*_ctx.device, _samplers.result_image);
+
+		// Rebind
+		_sync_queue->push(
+			[&]() {
+				bind_ds(*_ctx.device,
+					_ds_raytracing, _dev.pixels,
+					vk::DescriptorType::eStorageBuffer,
+					MESH_BINDING_PIXELS
+				);
+
+				bind_ds(*_ctx.device,
+					_ds_postprocess, _samplers.result,
+					_samplers.result_image,
+					MESH_BINDING_PIXELS
+				);
+			}
+		);
+
+		// Return and wait for the next frame
+		return;
+	}
+
+	// Profiler
 	Profiler profiler;
 
 	// Initialization phase
@@ -451,6 +495,7 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 
 		profiler.end();
 
+		KOBRA_LOG_FILE(notify) << "Uploading data to device buffers...\n";
 		rebinding |= _dev.vertices.upload(host_buffers.vertices, 0);
 		rebinding |= _dev.triangles.upload(host_buffers.triangles, 0);
 		rebinding |= _dev.materials.upload(host_buffers.materials, 0);
@@ -523,8 +568,8 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 	// Prepare push constants
 	// TODO: method for generating this structure
 	PushConstants pc {
-		.width = _ctx.extent.width,
-		.height = _ctx.extent.height,
+		.width = ra.width(),
+		.height = ra.height(),
 
 		// TODO: pass skpi size
 		.skip = (uint) _skip,
@@ -595,31 +640,14 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 		_dev.pixels.buffer,
 		_samplers.result_image.image,
 		_samplers.result_image.format,
-		_ctx.extent.width,
-		_ctx.extent.height
+		ra.width(), ra.height()
 	);
 
 	// Transition image back to shader read
 	_samplers.result_image.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
 
-
-	// Set viewport
-	cmd.setViewport(0,
-		vk::Viewport {
-			0.0f, 0.0f,
-			static_cast <float> (_ctx.extent.width),
-			static_cast <float> (_ctx.extent.height),
-			0.0f, 1.0f
-		}
-	);
-
-	// Set scissor
-	cmd.setScissor(0,
-		vk::Rect2D {
-			vk::Offset2D {0, 0},
-			_ctx.extent
-		}
-	);
+	// Apply render area
+	ra.apply(cmd, _ctx.extent);
 
 	// Clear colors
 	std::array <vk::ClearValue, 2> clear_values {

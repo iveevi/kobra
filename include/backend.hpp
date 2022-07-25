@@ -81,6 +81,59 @@ public:
 	}
 };
 
+struct RenderArea {
+	glm::vec2 min;
+	glm::vec2 max;
+
+	// TODO: scissor as well
+
+	// Width and height
+	uint32_t width() const {
+		return (uint32_t)(max.x - min.x);
+	}
+
+	uint32_t height() const {
+		return (uint32_t)(max.y - min.y);
+	}
+
+	// Number of pixels
+	uint32_t pixels() const {
+		return width() * height();
+	}
+
+	// Apply render area (viewport and scissor)
+	void apply(const vk::raii::CommandBuffer &cmd, const vk::Extent2D &extent) const {
+		float minx = min.x, miny = min.y;
+		float maxx = max.x, maxy = max.y;
+
+		if (min == glm::vec2 {-1, -1}) {
+			minx = 0;
+			miny = 0;
+		}
+
+		if (max == glm::vec2 {-1, -1}) {
+			maxx = extent.width;
+			maxy = extent.height;
+		}
+
+		cmd.setViewport(0,
+			vk::Viewport {
+				minx, miny,
+				maxx - minx, maxy - miny,
+				0.0f, 1.0f
+			}
+		);
+
+		// Set scissor
+		cmd.setScissor(0,
+			vk::Rect2D {
+				vk::Offset2D {0, 0},
+				extent
+			}
+		);
+	}
+};
+
 //////////////////////
 // Object factories //
 //////////////////////

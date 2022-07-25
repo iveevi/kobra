@@ -119,7 +119,11 @@ public:
 
 	// Render
 	// TODO: pass extent
-	void render(const vk::raii::CommandBuffer &cmd, const std::vector <ui::Rect> &rects) {
+	void render(const vk::raii::CommandBuffer &cmd, const std::vector <ui::Rect> &rects, const RenderArea &ra = {{-1, -1}, {-1, -1}}) {
+		// Apply render area
+		ra.apply(cmd, _ctx.extent);
+
+		// Gather shapes
 		std::vector <Vertex> vertices;
 		std::vector <uint32_t> indices;
 

@@ -32,13 +32,28 @@ struct ECSApp : public BaseApp {
 
 	Scene scene;
 
+	// TODO: will later also need a project manager
+
 	ui::Button button;
 	Entity camera;
 
 	ui::Slider slider;
 
+	static constexpr glm::vec2 window_size {1920, 1200};
+	static constexpr float scene_graph_width = 400;
+	static constexpr float component_panel_width = 400;
+	static constexpr float project_explorer_height = 300;
+	static constexpr glm::vec2 render_min = {scene_graph_width, 0};
+	static constexpr glm::vec2 render_max = {
+		window_size.x - component_panel_width,
+		window_size.y - project_explorer_height
+	};
+
 	ECSApp(const vk::raii::PhysicalDevice &phdev, const std::vector <const char *> &extensions)
-			: BaseApp(phdev, "ECSApp", {1000, 1000}, extensions, vk::AttachmentLoadOp::eLoad),
+			: BaseApp(phdev, "ECSApp",
+				vk::Extent2D {(uint32_t) window_size.x, (uint32_t) window_size.y},
+				extensions, vk::AttachmentLoadOp::eLoad
+			),
 			rasterizer(get_context(), vk::AttachmentLoadOp::eClear),
 			raytracer(get_context(), &sync_queue, vk::AttachmentLoadOp::eClear),
 			font_renderer(get_context(), render_pass, "resources/fonts/noto_sans.ttf"),
@@ -176,9 +191,9 @@ struct ECSApp : public BaseApp {
 		cmd.begin({});
 
 		if (mode == 1)
-			raytracer.render(cmd, framebuffer, scene.ecs);
+			raytracer.render(cmd, framebuffer, scene.ecs, {render_min, render_max});
 		else
-			rasterizer.render(cmd, framebuffer, scene.ecs);
+			rasterizer.render(cmd, framebuffer, scene.ecs, {render_min, render_max});
 
 		// Start render pass
 		std::array <vk::ClearValue, 2> clear_values = {

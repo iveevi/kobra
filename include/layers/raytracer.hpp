@@ -148,7 +148,7 @@ public:
 	// Render
 	void render(const vk::raii::CommandBuffer &,
 			const vk::raii::Framebuffer &,
-			const ECS &);
+			const ECS &, const RenderArea &ra = {{-1, -1}, {-1, -1}});
 };
 
 }

@@ -241,7 +241,8 @@ public:
 };
 
 // Macros for logging
-#define KOBRA_LOG_FUNC(type) Logger::type##_from(__PRETTY_FUNCTION__)
+// TODO: option to swthich function and pretty function
+#define KOBRA_LOG_FUNC(type) Logger::type##_from(__FUNCTION__)
 
 #define LINE_TO_STRING(line) #line
 #define LINE_TO_STRING2(line) LINE_TO_STRING(line)

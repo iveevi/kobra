@@ -60,7 +60,6 @@ struct Raster::LightsData {
 
 	// TODO: max lights, not points lights
 	_light lights[MAX_POINT_LIGHTS];
-	// aligned_vec4 positions[MAX_POINT_LIGHTS];
 };
 
 //////////////////
@@ -150,7 +149,7 @@ Raster::Raster(const Context &ctx, const vk::AttachmentLoadOp &load)
 
 	// Create box for rendering area lights
 	{
-		auto box = Mesh::box({0, 0, 0}, {0.5, 0.5, 0.5});
+		auto box = Mesh::box({0, 0, 0}, {0.5, 0.01, 0.5});
 
 		_area_light = new Rasterizer({_ctx.phdev, _ctx.device}, box, new Material());
 
@@ -180,25 +179,10 @@ Raster::Raster(const Context &ctx, const vk::AttachmentLoadOp &load)
 
 void Raster::render(const vk::raii::CommandBuffer &cmd,
 		const vk::raii::Framebuffer &framebuffer,
-		const ECS &ecs)
+		const ECS &ecs, const RenderArea &ra)
 {
-	// Set viewport
-	cmd.setViewport(0,
-		vk::Viewport {
-			0.0f, 0.0f,
-			static_cast <float> (_ctx.extent.width),
-			static_cast <float> (_ctx.extent.height),
-			0.0f, 1.0f
-		}
-	);
-
-	// Set scissor
-	cmd.setScissor(0,
-		vk::Rect2D {
-			vk::Offset2D {0, 0},
-			_ctx.extent
-		}
-	);
+	// Apply render area
+	ra.apply(cmd, _ctx.extent);
 
 	// Clear colors
 	std::array <vk::ClearValue, 2> clear_values {
