@@ -21,7 +21,7 @@ namespace ui {
 class Button {
 public:
 	// Handlers
-	using OnClick = std::pair <void *, std::function <void (void *)>>;
+	using OnClick = std::pair <void *, std::function <void (void *, glm::vec2)>>;
 	using OnDrag = std::pair <void *, std::function <void (void *, glm::vec2)>>;
 
 	// Parameters
@@ -73,7 +73,7 @@ private:
 				button->_rect.color = button->_pressed;
 
 				for (auto &handler : button->_on_click)
-					handler.second(handler.first);
+					handler.second(handler.first, {event.xpos, event.ypos});
 
 				button->_drag_start = {event.xpos, event.ypos};
 			} else if (is_released) {
@@ -159,7 +159,8 @@ public:
 		_on_drag = std::move(other._on_drag);
 
 		// If queues are the same, only unsubscribe from the other
-		other._queue->unsubscribe(&other);
+		if (other._queue)
+			other._queue->unsubscribe(&other);
 
 		if (other._queue != _queue) {
 			// If also has a queue, first unsubscribe
@@ -189,6 +190,20 @@ public:
 	void clear_handlers() {
 		_on_click.clear();
 		_on_drag.clear();
+	}
+
+	// Set idle/hover/pressed colors
+	// TODO: each shoulder be a separate ui element?
+	void set_idle(glm::vec3 color) {
+		_idle = color;
+	}
+
+	void set_hover(glm::vec3 color) {
+		_hover = color;
+	}
+
+	void set_pressed(glm::vec3 color) {
+		_pressed = color;
 	}
 
 	// Get the button's shape

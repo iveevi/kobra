@@ -2,7 +2,6 @@
 #include "include/backend.hpp"
 #include "include/common.hpp"
 #include "include/ecs.hpp"
-#include "include/engine/ecs_panel.hpp"
 #include "include/io/event.hpp"
 #include "include/layers/font_renderer.hpp"
 #include "include/layers/raster.hpp"
@@ -14,6 +13,7 @@
 #include "include/transform.hpp"
 #include "include/types.hpp"
 #include "include/ui/button.hpp"
+#include "include/ui/color_picker.hpp"
 #include "include/ui/slider.hpp"
 #include "tinyfiledialogs.h"
 #include <glslang/Public/ShaderLang.h>
@@ -29,22 +29,25 @@ struct ECSApp : public BaseApp {
 	layers::Raytracer raytracer;
 	layers::FontRenderer font_renderer;
 	layers::ShapeRenderer shape_renderer;
-	engine::ECSPanel panel;
 
 	Scene scene;
 
 	// TODO: will later also need a project manager
 	Entity camera;
 
+	// TODO: Gaps are managed by layout manager
+
 	static constexpr glm::vec2 window_size {1900, 1100};
 	static constexpr float scene_graph_width = 400;
 	static constexpr float component_panel_width = 400;
 	static constexpr float project_explorer_height = 300;
-	static constexpr glm::vec2 render_min = {scene_graph_width, 0};
+	static constexpr glm::vec2 render_min = {scene_graph_width, 5.0f};
 	static constexpr glm::vec2 render_max = {
 		window_size.x - component_panel_width,
-		window_size.y - project_explorer_height
+		window_size.y - project_explorer_height + 5.0f
 	};
+
+	// TODO: theme manager, with fonts, etc
 
 	// Scene graph
 	struct SceneGraph {
@@ -85,7 +88,7 @@ struct ECSApp : public BaseApp {
 					struct _on_click {
 						int index;
 
-						void operator()(void *user) {
+						void operator()(void *user, glm::vec2) {
 							int *i = (int *) user;
 							*i = index;
 						}
@@ -152,10 +155,12 @@ struct ECSApp : public BaseApp {
 		}
 	};
 
-	ui::Rect color_rect;
-	ui::Rect hue_rect;
-
 	SceneGraph scene_graph;
+
+	ui::ColorPicker color_picker;
+	glm::vec3 color;
+
+	ui::Rect r_background;
 
 	ECSApp(const vk::raii::PhysicalDevice &phdev, const std::vector <const char *> &extensions)
 			: BaseApp(phdev, "ECSApp",
@@ -166,7 +171,6 @@ struct ECSApp : public BaseApp {
 			raytracer(get_context(), &sync_queue, vk::AttachmentLoadOp::eClear),
 			font_renderer(get_context(), render_pass, "resources/fonts/noto_sans.ttf"),
 			shape_renderer(get_context(), render_pass),
-			panel(get_context(), scene.ecs, io),
 			scene_graph(scene.ecs, font_renderer, io.mouse_events) {
 		scene.load(get_device(), scene_path);
 		// raytracer.environment_map(scene.p_environment_map);
@@ -178,27 +182,25 @@ struct ECSApp : public BaseApp {
 		// TODO: set camera properties (aspect)
 		camera.get <Camera> ().tunings.aspect = (render_max.x - render_min.x)/(render_max.y - render_min.y);
 
-		// Rect with custom shader program
-		ShaderProgram program;
-		program.set_file("./shaders/ui/color_picker_square.frag", true);
-
-		color_rect = ui::Rect {
-			.min = {1600, 200},
-			.max = {1800, 400},
-			.color = glm::vec3 {0, 0, 1},
-			.radius = 0.01f
+		// Color picker
+		color = glm::vec3 {0.86f, 0.13f, 0.13f};
+		color_picker = ui::ColorPicker {
+			io.mouse_events,
+			ui::ColorPicker::Args {
+				.min = {window_size.x - component_panel_width, 200},
+				.max = {window_size.x, 200 + 250.0f},
+				.label = "diffuse",
+				.ref = &color,
+				.font_renderer = &font_renderer
+			}
 		};
 
-		color_rect.shader_program = program;
-
-		hue_rect = ui::Rect {
-			.min = {1600, 400},
-			.max = {1800, 600},
-			.color = glm::vec3 {0, 0, 1},
-			.radius = 0.01f
+		r_background = ui::Rect {
+			.min = {window_size.x - component_panel_width + 5, 5},
+			.max = {window_size.x - 5, window_size.y - 5},
+			.color = glm::vec3 {0.6f, 0.7, 0.6f},
+			.radius = 0.005f
 		};
-
-		hue_rect.shader_program.set_file("./shaders/ui/color_picker_hue.frag", true);
 
 		// Input callbacks
 		io.mouse_events.subscribe(mouse_callback, this);
@@ -269,12 +271,16 @@ struct ECSApp : public BaseApp {
 		for (auto &t : scene_graph.texts())
 			texts.push_back(t);
 
+		for (auto &t : color_picker.texts())
+			texts.push_back(t);
+
 		// Shape things
-		std::vector <ui::Rect *> rects {
-			&color_rect, &hue_rect
-		};
+		std::vector <ui::Rect *> rects {&r_background};
 
 		for (auto &s : scene_graph.shapes())
+			rects.push_back(s);
+
+		for (auto &s : color_picker.shapes())
 			rects.push_back(s);
 
 		// Input
@@ -283,6 +289,7 @@ struct ECSApp : public BaseApp {
 		// Begin command buffer
 		cmd.begin({});
 
+		// TODO: pass camera
 		if (mode == 1)
 			raytracer.render(cmd, framebuffer, scene.ecs, {render_min, render_max});
 		else
