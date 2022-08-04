@@ -202,7 +202,7 @@ struct DebugMessenger {
 #endif
 
 // Initialize GLFW statically
-inline void _initialize_glfw()
+void _initialize_glfw()
 {
 	static bool initialized = false;
 

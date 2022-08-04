@@ -28,7 +28,10 @@ definitions:
     thirdparty/glm,
     thirdparty/imgui,
     thirdparty/assimp/include,
-    thirdparty/tinyfiledialogs'
+    thirdparty/tinyfiledialogs,
+    thirdparty/optix,
+    thirdparty/optix/sutil,
+    thirdparty/tinyexr'
   - libs: 'glfw,
     vulkan,
     assimp,
@@ -67,12 +70,13 @@ builds:
     - libraries: libs
     - flags: '-std=c++17 -Wall -Werror'
   - experimental_normal:
-    - sources: experimental/main.cpp, kobra_source
+    - sources: experimental/main.cu, source/logger.cpp, thirdparty/optix/sutil/Camera.cpp, experimental/sutil.cu
     - idirs: includes
-    - flags: '-O3 -std=c++17'
+    - flags: '-std=c++17'
     - libraries: libs
+    - ksources: 
   - experimental_debug:
-    - sources: experimental/main.cpp, kobra_source
+    - sources: experimental/main.cu, kobra_source, tinyfd_source, glslang_source
     - idirs: includes
     - flags: '-std=c++17 -g'
     - libraries: libs

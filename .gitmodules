@@ -10,3 +10,6 @@
 [submodule "thirdparty/glslang"]
 	path = thirdparty/glslang
 	url = https://github.com/KhronosGroup/glslang.git
+[submodule "thirdparty/tinyexr"]
+	path = thirdparty/tinyexr
+	url = https://github.com/syoyo/tinyexr.git
