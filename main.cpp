@@ -180,7 +180,7 @@ struct ECSApp : public BaseApp {
 		camera = scene.ecs.get_entity("Camera");
 
 		// TODO: set camera properties (aspect)
-		camera.get <Camera> ().tunings.aspect = (render_max.x - render_min.x)/(render_max.y - render_min.y);
+		camera.get <Camera> ().aspect = (render_max.x - render_min.x)/(render_max.y - render_min.y);
 
 		// Color picker
 		color = glm::vec3 {0.86f, 0.13f, 0.13f};
@@ -216,26 +216,26 @@ struct ECSApp : public BaseApp {
 
 		// Camera movement
 		// TODO: remove transform component from camera?
-		auto &cam = camera.get <Camera> ();
+		auto &transform = camera.get <Transform> ();
 
-		glm::vec3 forward = cam.transform.forward();
-		glm::vec3 right = cam.transform.right();
-		glm::vec3 up = cam.transform.up();
+		glm::vec3 forward = transform.forward();
+		glm::vec3 right = transform.right();
+		glm::vec3 up = transform.up();
 
 		if (io.input.is_key_down(GLFW_KEY_W))
-			cam.transform.move(forward * speed);
+			transform.move(forward * speed);
 		else if (io.input.is_key_down(GLFW_KEY_S))
-			cam.transform.move(-forward * speed);
+			transform.move(-forward * speed);
 
 		if (io.input.is_key_down(GLFW_KEY_A))
-			cam.transform.move(-right * speed);
+			transform.move(-right * speed);
 		else if (io.input.is_key_down(GLFW_KEY_D))
-			cam.transform.move(right * speed);
+			transform.move(right * speed);
 
 		if (io.input.is_key_down(GLFW_KEY_E))
-			cam.transform.move(up * speed);
+			transform.move(up * speed);
 		else if (io.input.is_key_down(GLFW_KEY_Q))
-			cam.transform.move(-up * speed);
+			transform.move(-up * speed);
 
 		// Switch mode on tab
 		if (io.input.is_key_down(GLFW_KEY_TAB)) {
@@ -363,7 +363,7 @@ struct ECSApp : public BaseApp {
 		static float pitch = 0.0f;
 
 		auto &app = *static_cast <ECSApp *> (us);
-		auto &cam = app.camera.get <Camera> ();
+		auto &transform = app.camera.get <Transform> ();
 
 		// Deltas and directions
 		float dx = event.xpos - px;
@@ -388,8 +388,8 @@ struct ECSApp : public BaseApp {
 			if (pitch < -89.0f)
 				pitch = -89.0f;
 
-			cam.transform.rotation.x = pitch;
-			cam.transform.rotation.y = yaw;
+			transform.rotation.x = pitch;
+			transform.rotation.y = yaw;
 		}
 
 		// Update previous position

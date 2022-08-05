@@ -14,80 +14,30 @@
 
 namespace kobra {
 
-// TODO: clean up this interface
-
-// Camera properties
-class Tunings {
-        float _radians(float degrees) {
-                return degrees * (M_PI / 180.0f);
-        }
-public:
-        float fov;
-        float scale;
-        float aspect;
-
-        // TODO: add lens attributes
-        Tunings() : fov(90.0f), aspect(1.0f) {
-                scale = tan(_radians(fov) * 0.5f);
-        }
-
-        Tunings(float fov, float width, float height)
-                        : fov(fov), aspect(width / height) {
-                scale = tan(_radians(fov) * 0.5f);
-        }
-};
-
-// Camera class
-// TODO: should be object type
+// Camera properties are still affected by transform
 struct Camera {
-        // Camera properties
-        Tunings tunings;
+	Camera(float fov_ = 45.0f, float aspect_ = 1.0f)
+			: fov(fov_), aspect(aspect_) {}
 
-	// Public member variables
-        Transform transform;
+	// Perspective projection matrix
+	glm::mat4 perspective_matrix() const {
+		return glm::perspective(
+			glm::radians(fov),
+			aspect, 0.1f, 100.0f
+		);
+	}
 
-        // Constructors
-	// TODO: should not have anything to do with the camera
-        Camera() {}
-        Camera(const Transform& trans, const Tunings& tns)
-                        : transform(trans), tunings(tns) {}
-
-	// Get view matrix
-	glm::mat4 view() const {
+	// View matrix
+	static glm::mat4 view_matrix(const Transform &transform) {
 		return glm::lookAt(
 			transform.position,
 			transform.position + transform.forward(),
 			transform.up()
 		);
-	};
-
-	// Get perspective matrix
-	// TODO: should be dealt with in the rasterizer, not here
-	glm::mat4 perspective() const {
-		return glm::perspective(
-			glm::radians(tunings.fov),
-			tunings.aspect,
-			0.01f, 100.0f
-		);
-
 	}
-
-	// Get projection matrix
-	glm::mat4 projection() const {
-		return perspective() * view();
-	}
-
-	// Generate ray
-	Ray generate_ray(float x, float y) const {
-		float cx = (2 * x - 1) * tunings.scale * tunings.aspect;
-		float cy = (1 - 2 * y) * tunings.scale;
-
-		glm::vec3 dir = cx * transform.right()
-			+ cy * transform.up()
-			+ transform.forward();
-
-		return Ray {transform.position, dir};
-	}
+	
+	float		fov;
+	float		aspect;
 };
 
 using CameraPtr = std::shared_ptr <Camera>;

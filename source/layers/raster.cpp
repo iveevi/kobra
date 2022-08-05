@@ -215,6 +215,8 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 
 	// Initialization phase
 	Camera camera;
+	Transform camera_transform;
+
 	bool found_camera = false;
 
 	LightsData lights_data {
@@ -227,6 +229,7 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 		// Deal with camera component
 		if (ecs.exists <Camera> (i)) {
 			camera = ecs.get <Camera> (i);
+			camera_transform = ecs.get <Transform> (i);
 			found_camera = true;
 		}
 
@@ -278,8 +281,8 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 
 	// Render all rasterizer components
 	PushConstants push_constants {
-		.view = camera.view(),
-		.perspective = camera.perspective(),
+		.view = camera.view_matrix(camera_transform),
+		.perspective = camera.perspective_matrix(),
 		.type = Shading::eDiffuse,
 		.highlight = false,
 		.has_albedo = false,

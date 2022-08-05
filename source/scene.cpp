@@ -47,11 +47,7 @@ static const std::array <std::string, 4> light_types {
 
 // TODO: get rid of the transform portion
 static constexpr char camera_format[]
-= R"(position: %f %f %f
-rotation: %f %f %f
-scale: %f %f %f
-fov: %f
-scale: %f
+= R"(fov: %f
 aspect: %f
 )";
 
@@ -109,12 +105,8 @@ static void save_camera(const Camera &cam, std::ofstream &fout)
 {
 	fout << "\n[CAMERA]\n";
 	fout << common::sprintf(camera_format,
-		cam.transform.position.x, cam.transform.position.y, cam.transform.position.z,
-		cam.transform.rotation.x, cam.transform.rotation.y, cam.transform.rotation.z,
-		cam.transform.scale.x, cam.transform.scale.y, cam.transform.scale.z,
-		cam.tunings.fov,
-		cam.tunings.scale,
-		cam.tunings.aspect
+		cam.fov,
+		cam.aspect
 	);
 }
 
@@ -422,10 +414,7 @@ void load_camera(Entity &e, std::ifstream &fin)
 
 	Camera &camera = e.get <Camera> ();
 	read_fmt(fin, camera_format,
-		&camera.transform.position.x, &camera.transform.position.y, &camera.transform.position.z,
-		&camera.transform.rotation.x, &camera.transform.rotation.y, &camera.transform.rotation.z,
-		&camera.transform.scale.x, &camera.transform.scale.y, &camera.transform.scale.z,
-		&camera.tunings.fov, &camera.tunings.scale, &camera.tunings.aspect
+		&camera.fov, &camera.aspect
 	);
 }
 

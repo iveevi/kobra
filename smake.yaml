@@ -70,7 +70,7 @@ builds:
     - libraries: libs
     - flags: '-std=c++17 -Wall -Werror'
   - experimental_normal:
-    - sources: experimental/main.cu, source/logger.cpp, thirdparty/optix/sutil/Camera.cpp, experimental/sutil.cu
+    - sources: experimental/main.cu, source/logger.cpp, thirdparty/optix/sutil/Camera.cpp
     - idirs: includes
     - flags: '-std=c++17'
     - libraries: libs

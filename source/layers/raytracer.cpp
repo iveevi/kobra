@@ -367,6 +367,7 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 
 	// Initialization phase
 	Camera camera;
+	Transform camera_transform;
 	bool found_camera = false;
 
 	kobra::Raytracer::HostBuffers host_buffers {
@@ -398,6 +399,7 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 		// Deal with camera component
 		if (ecs.exists <Camera> (i)) {
 			camera = ecs.get <Camera> (i);
+			camera_transform = ecs.get <Transform> (i);
 			found_camera = true;
 		}
 
@@ -550,14 +552,14 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 			(std::chrono::system_clock::now().time_since_epoch()).count());
 
 	// Dirty means reset samples
-	bool dirty = (_ptransform != camera.transform);
+	bool dirty = (_ptransform != camera_transform);
 	if (dirty || dirty_lights) {
 		_accumulated = 0;
 		_offsetx = 0;
 		_offsety = 0;
 	}
 
-	_ptransform = camera.transform;
+	_ptransform = camera_transform;
 
 	_p_light_transforms = light_transforms;
 	_p_raytracers = raytracers;
@@ -591,14 +593,15 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 		// Pass current time (as float)
 		.time = (float) time,
 
-		.camera_position = camera.transform.position,
-		.camera_forward = camera.transform.forward(),
-		.camera_up = camera.transform.up(),
-		.camera_right = camera.transform.right(),
+		// TODO: uvw instead?
+		.camera_position = camera_transform.position,
+		.camera_forward = camera_transform.forward(),
+		.camera_up = camera_transform.up(),
+		.camera_right = camera_transform.right(),
 
 		.camera_tunings = glm::vec4 {
-			camera.tunings.scale,
-			camera.tunings.aspect,
+			tan(glm::radians(camera.fov) / 2.0f),
+			camera.aspect,
 			0, 0
 		}
 	};

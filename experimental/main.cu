@@ -10,8 +10,11 @@
 #include <optix_stubs.h>
 
 #include <sutil/Camera.h>
-#include <sutil/sutil.h>
+// #include <sutil/sutil.h>
 #include <sutil/vec_math.h>
+
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <stb_image_write.h>
 
 #include "cuda_output_buffer.h"
 #include "common.hpp"
@@ -41,6 +44,11 @@ void configureCamera( sutil::Camera& cam, const uint32_t width, const uint32_t h
     cam.setAspectRatio( (float)width / (float)height );
 }
 
+float3 to_f3(const glm::vec3 &v)
+{
+	return make_float3(v.x, v.y, v.z);
+}
+
 int main()
 {
         char log[2048]; // For error reporting from OptiX creation functions
@@ -49,7 +57,7 @@ int main()
 	// Initialize CUDA with a no-op call to the the CUDA runtime API
 	cudaFree(0);
 
-	// Initialize the OptiX API, loading all API entry points 
+	// Initialize the OptiX API, loading all API entry points
 	optixInit();
 
 	// Specify options for this context. We will use the default options.
@@ -61,7 +69,7 @@ int main()
 
 	OptixDeviceContext context = nullptr;
 	optixDeviceContextCreate( cuCtx, &options, &context );
-        
+
 	//
         // accel handling
         //
@@ -370,19 +378,13 @@ int main()
             CUDA_CHECK( cudaFree( reinterpret_cast<void*>( d_param ) ) );
         }
 
-	std::string outfile = "out.png";
+	// STB enable flipping
+	stbi_flip_vertically_on_write(true);
 
-        //
-        // Display results
-        //
-        {
-            sutil::ImageBuffer buffer;
-            buffer.data         = output_buffer.getHostPointer();
-            buffer.width        = width;
-            buffer.height       = height;
-            buffer.pixel_format = sutil::BufferImageFormat::UNSIGNED_BYTE4;
-	    sutil::saveImage( outfile.c_str(), buffer, false );
-        }
+	// Save output image
+	std::string outfile = "out.png";
+	stbi_write_png(outfile.c_str(), width, height, 4,
+			output_buffer.getHostPointer(), width * 4 );
 
         //
         // Cleanup
