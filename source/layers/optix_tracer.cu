@@ -91,6 +91,11 @@ void OptixTracer::render(const vk::raii::CommandBuffer &cmd,
 	Transform camera_transform;
 	bool found_camera = false;
 
+	std::vector <const kobra::Raytracer *> raytracers;
+	std::vector <Transform> raytracer_transforms;
+	bool dirty_raytracers = false;
+	int raytracers_index = 0;
+
 	// Iterate over all entities
 	for (int i = 0; i < ecs.size(); i++) {
 		 if (ecs.exists <Camera> (i)) {
@@ -98,6 +103,27 @@ void OptixTracer::render(const vk::raii::CommandBuffer &cmd,
 			camera_transform = ecs.get <Transform> (i);
 			found_camera = true;
 		 }
+
+		if (ecs.exists <kobra::Raytracer> (i)) {
+			// TODO: account for changing transforms
+			const kobra::Raytracer *raytracer = &ecs.get <kobra::Raytracer> (i);
+
+			if (raytracers_index >= _c_raytracers.size())
+				dirty_raytracers = true;
+			else if (_c_raytracers[raytracers_index] != raytracer)
+				dirty_raytracers = true;
+			// TODO: also check for content changes in the component
+			raytracer_transforms.push_back(ecs.get <Transform> (i));
+			raytracers.push_back(raytracer);
+			raytracers_index++;
+		}
+	}
+
+	if (dirty_raytracers) {
+		KOBRA_LOG_FILE(notify) << "Need to rebuild AS\n";
+		_c_raytracers = raytracers;
+		_c_transforms = raytracer_transforms;
+		_optix_build();
 	}
 
 	// Launch OptiX with the given camera
@@ -191,8 +217,6 @@ void OptixTracer::_initialize_optix()
 	optixDeviceContextCreate(cu_ctx, &options, &context); */
             
 	// Initialize CUDA
-	OptixDeviceContext context = nullptr;
-
 	CUDA_CHECK( cudaFree( 0 ) );
 
 	// Initialize the OptiX API, loading all API entry points
@@ -206,9 +230,9 @@ void OptixTracer::_initialize_optix()
 	// Associate a CUDA context (and therefore a specific GPU) with this
 	// device context
 	CUcontext cuCtx = 0;  // zero means take the current context
-	OPTIX_CHECK( optixDeviceContextCreate( cuCtx, &options, &context ) );
+	OPTIX_CHECK( optixDeviceContextCreate( cuCtx, &options, &_optix_ctx) );
 	
-	//
+	/*
         // accel handling
         //
         CUdeviceptr            d_gas_output_buffer;
@@ -249,13 +273,10 @@ void OptixTracer::_initialize_optix()
 
 		OptixAccelBufferSizes gas_buffer_sizes;
 		OPTIX_CHECK(optixAccelComputeMemoryUsage(
-			context,
+			_optix_ctx,
 			&accel_options, &triangle_input,
 			1, &gas_buffer_sizes
 		));
-
-		std::cout << "gas_buffer_sizes.outputSize: " <<
-			gas_buffer_sizes.outputSizeInBytes << std::endl;
 
 		CUdeviceptr d_temp_buffer_gas;
 		CUDA_CHECK( cudaMalloc(
@@ -268,7 +289,7 @@ void OptixTracer::_initialize_optix()
 				      ) );
 
 		OPTIX_CHECK( optixAccelBuild(
-					context,
+					_optix_ctx,
 					0,                  // CUDA stream
 					&accel_options,
 					&triangle_input,
@@ -286,7 +307,7 @@ void OptixTracer::_initialize_optix()
 		// inputs, since they are not needed by our trivial shading method
 		CUDA_CHECK( cudaFree( reinterpret_cast<void*>( d_temp_buffer_gas ) ) );
 		CUDA_CHECK( cudaFree( reinterpret_cast<void*>( d_vertices        ) ) );
-	}
+	} */
 
 	// Create the OptiX module
 	OptixPipelineCompileOptions pipeline_compile_options = {};
@@ -326,7 +347,7 @@ void OptixTracer::_initialize_optix()
 		size_t sizeof_log = sizeof( log );
 
 		OPTIX_CHECK_LOG( optixModuleCreateFromPTX(
-					context,
+					_optix_ctx,
 					&module_compile_options,
 					&pipeline_compile_options,
 					input.c_str(),
@@ -351,7 +372,7 @@ void OptixTracer::_initialize_optix()
 		raygen_prog_group_desc.raygen.module            = _optix_module;
 		raygen_prog_group_desc.raygen.entryFunctionName = "__raygen__rg";
 		OPTIX_CHECK_LOG( optixProgramGroupCreate(
-					context,
+					_optix_ctx,
 					&raygen_prog_group_desc,
 					1,   // num program groups
 					&program_group_options,
@@ -366,7 +387,7 @@ void OptixTracer::_initialize_optix()
 		miss_prog_group_desc.miss.entryFunctionName = "__miss__ms";
 		sizeof_log = sizeof( log );
 		OPTIX_CHECK_LOG( optixProgramGroupCreate(
-					context,
+					_optix_ctx,
 					&miss_prog_group_desc,
 					1,   // num program groups
 					&program_group_options,
@@ -381,7 +402,7 @@ void OptixTracer::_initialize_optix()
 		hitgroup_prog_group_desc.hitgroup.entryFunctionNameCH = "__closesthit__ch";
 		sizeof_log = sizeof( log );
 		OPTIX_CHECK_LOG( optixProgramGroupCreate(
-					context,
+					_optix_ctx,
 					&hitgroup_prog_group_desc,
 					1,   // num program groups
 					&program_group_options,
@@ -404,7 +425,7 @@ void OptixTracer::_initialize_optix()
             pipeline_link_options.debugLevel             = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
             size_t sizeof_log = sizeof( log );
             OPTIX_CHECK_LOG( optixPipelineCreate(
-                        context,
+                        _optix_ctx,
                         &pipeline_compile_options,
                         &pipeline_link_options,
                         program_groups,
@@ -485,15 +506,106 @@ void OptixTracer::_initialize_optix()
             _optix_sbt.hitgroupRecordCount         = 1;
         }
 
-	CUDA_CHECK(cudaStreamCreate(&_optix_stream ));
+	CUDA_CHECK(cudaStreamCreate(&_optix_stream));
 
 	KOBRA_LOG_FILE(ok) << "Initialized OptiX and relevant structures" << std::endl;
+}
+
+void OptixTracer::_optix_build()
+{
+        CUdeviceptr            d_gas_output_buffer;
+
+	// Use default options for simplicity.  In a real use case we would want to
+	// enable compaction, etc
+	OptixAccelBuildOptions accel_options = {};
+	accel_options.buildFlags = OPTIX_BUILD_FLAG_NONE;
+	accel_options.operation  = OPTIX_BUILD_OPERATION_BUILD;
+
+	/* Triangle build input: simple list of three vertices
+	const std::array <float3, 3> vertices {
+		  float3 { -0.5f, -0.5f, 0.0f },
+		  float3 {  0.5f, -0.5f, 0.0f },
+		  float3 {  0.0f,  0.5f, 0.0f }
+	}; */
+	
+	std::vector <float3> vertices;
+
+	int ti = 0;
+	for (const kobra::Raytracer *rt : _c_raytracers) {
+		const Mesh &mesh = rt->get_mesh();
+		for (auto s : mesh.submeshes) {
+			for (auto i : s.indices) {
+				auto p = s.vertices[i].position;
+				p = _c_transforms[ti].apply(p);
+				vertices.push_back(to_f3(p));
+			}
+		}
+			
+		ti++;
+	}
+
+	const size_t vertices_size = sizeof( float3 )*vertices.size();
+	CUdeviceptr d_vertices=0;
+	CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_vertices ), vertices_size ) );
+	CUDA_CHECK( cudaMemcpy(
+				reinterpret_cast<void*>( d_vertices ),
+				vertices.data(),
+				vertices_size,
+				cudaMemcpyHostToDevice
+			      ) );
+
+	// Our build input is a simple list of non-indexed triangle vertices
+	const uint32_t triangle_input_flags[1] = { OPTIX_GEOMETRY_FLAG_NONE };
+	OptixBuildInput triangle_input = {};
+	triangle_input.type                        = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
+	triangle_input.triangleArray.vertexFormat  = OPTIX_VERTEX_FORMAT_FLOAT3;
+	triangle_input.triangleArray.numVertices   = static_cast<uint32_t>( vertices.size() );
+	triangle_input.triangleArray.vertexBuffers = &d_vertices;
+	triangle_input.triangleArray.flags         = triangle_input_flags;
+	triangle_input.triangleArray.numSbtRecords = 1;
+
+	OptixAccelBufferSizes gas_buffer_sizes;
+	OPTIX_CHECK(optixAccelComputeMemoryUsage(
+		_optix_ctx,
+		&accel_options, &triangle_input,
+		1, &gas_buffer_sizes
+	));
+
+	CUdeviceptr d_temp_buffer_gas;
+	CUDA_CHECK( cudaMalloc(
+				reinterpret_cast<void**>( &d_temp_buffer_gas ),
+				gas_buffer_sizes.tempSizeInBytes
+			      ) );
+	CUDA_CHECK( cudaMalloc(
+				reinterpret_cast<void**>( &d_gas_output_buffer ),
+				gas_buffer_sizes.outputSizeInBytes
+			      ) );
+
+	OPTIX_CHECK( optixAccelBuild(
+				_optix_ctx,
+				0,                  // CUDA stream
+				&accel_options,
+				&triangle_input,
+				1,                  // num build inputs
+				d_temp_buffer_gas,
+				gas_buffer_sizes.tempSizeInBytes,
+				d_gas_output_buffer,
+				gas_buffer_sizes.outputSizeInBytes,
+				&_optix_traversable,
+				nullptr,            // emitted property list
+				0                   // num emitted properties
+				) );
+
+	// We can now free the scratch space buffer used during build and the vertex
+	// inputs, since they are not needed by our trivial shading method
+	CUDA_CHECK( cudaFree( reinterpret_cast<void*>( d_temp_buffer_gas ) ) );
+	CUDA_CHECK( cudaFree( reinterpret_cast<void*>( d_vertices        ) ) );
 }
 
 void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 {
 	Params params;
-	params.image        = _output_buffer.map();
+	params.image        = _result_buffer.dev <uchar4> ();
 	params.image_width  = width;
 	params.image_height = height;
 	params.handle       = _optix_traversable;
@@ -517,11 +629,11 @@ void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 				1) );
 	CUDA_SYNC_CHECK();
 
-	_output_buffer.unmap();
 	CUDA_CHECK( cudaFree( reinterpret_cast<void*>( d_param ) ) );
 
 	// Copy result to buffer
-	uchar4 *ptr = _output_buffer.getHostPointer();
+	std::vector <uchar4> ptr = _result_buffer.download <uchar4> ();
+	// uchar4 *ptr = _output_buffer.getHostPointer();
 
 	_output.resize(width * height);
 	for (int x = 0; x < width; x++) {

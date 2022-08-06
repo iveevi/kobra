@@ -12,6 +12,8 @@
 
 namespace kobra {
 
+// TODO: inherit mesh from component type?
+
 // Submesh, holds vertices and indices
 class Submesh {
 	// Process tangent and bitangent

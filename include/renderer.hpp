@@ -100,6 +100,11 @@ public:
 	// Constructor sets mesh reference
 	Raytracer(Mesh *, Material *);
 
+	// Get the mesh
+	const Mesh &get_mesh() const {
+		return *mesh;
+	}
+
 	// Serialize
 	void serialize(const Device &, const Transform &, HostBuffers &) const;
 

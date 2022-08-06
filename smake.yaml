@@ -1,4 +1,4 @@
-default_compiler: nvcc -ccbin clang
+default_compiler: nvcc
 default_standard: c++17
 
 definitions:

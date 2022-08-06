@@ -9,7 +9,7 @@
 #include "../backend.hpp"
 #include "../ecs.hpp"
 
-#include "tmp_buf.cuh"
+#include "../cuda/buffer_data.cuh"
 
 namespace kobra {
 
@@ -30,14 +30,20 @@ class OptixTracer {
 	static const std::vector <DSLB> _dslb_render;
 
 	// OptiX structures
+	OptixDeviceContext		_optix_ctx = nullptr;
 	OptixModule			_optix_module = nullptr;
 	OptixPipeline			_optix_pipeline = nullptr;
 	OptixTraversableHandle		_optix_traversable;
 	OptixShaderBindingTable		_optix_sbt;
 	CUstream			_optix_stream;
 
-	sutil::CUDAOutputBuffer <uchar4>_output_buffer;
+	cuda::BufferData		_result_buffer;
 	std::vector <uint32_t>		_output;
+
+	// Cached ryatracer data
+	std::vector <const kobra::Raytracer *>
+					_c_raytracers;
+	std::vector <Transform>		_c_transforms;
 
 	// Initialize Optix globally
 	void _initialize_optix();
@@ -101,6 +107,7 @@ class OptixTracer {
 	}
 
 	// Other helper methods
+	void _optix_build();
 	void _optix_trace(const Camera &, const Transform &);
 public:
 	// Default constructor
@@ -118,10 +125,7 @@ public:
 
 	// Constructor
 	OptixTracer(const Context &ctx, const vk::AttachmentLoadOp &load)
-			: _ctx(ctx), _output_buffer(
-				sutil::CUDAOutputBufferType::CUDA_DEVICE,
-				width, height
-			) {
+			: _ctx(ctx), _result_buffer(width * height * 4) {
 		_initialize_optix();
 		_initialize_vulkan_structures(load);
 
