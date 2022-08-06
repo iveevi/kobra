@@ -108,22 +108,12 @@ Raster::Raster(const Context &ctx, const vk::AttachmentLoadOp &load)
 	auto vertex_binding = Vertex::vertex_binding();
 	auto vertex_attributes = Vertex::vertex_attributes();
 
-	GraphicsPipelineInfo grp_info {
-		.device = *_ctx.device,
-		.render_pass = _render_pass,
-
-		.vertex_shader = nullptr,
-		.fragment_shader = nullptr,
-
-		.vertex_binding = vertex_binding,
-		.vertex_attributes = vertex_attributes,
-
-		.pipeline_layout = _ppl,
-		.pipeline_cache = pipeline_cache,
-
-		.depth_test = true,
-		.depth_write = true
-	};
+	GraphicsPipelineInfo grp_info(*_ctx.device, _render_pass,
+		nullptr, nullptr,
+		nullptr, nullptr,
+		vertex_binding, vertex_attributes,
+		_ppl, pipeline_cache
+	);
 
 	// Common vertex shader
 	grp_info.vertex_shader = std::move(shaders[0]);

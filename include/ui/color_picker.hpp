@@ -22,6 +22,7 @@ struct ColorPicker {
 	ui::Rect r_hue;
 	ui::Rect r_result;
 
+	// TODO: remove all text from color picker
 	ui::Text t_label;
 	ui::Text t_color;
 
@@ -247,20 +248,19 @@ struct ColorPicker {
 
 		// Saturation panel
 		hue = 0.0f;
-		r_saturation = ui::Rect {
-			.min = min,
-			.max = {min.x + saturation_width, max.y},
-			.color = hue_to_rgb(0.0f, 0.0f, 0.0f),
-			.radius = 0.005f
-		};
+		r_saturation = ui::Rect(
+			min, glm::vec2 {min.x + saturation_width, max.y},
+			hue_to_rgb(0.0f, 0.0f, 0.0f),
+			0.005f
+		);
 
 		r_saturation.shader_program.set_file("./shaders/ui/color_picker_square.frag");
 
 		// Hue panel
-		r_hue = ui::Rect {
-			.min = {min.x + saturation_width + gap, min.y},
-			.max = {max.x, max.y}
-		};
+		r_hue = ui::Rect(
+			glm::vec2 {min.x + saturation_width + gap, min.y},
+			glm::vec2 {max.x, max.y}
+		);
 
 		r_hue.shader_program.set_file("./shaders/ui/color_picker_hue.frag");
 
@@ -294,68 +294,74 @@ struct ColorPicker {
 		// Result panel
 		float offset = 5.0f + button_size/2.0f;
 		float result_size = 15.0f;
-		r_result = ui::Rect {
-			.min = {min.x + 5.0f, max.y + offset},
-			.max = {min.x + result_size + 5.0f, max.y + result_size + offset},
-			.color = r_saturation.color,
-			.radius = 0.005f
-		};
+		r_result = ui::Rect(
+			{min.x + 5.0f, max.y + offset},
+			{min.x + result_size + 5.0f, max.y + result_size + offset},
+			r_saturation.color,
+			0.005f
+		);
 
 		// Text
-		t_label = ui::Text {
-			.text = args.label,
-			.anchor = {min.x + result_size + 10.0f, max.y + offset},
-			.color = glm::vec3 {1.0},
-			.size = 0.4f
-		};
+		t_label = ui::Text(
+			args.label,
+			{min.x + result_size + 10.0f, max.y + offset},
+			glm::vec3 {1.0},
+			0.4f
+		);
 
 		t_color = ui::Text {
-			.anchor = {max.x, max.y + offset},
-			.color = glm::vec3 {1.0},
-			.size = 0.4f
+			"text",
+			{max.x, max.y + offset},
+			glm::vec3 {1.0},
+			0.4f
 		};
 
 		t_color.anchor.x -= fr->size(t_color).x + 5.0f;
 
 		// Buttons
+		ui::Button::Args button_args = ui::Button::Args {};
+		button_args.min = min;
+		button_args.max = {min.x + saturation_width, max.y};
+		button_args.on_click = {{this, on_click_saturation}};
+
 		// TODO: pass ui element to button constructor
 		b_square = ui::Button {
 			mouse_events,
-			ui::Button::Args {
-				.min = min,
-				.max = {min.x + saturation_width, max.y},
-				.on_click = {{this, on_click_saturation}}
-			}
+			button_args
 		};
+
+		button_args = ui::Button::Args {};
+		button_args.radius = 0.01f;
+		button_args.border_width = 0.005f;
+		button_args.idle = glm::vec3 {0.5, 0.5, 1.0};
+		button_args.on_drag = {{this, on_drag_saturation}};
 
 		b_saturation = ui::Button {
 			mouse_events,
-			ui::Button::Args {
-				.radius = 0.01f,
-				.border_width = 0.005f,
-				.idle = glm::vec3 {0.5, 0.5, 1.0},
-				.on_drag = {{this, on_drag_saturation}}
-			}
+			button_args
 		};
+
+		// TODO: we dont even need the sliders, just the areas...
+		button_args = ui::Button::Args {};
+		button_args.min = {min.x + saturation_width + gap, min.y};
+		button_args.max = {max.x, max.y};
+		button_args.on_click = {{this, on_click_hue}};
 
 		b_square_hue = ui::Button {
 			mouse_events,
-			ui::Button::Args {
-				.min = {min.x + saturation_width + gap, min.y},
-				.max = {max.x, max.y},
-				.on_click = {{this, on_click_hue}}
-			}
+			button_args
 		};
+				
+		button_args = ui::Button::Args {};
+		button_args.min = {min.x + saturation_width + gap, min.y};
+		button_args.max = {max.x, max.y};
+		button_args.radius = 0.002f;
+		button_args.border_width = 0.005f;
+		button_args.on_drag = {{this, on_drag_hue}};
 
 		b_hue_slider = ui::Button {
 			mouse_events,
-			ui::Button::Args {
-				.min = {min.x + saturation_width + gap, min.y},
-				.max = {max.x, max.y},
-				.radius = 0.002f,
-				.border_width = 0.005f,
-				.on_drag = {{this, on_drag_hue}}
-			}
+			button_args
 		};
 
 		set_hue(hue_pos);

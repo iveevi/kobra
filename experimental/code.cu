@@ -1,6 +1,6 @@
 #include <optix.h>
 
-#include <sutil/vec_math.h>
+#include "../include/cuda/math.cuh"
 
 #include "common.hpp"
 #include "color.cuh"
@@ -85,6 +85,6 @@ extern "C" __global__ void __closesthit__ch()
     // attributes are provided by the OptiX API, indlucing barycentric coordinates.
     const float2 barycentrics = optixGetTriangleBarycentrics();
 
-    setPayload( make_float3( barycentrics, 1.0f ) );
+    setPayload( make_float3( barycentrics, 0.5f ) );
 }
 

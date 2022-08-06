@@ -9,9 +9,8 @@
 #include <optix_function_table_definition.h>
 #include <optix_stubs.h>
 
-#include <sutil/Camera.h>
 // #include <sutil/sutil.h>
-#include <sutil/vec_math.h>
+#include "../include/cuda/math.cuh"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
@@ -20,6 +19,7 @@
 #include "common.hpp"
 
 #include "../include/common.hpp"
+#include "../include/camera.hpp"
 
 unsigned int width = 1280;
 unsigned int height = 720;
@@ -35,15 +35,6 @@ typedef SbtRecord<RayGenData>     RayGenSbtRecord;
 typedef SbtRecord<MissData>       MissSbtRecord;
 typedef SbtRecord<HitGroupData>   HitGroupSbtRecord;
 
-void configureCamera( sutil::Camera& cam, const uint32_t width, const uint32_t height )
-{
-    cam.setEye( {0.0f, 0.0f, 2.0f} );
-    cam.setLookat( {0.0f, 0.0f, 0.0f} );
-    cam.setUp( {0.0f, 1.0f, 3.0f} );
-    cam.setFovY( 45.0f );
-    cam.setAspectRatio( (float)width / (float)height );
-}
-
 float3 to_f3(const glm::vec3 &v)
 {
 	return make_float3(v.x, v.y, v.z);
@@ -52,7 +43,12 @@ float3 to_f3(const glm::vec3 &v)
 int main()
 {
         char log[2048]; // For error reporting from OptiX creation functions
+
 	std::cout << "Hello World!" << std::endl;
+
+	kobra::Camera camera {45.0f, (float) width / (float) height};
+	kobra::Transform camera_transform;
+	camera_transform.position = glm::vec3 {0.0f, 0.0f, 5.0f};
 
 	// Initialize CUDA with a no-op call to the the CUDA runtime API
 	cudaFree(0);
@@ -352,16 +348,17 @@ int main()
             CUstream stream;
             CUDA_CHECK( cudaStreamCreate( &stream ) );
 
-            sutil::Camera cam;
-            configureCamera( cam, width, height );
-
             Params params;
             params.image        = output_buffer.map();
             params.image_width  = width;
             params.image_height = height;
             params.handle       = gas_handle;
-            params.cam_eye      = cam.eye();
-            cam.UVWFrame( params.cam_u, params.cam_v, params.cam_w );
+            params.cam_eye      = to_f3(camera_transform.position);
+
+	    auto uvw = kobra::uvw_frame(camera, camera_transform);
+	    params.cam_u = to_f3(uvw.u);
+	    params.cam_v = to_f3(uvw.v);
+	    params.cam_w = to_f3(uvw.w);
 
             CUdeviceptr d_param;
             CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_param ), sizeof( Params ) ) );

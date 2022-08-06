@@ -629,7 +629,7 @@ $L__BB0_36:
 	call _optix_set_payload, (%r3, %r4);
 	// end inline asm
 	mov.u32 	%r5, 2;
-	mov.u32 	%r6, 1065353216;
+	mov.u32 	%r6, 1056964608;
 	// begin inline asm
 	call _optix_set_payload, (%r5, %r6);
 	// end inline asm

@@ -777,27 +777,16 @@ void Raytracer::_initialize_vuklan_structures(const vk::AttachmentLoadOp &load)
 		*_ctx.device,
 		{{}, *_dsl_postprocess, pcr}
 	};
-
-	GraphicsPipelineInfo grp_info {
-		.device = *_ctx.device,
-		.render_pass = _render_pass,
-
-		.vertex_shader = std::move(shaders[1]),
-		.fragment_shader = std::move(shaders[2]),
-
-		.no_bindings = true,
-		.vertex_binding = {},
-		.vertex_attributes = {},
-
-		.pipeline_layout = _ppl_postprocess,
-		.pipeline_cache = vk::raii::PipelineCache {
+		
+	GraphicsPipelineInfo grp_info(*_ctx.device, _render_pass,
+		std::move(shaders[1]), nullptr,
+		std::move(shaders[2]), nullptr,
+		{}, {},
+		_ppl_postprocess, vk::raii::PipelineCache {
 			*_ctx.device,
 			vk::PipelineCacheCreateInfo {}
-		},
-
-		.depth_test = true,
-		.depth_write = true
-	};
+		}
+	);
 
 	_p_postprocess = make_graphics_pipeline(grp_info);
 }

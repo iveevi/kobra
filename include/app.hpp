@@ -1,5 +1,5 @@
-#ifndef APP_H_
-#define APP_H_
+#ifndef KOBRA_APP_H_
+#define KOBRA_APP_H_
 
 // Engine headers
 #include "backend.hpp"

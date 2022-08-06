@@ -20,11 +20,19 @@ struct Shape {
 
 // Rectangle
 struct Rect : public Shape {
-	glm::vec2 min {0.0f};
-	glm::vec2 max {0.0f};
-	glm::vec3 color {1.0f};
-	float radius {0.0f};
-	float border_width {0.0f};
+	glm::vec2 min;
+	glm::vec2 max;
+	glm::vec3 color;
+	float radius;
+	float border_width;
+
+	// Constructor
+	Rect(const glm::vec2 &min_ = glm::vec2 {0.0f},
+			const glm::vec2 &max_ = glm::vec2 {1.0f},
+			const glm::vec3 &color_ = glm::vec3 {1.0f},
+			float radius_ = 0.0f, float border_width_ = 0.0f)
+			: min(min_), max(max_), color(color_),
+			radius(radius_), border_width(border_width_) {}
 };
 
 // TODO: circle and polygons

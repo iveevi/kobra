@@ -40,6 +40,31 @@ struct Camera {
 	float		aspect;
 };
 
+// Creating UVW frame
+struct UVW {
+	glm::vec3 u, v, w;
+};
+
+inline UVW uvw_frame(const Camera &camera, const Transform &transform)
+{
+	glm::vec3 eye = transform.position;
+	glm::vec3 lookat = eye + transform.forward();
+	glm::vec3 up = transform.up();
+
+	glm::vec3 w = lookat - eye;
+	float wlen = glm::length(w);
+	glm::vec3 u = glm::normalize(glm::cross(w, up));
+	glm::vec3 v = glm::normalize(glm::cross(u, w));
+
+	float vlen = wlen * glm::tan(glm::radians(camera.fov) / 2.0f);
+	v *= vlen;
+
+	float ulen = vlen * camera.aspect;
+	u *= ulen;
+
+	return {u, v, w};
+}
+
 using CameraPtr = std::shared_ptr <Camera>;
 
 }

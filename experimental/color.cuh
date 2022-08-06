@@ -1,4 +1,4 @@
-#include <sutil/vec_math.h>
+#include "../include/cuda/math.cuh"
 
 __forceinline__ __device__ float3 toSRGB( const float3& c )
 {

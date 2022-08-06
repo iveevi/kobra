@@ -27,6 +27,7 @@ private:
 	ui::Button	_button;
 	ui::Rect	_rect;
 
+	// TODO: should we put text here?
 	ui::Text	_t_label;
 	ui::Text	_t_value;
 
@@ -115,9 +116,9 @@ public:
 		float maxy = (min.y + max.y + thickness)/2.0f;
 
 		_rect = ui::Rect {
-			.min = {min.x, miny},
-			.max = {max.x, maxy},
-			.color = glm::vec3 {0.5f}
+			glm::vec2 {min.x, miny},
+			glm::vec2 {max.x, maxy},
+			glm::vec3 {0.5f}
 		};
 
 		// Slider button
@@ -125,26 +126,28 @@ public:
 		float maxx = min.x + _value * (max.x - min.x) + _width/2.0f;
 
 		ui::Button::Args button_args {
-			.min = {minx, min.y},
-			.max = {maxx, max.y},
-			.radius = 0.01f,
-			.border_width = 0.01f,
+			glm::vec2 {minx, min.y},
+			glm::vec2 {maxx, max.y},
+			0.01f,
+			0.01f,
 
-			.idle = glm::vec3 {0.5f},
-			.hover = glm::vec3 {0.6f},
-			.pressed = {0.7f, 0.7f, 0.8f},
+			glm::vec3 {0.5f},
+			glm::vec3 {0.6f},
+			{0.7f, 0.7f, 0.8f},
 
-			.on_drag = {{this, on_drag}}
+			GLFW_MOUSE_BUTTON_LEFT,
+
+			{{this, on_drag}}, {}
 		};
 
 		_button = ui::Button(mouse_events, button_args);
 
 		// Label
 		_t_label = ui::Text {
-			.text = args.name,
-			.anchor = {min.x - _width/2.0f, min.y},
-			.color = glm::vec3 {1.0f},
-			.size = args.font_size,
+			args.name,
+			{min.x - _width/2.0f, min.y},
+			glm::vec3 {1.0f},
+			args.font_size,
 		};
 
 		float height = min.y - _fr->size(_t_label).y/2.0f - 2.0f * thickness;
@@ -152,10 +155,10 @@ public:
 
 		// Value
 		_t_value = ui::Text {
-			.text = common::sprintf("%.2f", _value),
-			.anchor = {max.x + _width/2.0f, height},
-			.color = glm::vec3 {0.8f},
-			.size = args.font_size,
+			common::sprintf("%.2f", _value),
+			{max.x + _width/2.0f, height},
+			glm::vec3 {0.8f},
+			args.font_size,
 		};
 
 		_t_value.anchor.x = max.x - _fr->size(_t_value).x/2.0f;

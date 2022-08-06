@@ -21,10 +21,17 @@ namespace ui {
 
 // Text object
 struct Text {
-	std::string	text = "text";
-	glm::vec2	anchor {0.0f};
-	glm::vec3	color {1.0f};
-	float		size {1.0f};
+	std::string	text;
+	glm::vec2	anchor;
+	glm::vec3	color;
+	float		size;
+
+	// Constructor
+	Text(const std::string &text_ = "text",
+			const glm::vec2 &anchor_ = glm::vec2 {0.0f},
+			const glm::vec3 &color_ = glm::vec3 {1.0f},
+			float size_ = 1.0f)
+			: text(text_), anchor(anchor_), color(color_), size(size_) {}
 
 	// Friends
 	friend class layers::FontRenderer;

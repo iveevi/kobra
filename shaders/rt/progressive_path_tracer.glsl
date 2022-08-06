@@ -283,11 +283,19 @@ vec3 Lo(vec3 x, vec3 wo, vec3 n, Material mat, int depth)
 			break;
 		}
 
+		// Russian roulette
+		float tmax = max(throughput.x, max(throughput.y, throughput.z));
+		float q = 1 - min(tmax, 1.0f);
+		float r = random();
+
+		if (r < q)
+			break;
+
 		// Setup next point
 		x = hit.point + hit.normal * 1e-3f;
 		n = hit.normal;
 		mat = hit.mat;
-		throughput *= T;
+		throughput *= T/(1 - q);
 	}
 
 	return contr;
@@ -340,13 +348,12 @@ void main()
 		pc.properties.x,
 		pc.properties.y
 	);
-
+	
 	// Progressive rendering
 	vec3 color = pathtracer(ray, MAX_DEPTH);
 	vec3 pcolor = cast_color(frame.pixels[index]);
 	pcolor = pow(pcolor, vec3(2.2));
-	float t = 1.0f/(1.0f + pc.present);
-	color = mix(pcolor, color, t);
+	color = (color + pcolor * pc.present)/(pc.present + 1.0f);
 	color = pow(color, vec3(1.0/2.2));
 	frame.pixels[index] = cast_color(color);
 }

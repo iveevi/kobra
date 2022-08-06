@@ -1,4 +1,4 @@
-default_compiler: nvcc
+default_compiler: nvcc -ccbin clang
 default_standard: c++17
 
 definitions:
@@ -10,6 +10,7 @@ definitions:
     source/extensions.cpp,
     source/formats.cpp,
     source/io/event.cpp,
+    source/layers/optix_tracer.cu,
     source/layers/raster.cpp,
     source/layers/raytracer.cpp,
     source/logger.cpp,
@@ -30,7 +31,6 @@ definitions:
     thirdparty/assimp/include,
     thirdparty/tinyfiledialogs,
     thirdparty/optix,
-    thirdparty/optix/sutil,
     thirdparty/tinyexr'
   - libs: 'glfw,
     vulkan,
@@ -74,7 +74,6 @@ builds:
     - idirs: includes
     - flags: '-std=c++17'
     - libraries: libs
-    - ksources: 
   - experimental_debug:
     - sources: experimental/main.cu, kobra_source, tinyfd_source, glslang_source
     - idirs: includes

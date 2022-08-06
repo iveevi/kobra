@@ -1320,6 +1320,32 @@ struct GraphicsPipelineInfo {
 
 	bool depth_test;
 	bool depth_write;
+
+	// Constructor
+	GraphicsPipelineInfo(const vk::raii::Device &device,
+			const vk::raii::RenderPass &render_pass,
+			vk::raii::ShaderModule &&vertex_shader,
+			const vk::SpecializationInfo *vertex_specialization,
+			vk::raii::ShaderModule &&fragment_shader,
+			const vk::SpecializationInfo *fragment_specialization,
+			const vk::VertexInputBindingDescription &vertex_binding,
+			const std::vector <vk::VertexInputAttributeDescription> &vertex_attributes,
+			const vk::raii::PipelineLayout &pipeline_layout,
+			const vk::raii::PipelineCache &pipeline_cache,
+			bool depth_test = true,
+			bool depth_write = true)
+			: device(device),
+			render_pass(render_pass),
+			vertex_shader(std::move(vertex_shader)),
+			vertex_specialization(vertex_specialization),
+			fragment_shader(std::move(fragment_shader)),
+			fragment_specialization(fragment_specialization),
+			vertex_binding(vertex_binding),
+			vertex_attributes(vertex_attributes),
+			pipeline_layout(pipeline_layout),
+			pipeline_cache(pipeline_cache),
+			depth_test(depth_test),
+			depth_write(depth_write) {}
 };
 
 inline vk::raii::Pipeline make_graphics_pipeline(const GraphicsPipelineInfo &info)

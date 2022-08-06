@@ -1,3 +1,6 @@
+#define KCUDA_DEBUG
+#define KOBRA_VALIDATION_ERROR_ONLY
+
 #include "include/app.hpp"
 #include "include/backend.hpp"
 #include "include/common.hpp"
@@ -16,7 +19,7 @@
 #include "include/ui/color_picker.hpp"
 #include "include/ui/slider.hpp"
 #include "tinyfiledialogs.h"
-#include <glslang/Public/ShaderLang.h>
+#include "include/layers/optix_tracer.cuh"
 
 using namespace kobra;
 
@@ -29,6 +32,7 @@ struct ECSApp : public BaseApp {
 	layers::Raytracer raytracer;
 	layers::FontRenderer font_renderer;
 	layers::ShapeRenderer shape_renderer;
+	layers::OptixTracer optix_tracer;
 
 	Scene scene;
 
@@ -61,12 +65,11 @@ struct ECSApp : public BaseApp {
 
 		SceneGraph(ECS &ecs_, layers::FontRenderer &fr_, io::MouseEventQueue &mouse_events_)
 				: ecs(ecs_), fr(fr_), mouse_events(mouse_events_) {
-			r_background = ui::Rect {
-				.min = {5, 5},
-				.max = {scene_graph_width - 5, window_size.y - 5},
-				.color = glm::vec3 {0.6f, 0.7, 0.6f},
-				.radius = 0.005f
-			};
+			// TODO: modify this constructor for the rectangle
+			r_background.min = glm::vec2 {5.0f, 5.0f};
+			r_background.max = glm::vec2 {scene_graph_width - 5, window_size.y - 5};
+			r_background.color = glm::vec3 {0.6f, 0.7, 0.6f};
+			r_background.radius = 0.005f;
 		}
 
 		int selected_entity = -1;
@@ -94,17 +97,15 @@ struct ECSApp : public BaseApp {
 						}
 					};
 
-					ui::Button::Args button_args {
-						.min = {10, y},
-						.max = {scene_graph_width - 10, y + 30.0f},
-						.radius = 0.005f,
+					ui::Button::Args button_args {};
 
-						.idle = glm::vec3 {0.6, 0.7, 0.6},
-						.hover = glm::vec3 {0.7, 0.8, 0.7},
-						.pressed = glm::vec3 {0.65, 0.8, 0.65},
-
-						.on_click = {{&selected_entity, _on_click {i}}},
-					};
+					button_args.min = {10, y},
+					button_args.max = {scene_graph_width - 10, y + 30.0f},
+					button_args.radius = 0.005f,
+					button_args.idle = glm::vec3 {0.6, 0.7, 0.6},
+					button_args.hover = glm::vec3 {0.7, 0.8, 0.7},
+					button_args.pressed = glm::vec3 {0.65, 0.8, 0.65},
+					button_args.on_click = {{&selected_entity, _on_click {i}}},
 
 					b_entities[i] = ui::Button(mouse_events, button_args);
 
@@ -135,12 +136,12 @@ struct ECSApp : public BaseApp {
 			for (int i = 0; i < ecs.size(); i++) {
 				auto &e = ecs.get_entity(i);
 
-				auto t = ui::Text {
-					.text = e.name,
-					.anchor = {x + 5.0f, y},
-					.color = glm::vec3 {0.5, 0.5, 1.0},
-					.size = 0.4f
-				};
+				auto t = ui::Text(
+					e.name,
+					{x + 5.0f, y},
+					glm::vec3 {0.5, 0.5, 1.0},
+					0.4f
+				);
 
 				// Center from y to y + minh
 				float h = fr.size(t).y;
@@ -169,6 +170,7 @@ struct ECSApp : public BaseApp {
 			),
 			rasterizer(get_context(), vk::AttachmentLoadOp::eClear),
 			raytracer(get_context(), &sync_queue, vk::AttachmentLoadOp::eClear),
+			optix_tracer(get_context(), vk::AttachmentLoadOp::eClear),
 			font_renderer(get_context(), render_pass, "resources/fonts/noto_sans.ttf"),
 			shape_renderer(get_context(), render_pass),
 			scene_graph(scene.ecs, font_renderer, io.mouse_events) {
@@ -195,12 +197,12 @@ struct ECSApp : public BaseApp {
 			}
 		};
 
-		r_background = ui::Rect {
-			.min = {window_size.x - component_panel_width + 5, 5},
-			.max = {window_size.x - 5, window_size.y - 5},
-			.color = glm::vec3 {0.6f, 0.7, 0.6f},
-			.radius = 0.005f
-		};
+		r_background = ui::Rect(
+			glm::vec2 {window_size.x - component_panel_width + 5, 5},
+			glm::vec2 {window_size.x - 5, window_size.y - 5},
+			glm::vec3 {0.6f, 0.7, 0.6f},
+			0.005f
+		);
 
 		// Input callbacks
 		io.mouse_events.subscribe(mouse_callback, this);
@@ -208,7 +210,11 @@ struct ECSApp : public BaseApp {
 		scene.ecs.info <Mesh> ();
 	}
 
-	int mode = 0;	// 0 for raster, 1 for raytracer
+	int mode = 0;	// 0 for raster, 1 for raytracer, 2 for OptiX
+	std::vector <std::string> mode_strs {
+		"Rasterize", "Raytrace", "OptiX"
+	};
+
 	bool tab_pressed = false;
 
 	void active_input() {
@@ -241,7 +247,7 @@ struct ECSApp : public BaseApp {
 		if (io.input.is_key_down(GLFW_KEY_TAB)) {
 			if (!tab_pressed) {
 				tab_pressed = true;
-				mode = (mode + 1) % 2;
+				mode = (mode + 1) % mode_strs.size();
 			}
 		} else {
 			tab_pressed = false;
@@ -261,11 +267,11 @@ struct ECSApp : public BaseApp {
 
 		// Text things
 		std::vector <ui::Text> texts {
-			ui::Text {
-				.text = common::sprintf("%.2f fps", fps),
-				.anchor = {scene_graph_width + 5, 5},
-				.size = 0.4f
-			},
+			ui::Text(
+				common::sprintf("%s mode: %.2f fps", mode_strs[mode].c_str(), fps),
+				{scene_graph_width + 5, 5},
+				glm::vec3 {1.0f}, 0.4f
+			),
 		};
 
 		for (auto &t : scene_graph.texts())
@@ -290,10 +296,12 @@ struct ECSApp : public BaseApp {
 		cmd.begin({});
 
 		// TODO: pass camera
-		if (mode == 1)
-			raytracer.render(cmd, framebuffer, scene.ecs, {render_min, render_max});
-		else
+		if (mode == 0)
 			rasterizer.render(cmd, framebuffer, scene.ecs, {render_min, render_max});
+		else if (mode == 1)
+			raytracer.render(cmd, framebuffer, scene.ecs, {render_min, render_max});
+		else if (mode == 2)
+			optix_tracer.render(cmd, framebuffer, {render_min, render_max});
 
 		// Start render pass
 		std::array <vk::ClearValue, 2> clear_values = {
