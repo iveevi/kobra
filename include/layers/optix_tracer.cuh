@@ -7,6 +7,9 @@
 
 // Engine headers
 #include "../backend.hpp"
+#include "../ecs.hpp"
+
+#include "tmp_buf.cuh"
 
 namespace kobra {
 
@@ -27,8 +30,13 @@ class OptixTracer {
 	static const std::vector <DSLB> _dslb_render;
 
 	// OptiX structures
-	OptixModule			_module = nullptr;
+	OptixModule			_optix_module = nullptr;
+	OptixPipeline			_optix_pipeline = nullptr;
+	OptixTraversableHandle		_optix_traversable;
+	OptixShaderBindingTable		_optix_sbt;
+	CUstream			_optix_stream;
 
+	sutil::CUDAOutputBuffer <uchar4>_output_buffer;
 	std::vector <uint32_t>		_output;
 
 	// Initialize Optix globally
@@ -91,6 +99,9 @@ class OptixTracer {
 
 		_pipeline = make_graphics_pipeline(grp_info);
 	}
+
+	// Other helper methods
+	void _optix_trace(const Camera &, const Transform &);
 public:
 	// Default constructor
 	OptixTracer() = default;
@@ -107,7 +118,10 @@ public:
 
 	// Constructor
 	OptixTracer(const Context &ctx, const vk::AttachmentLoadOp &load)
-			: _ctx(ctx) {
+			: _ctx(ctx), _output_buffer(
+				sutil::CUDAOutputBufferType::CUDA_DEVICE,
+				width, height
+			) {
 		_initialize_optix();
 		_initialize_vulkan_structures(load);
 
@@ -147,73 +161,9 @@ public:
 	}
 
 	// Render
-	void render(const vk::raii::CommandBuffer &cmd,
-			const vk::raii::Framebuffer &framebuffer,
-			const RenderArea &ra = {{-1, -1}, {-1, -1}}) {
-		// Apply render area
-		ra.apply(cmd, _ctx.extent);
-
-		// Clear colors
-		std::array <vk::ClearValue, 2> clear_values {
-			vk::ClearValue {
-				vk::ClearColorValue {
-					std::array <float, 4> {0.0f, 0.0f, 0.0f, 1.0f}
-				}
-			},
-			vk::ClearValue {
-				vk::ClearDepthStencilValue {
-					1.0f, 0
-				}
-			}
-		};
-
-		// Copy output to staging buffer
-		_staging.upload(_output);
-
-		// Copy staging buffer to image
-		_result.transition_layout(cmd, vk::ImageLayout::eTransferDstOptimal);
-
-		copy_data_to_image(cmd,
-			_staging.buffer,
-			_result.image,
-			_result.format,
-			width, height
-		);
-
-		// Transition image back to shader read
-		_result.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
-
-		// Start the render pass
-		cmd.beginRenderPass(
-			vk::RenderPassBeginInfo {
-				*_render_pass,
-				*framebuffer,
-				vk::Rect2D {
-					vk::Offset2D {0, 0},
-					_ctx.extent
-				},
-				static_cast <uint32_t> (clear_values.size()),
-				clear_values.data()
-			},
-			vk::SubpassContents::eInline
-		);
-
-		// Post process pipeline
-		cmd.bindPipeline(
-			vk::PipelineBindPoint::eGraphics,
-			*_pipeline
-		);
-
-		// Bind descriptor set
-		cmd.bindDescriptorSets(
-			vk::PipelineBindPoint::eGraphics,
-			*_ppl, 0, {*_ds_render}, {}
-		);
-
-		// Draw and end
-		cmd.draw(6, 1, 0, 0);
-		cmd.endRenderPass();
-	}
+	void render(const vk::raii::CommandBuffer &,
+			const vk::raii::Framebuffer &,
+			const ECS &, const RenderArea & = {{-1, -1}, {-1, -1}});
 };
 
 }

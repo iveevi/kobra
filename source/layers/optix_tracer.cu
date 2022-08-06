@@ -6,7 +6,7 @@
 
 // Engine headers
 #include "../../include/cuda/error.cuh"
-#include "../../include/layers/tmp_buf.cuh"
+// #include "../../include/layers/tmp_buf.cuh"
 #include "../../include/layers/optix_tracer.cuh"
 #include "../../include/camera.hpp"
 
@@ -78,6 +78,96 @@ static void context_log_cb( unsigned int level, const char* tag, const char* mes
               << message << "\n";
 }
 
+////////////
+// Render //
+////////////
+
+void OptixTracer::render(const vk::raii::CommandBuffer &cmd,
+		const vk::raii::Framebuffer &framebuffer,
+		const ECS &ecs, const RenderArea &ra)
+{
+	// Get camera and camera transform
+	Camera camera;
+	Transform camera_transform;
+	bool found_camera = false;
+
+	// Iterate over all entities
+	for (int i = 0; i < ecs.size(); i++) {
+		 if (ecs.exists <Camera> (i)) {
+			camera = ecs.get <Camera> (i);
+			camera_transform = ecs.get <Transform> (i);
+			found_camera = true;
+		 }
+	}
+
+	// Launch OptiX with the given camera
+	_optix_trace(camera, camera_transform);
+
+	// Apply render area
+	ra.apply(cmd, _ctx.extent);
+
+	// Clear colors
+	std::array <vk::ClearValue, 2> clear_values {
+		vk::ClearValue {
+			vk::ClearColorValue {
+				std::array <float, 4> {0.0f, 0.0f, 0.0f, 1.0f}
+			}
+		},
+		vk::ClearValue {
+			vk::ClearDepthStencilValue {
+				1.0f, 0
+			}
+		}
+	};
+
+	// Copy output to staging buffer
+	_staging.upload(_output);
+
+	// Copy staging buffer to image
+	_result.transition_layout(cmd, vk::ImageLayout::eTransferDstOptimal);
+
+	copy_data_to_image(cmd,
+		_staging.buffer,
+		_result.image,
+		_result.format,
+		width, height
+	);
+
+	// Transition image back to shader read
+	_result.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
+
+	// Start the render pass
+	cmd.beginRenderPass(
+		vk::RenderPassBeginInfo {
+			*_render_pass,
+			*framebuffer,
+			vk::Rect2D {
+				vk::Offset2D {0, 0},
+				_ctx.extent
+			},
+			static_cast <uint32_t> (clear_values.size()),
+			clear_values.data()
+		},
+		vk::SubpassContents::eInline
+	);
+
+	// Post process pipeline
+	cmd.bindPipeline(
+		vk::PipelineBindPoint::eGraphics,
+		*_pipeline
+	);
+
+	// Bind descriptor set
+	cmd.bindDescriptorSets(
+		vk::PipelineBindPoint::eGraphics,
+		*_ppl, 0, {*_ds_render}, {}
+	);
+
+	// Draw and end
+	cmd.draw(6, 1, 0, 0);
+	cmd.endRenderPass();
+}
+
 /////////////////////
 // Private methods //
 /////////////////////
@@ -121,7 +211,6 @@ void OptixTracer::_initialize_optix()
 	//
         // accel handling
         //
-        OptixTraversableHandle gas_handle;
         CUdeviceptr            d_gas_output_buffer;
         {
 		// Use default options for simplicity.  In a real use case we would want to
@@ -188,7 +277,7 @@ void OptixTracer::_initialize_optix()
 					gas_buffer_sizes.tempSizeInBytes,
 					d_gas_output_buffer,
 					gas_buffer_sizes.outputSizeInBytes,
-					&gas_handle,
+					&_optix_traversable,
 					nullptr,            // emitted property list
 					0                   // num emitted properties
 					) );
@@ -244,7 +333,7 @@ void OptixTracer::_initialize_optix()
 					inputSize,
 					log,
 					&sizeof_log,
-					&_module
+					&_optix_module
 					) );
 	}
 
@@ -259,7 +348,7 @@ void OptixTracer::_initialize_optix()
 
 		OptixProgramGroupDesc raygen_prog_group_desc    = {}; //
 		raygen_prog_group_desc.kind                     = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
-		raygen_prog_group_desc.raygen.module            = _module;
+		raygen_prog_group_desc.raygen.module            = _optix_module;
 		raygen_prog_group_desc.raygen.entryFunctionName = "__raygen__rg";
 		OPTIX_CHECK_LOG( optixProgramGroupCreate(
 					context,
@@ -273,7 +362,7 @@ void OptixTracer::_initialize_optix()
 
 		OptixProgramGroupDesc miss_prog_group_desc  = {};
 		miss_prog_group_desc.kind                   = OPTIX_PROGRAM_GROUP_KIND_MISS;
-		miss_prog_group_desc.miss.module            = _module;
+		miss_prog_group_desc.miss.module            = _optix_module;
 		miss_prog_group_desc.miss.entryFunctionName = "__miss__ms";
 		sizeof_log = sizeof( log );
 		OPTIX_CHECK_LOG( optixProgramGroupCreate(
@@ -288,7 +377,7 @@ void OptixTracer::_initialize_optix()
 
 		OptixProgramGroupDesc hitgroup_prog_group_desc = {};
 		hitgroup_prog_group_desc.kind                         = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
-		hitgroup_prog_group_desc.hitgroup.moduleCH            = _module;
+		hitgroup_prog_group_desc.hitgroup.moduleCH            = _optix_module;
 		hitgroup_prog_group_desc.hitgroup.entryFunctionNameCH = "__closesthit__ch";
 		sizeof_log = sizeof( log );
 		OPTIX_CHECK_LOG( optixProgramGroupCreate(
@@ -305,7 +394,7 @@ void OptixTracer::_initialize_optix()
 	//
         // Link pipeline
         //
-        OptixPipeline pipeline = nullptr;
+        _optix_pipeline = nullptr;
         {
             const uint32_t    max_trace_depth  = 1;
             OptixProgramGroup program_groups[] = { raygen_prog_group, miss_prog_group, hitgroup_prog_group };
@@ -322,7 +411,7 @@ void OptixTracer::_initialize_optix()
                         sizeof( program_groups ) / sizeof( program_groups[0] ),
                         log,
                         &sizeof_log,
-                        &pipeline
+                        &_optix_pipeline
                         ) );
 
             OptixStackSizes stack_sizes = {};
@@ -339,7 +428,7 @@ void OptixTracer::_initialize_optix()
                                                      0,  // maxDCDEpth
                                                      &direct_callable_stack_size_from_traversal,
                                                      &direct_callable_stack_size_from_state, &continuation_stack_size ) );
-            OPTIX_CHECK( optixPipelineSetStackSize( pipeline, direct_callable_stack_size_from_traversal,
+            OPTIX_CHECK( optixPipelineSetStackSize( _optix_pipeline, direct_callable_stack_size_from_traversal,
                                                     direct_callable_stack_size_from_state, continuation_stack_size,
                                                     1  // maxTraversableDepth
                                                     ) );
@@ -348,7 +437,6 @@ void OptixTracer::_initialize_optix()
         //
         // Set up shader binding table
         //
-        OptixShaderBindingTable sbt = {};
         {
             CUdeviceptr  raygen_record;
             const size_t raygen_record_size = sizeof( RayGenSbtRecord );
@@ -387,59 +475,53 @@ void OptixTracer::_initialize_optix()
                         cudaMemcpyHostToDevice
                         ) );
 
-            sbt.raygenRecord                = raygen_record;
-            sbt.missRecordBase              = miss_record;
-            sbt.missRecordStrideInBytes     = sizeof( MissSbtRecord );
-            sbt.missRecordCount             = 1;
-            sbt.hitgroupRecordBase          = hitgroup_record;
-            sbt.hitgroupRecordStrideInBytes = sizeof( HitGroupSbtRecord );
-            sbt.hitgroupRecordCount         = 1;
+	    _optix_sbt = OptixShaderBindingTable {};
+            _optix_sbt.raygenRecord                = raygen_record;
+            _optix_sbt.missRecordBase              = miss_record;
+            _optix_sbt.missRecordStrideInBytes     = sizeof( MissSbtRecord );
+            _optix_sbt.missRecordCount             = 1;
+            _optix_sbt.hitgroupRecordBase          = hitgroup_record;
+            _optix_sbt.hitgroupRecordStrideInBytes = sizeof( HitGroupSbtRecord );
+            _optix_sbt.hitgroupRecordCount         = 1;
         }
 
-        sutil::CUDAOutputBuffer<uchar4> output_buffer( sutil::CUDAOutputBufferType::CUDA_DEVICE, width, height );
-	
-	Camera camera {45.0f, (float) width / (float) height};
-	Transform camera_transform;
-	camera_transform.position = glm::vec3 {0.0f, 0.0f, 5.0f};
-        
-	//
-        // launch
-        //
-	{
-		CUstream stream;
-		CUDA_CHECK( cudaStreamCreate( &stream ) );
-
-		Params params;
-		params.image        = output_buffer.map();
-		params.image_width  = width;
-		params.image_height = height;
-		params.handle       = gas_handle;
-		params.cam_eye      = to_f3(camera_transform.position);
-
-		auto uvw = kobra::uvw_frame(camera, camera_transform);
-		params.cam_u = to_f3(uvw.u);
-		params.cam_v = to_f3(uvw.v);
-		params.cam_w = to_f3(uvw.w);
-
-		CUdeviceptr d_param;
-		CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_param ), sizeof( Params ) ) );
-		CUDA_CHECK( cudaMemcpy(
-					reinterpret_cast<void*>( d_param ),
-					&params, sizeof( params ),
-					cudaMemcpyHostToDevice
-				      ) );
-
-		OPTIX_CHECK( optixLaunch( pipeline, stream, d_param, sizeof( Params ), &sbt, width, height, /*depth=*/1 ) );
-		CUDA_SYNC_CHECK();
-
-		output_buffer.unmap();
-		CUDA_CHECK( cudaFree( reinterpret_cast<void*>( d_param ) ) );
-	}
+	CUDA_CHECK(cudaStreamCreate(&_optix_stream ));
 
 	KOBRA_LOG_FILE(ok) << "Initialized OptiX and relevant structures" << std::endl;
+}
+
+void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
+{
+	Params params;
+	params.image        = _output_buffer.map();
+	params.image_width  = width;
+	params.image_height = height;
+	params.handle       = _optix_traversable;
+	params.cam_eye      = to_f3(transform.position);
+
+	auto uvw = kobra::uvw_frame(camera, transform);
+	params.cam_u = to_f3(uvw.u);
+	params.cam_v = to_f3(uvw.v);
+	params.cam_w = to_f3(uvw.w);
+
+	CUdeviceptr d_param;
+	CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_param ), sizeof( Params ) ) );
+	CUDA_CHECK( cudaMemcpy(
+				reinterpret_cast<void*>( d_param ),
+				&params, sizeof( params ),
+				cudaMemcpyHostToDevice
+			      ) );
+
+	OPTIX_CHECK( optixLaunch( _optix_pipeline, _optix_stream, d_param,
+				sizeof( Params ), &_optix_sbt, width, height,
+				1) );
+	CUDA_SYNC_CHECK();
+
+	_output_buffer.unmap();
+	CUDA_CHECK( cudaFree( reinterpret_cast<void*>( d_param ) ) );
 
 	// Copy result to buffer
-	uchar4 *ptr = output_buffer.getHostPointer();
+	uchar4 *ptr = _output_buffer.getHostPointer();
 
 	_output.resize(width * height);
 	for (int x = 0; x < width; x++) {

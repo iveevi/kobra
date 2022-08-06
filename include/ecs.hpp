@@ -2,7 +2,7 @@
 #define KOBRA_ECS_H_
 
 // Standard headers
-#include <map>
+#include <unordered_map>
 #include <memory>
 #include <vector>
 
@@ -66,7 +66,8 @@ class ECS {
 
 	Archetype <Entity>		entities;
 
-	std::map <std::string, int>	name_map;
+	std::unordered_map <std::string, int>
+					name_map;
 
 	// Private helpers
 	void _expand_all();

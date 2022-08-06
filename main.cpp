@@ -301,7 +301,7 @@ struct ECSApp : public BaseApp {
 		else if (mode == 1)
 			raytracer.render(cmd, framebuffer, scene.ecs, {render_min, render_max});
 		else if (mode == 2)
-			optix_tracer.render(cmd, framebuffer, {render_min, render_max});
+			optix_tracer.render(cmd, framebuffer, scene.ecs, {render_min, render_max});
 
 		// Start render pass
 		std::array <vk::ClearValue, 2> clear_values = {

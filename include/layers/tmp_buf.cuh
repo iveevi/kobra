@@ -52,6 +52,7 @@ template <typename PIXEL_FORMAT>
 class CUDAOutputBuffer
 {
 public:
+	CUDAOutputBuffer() = default;
     CUDAOutputBuffer( CUDAOutputBufferType type, int32_t width, int32_t height );
     ~CUDAOutputBuffer();
 
