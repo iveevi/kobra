@@ -82,15 +82,17 @@ builds:
 
 targets:
   - kobra:
-    - modes: 'gdb, wall, release'
+    - modes: 'gdb, cuda-gdb, wall, release'
     - builds:
       - default: kobra
+      - cuda-gdb: kobra_debug
       - gdb: kobra_debug
       - wall: kobra_wall
       - release: kobra_release
     - postbuilds:
       - default: 'cd shaders && ./compile.sh && cd .. && {}'
       - gdb: 'gdb {}'
+      - cuda-gdb: 'cuda-gdb {}'
       - wall: '{}'
   - experimental:
     - modes: 'gdb'

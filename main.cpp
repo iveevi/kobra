@@ -252,6 +252,14 @@ struct ECSApp : public BaseApp {
 		} else {
 			tab_pressed = false;
 		}
+
+		// Also switch on numbers
+		if (io.input.is_key_down(GLFW_KEY_1))
+			mode = 0;
+		else if (io.input.is_key_down(GLFW_KEY_2))
+			mode = 1;
+		else if (io.input.is_key_down(GLFW_KEY_3))
+			mode = 2;
 	}
 
 	float fps = 0;
