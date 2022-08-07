@@ -101,9 +101,7 @@ public:
 	Raytracer(Mesh *, Material *);
 
 	// Get the mesh
-	const Mesh &get_mesh() const {
-		return *mesh;
-	}
+	const Mesh &get_mesh() const;
 
 	// Serialize
 	void serialize(const Device &, const Transform &, HostBuffers &) const;

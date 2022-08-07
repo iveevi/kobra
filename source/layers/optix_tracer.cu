@@ -232,83 +232,6 @@ void OptixTracer::_initialize_optix()
 	CUcontext cuCtx = 0;  // zero means take the current context
 	OPTIX_CHECK( optixDeviceContextCreate( cuCtx, &options, &_optix_ctx) );
 	
-	/*
-        // accel handling
-        //
-        CUdeviceptr            d_gas_output_buffer;
-        {
-		// Use default options for simplicity.  In a real use case we would want to
-		// enable compaction, etc
-		OptixAccelBuildOptions accel_options = {};
-		accel_options.buildFlags = OPTIX_BUILD_FLAG_NONE;
-		accel_options.operation  = OPTIX_BUILD_OPERATION_BUILD;
-
-		// Triangle build input: simple list of three vertices
-		const std::array <float3, 3> vertices =
-		{ {
-			  { -0.5f, -0.5f, 0.0f },
-			  {  0.5f, -0.5f, 0.0f },
-			  {  0.0f,  0.5f, 0.0f }
-		  } };
-
-		const size_t vertices_size = sizeof( float3 )*vertices.size();
-		CUdeviceptr d_vertices=0;
-		CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_vertices ), vertices_size ) );
-		CUDA_CHECK( cudaMemcpy(
-					reinterpret_cast<void*>( d_vertices ),
-					vertices.data(),
-					vertices_size,
-					cudaMemcpyHostToDevice
-				      ) );
-
-		// Our build input is a simple list of non-indexed triangle vertices
-		const uint32_t triangle_input_flags[1] = { OPTIX_GEOMETRY_FLAG_NONE };
-		OptixBuildInput triangle_input = {};
-		triangle_input.type                        = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
-		triangle_input.triangleArray.vertexFormat  = OPTIX_VERTEX_FORMAT_FLOAT3;
-		triangle_input.triangleArray.numVertices   = static_cast<uint32_t>( vertices.size() );
-		triangle_input.triangleArray.vertexBuffers = &d_vertices;
-		triangle_input.triangleArray.flags         = triangle_input_flags;
-		triangle_input.triangleArray.numSbtRecords = 1;
-
-		OptixAccelBufferSizes gas_buffer_sizes;
-		OPTIX_CHECK(optixAccelComputeMemoryUsage(
-			_optix_ctx,
-			&accel_options, &triangle_input,
-			1, &gas_buffer_sizes
-		));
-
-		CUdeviceptr d_temp_buffer_gas;
-		CUDA_CHECK( cudaMalloc(
-					reinterpret_cast<void**>( &d_temp_buffer_gas ),
-					gas_buffer_sizes.tempSizeInBytes
-				      ) );
-		CUDA_CHECK( cudaMalloc(
-					reinterpret_cast<void**>( &d_gas_output_buffer ),
-					gas_buffer_sizes.outputSizeInBytes
-				      ) );
-
-		OPTIX_CHECK( optixAccelBuild(
-					_optix_ctx,
-					0,                  // CUDA stream
-					&accel_options,
-					&triangle_input,
-					1,                  // num build inputs
-					d_temp_buffer_gas,
-					gas_buffer_sizes.tempSizeInBytes,
-					d_gas_output_buffer,
-					gas_buffer_sizes.outputSizeInBytes,
-					&_optix_traversable,
-					nullptr,            // emitted property list
-					0                   // num emitted properties
-					) );
-
-		// We can now free the scratch space buffer used during build and the vertex
-		// inputs, since they are not needed by our trivial shading method
-		CUDA_CHECK( cudaFree( reinterpret_cast<void*>( d_temp_buffer_gas ) ) );
-		CUDA_CHECK( cudaFree( reinterpret_cast<void*>( d_vertices        ) ) );
-	} */
-
 	// Create the OptiX module
 	OptixPipelineCompileOptions pipeline_compile_options = {};
 
@@ -513,6 +436,7 @@ void OptixTracer::_initialize_optix()
 
 void OptixTracer::_optix_build()
 {
+	// Buffer for the output acceleration structure
         CUdeviceptr            d_gas_output_buffer;
 
 	// Use default options for simplicity.  In a real use case we would want to
@@ -521,48 +445,65 @@ void OptixTracer::_optix_build()
 	accel_options.buildFlags = OPTIX_BUILD_FLAG_NONE;
 	accel_options.operation  = OPTIX_BUILD_OPERATION_BUILD;
 
-	/* Triangle build input: simple list of three vertices
-	const std::array <float3, 3> vertices {
-		  float3 { -0.5f, -0.5f, 0.0f },
-		  float3 {  0.5f, -0.5f, 0.0f },
-		  float3 {  0.0f,  0.5f, 0.0f }
-	}; */
-	
+	// One build input (and temporary buffer) for each instance
 	std::vector <float3> vertices;
+	std::vector <uint3> triangles;
 
 	int ti = 0;
+
+	// TODO: custom vector class which can be casted to glm, float3 and
+	// bullet btVector3
 	for (const kobra::Raytracer *rt : _c_raytracers) {
 		const Mesh &mesh = rt->get_mesh();
+		const Transform &transform = _c_transforms[ti];
+
+		uint offset = vertices.size();
 		for (auto s : mesh.submeshes) {
-			for (auto i : s.indices) {
+			for (int i = 0; i < s.indices.size(); i += 3) {
+				triangles.push_back({
+					offset + s.indices[i],
+					offset + s.indices[i + 1],
+					offset + s.indices[i + 2]
+				});
+			}
+
+			for (int i = 0; i < s.vertices.size(); i++) {
 				auto p = s.vertices[i].position;
-				p = _c_transforms[ti].apply(p);
+				p = transform.apply(p);
 				vertices.push_back(to_f3(p));
 			}
 		}
-			
+
 		ti++;
 	}
 
-	const size_t vertices_size = sizeof( float3 )*vertices.size();
-	CUdeviceptr d_vertices=0;
-	CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_vertices ), vertices_size ) );
-	CUDA_CHECK( cudaMemcpy(
-				reinterpret_cast<void*>( d_vertices ),
-				vertices.data(),
-				vertices_size,
-				cudaMemcpyHostToDevice
-			      ) );
+	const size_t vertices_size = sizeof(float3) * vertices.size();
+	const size_t triangles_size = sizeof(uint3) * triangles.size();
 
-	// Our build input is a simple list of non-indexed triangle vertices
-	const uint32_t triangle_input_flags[1] = { OPTIX_GEOMETRY_FLAG_NONE };
+	// cuda::BufferData vertices_data(vertices_size, vertices.data());
+	cuda::BufferData vertices_data;
+	vertices_data.upload(vertices);
+
+	cuda::BufferData triangles_data;
+	triangles_data.upload(triangles);
+
+	const uint32_t triangle_input_flags[1] = {OPTIX_GEOMETRY_FLAG_NONE};
+
 	OptixBuildInput triangle_input = {};
+
+	CUdeviceptr dd_vertices = vertices_data.dev();
+
 	triangle_input.type                        = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
+	
 	triangle_input.triangleArray.vertexFormat  = OPTIX_VERTEX_FORMAT_FLOAT3;
-	triangle_input.triangleArray.numVertices   = static_cast<uint32_t>( vertices.size() );
-	triangle_input.triangleArray.vertexBuffers = &d_vertices;
+	triangle_input.triangleArray.numVertices   = static_cast <uint32_t> (vertices.size());
+	triangle_input.triangleArray.vertexBuffers = &dd_vertices;
 	triangle_input.triangleArray.flags         = triangle_input_flags;
 	triangle_input.triangleArray.numSbtRecords = 1;
+	
+	triangle_input.triangleArray.indexFormat = OPTIX_INDICES_FORMAT_UNSIGNED_INT3;
+	triangle_input.triangleArray.numIndexTriplets = static_cast <uint32_t> (triangles.size());
+	triangle_input.triangleArray.indexBuffer = triangles_data.dev();
 
 	OptixAccelBufferSizes gas_buffer_sizes;
 	OPTIX_CHECK(optixAccelComputeMemoryUsage(
@@ -572,6 +513,8 @@ void OptixTracer::_optix_build()
 	));
 
 	CUdeviceptr d_temp_buffer_gas;
+
+	// TODO: cuda::alloc which does CUDA_CHECK automatically
 	CUDA_CHECK( cudaMalloc(
 				reinterpret_cast<void**>( &d_temp_buffer_gas ),
 				gas_buffer_sizes.tempSizeInBytes
@@ -595,11 +538,6 @@ void OptixTracer::_optix_build()
 				nullptr,            // emitted property list
 				0                   // num emitted properties
 				) );
-
-	// We can now free the scratch space buffer used during build and the vertex
-	// inputs, since they are not needed by our trivial shading method
-	CUDA_CHECK( cudaFree( reinterpret_cast<void*>( d_temp_buffer_gas ) ) );
-	CUDA_CHECK( cudaFree( reinterpret_cast<void*>( d_vertices        ) ) );
 }
 
 void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)

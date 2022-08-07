@@ -11,15 +11,6 @@
 #include <set>
 #include <sstream>
 
-// Color constants
-// TODO: refactor to kobra
-#define MC_RESET	"\033[0m"
-#define MC_RED		"\033[31m"
-#define MC_GREEN	"\033[32m"
-#define MC_YELLOW	"\033[33m"
-#define MC_BLUE		"\033[34m"
-#define MC_MAGENTA	"\033[35m"
-
 // Color structs
 struct log_ok {};
 struct log_warn {};
@@ -27,6 +18,7 @@ struct log_error {};
 struct log_reset {};
 struct log_notify {};
 struct log_fatal_error {};
+struct log_header {};
 
 // Overload printing these structs
 std::ostream &operator<<(std::ostream &, const log_ok &);
@@ -35,8 +27,10 @@ std::ostream &operator<<(std::ostream &, const log_error &);
 std::ostream &operator<<(std::ostream &, const log_reset &);
 std::ostream &operator<<(std::ostream &, const log_notify &);
 std::ostream &operator<<(std::ostream &, const log_fatal_error &);
+std::ostream &operator<<(std::ostream &, const log_header &);
 
 // Logger class
+// TODO: completely put in source file
 class Logger {
 	// Static members
 	static std::ostream *	os;
@@ -44,10 +38,14 @@ class Logger {
 	static std::mutex	mtx;
 
 	// For main stream
+	// TODO: engine callbacks to these functions
+	static constexpr int _header_width = 12;
+
 	static std::ostream &_main_fatal_error() {
 		mtx.lock();
 		if (console) *os << log_fatal_error();
-		*os << "[KOBRA: " << time() << ": FATAL ERROR] ";
+		*os << "[" << time() << std::setw(_header_width)
+			<< "FATAL ERROR] ";
 		if (console) *os << log_reset();
 		if (!console) os->flush();
 		mtx.unlock();
@@ -62,7 +60,8 @@ class Logger {
 	static std::ostream &_main_ok() {
 		mtx.lock();
 		if (console) *os << log_ok();
-		*os << "[KOBRA: " << time() << "] ";
+		*os << "[" << time() << std::setw(_header_width)
+			<< "OK] ";
 		if (console) *os << log_reset();
 		if (!console) os->flush();
 		mtx.unlock();
@@ -72,7 +71,8 @@ class Logger {
 	static std::ostream &_main_error() {
 		mtx.lock();
 		if (console) *os << log_error();
-		*os << "[KOBRA: " << time() << "] ";
+		*os << "[" << time() << std::setw(_header_width)
+			<< "ERROR] ";
 		if (console) *os << log_reset();
 		if (!console) os->flush();
 		mtx.unlock();
@@ -82,17 +82,20 @@ class Logger {
 	static std::ostream &_main_warn() {
 		mtx.lock();
 		if (console) *os << log_warn();
-		*os << "[KOBRA: " << time() << "] ";
+		*os << "[" << time() << std::setw(_header_width)
+			<< "WARNING] ";
 		if (console) *os << log_reset();
 		if (!console) os->flush();
 		mtx.unlock();
 		return *os;
 	}
 
+	// TODO: refactor to info
 	static std::ostream &_main_notify() {
 		mtx.lock();
 		if (console) *os << log_notify();
-		*os << "[KOBRA: " << time() << "] ";
+		*os << "[" << time() << std::setw(_header_width)
+			<< "INFO] ";
 		if (console) *os << log_reset();
 		if (!console) os->flush();
 		mtx.unlock();
@@ -103,7 +106,7 @@ public:
 		auto t = std::time(0);
 		auto tm = *std::localtime(&t);
 		std::ostringstream oss;
-		oss << std::put_time(&tm, "%m/%d/%Y %H:%M:%S");
+		oss << std::put_time(&tm, "%H:%M:%S");
 		return oss.str();
 	}
 
@@ -168,37 +171,46 @@ public:
 	}
 
 	// With bracketed origin
+	// TODO: function to write the origined message
 	static void ok(const char *origin, const char *msg) {
-		ok() << "[" << origin << "] " << msg << std::endl;
+		ok() << log_header() << "[" << origin << "] "
+			<< log_reset() << msg << std::endl;
 	}
 
 	static void error(const char *origin, const char *msg) {
-		error() << "[" << origin << "] " << msg << std::endl;
+		error() << log_header() << "[" << origin << "] "
+			<< log_reset() << msg << std::endl;
 	}
 
 	static void warn(const char *origin, const char *msg) {
-		warn() << "[" << origin << "] " << msg << std::endl;
+		warn() << log_header() << "[" << origin << "] "
+			<< log_reset() << msg << std::endl;
 	}
 
 	static void notify(const char *origin, const char *msg) {
-		notify() << "[" << origin << "] " << msg << std::endl;
+		notify() << log_header() << "[" << origin << "] "
+			<< log_reset() << msg << std::endl;
 	}
 
 	// Bracketed origin and stream
 	static std::ostream &ok_from(const char *origin) {
-		return ok() << "[" << origin << "] ";
+		return ok() << log_header() << "[" << origin
+			<< "] " << log_reset();
 	}
 
 	static std::ostream &error_from(const char *origin) {
-		return error() << "[" << origin << "] ";
+		return error() << log_header() << "[" << origin
+			<< "] "	<< log_reset();
 	}
 
 	static std::ostream &warn_from(const char *origin) {
-		return warn() << "[" << origin << "] ";
+		return warn() << log_header() << "[" << origin
+			<< "] " << log_reset();
 	}
 
 	static std::ostream &notify_from(const char *origin) {
-		return notify() << "[" << origin << "] ";
+		return notify() << log_header() << "[" << origin
+			<< "] " << log_reset();
 	}
 
 	// Cached logging
@@ -242,7 +254,25 @@ public:
 
 // Macros for logging
 // TODO: option to swthich function and pretty function
-#define KOBRA_LOG_FUNC(type) Logger::type##_from(__FUNCTION__)
+static inline std::string function_name(const std::string &pretty)
+{
+	// Extract the full function name only
+	std::string word;
+
+	for (auto c : pretty) {
+		if (c == '(') break;
+		else if (c == ' ') word.clear();
+		else word += c;
+	}
+
+	// If it starts with 'kobra::', remove it
+	if (word.substr(0, 7) == "kobra::")
+		word = word.substr(7);
+
+	return word;
+}
+
+#define KOBRA_LOG_FUNC(type) Logger::type##_from(function_name(__PRETTY_FUNCTION__).c_str())
 
 #define LINE_TO_STRING(line) #line
 #define LINE_TO_STRING2(line) LINE_TO_STRING(line)

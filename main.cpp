@@ -210,7 +210,7 @@ struct ECSApp : public BaseApp {
 		scene.ecs.info <Mesh> ();
 	}
 
-	int mode = 0;	// 0 for raster, 1 for raytracer, 2 for OptiX
+	int mode = 2;	// 0 for raster, 1 for raytracer, 2 for OptiX
 	std::vector <std::string> mode_strs {
 		"Rasterize", "Raytrace", "OptiX"
 	};

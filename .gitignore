@@ -2,6 +2,7 @@
 *.ini
 *.log
 *.out
+*.ptx
 *.spv
 .cache
 .smake

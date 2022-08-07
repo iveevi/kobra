@@ -1,3 +1,13 @@
+// Color constants
+#define KOBRA_LOGGER_RESET	"\033[1;0m"
+#define KOBRA_LOGGER_RED	"\033[1;31m"
+#define KOBRA_LOGGER_GREEN	"\033[1;32m"
+#define KOBRA_LOGGER_YELLOW	"\033[1;33m"
+#define KOBRA_LOGGER_BLUE	"\033[1;34m"
+#define KOBRA_LOGGER_MAGENTA	"\033[1;35m"
+#define KOBRA_LOGGER_HEADER	"\033[3;36m"
+
+// Engine headers
 #include "../include/logger.hpp"
 
 // Static members
@@ -7,19 +17,22 @@ std::mutex Logger::mtx;
 
 // Overloading operator<<
 std::ostream &operator<<(std::ostream &os, const log_ok &lt)
-        {return os << MC_GREEN;}
+        {return os << KOBRA_LOGGER_GREEN;}
         
 std::ostream &operator<<(std::ostream &os, const log_warn &lt)
-        {return os << MC_YELLOW;}
+        {return os << KOBRA_LOGGER_YELLOW;}
 
 std::ostream &operator<<(std::ostream &os, const log_error &lt)
-        {return os << MC_RED;}
+        {return os << KOBRA_LOGGER_RED;}
 
 std::ostream &operator<<(std::ostream &os, const log_reset &lt)
-        {return os << MC_RESET;}
+        {return os << KOBRA_LOGGER_RESET;}
 
 std::ostream &operator<<(std::ostream &os, const log_notify &lt)
-        {return os << MC_BLUE;}
+        {return os << KOBRA_LOGGER_BLUE;}
 
 std::ostream &operator<<(std::ostream &os, const log_fatal_error &lt)
-        {return os << MC_MAGENTA;}
+        {return os << KOBRA_LOGGER_MAGENTA;}
+
+std::ostream &operator<<(std::ostream &os, const log_header &lt)
+        {return os << KOBRA_LOGGER_HEADER;}

@@ -79,6 +79,11 @@ void Rasterizer::bind_material(const Device &dev, const vk::raii::DescriptorSet 
 Raytracer::Raytracer(Mesh *mesh_, Material *material_)
 		: Renderer(material_), mesh(mesh_) {}
 
+const Mesh &Raytracer::get_mesh() const
+{
+	return *mesh;
+}
+
 void Raytracer::serialize_submesh(const Device &dev, const Submesh &submesh, const Transform &transform, HostBuffers &hb) const
 {
 	// Offset for triangle indices

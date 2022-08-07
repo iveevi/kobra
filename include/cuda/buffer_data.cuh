@@ -27,6 +27,12 @@ public:
 		resize(size);
 	}
 
+	// Destructor
+	~BufferData() {
+		if (_device_ptr != nullptr)
+			CUDA_CHECK(cudaFree(_device_ptr));
+	}
+
 	// No copy
 	BufferData(const BufferData &) = delete;
 	BufferData &operator=(const BufferData &) = delete;
@@ -37,14 +43,18 @@ public:
 	}
 
 	// Get device pointer
-	template <class T>
+	template <class T = void>
 	T *dev() {
 		return reinterpret_cast <T *> (_device_ptr);
 	}
 
+	CUdeviceptr dev() {
+		return reinterpret_cast <CUdeviceptr> (_device_ptr);
+	}
+
 	// Upload data to device
 	template <class T>
-	bool upload(const std::vector <T> &data, size_t offset, bool auto_resize = true) {
+	bool upload(const std::vector <T> &data, size_t offset = 0, bool auto_resize = true) {
 		static constexpr char size_msg[] = "Buffer size is smaller than data size";
 
 		// Resize status
