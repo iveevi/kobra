@@ -1,5 +1,5 @@
-#ifndef LOGGER_H_
-#define LOGGER_H_
+#ifndef KOBRA_LOGGER_H_
+#define KOBRA_LOGGER_H_
 
 // Standard headers
 #include <chrono>
@@ -11,6 +11,11 @@
 #include <set>
 #include <sstream>
 
+// Terminal colors header
+#include "termcolor/include/termcolor/termcolor.hpp"
+
+namespace kobra {
+
 // Color structs
 struct log_ok {};
 struct log_warn {};
@@ -20,6 +25,11 @@ struct log_notify {};
 struct log_fatal_error {};
 struct log_header {};
 
+// Custom headers
+struct log_optix {
+	static constexpr const char name[] = "OPTIX";
+};
+
 // Overload printing these structs
 std::ostream &operator<<(std::ostream &, const log_ok &);
 std::ostream &operator<<(std::ostream &, const log_warn &);
@@ -28,6 +38,7 @@ std::ostream &operator<<(std::ostream &, const log_reset &);
 std::ostream &operator<<(std::ostream &, const log_notify &);
 std::ostream &operator<<(std::ostream &, const log_fatal_error &);
 std::ostream &operator<<(std::ostream &, const log_header &);
+std::ostream &operator<<(std::ostream &, const log_optix &);
 
 // Logger class
 // TODO: completely put in source file
@@ -39,7 +50,7 @@ class Logger {
 
 	// For main stream
 	// TODO: engine callbacks to these functions
-	static constexpr int _header_width = 12;
+	static constexpr int _header_width = 20;
 
 	static std::ostream &_main_fatal_error() {
 		mtx.lock();
@@ -101,6 +112,19 @@ class Logger {
 		mtx.unlock();
 		return *os;
 	}
+
+	// Custom headers
+	template <class Header>
+	static std::ostream &_main_custom() {
+		mtx.lock();
+		if (console) *os << log_optix();
+		*os << "[" << time() << std::setw(1)
+			<< Header::name << "] ";
+		if (console) *os << log_reset();
+		if (!console) os->flush();
+		mtx.unlock();
+		return *os;
+	}
 public:
 	static std::string time() {
 		auto t = std::time(0);
@@ -129,6 +153,11 @@ public:
 
 	static std::ostream &notify() {
 		return _main_notify();
+	}
+
+	template <class Header>
+	static std::ostream &custom() {
+		return _main_custom <Header> ();
 	}
 
 	// C-string overloads
@@ -213,6 +242,12 @@ public:
 			<< "] " << log_reset();
 	}
 
+	template <class Header>
+	static std::ostream &custom_from(const char *origin) {
+		return custom <Header> () << log_header() << "[" << origin
+			<< "] " << log_reset();
+	}
+
 	// Cached logging
 	static void error_cached(const std::string &msg) {
 		static std::set <std::string> cached;
@@ -252,9 +287,8 @@ public:
 	}
 };
 
-// Macros for logging
-// TODO: option to swthich function and pretty function
-static inline std::string function_name(const std::string &pretty)
+// Helper functions
+inline std::string function_name(const std::string &pretty)
 {
 	// Extract the full function name only
 	std::string word;
@@ -272,16 +306,25 @@ static inline std::string function_name(const std::string &pretty)
 	return word;
 }
 
-#define KOBRA_LOG_FUNC(type) Logger::type##_from(function_name(__PRETTY_FUNCTION__).c_str())
+// Macros for logging
+// TODO: option to swthich function and pretty function
+enum class Log {OK, ERROR, WARN, INFO, AUTO};
+
+std::ostream &logger(const std::string &, Log level, const std::string & = "", bool = false);
+
+}
+
+// #define KOBRA_LOG_FUNC(type) Logger::type##_from(function_name(__PRETTY_FUNCTION__).c_str())
+#define KOBRA_LOG_FUNC(level) logger(__PRETTY_FUNCTION__, level)
 
 #define LINE_TO_STRING(line) #line
 #define LINE_TO_STRING2(line) LINE_TO_STRING(line)
 
-#define KOBRA_LOG_FILE(type) Logger::type##_from(__FILE__ ": " LINE_TO_STRING2(__LINE__))
+#define KOBRA_LOG_FILE(level) logger(__FILE__ ": " LINE_TO_STRING2(__LINE__), level, "", true)
 
 #define KOBRA_ASSERT(cond, msg)					\
 	if (!(cond)) {						\
-		KOBRA_LOG_FUNC(error) << msg << std::endl;	\
+		KOBRA_LOG_FUNC(Log::ERROR) << msg << std::endl;	\
 		throw std::runtime_error(msg);			\
 	}
 

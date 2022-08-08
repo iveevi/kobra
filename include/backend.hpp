@@ -728,7 +728,7 @@ public:
 
 #ifndef KOBRA_VALIDATION_ERROR_ONLY
 
-			KOBRA_LOG_FUNC(warn) << size_msg << " (size = " << size
+			KOBRA_LOG_FUNC(Log::WARN) << size_msg << " (size = " << size
 				<< ", data size = " << data.size() * sizeof(T)
 				<< ")" << std::endl;
 
@@ -771,7 +771,7 @@ public:
 
 #ifndef KOBRA_VALIDATION_ERROR_ONLY
 
-			KOBRA_LOG_FUNC(warn) << size_msg << " (size = " << size_
+			KOBRA_LOG_FUNC(Log::WARN) << size_msg << " (size = " << size_
 				<< ", buffer size = " << size << ")" << std::endl;
 
 #endif

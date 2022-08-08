@@ -322,7 +322,7 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 	// Check if we need to resize pixel buffer
 	uint32_t csize = ra.pixels() * sizeof(uint);
 	if (_dev.pixels.size != csize) {
-		KOBRA_LOG_FUNC(warn) << "Pixel buffer size changed, resizing...\n";
+		KOBRA_LOG_FUNC(Log::WARN) << "Pixel buffer size changed, resizing...\n";
 
 		// Resize buffer
 		_dev.pixels.resize(csize);
@@ -478,7 +478,7 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 
 	profiler.frame("Updating buffers");
 	if (dirty_raytracers) {
-		KOBRA_LOG_FILE(warn) << "Raytracer components have been modified, rebuilding...\n";
+		KOBRA_LOG_FILE(Log::WARN) << "Raytracer components have been modified, rebuilding...\n";
 
 		profiler.frame("Rebuilding raytracers");
 
@@ -497,7 +497,7 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 
 		profiler.end();
 
-		KOBRA_LOG_FILE(notify) << "Uploading data to device buffers...\n";
+		KOBRA_LOG_FILE(Log::INFO) << "Uploading data to device buffers...\n";
 		rebinding |= _dev.vertices.upload(host_buffers.vertices, 0);
 		rebinding |= _dev.triangles.upload(host_buffers.triangles, 0);
 		rebinding |= _dev.materials.upload(host_buffers.materials, 0);
@@ -524,7 +524,7 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 	// std::cout << profiler.pretty(profiler.pop()) << std::endl;
 
 	if (rebinding) {
-		KOBRA_LOG_FILE(warn) << "Rebinding device buffers\n";
+		KOBRA_LOG_FILE(Log::WARN) << "Rebinding device buffers\n";
 		_sync_queue->push(
 			[&]() {
 				_dev.bind(*_ctx.device, _ds_raytracing);

@@ -334,7 +334,7 @@ public:
 	const FT_Glyph_Metrics &metrics(char c) const {
 		auto it = _metrics.find(c);
 		if (it == _metrics.end()) {
-			KOBRA_LOG_FUNC(error) << "Glyph metrics not found: \'"
+			KOBRA_LOG_FUNC(Log::ERROR) << "Glyph metrics not found: \'"
 				<< c << "\' (" << (int) c << ")\n" << std::endl;
 			throw -1;
 		}

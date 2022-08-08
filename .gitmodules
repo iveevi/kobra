@@ -13,3 +13,6 @@
 [submodule "thirdparty/tinyexr"]
 	path = thirdparty/tinyexr
 	url = https://github.com/syoyo/tinyexr.git
+[submodule "thirdparty/termcolor"]
+	path = thirdparty/termcolor
+	url = https://github.com/ikalnytskyi/termcolor

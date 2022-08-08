@@ -30,7 +30,7 @@ inline std::string read_file(const std::string &file)
 {
 	std::ifstream f(file);
 	if (!f.good()) {
-		KOBRA_LOG_FUNC(error) << "Could not open file: " << file << std::endl;
+		KOBRA_LOG_FUNC(Log::ERROR) << "Could not open file: " << file << std::endl;
 		return "";
 	}
 

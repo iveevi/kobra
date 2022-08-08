@@ -165,7 +165,7 @@ void Scene::save(const std::string &path)
 {
 	std::ofstream fout(path);
 	if (!fout.is_open()) {
-		KOBRA_LOG_FUNC(error) << "Failed to open file: " << path << std::endl;
+		KOBRA_LOG_FUNC(Log::ERROR) << "Failed to open file: " << path << std::endl;
 		return;
 	}
 
@@ -214,7 +214,7 @@ static void read_fmt(std::ifstream &fin, const char *fmt, Args ... args)
 	// Parse
 	int read = sscanf(whole.c_str(), fmt, std::forward <Args> (args)...);
 	if (read != sizeof...(Args))
-		KOBRA_LOG_FUNC(warn) << "Failed to read field after #" << read << " fields\n";
+		KOBRA_LOG_FUNC(Log::WARN) << "Failed to read field after #" << read << " fields\n";
 }
 
 // Component basis
@@ -262,7 +262,7 @@ void load_material(Entity &e, std::ifstream &fin)
 	std::string value = line.substr(14);
 
 	if (field != "shading_type: ") {
-		KOBRA_LOG_FUNC(warn) << "Failed to read shading type: field = \""
+		KOBRA_LOG_FUNC(Log::WARN) << "Failed to read shading type: field = \""
 			<< field  << "\": value = \"" << value << "\"" << std::endl;
 		return;
 	}
@@ -290,7 +290,7 @@ void load_mesh(Entity &e, std::ifstream &fin)
 		auto mptr = Mesh::load(buf_source);
 
 		if (!mptr.has_value()) {
-			KOBRA_LOG_FUNC(warn) << "Failed to load mesh: " << buf_source << std::endl;
+			KOBRA_LOG_FUNC(Log::WARN) << "Failed to load mesh: " << buf_source << std::endl;
 			return;
 		}
 
@@ -305,7 +305,7 @@ void load_mesh(Entity &e, std::ifstream &fin)
 				break;
 
 			if (line != "submesh {") {
-				KOBRA_LOG_FUNC(warn) << "Expected submesh, got: " << line << std::endl;
+				KOBRA_LOG_FUNC(Log::WARN) << "Expected submesh, got: " << line << std::endl;
 				return;
 			}
 
@@ -342,7 +342,7 @@ void load_mesh(Entity &e, std::ifstream &fin)
 
 			// Assert closure
 			if (line != "}") {
-				KOBRA_LOG_FUNC(warn) << "Expected closure, got: " << line << std::endl;
+				KOBRA_LOG_FUNC(Log::WARN) << "Expected closure, got: " << line << std::endl;
 				return;
 			}
 
@@ -361,12 +361,12 @@ void load_rasterizer(Entity &e, std::ifstream &fin, const Device &dev)
 
 	// Mkae sure we have a mesh and material
 	if (!e.exists <Mesh> ()) {
-		KOBRA_LOG_FUNC(warn) << "No mesh for rasterizer" << std::endl;
+		KOBRA_LOG_FUNC(Log::WARN) << "No mesh for rasterizer" << std::endl;
 		return;
 	}
 
 	if (!e.exists <Material> ()) {
-		KOBRA_LOG_FUNC(warn) << "No material for rasterizer" << std::endl;
+		KOBRA_LOG_FUNC(Log::WARN) << "No material for rasterizer" << std::endl;
 		return;
 	}
 
@@ -384,7 +384,7 @@ void load_rasterizer(Entity &e, std::ifstream &fin, const Device &dev)
 		index++;
 
 	if (index >= rasterizer_modes.size()) {
-		KOBRA_LOG_FUNC(warn) << "Unknown rasterizer mode: " << buf_mode << std::endl;
+		KOBRA_LOG_FUNC(Log::WARN) << "Unknown rasterizer mode: " << buf_mode << std::endl;
 		return;
 	}
 
@@ -396,12 +396,12 @@ void load_raytracer(Entity &e, std::ifstream &fin)
 {
 	// Make sure we have a mesh and material
 	if (!e.exists <Mesh> ()) {
-		KOBRA_LOG_FUNC(warn) << "No mesh for raytracer" << std::endl;
+		KOBRA_LOG_FUNC(Log::WARN) << "No mesh for raytracer" << std::endl;
 		return;
 	}
 
 	if (!e.exists <Material> ()) {
-		KOBRA_LOG_FUNC(warn) << "No material for raytracer" << std::endl;
+		KOBRA_LOG_FUNC(Log::WARN) << "No material for raytracer" << std::endl;
 		return;
 	}
 
@@ -436,7 +436,7 @@ void load_light(Entity &e, std::ifstream &fin)
 		index++;
 
 	if (index >= light_types.size()) {
-		KOBRA_LOG_FUNC(warn) << "Unknown light type: " << buf_type << std::endl;
+		KOBRA_LOG_FUNC(Log::WARN) << "Unknown light type: " << buf_type << std::endl;
 		return;
 	}
 
@@ -497,13 +497,13 @@ void Scene::load(const Device &dev, const std::string &path)
 
 	std::ifstream fin(path);
 	if (!fin.is_open()) {
-		KOBRA_LOG_FUNC(error) << "Failed to open file: " << path << std::endl;
+		KOBRA_LOG_FUNC(Log::ERROR) << "Failed to open file: " << path << std::endl;
 		return;
 	}
 
 	// Load properties
 	if (get_header(fin) != "[PROPERTIES]") {
-		KOBRA_LOG_FUNC(error) << "Failed to load properties" << std::endl;
+		KOBRA_LOG_FUNC(Log::ERROR) << "Failed to load properties" << std::endl;
 		return;
 	}
 
@@ -514,7 +514,7 @@ void Scene::load(const Device &dev, const std::string &path)
 	std::string header = get_header(fin);
 	while (fin.good()) {
 		if (header != "[ENTITY]") {
-			KOBRA_LOG_FUNC(error) << "Invalid header: " << header << std::endl;
+			KOBRA_LOG_FUNC(Log::ERROR) << "Invalid header: " << header << std::endl;
 			return;
 		}
 

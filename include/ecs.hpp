@@ -119,7 +119,7 @@ public:
 	T &get(int i) {
 		// TODO: check index and show warningi with name
 		if (!_ref <T>::exists(this, i)) {
-			KOBRA_LOG_FUNC(warn) << "Entity " << i << " does not have component "
+			KOBRA_LOG_FUNC(Log::WARN) << "Entity " << i << " does not have component "
 				<< component_string <T> () << ".\n";
 		}
 
@@ -129,7 +129,7 @@ public:
 	template <class T>
 	const T &get(int i) const {
 		if (!_ref <T>::exists(this, i)) {
-			KOBRA_LOG_FUNC(warn) << "Entity " << i << " does not have component "
+			KOBRA_LOG_FUNC(Log::WARN) << "Entity " << i << " does not have component "
 				<< component_string <T> () << ".\n";
 		}
 

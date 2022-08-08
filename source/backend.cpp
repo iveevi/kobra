@@ -213,7 +213,7 @@ void _initialize_glfw()
 		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 		initialized = true;
 
-		KOBRA_LOG_FUNC(ok) << "GLFW initialized\n";
+		KOBRA_LOG_FUNC(Log::OK) << "GLFW initialized\n";
 	}
 }
 
@@ -314,7 +314,7 @@ const vk::raii::Instance &get_vulkan_instance()
 
 #endif
 
-	KOBRA_LOG_FUNC(ok) << "Vulkan instance created\n";
+	KOBRA_LOG_FUNC(Log::OK) << "Vulkan instance created\n";
 	initialized = true;
 
 	return instance;
@@ -362,7 +362,7 @@ bool physical_device_able(const vk::raii::PhysicalDevice &phdev,
 				[&extension](const vk::ExtensionProperties &prop) {
 					return !strcmp(prop.extensionName, extension);
 				}) == device_extensions.end()) {
-			KOBRA_LOG_FUNC(warn) << "Extension \"" << extension
+			KOBRA_LOG_FUNC(Log::WARN) << "Extension \"" << extension
 					<< "\" is not supported\n";
 			return false;
 		}
@@ -385,7 +385,7 @@ vk::raii::PhysicalDevice pick_physical_device
 	}
 
 	// If none found, throw an error
-	KOBRA_LOG_FUNC(error) << "No physical device found\n";
+	KOBRA_LOG_FUNC(Log::ERROR) << "No physical device found\n";
 	throw std::runtime_error("[Vulkan] No physical device found");
 }
 
@@ -403,7 +403,7 @@ uint32_t find_graphics_queue_family(const vk::raii::PhysicalDevice &phdev)
 	}
 
 	// If none found, throw an error
-	KOBRA_LOG_FUNC(error) << "No graphics queue family found\n";
+	KOBRA_LOG_FUNC(Log::ERROR) << "No graphics queue family found\n";
 	throw std::runtime_error("[Vulkan] No graphics queue family found");
 }
 
@@ -422,7 +422,7 @@ uint32_t find_present_queue_family(const vk::raii::PhysicalDevice &phdev,
 	}
 
 	// If none found, throw an error
-	KOBRA_LOG_FUNC(error) << "No presentation queue family found\n";
+	KOBRA_LOG_FUNC(Log::ERROR) << "No presentation queue family found\n";
 	throw std::runtime_error("[Vulkan] No presentation queue family found");
 }
 
@@ -491,7 +491,7 @@ uint32_t find_memory_type(const vk::PhysicalDeviceMemoryProperties &mem_props,
 	}
 
 	if (type_index == uint32_t(~0)) {
-		KOBRA_LOG_FUNC(error) << "No memory type found\n";
+		KOBRA_LOG_FUNC(Log::ERROR) << "No memory type found\n";
 		throw std::runtime_error("[Vulkan] No memory type found");
 	}
 
@@ -586,7 +586,7 @@ vk::SurfaceFormatKHR pick_surface_format(const vk::raii::PhysicalDevice &phdev,
 	}
 
 	// If none found, throw an error
-	KOBRA_LOG_FUNC(error) << "No supported surface format found\n";
+	KOBRA_LOG_FUNC(Log::ERROR) << "No supported surface format found\n";
 	throw std::runtime_error("[Vulkan] No supported surface format found");
 }
 
@@ -620,7 +620,7 @@ vk::PresentModeKHR pick_present_mode(const vk::raii::PhysicalDevice &phdev,
 	}
 
 	// If none found, throw an error
-	KOBRA_LOG_FUNC(error) << "No supported present mode found\n";
+	KOBRA_LOG_FUNC(Log::ERROR) << "No supported present mode found\n";
 	throw std::runtime_error("[Vulkan] No supported present mode found");
 }
 

@@ -198,7 +198,7 @@ public:
 
 			auto &sp = rect->shader_program;
 			if (sp.valid() && !sp.failed() && sp._pipeline == nullptr) {
-				KOBRA_LOG_FUNC(warn) << "Rect has custom shader, creating pipeline for it...\n";
+				KOBRA_LOG_FUNC(Log::WARN) << "Rect has custom shader, creating pipeline for it...\n";
 				auto *ppl = _mk_custom_pipeline(sp);
 				sp._pipeline = ppl;
 			}
@@ -217,7 +217,7 @@ public:
 
 			if (sp.valid()) {
 				if (sp._pipeline == nullptr) {
-					KOBRA_LOG_FUNC(error) << "Rect has custom shader, but its pipeline is invalid!\n";
+					KOBRA_LOG_FUNC(Log::ERROR) << "Rect has custom shader, but its pipeline is invalid!\n";
 					continue;
 				}
 

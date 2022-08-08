@@ -23,7 +23,7 @@ App::App(const vk::raii::PhysicalDevice &phdev_,
 	device = make_device(phdev, queue_family, extensions);
 	swapchain = Swapchain {phdev, device, surface, window.extent, queue_family};
 
-	KOBRA_LOG_FUNC(ok) << "Swapchain format: " << vk::to_string(swapchain.format) << std::endl;
+	KOBRA_LOG_FUNC(Log::OK) << "Swapchain format: " << vk::to_string(swapchain.format) << std::endl;
 
 	// GLFW things
 	glfwSetWindowUserPointer(window.handle, &io);
@@ -65,7 +65,7 @@ void App::run()
 		frame_time = frame_timer.lap()/scale;
 	}
 
-	KOBRA_LOG_FILE(ok) << "App successfully terminated.\n";
+	KOBRA_LOG_FILE(Log::OK) << "App successfully terminated.\n";
 
 	// Idle till all frames are finished
 	device.waitIdle();

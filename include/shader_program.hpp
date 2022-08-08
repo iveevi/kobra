@@ -56,7 +56,7 @@ inline EShLanguage translate_shader_stage(const vk::ShaderStageFlagBits &stage)
 		break;
 	}
 
-	KOBRA_LOG_FUNC(error) << "Unknown shader stage: "
+	KOBRA_LOG_FUNC(Log::ERROR) << "Unknown shader stage: "
 		<< vk::to_string(stage) << std::endl;
 	return EShLangVertex;
 }
@@ -157,13 +157,13 @@ public:
 
 					int fd = inotify_init();
 					if (fd < 0) {
-						KOBRA_LOG_FUNC(error) << "Failed to initialize inotify" << std::endl;
+						KOBRA_LOG_FUNC(Log::ERROR) << "Failed to initialize inotify" << std::endl;
 						return;
 					}
 
 					int wd = inotify_add_watch(fd, file.c_str(), IN_MODIFY);
 					if (wd < 0) {
-						KOBRA_LOG_FUNC(error) << "Failed to add inotify watch" << std::endl;
+						KOBRA_LOG_FUNC(Log::ERROR) << "Failed to add inotify watch" << std::endl;
 						return;
 					}
 
@@ -175,7 +175,7 @@ public:
 						int r = read(fd, ev, s);
 						std::cout << "\t" << r << " bytes read" << std::endl;
 						if (r < 0) {
-							KOBRA_LOG_FUNC(error) << "Failed to read inotify event" << std::endl;
+							KOBRA_LOG_FUNC(Log::ERROR) << "Failed to read inotify event" << std::endl;
 							break;
 						}
 
@@ -206,7 +206,7 @@ public:
 		glslang::InitializeProcess();
 
 		if (!valid()) {
-			KOBRA_LOG_FUNC(warn) << "Shader program is invalid, returning nullptr\n";
+			KOBRA_LOG_FUNC(Log::WARN) << "Shader program is invalid, returning nullptr\n";
 			return {};
 		}
 
@@ -217,7 +217,7 @@ public:
 		// Compile shader
 		_compile_out out = glsl_to_spriv(source, vk::ShaderStageFlagBits::eFragment);
 		if (!out.log.empty()) {
-			KOBRA_LOG_FUNC(error) << "Shader compilation failed:\n"
+			KOBRA_LOG_FUNC(Log::ERROR) << "Shader compilation failed:\n"
 				<< out.log << std::endl;
 
 			_cc_failed = true;

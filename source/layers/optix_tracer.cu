@@ -74,8 +74,9 @@ inline uint32_t to_ui32(uchar4 v)
 
 static void context_log_cb( unsigned int level, const char* tag, const char* message, void* /*cbdata */)
 {
-    std::cerr << "[" << std::setw( 2 ) << level << "][" << std::setw( 12 ) << tag << "]: "
-              << message << "\n";
+	std::stringstream ss;
+	ss << level << std::setw(20) << tag;
+	logger(ss.str(), Log::AUTO, "OPTIX") << message << std::endl;
 }
 
 ////////////
@@ -120,7 +121,7 @@ void OptixTracer::render(const vk::raii::CommandBuffer &cmd,
 	}
 
 	if (dirty_raytracers) {
-		KOBRA_LOG_FILE(notify) << "Need to rebuild AS\n";
+		KOBRA_LOG_FILE(Log::INFO) << "Need to rebuild AS\n";
 		_c_raytracers = raytracers;
 		_c_transforms = raytracer_transforms;
 		_optix_build();
@@ -264,7 +265,7 @@ void OptixTracer::_initialize_optix()
 		pipeline_compile_options.usesPrimitiveTypeFlags = OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE;
 
 		size_t      inputSize  = 0;
-		std::string input = kobra::common::read_file("code.ptx");
+		std::string input = kobra::common::read_file("./bin/ptx/code.ptx");
 		inputSize = input.size();
 
 		size_t sizeof_log = sizeof( log );
@@ -431,7 +432,7 @@ void OptixTracer::_initialize_optix()
 
 	CUDA_CHECK(cudaStreamCreate(&_optix_stream));
 
-	KOBRA_LOG_FILE(ok) << "Initialized OptiX and relevant structures" << std::endl;
+	KOBRA_LOG_FUNC(Log::OK) << "Initialized OptiX and relevant structures" << std::endl;
 }
 
 void OptixTracer::_optix_build()
@@ -567,9 +568,6 @@ void OptixTracer::_optix_build()
 
 		cuda::free(d_vertices);
 		cuda::free(d_triangles);
-
-		/* CUDA_CHECK(cudaFree((void *) d_vertices));
-		CUDA_CHECK(cudaFree((void *) d_triangles)); */
 	}
 }
 

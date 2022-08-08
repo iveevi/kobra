@@ -143,7 +143,7 @@ public:
 
 	// Adding a scene
 	void add_scene(const Scene &scene) override {
-		KOBRA_LOG_FUNC(warn) << "Not implemented\n";
+		KOBRA_LOG_FUNC(Log::WARN) << "Not implemented\n";
 	}
 
 	// Load fonts

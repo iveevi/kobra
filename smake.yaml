@@ -45,15 +45,23 @@ definitions:
     OSDependent,
     OGLCompiler'
 
-# TODO: compile glslang into shader library berfore any of the next steps
-# i.e. prebuild section
-
 builds:
+  - optix_ptx:
+    - sources: experimental/code.cu
+    - idirs: includes
+    - flags: '-ptx'
+    - options: 'nolink, output_dir=./bin/ptx, output_format={filename}.ptx'
+  - glsl_compute:
+    - sources: shaders/rt/progressive_path_tracer.glsl
+    - flags: '-fshader-stage=compute'
+    - compiler: glslc
+    - options: 'nolink, output_dir=./bin/spv'
   - kobra:
     - sources: main.cpp, kobra_source, tinyfd_source, glslang_source
     - idirs: includes
     - flags: '-std=c++17'
     - libraries: libs
+    - dependencies: optix_ptx, glsl_compute 
   - kobra_release:
     - sources: main.cpp, kobra_source, tinyfd_source, glslang_source
     - idirs: includes

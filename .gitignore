@@ -7,4 +7,5 @@
 .cache
 .smake
 .vscode
+bin
 compile_commands.json

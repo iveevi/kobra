@@ -65,7 +65,7 @@ Material Material::from_file(std::ifstream &file, const std::string &scene_file,
 
 	// Ensure correct header ("Kd=")
 	if (line.substr(0, 3) != "Kd=") {
-		KOBRA_LOG_FUNC(error) << "Expected Kd= but got " << line << std::endl;
+		KOBRA_LOG_FUNC(Log::ERROR) << "Expected Kd= but got " << line << std::endl;
 		return std::move(mat);
 	}
 
@@ -77,7 +77,7 @@ Material Material::from_file(std::ifstream &file, const std::string &scene_file,
 
 	// Ensure correct header ("Ks=")
 	if (line.substr(0, 3) != "Ks=") {
-		KOBRA_LOG_FUNC(error) << "Expected Ks= but got " << line << std::endl;
+		KOBRA_LOG_FUNC(Log::ERROR) << "Expected Ks= but got " << line << std::endl;
 		return std::move(mat);
 	}
 
@@ -100,7 +100,7 @@ Material Material::from_file(std::ifstream &file, const std::string &scene_file,
 
 	// Ensure correct header ("index_of_refraction=")
 	if (line.substr(0, 20) != "index_of_refraction=") {
-		KOBRA_LOG_FUNC(error) << "Expected index_of_refraction= but got "
+		KOBRA_LOG_FUNC(Log::ERROR) << "Expected index_of_refraction= but got "
 			<< line.substr(0, 20) << std::endl;
 		return std::move(mat);
 	}
@@ -113,7 +113,7 @@ Material Material::from_file(std::ifstream &file, const std::string &scene_file,
 
 	// Ensure correct header ("extinction_coefficient=")
 	if (line.substr(0, 23) != "extinction_coefficient=") {
-		KOBRA_LOG_FUNC(error) << "Expected extinction_coefficient= but got " << line << std::endl;
+		KOBRA_LOG_FUNC(Log::ERROR) << "Expected extinction_coefficient= but got " << line << std::endl;
 		return std::move(mat);
 	}
 
@@ -126,7 +126,7 @@ Material Material::from_file(std::ifstream &file, const std::string &scene_file,
 
 	// Ensure correct header ("albedo_texture=")
 	if (line.substr(0, 15) != "albedo_texture=") {
-		KOBRA_LOG_FUNC(error) << "Expected albedo_texture= but got " << line << std::endl;
+		KOBRA_LOG_FUNC(Log::ERROR) << "Expected albedo_texture= but got " << line << std::endl;
 		return std::move(mat);
 	}
 
@@ -140,7 +140,7 @@ Material Material::from_file(std::ifstream &file, const std::string &scene_file,
 
 	// Ensure correct header ("normal_texture=")
 	if (line.substr(0, 15) != "normal_texture=") {
-		KOBRA_LOG_FUNC(error) << "Expected normal_texture= but got " << line << std::endl;
+		KOBRA_LOG_FUNC(Log::ERROR) << "Expected normal_texture= but got " << line << std::endl;
 		return std::move(mat);
 	}
 

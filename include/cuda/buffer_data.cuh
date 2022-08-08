@@ -70,7 +70,7 @@ public:
 
 #ifndef KOBRA_VALIDATION_ERROR_ONLY
 
-			KOBRA_LOG_FUNC(warn) << size_msg << " (size = " << _size
+			KOBRA_LOG_FUNC(Log::ERROR) << size_msg << " (size = " << _size
 				<< ", data size = " << data.size() * sizeof(T)
 				<< ")" << std::endl;
 
@@ -108,7 +108,7 @@ public:
 
 #ifndef KOBRA_VALIDATION_ERROR_ONLY
 
-			KOBRA_LOG_FUNC(warn) << size_msg << " (size = " << size_
+			KOBRA_LOG_FUNC(Log::ERROR) << size_msg << " (size = " << size_
 				<< ", buffer size = " << _size << ")" << std::endl;
 
 #endif
@@ -158,7 +158,7 @@ public:
 			CUDA_CHECK(cudaMalloc(&_device_ptr, size));
 			_size = size;
 		} else {
-			KOBRA_LOG_FUNC(error) << "Invalid size: " << size << std::endl;
+			KOBRA_LOG_FUNC(Log::ERROR) << "Invalid size: " << size << std::endl;
 			_size = 0;
 		}
 	}
