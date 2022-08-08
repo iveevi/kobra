@@ -47,7 +47,7 @@ definitions:
 
 builds:
   - optix_ptx:
-    - sources: experimental/code.cu
+    - sources: source/layers/optix_rt.cu
     - idirs: includes
     - flags: '-ptx'
     - options: 'nolink, output_dir=./bin/ptx, output_format={filename}.ptx'

@@ -8,6 +8,7 @@
 #include "../../include/cuda/error.cuh"
 #include "../../include/cuda/alloc.cuh"
 #include "../../include/layers/optix_tracer.cuh"
+#include "../../include/layers/optix_tracer_common.cuh"
 #include "../../include/camera.hpp"
 
 namespace kobra {
@@ -20,35 +21,6 @@ const std::vector <DSLB> OptixTracer::_dslb_render = {
 		1, vk::ShaderStageFlagBits::eFragment
 	}
 };
-
-struct Params
-{
-    uchar4*                image;
-    unsigned int           image_width;
-    unsigned int           image_height;
-    float3                 cam_eye;
-    float3                 cam_u, cam_v, cam_w;
-    OptixTraversableHandle handle;
-};
-
-
-struct RayGenData
-{
-    // No data needed
-};
-
-
-struct MissData
-{
-    float3 bg_color;
-};
-
-
-struct HitGroupData
-{
-    // No data needed
-};
-
 
 template <typename T>
 struct SbtRecord
@@ -248,6 +220,7 @@ void OptixTracer::_initialize_optix()
 
 		pipeline_compile_options.usesMotionBlur        = false;
 		pipeline_compile_options.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_GAS;
+		pipeline_compile_options.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING;
 		pipeline_compile_options.numPayloadValues      = 3;
 		pipeline_compile_options.numAttributeValues    = 3;
 
@@ -265,7 +238,7 @@ void OptixTracer::_initialize_optix()
 		pipeline_compile_options.usesPrimitiveTypeFlags = OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE;
 
 		size_t      inputSize  = 0;
-		std::string input = kobra::common::read_file("./bin/ptx/code.ptx");
+		std::string input = kobra::common::read_file("./bin/ptx/optix_rt.ptx");
 		inputSize = input.size();
 
 		size_t sizeof_log = sizeof( log );
@@ -375,7 +348,7 @@ void OptixTracer::_initialize_optix()
                                                      &direct_callable_stack_size_from_state, &continuation_stack_size ) );
             OPTIX_CHECK( optixPipelineSetStackSize( _optix_pipeline, direct_callable_stack_size_from_traversal,
                                                     direct_callable_stack_size_from_state, continuation_stack_size,
-                                                    1  // maxTraversableDepth
+                                                    2  // maxTraversableDepth
                                                     ) );
         }
 
@@ -435,63 +408,36 @@ void OptixTracer::_initialize_optix()
 	KOBRA_LOG_FUNC(Log::OK) << "Initialized OptiX and relevant structures" << std::endl;
 }
 
+// TODO: also add an optix_update method
 void OptixTracer::_optix_build()
 {
 	// Use default options for simplicity.  In a real use case we would want to
 	// enable compaction, etc
-	OptixAccelBuildOptions accel_options = {};
-	accel_options.buildFlags = OPTIX_BUILD_FLAG_NONE;
-	accel_options.operation  = OPTIX_BUILD_OPERATION_BUILD;
+	OptixAccelBuildOptions gas_accel_options = {};
+	gas_accel_options.buildFlags = OPTIX_BUILD_FLAG_NONE;
+	gas_accel_options.operation  = OPTIX_BUILD_OPERATION_BUILD;
 
-	// List of build inputs
-	std::vector <OptixBuildInput> build_inputs(_c_raytracers.size());
-	std::vector <CUdeviceptr> vertex_buffers(_c_raytracers.size());
-	std::vector <CUdeviceptr> triangle_buffers(_c_raytracers.size());
-
+	std::vector <OptixTraversableHandle> instance_gas(_c_raytracers.size());
+	
 	// Flags
 	const uint32_t triangle_input_flags[1] = {OPTIX_GEOMETRY_FLAG_NONE};
 
-	// Allocate transforms
-	static constexpr size_t transform_stride = sizeof(float) * 12;
-	const size_t transforms_size = transform_stride * _c_raytracers.size();
-	CUdeviceptr d_transforms = cuda::alloc(transforms_size);
-
-	// Prepare transforms to upload
-	float *h_transforms = new float[12 * _c_raytracers.size()];
-	for (int i = 0; i < _c_transforms.size(); i++) {
-		// TODO: will need to get global matrix
-		const Transform &transform = _c_transforms[i];
-		glm::mat4 matrix = transform.matrix();
-
-		// Copy data 3x4 row major
-		h_transforms[i * 12 + 0] = matrix[0][0];
-		h_transforms[i * 12 + 1] = matrix[1][0];
-		h_transforms[i * 12 + 2] = matrix[2][0];
-		h_transforms[i * 12 + 3] = matrix[3][0];
-		
-		h_transforms[i * 12 + 4] = matrix[0][1];
-		h_transforms[i * 12 + 5] = matrix[1][1];
-		h_transforms[i * 12 + 6] = matrix[2][1];
-		h_transforms[i * 12 + 7] = matrix[3][1];
-		
-		h_transforms[i * 12 + 8] = matrix[0][2];
-		h_transforms[i * 12 + 9] = matrix[1][2];
-		h_transforms[i * 12 + 10] = matrix[2][2];
-		h_transforms[i * 12 + 11] = matrix[3][2];
-	}
-
-	// Upload transforms
-	cuda::copy(d_transforms, (void *) h_transforms, transforms_size);
-
-	// Iterate through all raytracers
 	for (int i = 0; i < _c_raytracers.size(); i++) {
-		// Get modified vertices and the indices
+		// Prepare the instance transform
+		glm::mat4 mat = _c_transforms[i].matrix();
+
+		float transform[12] = {
+			mat[0][0], mat[1][0], mat[2][0], mat[3][0],
+			mat[0][1], mat[1][1], mat[2][1], mat[3][1],
+			mat[0][2], mat[1][2], mat[2][2], mat[3][2]
+		};
+
+		// Prepare instance vertices and triangles
 		std::vector <float3> vertices;
 		std::vector <uint3> triangles;
-
+		
 		// TODO: raytracer method
 		const Mesh &mesh = _c_raytracers[i]->get_mesh();
-		const Transform &transform = _c_transforms[i];
 
 		for (auto s : mesh.submeshes) {
 			for (int j = 0; j < s.indices.size(); j += 3) {
@@ -509,20 +455,21 @@ void OptixTracer::_optix_build()
 		}
 
 		// Create the build input
-		OptixBuildInput &input = build_inputs[i];
+		OptixBuildInput build_input {};
 
-		input.type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
+		build_input.type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
 
-		CUdeviceptr &d_vertices = vertex_buffers[i];
-		CUdeviceptr &d_triangles = triangle_buffers[i];
+		CUdeviceptr d_vertices = cuda::alloc(vertices.size() * sizeof(float3));
+		CUdeviceptr d_triangles = cuda::alloc(triangles.size() * sizeof(uint3));
 
-		d_vertices = cuda::alloc(vertices.size() * sizeof(float3));
-		d_triangles = cuda::alloc(triangles.size() * sizeof(uint3));
+		// TODO: alloc and memcpy in one step function
+		CUdeviceptr d_transform = cuda::alloc(12 * sizeof(float));
 
 		cuda::copy(d_vertices, vertices);
 		cuda::copy(d_triangles, triangles);
+		cuda::copy(d_transform, transform, 12);
 
-		OptixBuildInputTriangleArray &triangle_array = input.triangleArray;
+		OptixBuildInputTriangleArray &triangle_array = build_input.triangleArray;
 		triangle_array.vertexFormat	= OPTIX_VERTEX_FORMAT_FLOAT3;
 		triangle_array.numVertices	= vertices.size();
 		triangle_array.vertexBuffers	= &d_vertices;
@@ -535,40 +482,107 @@ void OptixTracer::_optix_build()
 		triangle_array.numSbtRecords	= 1;
 
 		// Set the transform
-		triangle_array.preTransform	= d_transforms + transform_stride * i;
-		triangle_array.transformFormat	= OPTIX_TRANSFORM_FORMAT_MATRIX_FLOAT12;
+		// triangle_array.transformFormat	= OPTIX_TRANSFORM_FORMAT_MATRIX_FLOAT12;
+		// triangle_array.preTransform	= d_transform;
+
+		// Build GAS
+		CUdeviceptr d_gas_output;
+		CUdeviceptr d_gas_tmp;
+
+		OptixAccelBufferSizes gas_buffer_sizes;
+		OPTIX_CHECK(optixAccelComputeMemoryUsage(
+			_optix_ctx, &gas_accel_options,
+			&build_input, 1,
+			&gas_buffer_sizes
+		));
+
+		d_gas_output = cuda::alloc(gas_buffer_sizes.outputSizeInBytes);
+		d_gas_tmp = cuda::alloc(gas_buffer_sizes.tempSizeInBytes);
+
+		OptixTraversableHandle handle;
+		OPTIX_CHECK(optixAccelBuild(_optix_ctx,
+			0, &gas_accel_options,
+			&build_input, 1,
+			d_gas_tmp, gas_buffer_sizes.tempSizeInBytes,
+			d_gas_output, gas_buffer_sizes.outputSizeInBytes,
+			&handle, nullptr, 0
+		));
+
+		instance_gas[i] = handle;
+
+		// Free data at the end
+		cuda::free(d_gas_tmp);
+		// cuda::free(d_vertices);
+		// cuda::free(d_triangles);
+		// cuda::free(d_transform); // TODO: can be freed after all instances are built
 	}
 
-	// Build the acceleration structure
-        CUdeviceptr d_gas_output;
-	CUdeviceptr d_gas_tmp;
+	_optix_traversable = instance_gas[1];
+	// return;
 
-	OptixAccelBufferSizes gas_buffer_sizes;
+	// Build instances and top level acceleration structure
+	std::vector <OptixInstance> instances(_c_raytracers.size());
+
+	for (int i = 0; i < _c_raytracers.size(); i++) {
+		// Prepare the instance transform
+		// TODO: keep in a separate array
+		glm::mat4 mat = _c_transforms[i].matrix();
+
+		float transform[12] = {
+			mat[0][0], mat[1][0], mat[2][0], mat[3][0],
+			mat[0][1], mat[1][1], mat[2][1], mat[3][1],
+			mat[0][2], mat[1][2], mat[2][2], mat[3][2]
+		};
+
+		memcpy(instances[i].transform, transform, sizeof(float) * 12);
+
+		// Set the instance handle
+		instances[i].sbtOffset = 0;
+		instances[i].traversableHandle = instance_gas[i];
+		instances[i].visibilityMask = 0xFF;
+	}
+
+	// Copy the instances to the device
+	CUdeviceptr d_instances = cuda::alloc(instances.size() * sizeof(OptixInstance));
+	cuda::copy(d_instances, instances);
+
+	// Create the top level acceleration structure
+	OptixBuildInput ias_build_input {};
+	ias_build_input.type = OPTIX_BUILD_INPUT_TYPE_INSTANCES;
+	ias_build_input.instanceArray.instances = d_instances;
+	ias_build_input.instanceArray.numInstances = instances.size();
+
+	// IAS options
+	OptixAccelBuildOptions ias_accel_options {};
+	ias_accel_options.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
+	ias_accel_options.operation = OPTIX_BUILD_OPERATION_BUILD;
+
+	// IAS buffer sizes
+	OptixAccelBufferSizes ias_buffer_sizes;
 	OPTIX_CHECK(optixAccelComputeMemoryUsage(
-		_optix_ctx, &accel_options,
-		build_inputs.data(), build_inputs.size(),
-		&gas_buffer_sizes
+		_optix_ctx, &ias_accel_options,
+		&ias_build_input, 1,
+		&ias_buffer_sizes
 	));
 
-	d_gas_output = cuda::alloc(gas_buffer_sizes.outputSizeInBytes);
-	d_gas_tmp = cuda::alloc(gas_buffer_sizes.tempSizeInBytes);
+	KOBRA_LOG_FUNC(Log::INFO) << "IAS buffer sizes: " << ias_buffer_sizes.tempSizeInBytes << " " << ias_buffer_sizes.outputSizeInBytes << std::endl;
 
+	// Allocate the IAS
+	CUdeviceptr d_ias_output = cuda::alloc(ias_buffer_sizes.outputSizeInBytes);
+	CUdeviceptr d_ias_tmp = cuda::alloc(ias_buffer_sizes.tempSizeInBytes);
+
+	// Build the IAS
 	OPTIX_CHECK(optixAccelBuild(_optix_ctx,
-		0, &accel_options,
-		build_inputs.data(), build_inputs.size(),
-		d_gas_tmp, gas_buffer_sizes.tempSizeInBytes,
-		d_gas_output, gas_buffer_sizes.outputSizeInBytes,
+		0, &ias_accel_options,
+		&ias_build_input, 1,
+		d_ias_tmp, ias_buffer_sizes.tempSizeInBytes,
+		d_ias_output, ias_buffer_sizes.outputSizeInBytes,
 		&_optix_traversable, nullptr, 0
 	));
 
-	// Free the vertex and triangle buffers
-	for (int i = 0; i < _c_raytracers.size(); i++) {
-		CUdeviceptr &d_vertices = vertex_buffers[i];
-		CUdeviceptr &d_triangles = triangle_buffers[i];
-
-		cuda::free(d_vertices);
-		cuda::free(d_triangles);
-	}
+	// Free the memory
+	// cuda::free(d_instances);
+	// cuda::free(d_ias_tmp);
 }
 
 void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
