@@ -23,7 +23,8 @@
 #include <vulkan/vulkan_structs.hpp>
 #include <GLFW/glfw3.h>
 
-// #define KOBRA_VALIDATION_LAYERS
+#define KOBRA_VALIDATION_LAYERS
+#define KOBRA_VALIDATION_ERROR_ONLY
 
 // Engine headers
 #include "common.hpp"
@@ -472,7 +473,7 @@ inline void transition_image_layout(const vk::raii::CommandBuffer &cmd,
 	// Create the barrier
 	vk::ImageSubresourceRange image_subresource_range {
 		aspect_mask,
-			0, 1, 0, 1
+		0, 1, 0, 1
 	};
 
 	vk::ImageMemoryBarrier barrier {
@@ -516,32 +517,39 @@ struct ImageData {
 			usage {usage_},
 			layout {initial_layout_},
 			properties {memory_properties_},
-			aspect_mask {aspect_mask_},
-			image {device_,
-				{
-					vk::ImageCreateFlags(),
-					vk::ImageType::e2D,
-					format,
-					vk::Extent3D( extent, 1 ),
-					1,
-					1,
-					vk::SampleCountFlagBits::e1,
-					tiling,
-					usage | vk::ImageUsageFlagBits::eSampled,
-					vk::SharingMode::eExclusive,
-					{},
-					layout
-				}
-			},
+			aspect_mask {aspect_mask_} {
+		vk::ImageCreateInfo image_info {
+			vk::ImageCreateFlags {},
+			vk::ImageType::e2D,
+			format,
+			vk::Extent3D {extent.width, extent.height, 1},
+			1, 1,
+			vk::SampleCountFlagBits::e1,
+			tiling, usage | vk::ImageUsageFlagBits::eSampled,
+			vk::SharingMode::eExclusive, {},
+			vk::ImageLayout::eUndefined
+		};
 
-			memory {
-				allocate_device_memory(
-					device_, phdev_.getMemoryProperties(),
-					image.getMemoryRequirements(),
-					memory_properties_,
-					external_
-				)
-			} {
+		VkExternalMemoryImageCreateInfo ext_info;
+		ext_info.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
+		ext_info.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+		ext_info.pNext = nullptr;
+
+		image_info.pNext = nullptr;
+		if (external_)
+			image_info.pNext = &ext_info;
+
+		image = vk::raii::Image {device_, image_info};
+
+		memory = vk::raii::DeviceMemory {
+			allocate_device_memory(
+				device_, phdev_.getMemoryProperties(),
+				image.getMemoryRequirements(),
+				memory_properties_,
+				external_
+			)
+		};
+
 		image.bindMemory(*memory, 0);
 		view = vk::raii::ImageView {
 			device_,

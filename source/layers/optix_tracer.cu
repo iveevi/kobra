@@ -122,6 +122,31 @@ void OptixTracer::environment_map(const std::string &path)
 	CUDA_CHECK(cudaSetDevice(0));
 	CUDA_CHECK(cudaImportExternalMemory(&_dext_env_map, &env_tex_desc));
 
+	cudaExternalMemoryMipmappedArrayDesc env_mip_desc {};
+	env_mip_desc.flags = 0;
+	env_mip_desc.formatDesc = cudaCreateChannelDesc(8, 8, 8, 8, cudaChannelFormatKindUnsigned);
+	env_mip_desc.numLevels = 1;
+	env_mip_desc.offset = 0;
+	env_mip_desc.extent = make_cudaExtent(
+		_v_environment_map->extent.width,
+		_v_environment_map->extent.height, 0
+	);
+
+	cudaMipmappedArray_t env_mip_array;
+	CUDA_CHECK(cudaExternalMemoryGetMappedMipmappedArray(&env_mip_array, _dext_env_map, &env_mip_desc));
+
+	cudaResourceDesc res_desc {};
+	res_desc.resType = cudaResourceTypeMipmappedArray;
+	res_desc.res.mipmap.mipmap = env_mip_array;
+
+	cudaTextureDesc tex_desc {};
+	tex_desc.readMode = cudaReadModeNormalizedFloat;
+	tex_desc.normalizedCoords = true;
+	tex_desc.filterMode = cudaFilterModeLinear;
+
+	CUDA_CHECK(cudaCreateTextureObject(&_tex_env_map, &res_desc, &tex_desc, nullptr));
+
+	/*/////////////////////////////////////////////////////////////////////////////
 	cudaExternalMemoryBufferDesc env_tex_buf_desc {};
 	env_tex_buf_desc.flags = 0;
 	env_tex_buf_desc.offset = 0;
@@ -132,29 +157,6 @@ void OptixTracer::environment_map(const std::string &path)
 		(void **) &env_tex_buf, _dext_env_map,
 		&env_tex_buf_desc
 	));
-
-	/* Get data
-	uint32_t *env_tex_data = new uint32_t[env_tex_desc.size / sizeof(uint32_t)];
-	CUDA_CHECK(cudaMemcpy(env_tex_data, (void *) env_tex_buf, env_tex_desc.size, cudaMemcpyDeviceToHost));
-
-	uint32_t r = 0, g = 0, b = 0, a = 0;
-	for (int i = 0; i < 20; i++) {
-		uint32_t v = env_tex_data[i];
-		r = (v >> 24) & 0xff;
-		g = (v >> 16) & 0xff;
-		b = (v >> 8) & 0xff;
-		a = v & 0xff;
-		std::cout << "(" << r << ", " << g << ", " << b << ", " << a << ")\n";
-	} */
-
-	/* Save as png
-	stbi_flip_vertically_on_write(true);
-	stbi_write_png("cuda_env.png",
-		_v_environment_map->extent.width,
-		_v_environment_map->extent.height,
-		4, (void *) env_tex_data,
-		_v_environment_map->extent.width * 4
-	); */
 
 	// Create bindless texture
 	cudaResourceDesc res_desc {};
@@ -170,28 +172,7 @@ void OptixTracer::environment_map(const std::string &path)
 	tex_desc.normalizedCoords = true;
 	tex_desc.filterMode = cudaFilterModeLinear;
 
-	/* tex_desc.addressMode[0] = cudaAddressModeClamp;
-	tex_desc.addressMode[1] = cudaAddressModeClamp;
-	tex_desc.addressMode[2] = cudaAddressModeClamp; */
-
-	// tex_desc.maxAnisotropy = 1;
-
-	CUDA_CHECK(cudaCreateTextureObject(
-		&_tex_env_map, &res_desc, &tex_desc, nullptr
-	));
-
-	printf("Created texture, now going to check it...\n");
-	// check_texture <<<1, 1>>> (_tex_env_map, 20, 20);
-	printf("Checked texture\n");
-	std::cout << std::endl;
-
-	cudaResourceViewDesc res_view_desc {};
-	CUDA_CHECK(cudaGetTextureObjectResourceViewDesc(&res_view_desc,
-				_tex_env_map));
-
-	std::cout << "Desc = " << res_view_desc.format << std::endl;
-	std::cout << "\twidth = " << res_view_desc.width << std::endl;
-	std::cout << "\theight = " << res_view_desc.height << std::endl;
+	CUDA_CHECK(cudaCreateTextureObject(&_tex_env_map, &res_desc, &tex_desc, nullptr)); */
 
 	// Update miss group record
 	MissSbtRecord miss_record;

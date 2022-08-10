@@ -544,12 +544,15 @@ vk::raii::DeviceMemory allocate_device_memory(const vk::raii::Device &device,
 		memory_requirements.size, type_index
 	};
 
+	alloc_info.pNext = nullptr;
 	if (external) {
-		vk::ExportMemoryAllocateInfo ext_info {
-			vk::ExternalMemoryHandleTypeFlagBits::eOpaqueFd
-		};
+		// TODO: make not heap allocated
+		VkExportMemoryAllocateInfo *ext_info = new VkExportMemoryAllocateInfo;
+		ext_info->sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
+		ext_info->handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+		ext_info->pNext = nullptr;
 
-		alloc_info.pNext = &ext_info;
+		alloc_info.pNext = ext_info;
 	}
 
 	return vk::raii::DeviceMemory {

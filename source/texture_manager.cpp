@@ -53,15 +53,17 @@ const ImageData &TextureManager::load_texture
 		);
 	} else{
 		KOBRA_LOG_FUNC(Log::OK) << "Loading texture from file: " << path << "\n";
+
+		// TODO: not everything needs to be external...
 		img = make_image(phdev, dev,
 			command_pool, path,
-			vk::ImageTiling::eLinear,
+			vk::ImageTiling::eOptimal,
 			vk::ImageUsageFlagBits::eSampled
 				| vk::ImageUsageFlagBits::eTransferDst
 				| vk::ImageUsageFlagBits::eTransferSrc,
 			vk::MemoryPropertyFlagBits::eDeviceLocal,
 			vk::ImageAspectFlagBits::eColor,
-			external
+			true	
 		);
 	}
 
