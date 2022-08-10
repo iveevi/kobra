@@ -37,8 +37,24 @@ class OptixTracer {
 	OptixShaderBindingTable		_optix_sbt;
 	CUstream			_optix_stream;
 
+	OptixProgramGroup		_hitgroup_prog_group = nullptr;
+	OptixProgramGroup		_miss_prog_group = nullptr;
+
+	CUdeviceptr			_optix_hg_sbt = 0;
+	CUdeviceptr			_optix_miss_sbt = 0;
+
+	CUdeviceptr			_d_materials = 0;
+	size_t				_d_materials_size = 0;
+
 	cuda::BufferData		_result_buffer;
 	std::vector <uint32_t>		_output;
+
+	// Images
+	// TODO: wrap in struct
+	cudaExternalMemory_t		_dext_env_map = nullptr;
+	CUdeviceptr			_d_environment_map = 0;
+	cudaTextureObject_t		_tex_env_map = 0;
+	const ImageData			*_v_environment_map = nullptr;
 
 	// Cached ryatracer data
 	std::vector <const kobra::Raytracer *>
@@ -108,6 +124,7 @@ class OptixTracer {
 
 	// Other helper methods
 	void _optix_build();
+	void _optix_update_materials();
 	void _optix_trace(const Camera &, const Transform &);
 public:
 	// Default constructor
@@ -163,6 +180,9 @@ public:
 			_result, 0
 		);
 	}
+
+	// Set environment map
+	void environment_map(const std::string &);
 
 	// Render
 	void render(const vk::raii::CommandBuffer &,

@@ -1,12 +1,10 @@
-#define KCUDA_DEBUG
-#define KOBRA_VALIDATION_ERROR_ONLY
-
 #include "include/app.hpp"
 #include "include/backend.hpp"
 #include "include/common.hpp"
 #include "include/ecs.hpp"
 #include "include/io/event.hpp"
 #include "include/layers/font_renderer.hpp"
+#include "include/layers/optix_tracer.cuh"
 #include "include/layers/raster.hpp"
 #include "include/layers/raytracer.hpp"
 #include "include/layers/shape_renderer.hpp"
@@ -19,7 +17,6 @@
 #include "include/ui/color_picker.hpp"
 #include "include/ui/slider.hpp"
 #include "tinyfiledialogs.h"
-#include "include/layers/optix_tracer.cuh"
 
 using namespace kobra;
 
@@ -177,6 +174,7 @@ struct ECSApp : public BaseApp {
 		scene.load(get_device(), scene_path);
 		// raytracer.environment_map(scene.p_environment_map);
 		raytracer.environment_map("resources/skies/background_1.jpg");
+		optix_tracer.environment_map("resources/skies/background_1.jpg");
 
 		// Camera
 		camera = scene.ecs.get_entity("Camera");
@@ -420,6 +418,9 @@ int main()
 {
 	auto extensions = {
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+		VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
+		VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
+		VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME,
 	};
 
 	auto predicate = [&extensions](const vk::raii::PhysicalDevice &dev) {
@@ -435,8 +436,16 @@ int main()
 		Tunings { 45.0f, 800, 800 }
 	}; */
 
+	std::cout << "Extensions:" << std::endl;
+	for (auto str : extensions)
+		std::cout << "\t" << str << std::endl;
+
 	// Create the app and run it
-	ECSApp app(phdev, extensions);
+	ECSApp app(phdev, {
+		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+		VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
+		VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
+	});
 	// RTApp app(phdev, extensions);
 	// engine::RTCapture app(phdev, {1000, 1000}, extensions, scene_path, camera);
 

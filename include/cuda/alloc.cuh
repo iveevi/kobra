@@ -32,9 +32,9 @@ inline CUdeviceptr alloc(size_t size)
 
 // Copy
 template <class T>
-inline void copy(T *dst, T *src, size_t size, cudaMemcpyKind kind = cudaMemcpyHostToDevice)
+inline void copy(T *dst, T *src, size_t elements, cudaMemcpyKind kind = cudaMemcpyHostToDevice)
 {
-	cudaError_t err = cudaMemcpy(dst, src, size * sizeof(T), kind);
+	cudaError_t err = cudaMemcpy(dst, src, elements * sizeof(T), kind);
 	CUDA_CHECK(err);
 }
 
@@ -45,9 +45,9 @@ inline void copy(T *dst, const std::vector <T> &src, cudaMemcpyKind kind = cudaM
 }
 
 template <class T>
-inline void copy(CUdeviceptr dst, T *src, size_t size, cudaMemcpyKind kind = cudaMemcpyHostToDevice)
+inline void copy(CUdeviceptr dst, T *src, size_t elements, cudaMemcpyKind kind = cudaMemcpyHostToDevice)
 {
-	cudaError_t err = cudaMemcpy((void *) dst, src, size * sizeof(T), kind);
+	cudaError_t err = cudaMemcpy((void *) dst, src, elements * sizeof(T), kind);
 	CUDA_CHECK(err);
 }
 
@@ -58,18 +58,20 @@ inline void copy(CUdeviceptr dst, const std::vector <T> &src, cudaMemcpyKind kin
 }
 
 template <class T>
-inline void copy(T *dst, CUdeviceptr src, size_t size, cudaMemcpyKind kind = cudaMemcpyDeviceToHost)
+inline void copy(T *dst, CUdeviceptr src, size_t elements, cudaMemcpyKind kind = cudaMemcpyDeviceToHost)
 {
-	cudaError_t err = cudaMemcpy(dst, (void *) src, size * sizeof(T), kind);
+	cudaError_t err = cudaMemcpy(dst, (void *) src, elements * sizeof(T), kind);
 	CUDA_CHECK(err);
 }
 
 template <class T>
-inline void copy(std::vector <T> &dst, CUdeviceptr src, size_t size, cudaMemcpyKind kind = cudaMemcpyDeviceToHost)
+inline void copy(std::vector <T> &dst, CUdeviceptr src, size_t elements, cudaMemcpyKind kind = cudaMemcpyDeviceToHost)
 {
-	dst.resize(size);
-	copy(dst.data(), src, size, kind);
+	dst.resize(elements);
+	copy(dst.data(), src, elements, kind);
 }
+
+// Create buffer (alloc and copy)
 
 // Free
 template <class T>

@@ -23,6 +23,8 @@
 #include <vulkan/vulkan_structs.hpp>
 #include <GLFW/glfw3.h>
 
+// #define KOBRA_VALIDATION_LAYERS
+
 // Engine headers
 #include "common.hpp"
 #include "core.hpp"
@@ -234,7 +236,8 @@ std::string dev_info(const vk::raii::PhysicalDevice &);
 vk::raii::DeviceMemory allocate_device_memory(const vk::raii::Device &,
 		const vk::PhysicalDeviceMemoryProperties &,
 		const vk::MemoryRequirements &,
-		const vk::MemoryPropertyFlags &);
+		const vk::MemoryPropertyFlags &,
+		bool = false);
 
 // Create a command buffer
 vk::raii::CommandBuffer make_command_buffer(const vk::raii::Device &,
@@ -505,7 +508,8 @@ struct ImageData {
 			vk::ImageUsageFlags usage_,
 			vk::ImageLayout initial_layout_,
 			vk::MemoryPropertyFlags memory_properties_,
-			vk::ImageAspectFlags aspect_mask_)
+			vk::ImageAspectFlags aspect_mask_,
+			bool external_ = false)
 			: format {fmt_},
 			extent {ext_},
 			tiling {tiling_},
@@ -534,7 +538,8 @@ struct ImageData {
 				allocate_device_memory(
 					device_, phdev_.getMemoryProperties(),
 					image.getMemoryRequirements(),
-					memory_properties_
+					memory_properties_,
+					external_
 				)
 			} {
 		image.bindMemory(*memory, 0);
@@ -548,6 +553,68 @@ struct ImageData {
 	}
 
 	ImageData(std::nullptr_t) {}
+
+	// No copy
+	ImageData(const ImageData &) = delete;
+	ImageData &operator=(const ImageData &) = delete;
+
+	// Move only
+	ImageData(ImageData &&other)
+		: format {other.format},
+		extent {other.extent},
+		tiling {other.tiling},
+		usage {other.usage},
+		layout {other.layout},
+		properties {other.properties},
+		aspect_mask {other.aspect_mask},
+		image {std::move(other.image)},
+		memory {std::move(other.memory)},
+		view {std::move(other.view)} {}
+
+	ImageData &operator=(ImageData &&other) {
+		format = other.format;
+		extent = other.extent;
+		tiling = other.tiling;
+		usage = other.usage;
+		layout = other.layout;
+		properties = other.properties;
+		aspect_mask = other.aspect_mask;
+		image = std::move(other.image);
+		memory = std::move(other.memory);
+		view = std::move(other.view);
+		return *this;
+	}
+
+	// Get size in bytes
+	vk::DeviceSize get_size() const {
+		return image.getMemoryRequirements().size;
+	}
+
+	// Get memory handle
+	int get_memory_handle(const vk::raii::Device &device) const {
+		// TODO: need to ensure that the the VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION is enabled
+		int fd = -1;
+		VkMemoryGetFdInfoKHR fdInfo = { };
+		fdInfo.sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR;
+		fdInfo.memory = *memory;
+		fdInfo.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
+
+		// TODO: load in backend.cpp
+		auto func = (PFN_vkGetMemoryFdKHR) vkGetDeviceProcAddr(*device, "vkGetMemoryFdKHR");
+
+		if (!func) {
+			KOBRA_LOG_FUNC(Log::ERROR) << "vkGetMemoryFdKHR not found\n";
+			return -1;
+		}
+
+		VkResult result = func(*device, &fdInfo, &fd);
+		if (result != VK_SUCCESS) {
+			KOBRA_LOG_FUNC(Log::ERROR) << "vkGetMemoryFdKHR failed\n";
+			return -1;
+		}
+
+		return fd;
+	}
 
 	// Transition the image to a new layout
 	void transition_layout(const vk::raii::CommandBuffer &cmd,
@@ -580,69 +647,6 @@ struct ImageData {
 		// Wait for the command buffer to finish
 		queue.waitIdle();
 	}
-
-	/* Create a copy of the image data
-	ImageData copy(const vk::raii::PhysicalDevice &phdev,
-			const vk::raii::Device &device,
-			const vk::raii::CommandPool &command_pool) const {
-		ImageData copy {
-			phdev, device,
-			format, extent, tiling,
-			vk::ImageUsageFlagBits::eSampled
-				| vk::ImageUsageFlagBits::eTransferDst,
-			vk::ImageLayout::ePreinitialized,
-			properties,
-			aspect_mask
-		};
-
-		// Create a temporary command buffer
-		auto cmd = make_command_buffer(device, command_pool);
-
-		// Transition layuot, then copy image data
-		{
-			// Start recording the command buffer
-			cmd.begin({vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
-
-			// Transition for copying
-			transition_image_layout(cmd, *image, format, layout, vk::ImageLayout::eTransferSrcOptimal);
-
-			vk::ImageCopy copy_region {
-				{vk::ImageAspectFlagBits::eColor, 0, 0, 1},
-				{0, 0, 0},
-				{vk::ImageAspectFlagBits::eColor, 0, 0, 1},
-				{0, 0, 0},
-				{extent.width, extent.height, 1}
-			};
-
-			cmd.copyImage(
-				*image, vk::ImageLayout::eTransferSrcOptimal,
-				*copy.image, vk::ImageLayout::eTransferDstOptimal,
-				copy_region
-			);
-
-			// Transition to original layout
-			// transition_image_layout(cmd, *image, format, vk::ImageLayout::eTransferSrcOptimal, layout);
-
-			// End recording the command buffer
-			cmd.end();
-		}
-
-		// Queue to submit commands to
-		vk::raii::Queue queue {device, 0, 0};
-
-		// Submit the command buffer
-		queue.submit(
-			vk::SubmitInfo {
-				0, nullptr, nullptr, 1, &*cmd
-			},
-			nullptr
-		);
-
-		// Wait for the command buffer to finish
-		queue.waitIdle();
-
-		return copy;
-	} */
 
 	// Blank image
 	static ImageData blank(const vk::raii::PhysicalDevice &phdev,
@@ -861,7 +865,8 @@ ImageData make_image(const vk::raii::CommandBuffer &,
 		vk::ImageTiling,
 		vk::ImageUsageFlags,
 		vk::MemoryPropertyFlags,
-		vk::ImageAspectFlags);
+		vk::ImageAspectFlags,
+		bool = false);
 
 // Create ImageData object from a file
 ImageData make_image(const vk::raii::CommandBuffer &,
@@ -872,7 +877,8 @@ ImageData make_image(const vk::raii::CommandBuffer &,
 		vk::ImageTiling,
 		vk::ImageUsageFlags,
 		vk::MemoryPropertyFlags,
-		vk::ImageAspectFlags);
+		vk::ImageAspectFlags,
+		bool = false);
 
 // Create ImageData object from a file (without hastle of extra arguments)
 // TODO: source file
@@ -886,7 +892,8 @@ inline ImageData make_image(const vk::raii::PhysicalDevice &phdev,
 		vk::ImageTiling tiling,
 		vk::ImageUsageFlags usage,
 		vk::MemoryPropertyFlags memory_properties,
-		vk::ImageAspectFlags aspect_mask)
+		vk::ImageAspectFlags aspect_mask,
+		bool external = false)
 {
 	// Image data to be returned
 	ImageData img = nullptr;
@@ -910,7 +917,7 @@ inline ImageData make_image(const vk::raii::PhysicalDevice &phdev,
 		phdev, device, staging_buffer,
 		width, height, data,
 		format, tiling, usage,
-		memory_properties, aspect_mask
+		memory_properties, aspect_mask, external
 	));
 
 	// End
@@ -940,7 +947,8 @@ inline ImageData make_image(const vk::raii::PhysicalDevice &phdev,
 		vk::ImageTiling tiling,
 		vk::ImageUsageFlags usage,
 		vk::MemoryPropertyFlags memory_properties,
-		vk::ImageAspectFlags aspect_mask)
+		vk::ImageAspectFlags aspect_mask,
+		bool external = false)
 {
 	// Image data to be returned
 	ImageData img = nullptr;
@@ -963,7 +971,7 @@ inline ImageData make_image(const vk::raii::PhysicalDevice &phdev,
 	img = std::move(make_image(temp_command_buffer,
 		phdev, device, staging_buffer,
 		filename, tiling, usage,
-		memory_properties, aspect_mask
+		memory_properties, aspect_mask, external
 	));
 
 	// End

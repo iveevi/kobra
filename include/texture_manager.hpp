@@ -57,7 +57,7 @@ public:
 	static const ImageData &load_texture
 			(const vk::raii::PhysicalDevice &,
 			const vk::raii::Device &,
-			const std::string &);
+			const std::string &, bool = false);
 
 	// Create a sampler
 	static const vk::raii::Sampler &load_sampler

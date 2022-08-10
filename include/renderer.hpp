@@ -19,6 +19,7 @@ class Raytracer;
 
 // Handles the rendering of an entity
 struct Renderer {
+	// TODO: make private
 	Material *material = nullptr;
 
 	// No default constructor
@@ -26,6 +27,10 @@ struct Renderer {
 
 	// Constructor
 	Renderer(Material *material_) : material(material_) {}
+
+	const Material &get_material() const {
+		return *material;
+	}
 };
 
 // Rasterizer component

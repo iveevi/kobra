@@ -25,7 +25,8 @@ TextureManager::DeviceMap <std::mutex>
 const ImageData &TextureManager::load_texture
 		(const vk::raii::PhysicalDevice &phdev,
 		const vk::raii::Device &dev,
-		const std::string &path) {
+		const std::string &path,
+		bool external) {
 	// Get corresponding command pool
 	auto &command_pool = get_command_pool(phdev, dev);
 	auto &image_map = _image_map[*dev];
@@ -54,12 +55,13 @@ const ImageData &TextureManager::load_texture
 		KOBRA_LOG_FUNC(Log::OK) << "Loading texture from file: " << path << "\n";
 		img = make_image(phdev, dev,
 			command_pool, path,
-			vk::ImageTiling::eOptimal,
+			vk::ImageTiling::eLinear,
 			vk::ImageUsageFlagBits::eSampled
 				| vk::ImageUsageFlagBits::eTransferDst
 				| vk::ImageUsageFlagBits::eTransferSrc,
 			vk::MemoryPropertyFlagBits::eDeviceLocal,
-			vk::ImageAspectFlagBits::eColor
+			vk::ImageAspectFlagBits::eColor,
+			external
 		);
 	}
 

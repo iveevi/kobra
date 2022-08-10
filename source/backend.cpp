@@ -36,7 +36,12 @@ const std::vector <const char *> &get_required_extensions()
 		// Additional extensions
 		// TODO: debugging extension if debuggin enabled
 		extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
-		extensions.push_back("VK_KHR_get_physical_device_properties2");
+		// extensions.push_back("VK_KHR_get_physical_device_properties2");
+		extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+		extensions.push_back(VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME);
+		extensions.push_back(VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME);
+		// extensions.push_back(VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME);
+		// extensions.push_back(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
 
 #ifdef KOBRA_VALIDATION_LAYERS
 
@@ -525,10 +530,12 @@ std::string dev_info(const vk::raii::PhysicalDevice &phdev)
 }
 
 // Allocate device memory
+// TODO: external should be a struct?
 vk::raii::DeviceMemory allocate_device_memory(const vk::raii::Device &device,
 		const vk::PhysicalDeviceMemoryProperties &memory_properties,
 		const vk::MemoryRequirements &memory_requirements,
-		const vk::MemoryPropertyFlags &properties)
+		const vk::MemoryPropertyFlags &properties,
+		bool external)
 {
 	uint32_t type_index = find_memory_type(memory_properties,
 			memory_requirements.memoryTypeBits, properties);
@@ -536,6 +543,14 @@ vk::raii::DeviceMemory allocate_device_memory(const vk::raii::Device &device,
 	vk::MemoryAllocateInfo alloc_info {
 		memory_requirements.size, type_index
 	};
+
+	if (external) {
+		vk::ExportMemoryAllocateInfo ext_info {
+			vk::ExternalMemoryHandleTypeFlagBits::eOpaqueFd
+		};
+
+		alloc_info.pNext = &ext_info;
+	}
 
 	return vk::raii::DeviceMemory {
 		device, alloc_info
@@ -666,7 +681,8 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 		vk::ImageTiling tiling,
 		vk::ImageUsageFlags usage,
 		vk::MemoryPropertyFlags memory_properties,
-		vk::ImageAspectFlags aspect_mask)
+		vk::ImageAspectFlags aspect_mask,
+		bool external)
 {
 	// Create the image
 	vk::Extent2D extent {
@@ -682,7 +698,7 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 		usage,
 		vk::ImageLayout::ePreinitialized,
 		memory_properties,
-		aspect_mask
+		aspect_mask, external
 	);
 
 	// Copy the image data into a staging buffer
@@ -732,7 +748,8 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 		vk::ImageTiling tiling,
 		vk::ImageUsageFlags usage,
 		vk::MemoryPropertyFlags memory_properties,
-		vk::ImageAspectFlags aspect_mask)
+		vk::ImageAspectFlags aspect_mask,
+		bool external)
 {
 	// Check if the file exists
 	KOBRA_ASSERT(common::file_exists(filename), "File not found: " + filename);
@@ -745,6 +762,21 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 	stbi_set_flip_vertically_on_load(true);
 	byte *data = stbi_load(filename.c_str(), &width, &height, &channels, 4);
 	KOBRA_ASSERT(data, "Failed to load texture image");
+
+	KOBRA_LOG_FUNC(Log::INFO) << "Loaded image: " << filename << ": width="
+			<< width << ", height=" << height << ", channels=" << channels << "\n";
+
+	/* uint32_t *pixels = (uint32_t *)data;
+	std::cout << "Image dump: " << filename << std::endl;
+	uint32_t r = 0, g = 0, b = 0, a = 0;
+	for (int i = 0; i < 20; i++) {
+		uint32_t v = pixels[i];
+		r = (v >> 24) & 0xff;
+		g = (v >> 16) & 0xff;
+		b = (v >> 8) & 0xff;
+		a = v & 0xff;
+		std::cout << "(" << r << ", " << g << ", " << b << ", " << a << ")\n";
+	} */
 
 	// Create the image
 	vk::Extent2D extent {
@@ -760,11 +792,13 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 		usage,
 		vk::ImageLayout::ePreinitialized,
 		memory_properties,
-		aspect_mask
+		aspect_mask, external
 	);
 
 	// Copy the image data into a staging buffer
 	vk::DeviceSize size = width * height * vk::blockSize(img.format);
+
+	std::cout << "Buffer (staging) size = " << size << std::endl;
 
 	buffer = BufferData(
 		phdev, device,

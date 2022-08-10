@@ -10,6 +10,10 @@
 #include "../../include/layers/optix_tracer.cuh"
 #include "../../include/layers/optix_tracer_common.cuh"
 #include "../../include/camera.hpp"
+#include "../../include/texture_manager.hpp"
+#include "../../include/formats.hpp"
+
+#include <stb_image_write.h>
 
 namespace kobra {
 
@@ -49,6 +53,155 @@ static void context_log_cb( unsigned int level, const char* tag, const char* mes
 	std::stringstream ss;
 	ss << level << std::setw(20) << tag;
 	logger(ss.str(), Log::AUTO, "OPTIX") << message << std::endl;
+}
+
+__global__ void check_texture(cudaTextureObject_t tex, size_t width, size_t height)
+{
+
+	for (int y = 0; y < height; y++) {
+		for (int x = 0; x < width; x++) {
+			float u = x / (float) width;
+			float v = y / (float) height;
+			float4 flt = tex2D <float4> (tex, u, v);
+			uint4 color = tex2D <uint4> (tex, u, v);
+			printf("%d %d -> %d %d %d %d or %.2f %.2f %.2f %.2f\n",
+				x, y, color.x, color.y, color.z, color.w,
+				flt.x, flt.y, flt.z, flt.w);
+		}
+	}
+}
+	
+static int get_memory_handle(const vk::raii::Device &device, const VkDeviceMemory &memory) {
+	// TODO: need to ensure that the the VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION is enabled
+	int fd = -1;
+	VkMemoryGetFdInfoKHR fdInfo {};
+	fdInfo.sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR;
+	fdInfo.memory = memory;
+	fdInfo.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
+
+	// TODO: load in backend.cpp
+	auto func = (PFN_vkGetMemoryFdKHR) vkGetDeviceProcAddr(*device, "vkGetMemoryFdKHR");
+
+	std::cout << "Func = " << func << std::endl;
+	if (!func) {
+		KOBRA_LOG_FUNC(Log::ERROR) << "vkGetMemoryFdKHR not found\n";
+		return -1;
+	}
+
+	VkResult result = func(*device, &fdInfo, &fd);
+	if (result != VK_SUCCESS) {
+		KOBRA_LOG_FUNC(Log::ERROR) << "vkGetMemoryFdKHR failed\n";
+		return -1;
+	}
+
+	return fd;
+}
+
+// Set environment map
+void OptixTracer::environment_map(const std::string &path)
+{
+	_v_environment_map = &TextureManager::load_texture(
+		*_ctx.phdev,
+		*_ctx.device,
+		path, true
+	);
+
+	// Create a CUDA texture out of the environment map
+	cudaExternalMemoryHandleDesc env_tex_desc {};
+	env_tex_desc.type = cudaExternalMemoryHandleTypeOpaqueFd;
+	env_tex_desc.handle.fd = get_memory_handle(*_ctx.device,
+			*_v_environment_map->memory);
+	env_tex_desc.size = _v_environment_map->get_size();
+
+	std::cout << "Size = " << env_tex_desc.size << ", fd = " << env_tex_desc.handle.fd << std::endl;
+	std::cout << "\twidth = " << _v_environment_map->extent.width
+		<< ", height = " << _v_environment_map->extent.height << std::endl;
+	std::cout << "\tsize = " << _v_environment_map->extent.width * _v_environment_map->extent.height * 4 << std::endl;
+	
+	// cudaExternalMemory_t env_tex_mem;
+	CUDA_CHECK(cudaSetDevice(0));
+	CUDA_CHECK(cudaImportExternalMemory(&_dext_env_map, &env_tex_desc));
+
+	cudaExternalMemoryBufferDesc env_tex_buf_desc {};
+	env_tex_buf_desc.flags = 0;
+	env_tex_buf_desc.offset = 0;
+	env_tex_buf_desc.size = env_tex_desc.size;
+
+	CUdeviceptr env_tex_buf;
+	CUDA_CHECK(cudaExternalMemoryGetMappedBuffer(
+		(void **) &env_tex_buf, _dext_env_map,
+		&env_tex_buf_desc
+	));
+
+	/* Get data
+	uint32_t *env_tex_data = new uint32_t[env_tex_desc.size / sizeof(uint32_t)];
+	CUDA_CHECK(cudaMemcpy(env_tex_data, (void *) env_tex_buf, env_tex_desc.size, cudaMemcpyDeviceToHost));
+
+	uint32_t r = 0, g = 0, b = 0, a = 0;
+	for (int i = 0; i < 20; i++) {
+		uint32_t v = env_tex_data[i];
+		r = (v >> 24) & 0xff;
+		g = (v >> 16) & 0xff;
+		b = (v >> 8) & 0xff;
+		a = v & 0xff;
+		std::cout << "(" << r << ", " << g << ", " << b << ", " << a << ")\n";
+	} */
+
+	/* Save as png
+	stbi_flip_vertically_on_write(true);
+	stbi_write_png("cuda_env.png",
+		_v_environment_map->extent.width,
+		_v_environment_map->extent.height,
+		4, (void *) env_tex_data,
+		_v_environment_map->extent.width * 4
+	); */
+
+	// Create bindless texture
+	cudaResourceDesc res_desc {};
+	res_desc.resType = cudaResourceTypePitch2D;
+	res_desc.res.pitch2D.devPtr = (void *) env_tex_buf;
+	res_desc.res.pitch2D.desc = cudaCreateChannelDesc(8, 8, 8, 8, cudaChannelFormatKindUnsigned);
+	res_desc.res.pitch2D.width = _v_environment_map->extent.width;
+	res_desc.res.pitch2D.height = _v_environment_map->extent.height;
+	res_desc.res.pitch2D.pitchInBytes = 4 * _v_environment_map->extent.width;
+
+	cudaTextureDesc tex_desc {};
+	tex_desc.readMode = cudaReadModeNormalizedFloat;
+	tex_desc.normalizedCoords = true;
+	tex_desc.filterMode = cudaFilterModeLinear;
+
+	/* tex_desc.addressMode[0] = cudaAddressModeClamp;
+	tex_desc.addressMode[1] = cudaAddressModeClamp;
+	tex_desc.addressMode[2] = cudaAddressModeClamp; */
+
+	// tex_desc.maxAnisotropy = 1;
+
+	CUDA_CHECK(cudaCreateTextureObject(
+		&_tex_env_map, &res_desc, &tex_desc, nullptr
+	));
+
+	printf("Created texture, now going to check it...\n");
+	// check_texture <<<1, 1>>> (_tex_env_map, 20, 20);
+	printf("Checked texture\n");
+	std::cout << std::endl;
+
+	cudaResourceViewDesc res_view_desc {};
+	CUDA_CHECK(cudaGetTextureObjectResourceViewDesc(&res_view_desc,
+				_tex_env_map));
+
+	std::cout << "Desc = " << res_view_desc.format << std::endl;
+	std::cout << "\twidth = " << res_view_desc.width << std::endl;
+	std::cout << "\theight = " << res_view_desc.height << std::endl;
+
+	// Update miss group record
+	MissSbtRecord miss_record;
+	miss_record.data.bg_color = float3 {0.0f, 0.0f, 0.0f};
+	miss_record.data.bg_tex = _tex_env_map;
+	miss_record.data.bg_tex_width = _v_environment_map->extent.width;
+	miss_record.data.bg_tex_height = _v_environment_map->extent.height;
+
+	OPTIX_CHECK(optixSbtRecordPackHeader(_miss_prog_group, &miss_record));
+	cuda::copy(_optix_miss_sbt, &miss_record, 1);
 }
 
 ////////////
@@ -100,6 +253,7 @@ void OptixTracer::render(const vk::raii::CommandBuffer &cmd,
 	}
 
 	// Launch OptiX with the given camera
+	_optix_update_materials();
 	_optix_trace(camera, camera_transform);
 
 	// Apply render area
@@ -171,23 +325,14 @@ void OptixTracer::render(const vk::raii::CommandBuffer &cmd,
 // Private methods //
 /////////////////////
 
+#define KCUDA_DEBUG
+#define KOPTIX_DEBUG
+
 void OptixTracer::_initialize_optix()
 {
 	// Storage for logs
 	static char log[1024];
 	size_t sizeof_log = sizeof( log );
-
-	/* cudaFree(0);
-	optixInit();
-
-	// Options
-	OptixDeviceContextOptions options;
-
-	// Context
-	CUcontext cu_ctx = nullptr;
-
-	OptixDeviceContext context = nullptr;
-	optixDeviceContextCreate(cu_ctx, &options, &context); */
 
 	// Initialize CUDA
 	CUDA_CHECK( cudaFree( 0 ) );
@@ -213,6 +358,8 @@ void OptixTracer::_initialize_optix()
 
 #ifdef KCUDA_DEBUG
 
+#warning "CUDA debug enabled"
+
 		module_compile_options.optLevel   = OPTIX_COMPILE_OPTIMIZATION_LEVEL_0;
 		module_compile_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
 
@@ -225,6 +372,8 @@ void OptixTracer::_initialize_optix()
 		pipeline_compile_options.numAttributeValues    = 3;
 
 #ifdef KOPTIX_DEBUG
+
+#warning "OptiX debug enabled"
 
 		pipeline_compile_options.exceptionFlags = OPTIX_EXCEPTION_FLAG_DEBUG | OPTIX_EXCEPTION_FLAG_TRACE_DEPTH | OPTIX_EXCEPTION_FLAG_STACK_OVERFLOW;
 
@@ -259,8 +408,7 @@ void OptixTracer::_initialize_optix()
 	// Create program groups
 	//
 	OptixProgramGroup raygen_prog_group   = nullptr;
-	OptixProgramGroup miss_prog_group     = nullptr;
-	OptixProgramGroup hitgroup_prog_group = nullptr;
+	
 	{
 		OptixProgramGroupOptions program_group_options   = {}; // Initialize to zeros
 
@@ -290,7 +438,7 @@ void OptixTracer::_initialize_optix()
 					&program_group_options,
 					log,
 					&sizeof_log,
-					&miss_prog_group
+					&_miss_prog_group
 					) );
 
 		OptixProgramGroupDesc hitgroup_prog_group_desc = {};
@@ -305,104 +453,99 @@ void OptixTracer::_initialize_optix()
 					&program_group_options,
 					log,
 					&sizeof_log,
-					&hitgroup_prog_group
+					&_hitgroup_prog_group
 					) );
 	}
 
 	//
-        // Link pipeline
-        //
-        _optix_pipeline = nullptr;
-        {
-            const uint32_t    max_trace_depth  = 1;
-            OptixProgramGroup program_groups[] = { raygen_prog_group, miss_prog_group, hitgroup_prog_group };
+	// Link pipeline
+	//
+	_optix_pipeline = nullptr;
+	{
+		const uint32_t    max_trace_depth  = 1;
+		OptixProgramGroup program_groups[] = { raygen_prog_group,
+			_miss_prog_group, _hitgroup_prog_group };
 
-            OptixPipelineLinkOptions pipeline_link_options = {};
-            pipeline_link_options.maxTraceDepth          = max_trace_depth;
-            pipeline_link_options.debugLevel             = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
-            size_t sizeof_log = sizeof( log );
-            OPTIX_CHECK_LOG( optixPipelineCreate(
-                        _optix_ctx,
-                        &pipeline_compile_options,
-                        &pipeline_link_options,
-                        program_groups,
-                        sizeof( program_groups ) / sizeof( program_groups[0] ),
-                        log,
-                        &sizeof_log,
-                        &_optix_pipeline
-                        ) );
+		OptixPipelineLinkOptions pipeline_link_options = {};
+		pipeline_link_options.maxTraceDepth          = max_trace_depth;
+		pipeline_link_options.debugLevel             = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
+		size_t sizeof_log = sizeof( log );
+		OPTIX_CHECK_LOG( optixPipelineCreate(
+					_optix_ctx,
+					&pipeline_compile_options,
+					&pipeline_link_options,
+					program_groups,
+					sizeof( program_groups ) / sizeof( program_groups[0] ),
+					log,
+					&sizeof_log,
+					&_optix_pipeline
+					) );
 
-            OptixStackSizes stack_sizes = {};
-            for( auto& prog_group : program_groups )
-            {
-                OPTIX_CHECK( optixUtilAccumulateStackSizes( prog_group, &stack_sizes ) );
-            }
+		OptixStackSizes stack_sizes = {};
+		for( auto& prog_group : program_groups )
+		{
+			OPTIX_CHECK( optixUtilAccumulateStackSizes( prog_group, &stack_sizes ) );
+		}
 
-            uint32_t direct_callable_stack_size_from_traversal;
-            uint32_t direct_callable_stack_size_from_state;
-            uint32_t continuation_stack_size;
-            OPTIX_CHECK( optixUtilComputeStackSizes( &stack_sizes, max_trace_depth,
-                                                     0,  // maxCCDepth
-                                                     0,  // maxDCDEpth
-                                                     &direct_callable_stack_size_from_traversal,
-                                                     &direct_callable_stack_size_from_state, &continuation_stack_size ) );
-            OPTIX_CHECK( optixPipelineSetStackSize( _optix_pipeline, direct_callable_stack_size_from_traversal,
-                                                    direct_callable_stack_size_from_state, continuation_stack_size,
-                                                    2  // maxTraversableDepth
-                                                    ) );
-        }
+		uint32_t direct_callable_stack_size_from_traversal;
+		uint32_t direct_callable_stack_size_from_state;
+		uint32_t continuation_stack_size;
+		OPTIX_CHECK( optixUtilComputeStackSizes( &stack_sizes, max_trace_depth,
+					0,  // maxCCDepth
+					0,  // maxDCDEpth
+					&direct_callable_stack_size_from_traversal,
+					&direct_callable_stack_size_from_state, &continuation_stack_size ) );
+		OPTIX_CHECK( optixPipelineSetStackSize( _optix_pipeline, direct_callable_stack_size_from_traversal,
+					direct_callable_stack_size_from_state, continuation_stack_size,
+					2  // maxTraversableDepth
+					) );
+	}
 
-        //
-        // Set up shader binding table
-        //
-        {
-            CUdeviceptr  raygen_record;
-            const size_t raygen_record_size = sizeof( RayGenSbtRecord );
-            CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &raygen_record ), raygen_record_size ) );
-            RayGenSbtRecord rg_sbt;
-            OPTIX_CHECK( optixSbtRecordPackHeader( raygen_prog_group, &rg_sbt ) );
-            CUDA_CHECK( cudaMemcpy(
-                        reinterpret_cast<void*>( raygen_record ),
-                        &rg_sbt,
-                        raygen_record_size,
-                        cudaMemcpyHostToDevice
-                        ) );
+	/////////////////////////////////
+	// Set up shader binding table //
+	/////////////////////////////////
 
-            CUdeviceptr miss_record;
-            size_t      miss_record_size = sizeof( MissSbtRecord );
-            CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &miss_record ), miss_record_size ) );
-            MissSbtRecord ms_sbt;
-            ms_sbt.data = { 0.3f, 0.1f, 0.2f };
-            OPTIX_CHECK( optixSbtRecordPackHeader( miss_prog_group, &ms_sbt ) );
-            CUDA_CHECK( cudaMemcpy(
-                        reinterpret_cast<void*>( miss_record ),
-                        &ms_sbt,
-                        miss_record_size,
-                        cudaMemcpyHostToDevice
-                        ) );
+	// Ray generation
+	CUdeviceptr  raygen_record;
+	const size_t raygen_record_size = sizeof( RayGenSbtRecord );
+	CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &raygen_record ), raygen_record_size ) );
+	RayGenSbtRecord rg_sbt;
+	OPTIX_CHECK( optixSbtRecordPackHeader( raygen_prog_group, &rg_sbt ) );
+	CUDA_CHECK( cudaMemcpy(
+				reinterpret_cast<void*>( raygen_record ),
+				&rg_sbt,
+				raygen_record_size,
+				cudaMemcpyHostToDevice
+			      ) );
 
-            CUdeviceptr hitgroup_record;
-            size_t      hitgroup_record_size = sizeof( HitGroupSbtRecord );
-            CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &hitgroup_record ), hitgroup_record_size ) );
-            HitGroupSbtRecord hg_sbt;
-            OPTIX_CHECK( optixSbtRecordPackHeader( hitgroup_prog_group, &hg_sbt ) );
-            CUDA_CHECK( cudaMemcpy(
-                        reinterpret_cast<void*>( hitgroup_record ),
-                        &hg_sbt,
-                        hitgroup_record_size,
-                        cudaMemcpyHostToDevice
-                        ) );
+	// Ray miss program
+	_optix_miss_sbt = cuda::alloc(sizeof(MissSbtRecord));
+	
+	MissSbtRecord ms_sbt;
+	ms_sbt.data = {0.6f, 0.6f, 0.9f};
 
-	    _optix_sbt = OptixShaderBindingTable {};
-            _optix_sbt.raygenRecord                = raygen_record;
-            _optix_sbt.missRecordBase              = miss_record;
-            _optix_sbt.missRecordStrideInBytes     = sizeof( MissSbtRecord );
-            _optix_sbt.missRecordCount             = 1;
-            _optix_sbt.hitgroupRecordBase          = hitgroup_record;
-            _optix_sbt.hitgroupRecordStrideInBytes = sizeof( HitGroupSbtRecord );
-            _optix_sbt.hitgroupRecordCount         = 1;
-        }
+	OPTIX_CHECK(optixSbtRecordPackHeader(_miss_prog_group, &ms_sbt));
+	cuda::copy(_optix_miss_sbt, &ms_sbt, 1);
 
+	// Ray closest hit program
+	_optix_hg_sbt = cuda::alloc(sizeof(HitGroupSbtRecord));
+	
+	HitGroupSbtRecord hg_sbt;
+	hg_sbt.data.material_count = 2;
+
+	OPTIX_CHECK(optixSbtRecordPackHeader(_hitgroup_prog_group, &hg_sbt));
+	cuda::copy(_optix_hg_sbt, &hg_sbt, 1);
+
+	_optix_sbt = OptixShaderBindingTable {};
+	_optix_sbt.raygenRecord                = raygen_record;
+	_optix_sbt.missRecordBase              = _optix_miss_sbt;
+	_optix_sbt.missRecordStrideInBytes     = sizeof( MissSbtRecord );
+	_optix_sbt.missRecordCount             = 1;
+	_optix_sbt.hitgroupRecordBase          = _optix_hg_sbt;
+	_optix_sbt.hitgroupRecordStrideInBytes = sizeof( HitGroupSbtRecord );
+	_optix_sbt.hitgroupRecordCount         = 1;
+
+	// Create stream
 	CUDA_CHECK(cudaStreamCreate(&_optix_stream));
 
 	KOBRA_LOG_FUNC(Log::OK) << "Initialized OptiX and relevant structures" << std::endl;
@@ -517,9 +660,6 @@ void OptixTracer::_optix_build()
 		// cuda::free(d_transform); // TODO: can be freed after all instances are built
 	}
 
-	_optix_traversable = instance_gas[1];
-	// return;
-
 	// Build instances and top level acceleration structure
 	std::vector <OptixInstance> instances(_c_raytracers.size());
 
@@ -583,6 +723,40 @@ void OptixTracer::_optix_build()
 	// Free the memory
 	// cuda::free(d_instances);
 	// cuda::free(d_ias_tmp);
+}
+
+// Update hit group data with materials
+void OptixTracer::_optix_update_materials()
+{
+	// TODO: avoid doing this every frame
+	size_t n_materials = _c_raytracers.size();
+
+	std::vector <HitGroupData::Material> materials(n_materials);
+	for (int i = 0; i < _c_raytracers.size(); i++) {
+		 Material mat = _c_raytracers[i]->get_material();
+		 materials[i].diffuse = to_f3(mat.diffuse);
+		 materials[i].specular = to_f3(mat.specular);
+		 materials[i].emission = to_f3(mat.emission);
+	}
+
+	// Turn into CUDA device memory
+	// TODO: be more conservative with the memory
+	if (n_materials * sizeof(HitGroupData::Material) > _d_materials_size) {
+		if (_d_materials != 0)
+			cuda::free(_d_materials);
+		
+		_d_materials = cuda::alloc(sizeof(HitGroupData::Material) * n_materials);
+	}
+
+	cuda::copy(_d_materials, materials);
+
+	// Update hit group data
+	HitGroupSbtRecord hg_sbt;
+	hg_sbt.data.material_count = n_materials;
+	hg_sbt.data.materials = (HitGroupData::Material *) _d_materials;
+
+	OPTIX_CHECK(optixSbtRecordPackHeader(_hitgroup_prog_group, &hg_sbt));
+	cuda::copy(_optix_hg_sbt, &hg_sbt, 1);
 }
 
 void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
