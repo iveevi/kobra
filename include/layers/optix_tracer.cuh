@@ -119,6 +119,8 @@ class OptixTracer {
 			}
 		);
 
+		grp_info.no_bindings = true;
+
 		_pipeline = make_graphics_pipeline(grp_info);
 	}
 
@@ -153,7 +155,7 @@ public:
 			vk::ImageTiling::eOptimal,
 			vk::ImageUsageFlagBits::eSampled
 				| vk::ImageUsageFlagBits::eTransferDst,
-			vk::ImageLayout::ePreinitialized,
+			vk::ImageLayout::eUndefined,
 			vk::MemoryPropertyFlagBits::eDeviceLocal,
 			vk::ImageAspectFlagBits::eColor
 		);

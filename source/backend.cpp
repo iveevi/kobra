@@ -699,7 +699,7 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 		extent,
 		tiling,
 		usage,
-		vk::ImageLayout::ePreinitialized,
+		vk::ImageLayout::eUndefined,
 		memory_properties,
 		aspect_mask, external
 	);
@@ -721,7 +721,7 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 	// First transition the image to the transfer destination layout
 	transition_image_layout(cmd,
 		*img.image, img.format,
-		vk::ImageLayout::ePreinitialized,
+		vk::ImageLayout::eUndefined,
 		vk::ImageLayout::eTransferDstOptimal
 	);
 
@@ -793,7 +793,7 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 		extent,
 		tiling,
 		usage,
-		vk::ImageLayout::ePreinitialized,
+		vk::ImageLayout::eUndefined,
 		memory_properties,
 		aspect_mask, external
 	);
@@ -817,7 +817,7 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 	// First transition the image to the transfer destination layout
 	transition_image_layout(cmd,
 		*img.image, img.format,
-		vk::ImageLayout::ePreinitialized,
+		vk::ImageLayout::eUndefined,
 		vk::ImageLayout::eTransferDstOptimal
 	);
 

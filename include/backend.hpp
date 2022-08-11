@@ -24,7 +24,7 @@
 #include <GLFW/glfw3.h>
 
 #define KOBRA_VALIDATION_LAYERS
-#define KOBRA_VALIDATION_ERROR_ONLY
+#define KOBRA_THROW_ERROR
 
 // Engine headers
 #include "common.hpp"
@@ -664,7 +664,7 @@ struct ImageData {
 			vk::Extent2D(1, 1),
 			vk::ImageTiling::eOptimal,
 			vk::ImageUsageFlagBits::eSampled,
-			vk::ImageLayout::ePreinitialized,
+			vk::ImageLayout::eUndefined,
 			vk::MemoryPropertyFlagBits::eDeviceLocal,
 			vk::ImageAspectFlagBits::eColor
 		);
@@ -934,7 +934,8 @@ inline ImageData make_image(const vk::raii::PhysicalDevice &phdev,
 	// Submit
 	queue.submit(
 		vk::SubmitInfo {
-			0, nullptr, nullptr, 1, &*temp_command_buffer
+			0, nullptr, nullptr,
+			1, &*temp_command_buffer
 		},
 		nullptr
 	);

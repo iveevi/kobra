@@ -63,7 +63,7 @@ void main()
 
 		vec3 Li = light.intensity/d;
 
-		float diffuse = max(dot(ldir, n), 0.0);
+		vec3 diffuse = albedo * max(dot(ldir, n), 0.0);
 		float specular = pow(
 			max(
 				dot(ldir, reflect(-ldir, n)),
@@ -71,7 +71,7 @@ void main()
 			), 1 // TODO: shininess
 		);
 
-		color += Li * (diffuse + specular) + ambience;
+		color += Li * (diffuse + vec3(specular)) + ambience;
 	}
 
 	// Gamma correction

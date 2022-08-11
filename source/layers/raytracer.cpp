@@ -211,7 +211,7 @@ Raytracer::Raytracer(const Context &ctx, SyncQueue *sq, const vk::AttachmentLoad
 		vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eSampled
 			| vk::ImageUsageFlagBits::eTransferDst,
-		vk::ImageLayout::ePreinitialized,
+		vk::ImageLayout::eUndefined,
 		vk::MemoryPropertyFlagBits::eDeviceLocal,
 		vk::ImageAspectFlagBits::eColor
 	);
@@ -334,7 +334,7 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 			vk::ImageTiling::eOptimal,
 			vk::ImageUsageFlagBits::eSampled
 				| vk::ImageUsageFlagBits::eTransferDst,
-			vk::ImageLayout::ePreinitialized,
+			vk::ImageLayout::eUndefined,
 			vk::MemoryPropertyFlagBits::eDeviceLocal,
 			vk::ImageAspectFlagBits::eColor
 		);
@@ -787,6 +787,8 @@ void Raytracer::_initialize_vuklan_structures(const vk::AttachmentLoadOp &load)
 			vk::PipelineCacheCreateInfo {}
 		}
 	);
+
+	grp_info.no_bindings = true;
 
 	_p_postprocess = make_graphics_pipeline(grp_info);
 }

@@ -219,7 +219,7 @@ class Font {
 
 				transition_image_layout(tmp_cmd,
 					*img.image, img.format,
-					vk::ImageLayout::ePreinitialized,
+					vk::ImageLayout::eUndefined,
 					vk::ImageLayout::eShaderReadOnlyOptimal
 				);
 

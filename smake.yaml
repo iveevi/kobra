@@ -31,7 +31,8 @@ definitions:
     thirdparty/assimp/include,
     thirdparty/tinyfiledialogs,
     thirdparty/optix,
-    thirdparty/tinyexr'
+    thirdparty/tinyexr,
+    thirdparty/stb'
   - libs: 'glfw,
     vulkan,
     assimp,
