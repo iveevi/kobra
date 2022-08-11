@@ -43,13 +43,9 @@ struct HitGroupData
 		float	shininess;
 		float	roughness;
 		float	refraction;
-
-		// TODO: material
 	};
 
-	// Materials
-	Material	*materials;
-	size_t		material_count;
+	Material material;
 };
 
 }

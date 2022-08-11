@@ -153,10 +153,10 @@ extern "C" __global__ void __closesthit__ch()
 	int instance_index = optixGetInstanceIndex();
 
 	float3 color = colorwheel[instance_index % colorwheel_size];
-	if (instance_index >= hit_data->material_count)
+	/* if (instance_index >= hit_data->material_count)
 		color = float3 {1, 0, 1};
 	else
-		color = hit_data->materials[instance_index].diffuse;
+		color = hit_data->materials[instance_index].diffuse; */
 
-	setPayload(color);
+	setPayload(hit_data->material.diffuse);
 }

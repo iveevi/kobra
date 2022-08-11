@@ -27,15 +27,16 @@ const std::vector <DSLB> OptixTracer::_dslb_render = {
 };
 
 template <typename T>
-struct SbtRecord
-{
-    __align__( OPTIX_SBT_RECORD_ALIGNMENT ) char header[OPTIX_SBT_RECORD_HEADER_SIZE];
-    T data;
+struct Record {
+	__align__ (OPTIX_SBT_RECORD_ALIGNMENT)
+	char header[OPTIX_SBT_RECORD_HEADER_SIZE];
+
+	T data;
 };
 
-typedef SbtRecord <RayGenData>     RayGenSbtRecord;
-typedef SbtRecord <MissData>       MissSbtRecord;
-typedef SbtRecord <HitGroupData>   HitGroupSbtRecord;
+typedef Record <RayGenData>     RayGenSbtRecord;
+typedef Record <MissData>       MissSbtRecord;
+typedef Record <HitGroupData>   HitGroupSbtRecord;
 
 inline float3 to_f3(const glm::vec3 &v)
 {
@@ -512,7 +513,6 @@ void OptixTracer::_initialize_optix()
 	_optix_hg_sbt = cuda::alloc(sizeof(HitGroupSbtRecord));
 	
 	HitGroupSbtRecord hg_sbt;
-	hg_sbt.data.material_count = 2;
 
 	OPTIX_CHECK(optixSbtRecordPackHeader(_hitgroup_prog_group, &hg_sbt));
 	cuda::copy(_optix_hg_sbt, &hg_sbt, 1);
@@ -523,7 +523,7 @@ void OptixTracer::_initialize_optix()
 	_optix_sbt.missRecordStrideInBytes     = sizeof( MissSbtRecord );
 	_optix_sbt.missRecordCount             = 1;
 	_optix_sbt.hitgroupRecordBase          = _optix_hg_sbt;
-	_optix_sbt.hitgroupRecordStrideInBytes = sizeof( HitGroupSbtRecord );
+	_optix_sbt.hitgroupRecordStrideInBytes = sizeof(HitGroupSbtRecord);
 	_optix_sbt.hitgroupRecordCount         = 1;
 
 	// Create stream
@@ -538,7 +538,7 @@ void OptixTracer::_optix_build()
 	// Use default options for simplicity.  In a real use case we would want to
 	// enable compaction, etc
 	OptixAccelBuildOptions gas_accel_options = {};
-	gas_accel_options.buildFlags = OPTIX_BUILD_FLAG_NONE;
+	gas_accel_options.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
 	gas_accel_options.operation  = OPTIX_BUILD_OPERATION_BUILD;
 
 	std::vector <OptixTraversableHandle> instance_gas(_c_raytracers.size());
@@ -603,11 +603,12 @@ void OptixTracer::_optix_build()
 		triangle_array.indexBuffer	= d_triangles;
 
 		triangle_array.flags		= triangle_input_flags;
-		triangle_array.numSbtRecords	= 1;
 
-		// Set the transform
-		// triangle_array.transformFormat	= OPTIX_TRANSFORM_FORMAT_MATRIX_FLOAT12;
-		// triangle_array.preTransform	= d_transform;
+		// SBT record properties
+		triangle_array.numSbtRecords	= 1;
+		triangle_array.sbtIndexOffsetBuffer = 0;
+		triangle_array.sbtIndexOffsetStrideInBytes = 0;
+		triangle_array.sbtIndexOffsetSizeInBytes = 0;
 
 		// Build GAS
 		CUdeviceptr d_gas_output;
@@ -658,9 +659,9 @@ void OptixTracer::_optix_build()
 		memcpy(instances[i].transform, transform, sizeof(float) * 12);
 
 		// Set the instance handle
-		instances[i].sbtOffset = 0;
 		instances[i].traversableHandle = instance_gas[i];
 		instances[i].visibilityMask = 0xFF;
+		instances[i].sbtOffset = i;
 	}
 
 	// Copy the instances to the device
@@ -709,35 +710,39 @@ void OptixTracer::_optix_build()
 // Update hit group data with materials
 void OptixTracer::_optix_update_materials()
 {
-	// TODO: avoid doing this every frame
-	size_t n_materials = _c_raytracers.size();
+	// TODO: conserve memory
+	static std::vector <HitGroupSbtRecord> hg_sbts;
 
-	std::vector <HitGroupData::Material> materials(n_materials);
-	for (int i = 0; i < _c_raytracers.size(); i++) {
-		 Material mat = _c_raytracers[i]->get_material();
-		 materials[i].diffuse = to_f3(mat.diffuse);
-		 materials[i].specular = to_f3(mat.specular);
-		 materials[i].emission = to_f3(mat.emission);
+	// Update if necessary
+	if (hg_sbts.size() != _c_raytracers.size()) {
+		hg_sbts.resize(_c_raytracers.size());
+
+		for (int i = 0; i < _c_raytracers.size(); i++) {
+			Material mat = _c_raytracers[i]->get_material();
+
+			HitGroupData::Material material;
+			material.diffuse = to_f3(mat.diffuse);
+			material.specular = to_f3(mat.specular);
+			material.emission = to_f3(mat.emission);
+			material.ambient = to_f3(mat.ambient);
+			material.shininess = mat.shininess;
+			material.roughness = mat.roughness;
+			material.refraction = mat.refraction;
+
+			hg_sbts[i].data.material = material;
+
+			OPTIX_CHECK(optixSbtRecordPackHeader(_hitgroup_prog_group, &hg_sbts[i]));
+		}
+
+		// Upload to device
+		_optix_hg_sbt = cuda::alloc(sizeof(HitGroupSbtRecord) * _c_raytracers.size());
+		cuda::copy(_optix_hg_sbt, hg_sbts);
+
+		// Update SBT
+		_optix_sbt.hitgroupRecordBase = _optix_hg_sbt;
+		_optix_sbt.hitgroupRecordCount = _c_raytracers.size();
+		_optix_sbt.hitgroupRecordStrideInBytes = sizeof(HitGroupSbtRecord);
 	}
-
-	// Turn into CUDA device memory
-	// TODO: be more conservative with the memory
-	if (n_materials * sizeof(HitGroupData::Material) > _d_materials_size) {
-		if (_d_materials != 0)
-			cuda::free(_d_materials);
-		
-		_d_materials = cuda::alloc(sizeof(HitGroupData::Material) * n_materials);
-	}
-
-	cuda::copy(_d_materials, materials);
-
-	// Update hit group data
-	HitGroupSbtRecord hg_sbt;
-	hg_sbt.data.material_count = n_materials;
-	hg_sbt.data.materials = (HitGroupData::Material *) _d_materials;
-
-	OPTIX_CHECK(optixSbtRecordPackHeader(_hitgroup_prog_group, &hg_sbt));
-	cuda::copy(_optix_hg_sbt, &hg_sbt, 1);
 }
 
 void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
