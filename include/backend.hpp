@@ -55,6 +55,10 @@ struct Context {
 	vk::Extent2D			extent = {};
 	vk::Format			swapchain_format = vk::Format::eUndefined;
 	vk::Format			depth_format = vk::Format::eUndefined;
+
+	Device dev() const {
+		return Device {phdev, device};
+	}
 };
 
 using SyncTask = std::function <void ()>;

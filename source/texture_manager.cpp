@@ -63,7 +63,7 @@ const ImageData &TextureManager::load_texture
 				| vk::ImageUsageFlagBits::eTransferSrc,
 			vk::MemoryPropertyFlagBits::eDeviceLocal,
 			vk::ImageAspectFlagBits::eColor,
-			true	
+			true
 		);
 	}
 
@@ -74,6 +74,12 @@ const ImageData &TextureManager::load_texture
 	mutex.unlock();
 
 	return ret;
+}
+
+const ImageData &TextureManager::load_texture
+		(const Device &dev, const std::string &path, bool external)
+{
+	return load_texture(*dev.phdev, *dev.device, path, external);
 }
 
 // Create a sampler
@@ -101,6 +107,12 @@ const vk::raii::Sampler &TextureManager::load_sampler
 	return ret;
 }
 
+const vk::raii::Sampler &TextureManager::load_sampler
+		(const Device &dev, const std::string &path)
+{
+	return load_sampler(*dev.phdev, *dev.device, path);
+}
+
 // Create an image descriptor for an image
 vk::DescriptorImageInfo TextureManager::make_descriptor
 		(const vk::raii::PhysicalDevice &phdev,
@@ -114,6 +126,12 @@ vk::DescriptorImageInfo TextureManager::make_descriptor
 		*img.view,
 		vk::ImageLayout::eShaderReadOnlyOptimal
 	};
+}
+
+vk::DescriptorImageInfo TextureManager::make_descriptor
+		(const Device &dev, const std::string &path)
+{
+	return make_descriptor(*dev.phdev, *dev.device, path);
 }
 
 // Bind an image to a descriptor set
@@ -133,6 +151,35 @@ void TextureManager::bind(const vk::raii::PhysicalDevice &phdev,
 	};
 
 	device.updateDescriptorSets(dset_write, nullptr);
+}
+
+void TextureManager::bind(const Device &dev,
+		const vk::raii::DescriptorSet &dset,
+		const std::string &path,
+		uint32_t binding)
+{
+	bind(*dev.phdev, *dev.device, dset, path, binding);
+}
+
+/////////////////////
+// Private methods //
+/////////////////////
+
+vk::raii::CommandPool &TextureManager::get_command_pool
+		(const vk::raii::PhysicalDevice &phdev,
+		const vk::raii::Device &dev) {
+	if (_command_pools.find(*dev) == _command_pools.end()) {
+		_command_pools.insert({*dev,
+			vk::raii::CommandPool {
+				dev, {
+					vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+					find_graphics_queue_family(phdev)
+				}
+			}
+		});
+	}
+
+	return _command_pools.at(*dev);
 }
 
 }

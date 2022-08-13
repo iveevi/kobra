@@ -28,6 +28,7 @@ struct Material {
 
 	// TODO: extinction, absorption, etc.
 
+	// TODO: refactor ttexture names (diffuse, etc)
 	std::string	albedo_texture = "";
 	std::string	normal_texture = "";
 

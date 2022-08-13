@@ -28,24 +28,31 @@ struct MissData
 	float3			bg_color;
 
 	cudaTextureObject_t	bg_tex;
-	int			bg_tex_width;
-	int			bg_tex_height;
 };
 
 struct HitGroupData
 {
 	// Materials
 	struct Material {
-		float3	diffuse;
-		float3	specular;
-		float3	emission;
-		float3	ambient;
-		float	shininess;
-		float	roughness;
-		float	refraction;
+		float3		diffuse;
+		float3		specular;
+		float3		emission;
+		float3		ambient;
+		float		shininess;
+		float		roughness;
+		float		refraction;
 	};
 
-	Material material;
+	Material		material;
+
+	uint3			*triangles;
+	float2			*texcoords;
+
+	struct {
+		cudaTextureObject_t	diffuse;
+
+		bool			has_diffuse;
+	} textures;
 };
 
 }

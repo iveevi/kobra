@@ -1,6 +1,8 @@
 default_compiler: nvcc
 default_standard: c++17
 
+# TODO: detect whether nvcc exists (on non nvcc systems)
+
 definitions:
   - kobra_source: 'source/app.cpp,
     source/backend.cpp,
@@ -72,7 +74,8 @@ builds:
     - sources: main.cpp, kobra_source, tinyfd_source, glslang_source
     - idirs: includes
     - libraries: libs
-    - flags: '-std=c++17 -g'
+    - flags: '-g -std=c++17'
+    - dependencies: optix_ptx, glsl_compute 
   - kobra_wall:
     - sources: main.cpp, kobra_source, tinyfd_source, glslang_source
     - idirs: includes

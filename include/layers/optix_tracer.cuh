@@ -7,9 +7,8 @@
 
 // Engine headers
 #include "../backend.hpp"
-#include "../ecs.hpp"
-
 #include "../cuda/buffer_data.cuh"
+#include "../ecs.hpp"
 
 namespace kobra {
 

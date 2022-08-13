@@ -37,21 +37,8 @@ class TextureManager {
 
 	// Create a new command pool for the given device if it doesn't exist yet
 	static vk::raii::CommandPool &get_command_pool
-			(const vk::raii::PhysicalDevice &phdev,
-			const vk::raii::Device &dev) {
-		if (_command_pools.find(*dev) == _command_pools.end()) {
-			_command_pools.insert({*dev,
-				vk::raii::CommandPool {
-					dev, {
-						vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-						find_graphics_queue_family(phdev)
-					}
-				}
-			});
-		}
-
-		return _command_pools.at(*dev);
-	}
+			(const vk::raii::PhysicalDevice &,
+			const vk::raii::Device &);
 public:
 	// Load a texture
 	static const ImageData &load_texture
@@ -59,11 +46,17 @@ public:
 			const vk::raii::Device &,
 			const std::string &, bool = false);
 
+	static const ImageData &load_texture
+			(const Device &, const std::string &, bool = false);
+
 	// Create a sampler
 	static const vk::raii::Sampler &load_sampler
 			(const vk::raii::PhysicalDevice &,
 			const vk::raii::Device &,
 			const std::string &);
+
+	static const vk::raii::Sampler &load_sampler
+			(const Device &, const std::string &);
 
 	// Create an image descriptor for an image
 	static vk::DescriptorImageInfo make_descriptor
@@ -71,9 +64,17 @@ public:
 			const vk::raii::Device &,
 			const std::string &);
 
+	static vk::DescriptorImageInfo make_descriptor
+			(const Device &, const std::string &);
+
 	// Bind an image to a descriptor set
 	static void bind(const vk::raii::PhysicalDevice &,
 			const vk::raii::Device &,
+			const vk::raii::DescriptorSet &,
+			const std::string &,
+			uint32_t);
+
+	static void bind(const Device &,
 			const vk::raii::DescriptorSet &,
 			const std::string &,
 			uint32_t);

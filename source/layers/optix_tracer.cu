@@ -19,6 +19,45 @@ namespace kobra {
 
 namespace layers {
 
+static uint3 *generate_triangles(const kobra::Raytracer *raytracer)
+{
+	const Mesh &mesh = raytracer->get_mesh();
+
+	std::vector <uint3> triangles(mesh.triangles());
+
+	int i = 0;
+	for (const auto &submesh : mesh.submeshes) {
+		for (int j = 0; j < submesh.triangles(); j++) {
+			triangles[i++] = {
+				submesh.indices[j * 3 + 0],
+				submesh.indices[j * 3 + 1],
+				submesh.indices[j * 3 + 2]
+			};
+		}
+	}
+
+	return cuda::make_buffer(triangles);
+}
+
+static float2 *generate_texcoords(const kobra::Raytracer *raytracer)
+{
+	const Mesh &mesh = raytracer->get_mesh();
+
+	std::vector <float2> uvs(mesh.vertices());
+
+	int i = 0;
+	for (const auto &submesh : mesh.submeshes) {
+		for (int j = 0; j < submesh.vertices.size(); j++) {
+			uvs[i++] = {
+				submesh.vertices[j].tex_coords.x,
+				submesh.vertices[j].tex_coords.y
+			};
+		}
+	}
+
+	return cuda::make_buffer(uvs);
+}
+
 const std::vector <DSLB> OptixTracer::_dslb_render = {
 	DSLB {
 		0, vk::DescriptorType::eCombinedImageSampler,
@@ -56,131 +95,63 @@ static void context_log_cb( unsigned int level, const char* tag, const char* mes
 	logger(ss.str(), Log::AUTO, "OPTIX") << message << std::endl;
 }
 
-__global__ void check_texture(cudaTextureObject_t tex, size_t width, size_t height)
+static cudaTextureObject_t import_vulkan_texture(const vk::raii::Device &device, const ImageData &img)
 {
+	// Create a CUDA texture out of the Vulkan image
+	cudaExternalMemoryHandleDesc ext_mem_desc {};
+	ext_mem_desc.type = cudaExternalMemoryHandleTypeOpaqueFd;
+	ext_mem_desc.handle.fd = img.get_memory_handle(device);
+	ext_mem_desc.size = img.get_size();
 
-	for (int y = 0; y < height; y++) {
-		for (int x = 0; x < width; x++) {
-			float u = x / (float) width;
-			float v = y / (float) height;
-			float4 flt = tex2D <float4> (tex, u, v);
-			uint4 color = tex2D <uint4> (tex, u, v);
-			printf("%d %d -> %d %d %d %d or %.2f %.2f %.2f %.2f\n",
-				x, y, color.x, color.y, color.z, color.w,
-				flt.x, flt.y, flt.z, flt.w);
-		}
-	}
-}
-	
-static int get_memory_handle(const vk::raii::Device &device, const VkDeviceMemory &memory) {
-	// TODO: need to ensure that the the VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION is enabled
-	int fd = -1;
-	VkMemoryGetFdInfoKHR fdInfo {};
-	fdInfo.sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR;
-	fdInfo.memory = memory;
-	fdInfo.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
+	// Import the external memory
+	cudaExternalMemory_t tex_mem;
+	CUDA_CHECK(cudaSetDevice(0));
+	CUDA_CHECK(cudaImportExternalMemory(&tex_mem, &ext_mem_desc));
 
-	// TODO: load in backend.cpp
-	auto func = (PFN_vkGetMemoryFdKHR) vkGetDeviceProcAddr(*device, "vkGetMemoryFdKHR");
+	// Create a mipmapped array for the texture
+	cudaExternalMemoryMipmappedArrayDesc mip_desc {};
+	mip_desc.flags = 0;
+	mip_desc.formatDesc = cudaCreateChannelDesc(8, 8, 8, 8, cudaChannelFormatKindUnsigned);
+	mip_desc.numLevels = 1;
+	mip_desc.offset = 0;
+	mip_desc.extent = make_cudaExtent(
+		img.extent.width,
+		img.extent.height, 0
+	);
 
-	std::cout << "Func = " << func << std::endl;
-	if (!func) {
-		KOBRA_LOG_FUNC(Log::ERROR) << "vkGetMemoryFdKHR not found\n";
-		return -1;
-	}
+	cudaMipmappedArray_t mip_array;
+	CUDA_CHECK(cudaExternalMemoryGetMappedMipmappedArray(&mip_array, tex_mem, &mip_desc));
 
-	VkResult result = func(*device, &fdInfo, &fd);
-	if (result != VK_SUCCESS) {
-		KOBRA_LOG_FUNC(Log::ERROR) << "vkGetMemoryFdKHR failed\n";
-		return -1;
-	}
+	// Create the final texture object
+	cudaResourceDesc res_desc {};
+	res_desc.resType = cudaResourceTypeMipmappedArray;
+	res_desc.res.mipmap.mipmap = mip_array;
 
-	return fd;
+	cudaTextureDesc tex_desc {};
+	tex_desc.readMode = cudaReadModeNormalizedFloat;
+	tex_desc.normalizedCoords = true;
+	tex_desc.filterMode = cudaFilterModeLinear;
+
+	cudaTextureObject_t tex_obj;
+	CUDA_CHECK(cudaCreateTextureObject(&tex_obj, &res_desc, &tex_desc, nullptr));
+
+	return tex_obj;
 }
 
 // Set environment map
 void OptixTracer::environment_map(const std::string &path)
 {
+	// First load the environment map
 	_v_environment_map = &TextureManager::load_texture(
 		*_ctx.phdev,
 		*_ctx.device,
 		path, true
 	);
 
-	// Create a CUDA texture out of the environment map
-	cudaExternalMemoryHandleDesc env_tex_desc {};
-	env_tex_desc.type = cudaExternalMemoryHandleTypeOpaqueFd;
-	env_tex_desc.handle.fd = get_memory_handle(*_ctx.device,
-			*_v_environment_map->memory);
-	env_tex_desc.size = _v_environment_map->get_size();
-
-	std::cout << "Size = " << env_tex_desc.size << ", fd = " << env_tex_desc.handle.fd << std::endl;
-	std::cout << "\twidth = " << _v_environment_map->extent.width
-		<< ", height = " << _v_environment_map->extent.height << std::endl;
-	std::cout << "\tsize = " << _v_environment_map->extent.width * _v_environment_map->extent.height * 4 << std::endl;
-	
-	// cudaExternalMemory_t env_tex_mem;
-	CUDA_CHECK(cudaSetDevice(0));
-	CUDA_CHECK(cudaImportExternalMemory(&_dext_env_map, &env_tex_desc));
-
-	cudaExternalMemoryMipmappedArrayDesc env_mip_desc {};
-	env_mip_desc.flags = 0;
-	env_mip_desc.formatDesc = cudaCreateChannelDesc(8, 8, 8, 8, cudaChannelFormatKindUnsigned);
-	env_mip_desc.numLevels = 1;
-	env_mip_desc.offset = 0;
-	env_mip_desc.extent = make_cudaExtent(
-		_v_environment_map->extent.width,
-		_v_environment_map->extent.height, 0
-	);
-
-	cudaMipmappedArray_t env_mip_array;
-	CUDA_CHECK(cudaExternalMemoryGetMappedMipmappedArray(&env_mip_array, _dext_env_map, &env_mip_desc));
-
-	cudaResourceDesc res_desc {};
-	res_desc.resType = cudaResourceTypeMipmappedArray;
-	res_desc.res.mipmap.mipmap = env_mip_array;
-
-	cudaTextureDesc tex_desc {};
-	tex_desc.readMode = cudaReadModeNormalizedFloat;
-	tex_desc.normalizedCoords = true;
-	tex_desc.filterMode = cudaFilterModeLinear;
-
-	CUDA_CHECK(cudaCreateTextureObject(&_tex_env_map, &res_desc, &tex_desc, nullptr));
-
-	/*/////////////////////////////////////////////////////////////////////////////
-	cudaExternalMemoryBufferDesc env_tex_buf_desc {};
-	env_tex_buf_desc.flags = 0;
-	env_tex_buf_desc.offset = 0;
-	env_tex_buf_desc.size = env_tex_desc.size;
-
-	CUdeviceptr env_tex_buf;
-	CUDA_CHECK(cudaExternalMemoryGetMappedBuffer(
-		(void **) &env_tex_buf, _dext_env_map,
-		&env_tex_buf_desc
-	));
-
-	// Create bindless texture
-	cudaResourceDesc res_desc {};
-	res_desc.resType = cudaResourceTypePitch2D;
-	res_desc.res.pitch2D.devPtr = (void *) env_tex_buf;
-	res_desc.res.pitch2D.desc = cudaCreateChannelDesc(8, 8, 8, 8, cudaChannelFormatKindUnsigned);
-	res_desc.res.pitch2D.width = _v_environment_map->extent.width;
-	res_desc.res.pitch2D.height = _v_environment_map->extent.height;
-	res_desc.res.pitch2D.pitchInBytes = 4 * _v_environment_map->extent.width;
-
-	cudaTextureDesc tex_desc {};
-	tex_desc.readMode = cudaReadModeNormalizedFloat;
-	tex_desc.normalizedCoords = true;
-	tex_desc.filterMode = cudaFilterModeLinear;
-
-	CUDA_CHECK(cudaCreateTextureObject(&_tex_env_map, &res_desc, &tex_desc, nullptr)); */
-
 	// Update miss group record
 	MissSbtRecord miss_record;
 	miss_record.data.bg_color = float3 {0.0f, 0.0f, 0.0f};
-	miss_record.data.bg_tex = _tex_env_map;
-	miss_record.data.bg_tex_width = _v_environment_map->extent.width;
-	miss_record.data.bg_tex_height = _v_environment_map->extent.height;
+	miss_record.data.bg_tex = import_vulkan_texture(*_ctx.device, *_v_environment_map);
 
 	OPTIX_CHECK(optixSbtRecordPackHeader(_miss_prog_group, &miss_record));
 	cuda::copy(_optix_miss_sbt, &miss_record, 1);
@@ -307,7 +278,6 @@ void OptixTracer::render(const vk::raii::CommandBuffer &cmd,
 // Private methods //
 /////////////////////
 
-#define KCUDA_DEBUG
 #define KOPTIX_DEBUG
 
 void OptixTracer::_initialize_optix()
@@ -338,9 +308,9 @@ void OptixTracer::_initialize_optix()
 	{
 		OptixModuleCompileOptions module_compile_options = {};
 
-#ifdef KCUDA_DEBUG
+#ifdef KOPTIX_DEBUG
 
-#warning "CUDA debug enabled"
+#pragma message "CUDA debug enabled"
 
 		module_compile_options.optLevel   = OPTIX_COMPILE_OPTIMIZATION_LEVEL_0;
 		module_compile_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
@@ -355,7 +325,7 @@ void OptixTracer::_initialize_optix()
 
 #ifdef KOPTIX_DEBUG
 
-#warning "OptiX debug enabled"
+#pragma message"OptiX debug enabled"
 
 		pipeline_compile_options.exceptionFlags = OPTIX_EXCEPTION_FLAG_DEBUG | OPTIX_EXCEPTION_FLAG_TRACE_DEPTH | OPTIX_EXCEPTION_FLAG_STACK_OVERFLOW;
 
@@ -730,6 +700,18 @@ void OptixTracer::_optix_update_materials()
 			material.refraction = mat.refraction;
 
 			hg_sbts[i].data.material = material;
+			hg_sbts[i].data.triangles = generate_triangles(_c_raytracers[i]);
+			hg_sbts[i].data.texcoords = generate_texcoords(_c_raytracers[i]);
+
+			// Import textures if necessary
+			if (mat.has_albedo()) {
+				const ImageData &diffuse = TextureManager::load_texture(
+					_ctx.dev(), mat.albedo_texture
+				);
+
+				hg_sbts[i].data.textures.diffuse = import_vulkan_texture(*_ctx.device, diffuse);
+				hg_sbts[i].data.textures.has_diffuse = true;
+			}
 
 			OPTIX_CHECK(optixSbtRecordPackHeader(_hitgroup_prog_group, &hg_sbts[i]));
 		}

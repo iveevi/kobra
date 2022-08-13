@@ -8,14 +8,14 @@ extern "C"
 	__constant__ kobra::Params params;
 }
 
-static __forceinline__ __device__ void setPayload(float3 p)
+static __forceinline__ __device__ void set_payload(float3 p)
 {
 	optixSetPayload_0(__float_as_uint( p.x ));
 	optixSetPayload_1(__float_as_uint( p.y ));
 	optixSetPayload_2(__float_as_uint( p.z ));
 }
 
-static __forceinline__ __device__ void computeRay(uint3 idx, uint3 dim, float3 &origin, float3 &direction)
+static __forceinline__ __device__ void make_ray(uint3 idx, uint3 dim, float3 &origin, float3 &direction)
 {
 	const float3 U = params.cam_u;
 	const float3 V = params.cam_v;
@@ -26,8 +26,6 @@ static __forceinline__ __device__ void computeRay(uint3 idx, uint3 dim, float3 &
 	direction = normalize(d.x * U + d.y * V + W);
 }
 
-// Note the __raygen__ prefix which marks this as a ray-generation
-// program function
 extern "C" __global__ void __raygen__rg()
 {
 	// Lookup our location within the launch grid
@@ -37,7 +35,7 @@ extern "C" __global__ void __raygen__rg()
 	// Map our launch idx to a screen location and create a ray from
 	// the camera location through the screen
 	float3 ray_origin, ray_direction;
-	computeRay(idx, dim, ray_origin, ray_direction);
+	make_ray(idx, dim, ray_origin, ray_direction);
 
 	// Trace the ray against our scene hierarchy
 	unsigned int p0, p1, p2;
@@ -59,45 +57,6 @@ extern "C" __global__ void __raygen__rg()
 	params.image[idx.y * params.image_width + idx.x] = kobra::cuda::make_color(result);
 }
 
-__device__ float lerp(uint a, uint b, float t)
-{
-	return a + (b - a) * t;
-}
-
-__device__ float4 lerp(uint4 a, uint4 b, float t)
-{
-	return make_float4(
-		lerp(a.x, b.x, t),
-		lerp(a.y, b.y, t),
-		lerp(a.z, b.z, t),
-		lerp(a.w, b.w, t)
-	);
-}
-
-__device__ float4 read_tex(cudaTextureObject_t tex, int width, int height, float u, float v)
-{
-	u = u * width - 0.5f;
-	v = v * height - 0.5f;
-
-	int px = floor(u);
-	int py = floor(v);
-
-	return make_float4(tex2D <uint4> (tex, u, v));
-
-	float fx = u - px;
-	float fy = v - py;
-
-	uint4 c00 = tex2D <uint4> (tex, px, py);
-	uint4 c10 = tex2D <uint4> (tex, px + 1, py);
-	uint4 c01 = tex2D <uint4> (tex, px, py + 1);
-	uint4 c11 = tex2D <uint4> (tex, px + 1, py + 1);
-
-	float4 c0 = lerp(c00, c10, fx);
-	float4 c1 = lerp(c01, c11, fx);
-	float4 c = lerp(c0, c1, fy);
-	return c;
-}
-
 extern "C" __global__ void __miss__ms()
 {
 	// Background color based on ray direction
@@ -110,22 +69,9 @@ extern "C" __global__ void __miss__ms()
 	float u = atan2(ray_direction.x, ray_direction.z) / (2.0f * M_PI) + 0.5f;
 	float v = asin(ray_direction.y) / M_PI + 0.5f;
 
-	/* float4 c = read_tex(miss_data->bg_tex,
-		miss_data->bg_tex_width,
-		miss_data->bg_tex_height,
-		u, v
-	);
-
-	c /= 255.0f; */
-
 	float4 c = tex2D <float4> (miss_data->bg_tex, u, v);
 
-	// uint4 tex = tex2D <uint4> (miss_data->bg_tex, u, v);
-
-	// Compute the color of the background
-	// float3 color = 0.5f * ray_direction + 0.5f;
-	// color = clamp(color, 0.0f, 1.0f);
-	setPayload(float3 { c.x, c.y, c.z });
+	set_payload(float3 { c.x, c.y, c.z });
 }
 
 extern "C" __global__ void __closesthit__ch()
@@ -149,14 +95,26 @@ extern "C" __global__ void __closesthit__ch()
 	kobra::HitGroupData *hit_data = reinterpret_cast
 		<kobra::HitGroupData *> (optixGetSbtDataPointer());
 
+	// Barycentric coordinates of the hit point
+	const float2 bary = optixGetTriangleBarycentrics();
+
 	// Get instance index of the intersected primitive
 	int instance_index = optixGetInstanceIndex();
+	int primitive_index = optixGetPrimitiveIndex();
 
-	float3 color = colorwheel[instance_index % colorwheel_size];
-	/* if (instance_index >= hit_data->material_count)
-		color = float3 {1, 0, 1};
-	else
-		color = hit_data->materials[instance_index].diffuse; */
+	uint3 triangle = hit_data->triangles[primitive_index];
 
-	setPayload(hit_data->material.diffuse);
+	float2 uv1 = hit_data->texcoords[triangle.x];
+	float2 uv2 = hit_data->texcoords[triangle.y];
+	float2 uv3 = hit_data->texcoords[triangle.z];
+
+	float2 uv = (1 - bary.x - bary.y) * uv1 + bary.x * uv2 + bary.y * uv3;
+
+	float3 color = hit_data->material.diffuse;
+	if (hit_data->textures.has_diffuse) {
+		float4 c = tex2D <float4> (hit_data->textures.diffuse, uv.x, uv.y);
+		color = float3 { c.x, c.y, c.z };
+	}
+
+	set_payload(color);
 }

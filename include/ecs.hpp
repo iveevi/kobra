@@ -2,8 +2,8 @@
 #define KOBRA_ECS_H_
 
 // Standard headers
-#include <unordered_map>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 // GLM headers
@@ -14,6 +14,7 @@
 #include "common.hpp"
 #include "lights.hpp"
 #include "logger.hpp"
+#include "material.hpp"
 #include "mesh.hpp"
 #include "renderer.hpp"
 #include "transform.hpp"
@@ -63,7 +64,7 @@ class ECS {
 	Archetype <RasterizerPtr>	rasterizers;
 	Archetype <RaytracerPtr>	raytracers;
 	Archetype <Transform>		transforms;
-
+	
 	Archetype <Entity>		entities;
 
 	std::unordered_map <std::string, int>
@@ -181,53 +182,21 @@ public:
 
 // _constructor specializations
 // TODO: macros?
-template <>
-struct ECS::_constructor <Mesh> {
-	template <class ... Args>
-	static MeshPtr make(Args ... args) {
-		return std::make_shared <Mesh> (args ...);
+#define KOBRA_MAKE_SHARED(T, Ret)				\
+	template <>						\
+	struct ECS::_constructor <T> {				\
+		template <class ... Args>			\
+		static Ret make(Args ... args) {		\
+			return std::make_shared <T> (args...);	\
+		}						\
 	}
-};
 
-template <>
-struct ECS::_constructor <Rasterizer> {
-	template <class ... Args>
-	static RasterizerPtr make(Args ... args) {
-		return std::make_shared <Rasterizer> (args ...);
-	}
-};
-
-template <>
-struct ECS::_constructor <Raytracer> {
-	template <class ... Args>
-	static RaytracerPtr make(Args ... args) {
-		return std::make_shared <Raytracer> (args ...);
-	}
-};
-
-template <>
-struct ECS::_constructor <Camera> {
-	template <class ... Args>
-	static CameraPtr make(Args ... args) {
-		return std::make_shared <Camera> (args ...);
-	}
-};
-
-template <>
-struct ECS::_constructor <Light> {
-	template <class ... Args>
-	static LightPtr make(Args ... args) {
-		return std::make_shared <Light> (args ...);
-	}
-};
-
-template <>
-struct ECS::_constructor <Material> {
-	template <class ... Args>
-	static MaterialPtr make(Args ... args) {
-		return std::make_shared <Material> (args ...);
-	}
-};
+KOBRA_MAKE_SHARED(Camera, CameraPtr);
+KOBRA_MAKE_SHARED(Light, LightPtr);
+KOBRA_MAKE_SHARED(Material, MaterialPtr);
+KOBRA_MAKE_SHARED(Mesh, MeshPtr);
+KOBRA_MAKE_SHARED(Rasterizer, RasterizerPtr);
+KOBRA_MAKE_SHARED(Raytracer, RaytracerPtr);
 
 // _ref specializations
 // TODO: another header
@@ -250,125 +219,32 @@ struct ECS::_ref <Transform> {
 	}
 };
 
-template <>
-struct ECS::_ref <Mesh> {
-	static MeshPtr &ref(ECS *ecs, int i) {
-		return ecs->meshes[i];
+#define KOBRA_RET_SHARED(T, Ret, Array)				\
+	template <>						\
+	struct ECS::_ref <T> {					\
+		static Ret &ref(ECS *ecs, int i) {		\
+			return ecs->Array[i];			\
+		}						\
+								\
+		static T &get(ECS *ecs, int i) {		\
+			return *ecs->Array[i];			\
+		}						\
+								\
+		static const T &get(const ECS *ecs, int i) {	\	
+			return *ecs->Array[i];			\
+		}						\
+		static bool exists(const ECS *ecs, int i) {	\
+			return (ecs->Array.size() > i)		\
+				&& (ecs->Array[i] != nullptr);	\
+		}						\
 	}
 
-	static Mesh &get(ECS *ecs, int i) {
-		return *ecs->meshes[i];
-	}
-
-	static const Mesh &get(const ECS *ecs, int i) {
-		return *ecs->meshes[i];
-	}
-
-	static bool exists(const ECS *ecs, int i) {
-		return (ecs->meshes.size() > i)
-			&& (ecs->meshes[i] != nullptr);
-	}
-};
-
-template <>
-struct ECS::_ref <Rasterizer> {
-	static RasterizerPtr &ref(ECS *ecs, int i) {
-		return ecs->rasterizers[i];
-	}
-
-	static Rasterizer &get(ECS *ecs, int i) {
-		return *ecs->rasterizers[i];
-	}
-
-	static const Rasterizer &get(const ECS *ecs, int i) {
-		return *ecs->rasterizers[i];
-	}
-
-	static bool exists(const ECS *ecs, int i) {
-		return (ecs->rasterizers.size() > i)
-			&& (ecs->rasterizers[i] != nullptr);
-	}
-};
-
-template <>
-struct ECS::_ref <Raytracer> {
-	static RaytracerPtr &ref(ECS *ecs, int i) {
-		return ecs->raytracers[i];
-	}
-
-	static Raytracer &get(ECS *ecs, int i) {
-		return *ecs->raytracers[i];
-	}
-
-	static const Raytracer &get(const ECS *ecs, int i) {
-		return *ecs->raytracers[i];
-	}
-
-	static bool exists(const ECS *ecs, int i) {
-		return (ecs->raytracers.size() > i)
-			&& (ecs->raytracers[i] != nullptr);
-	}
-};
-
-template <>
-struct ECS::_ref <Camera> {
-	static CameraPtr &ref(ECS *ecs, int i) {
-		return ecs->cameras[i];
-	}
-
-	static Camera &get(ECS *ecs, int i) {
-		return *ecs->cameras[i];
-	}
-
-	static const Camera &get(const ECS *ecs, int i) {
-		return *ecs->cameras[i];
-	}
-
-	static bool exists(const ECS *ecs, int i) {
-		return (ecs->cameras.size() > i)
-			&& (ecs->cameras[i] != nullptr);
-	}
-};
-
-template <>
-struct ECS::_ref <Light> {
-	static LightPtr &ref(ECS *ecs, int i) {
-		return ecs->lights[i];
-	}
-
-	static Light &get(ECS *ecs, int i) {
-		return *ecs->lights[i];
-	}
-
-	static const Light &get(const ECS *ecs, int i) {
-		return *ecs->lights[i];
-	}
-
-	static bool exists(const ECS *ecs, int i) {
-		return (ecs->lights.size() > i)
-			&& (ecs->lights[i] != nullptr);
-	}
-};
-
-template <>
-struct ECS::_ref <Material> {
-	static MaterialPtr &ref(ECS *ecs, int i) {
-		return ecs->materials[i];
-	}
-
-	static Material &get(ECS *ecs, int i) {
-		return *ecs->materials[i];
-	}
-
-	static const Material &get(const ECS *ecs, int i) {
-		return *ecs->materials[i];
-	}
-
-	static bool exists(const ECS *ecs, int i) {
-		return (ecs->materials.size() > i)
-			&& (ecs->materials[i] != nullptr);
-	}
-};
+KOBRA_RET_SHARED(Camera, CameraPtr, cameras);
+KOBRA_RET_SHARED(Light, LightPtr, lights);
+KOBRA_RET_SHARED(Material, MaterialPtr, materials);
+KOBRA_RET_SHARED(Mesh, MeshPtr, meshes);
+KOBRA_RET_SHARED(Rasterizer, RasterizerPtr, rasterizers);
+KOBRA_RET_SHARED(Raytracer, RaytracerPtr, raytracers);
 
 // Entity class, acts like a pointer to a component
 class Entity {
