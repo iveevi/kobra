@@ -8,7 +8,6 @@
 #include "modules/bbox.glsl"
 #include "modules/color.glsl"
 #include "modules/random.glsl"
-// #include "modules/material.glsl"
 #include "modules/primitives.glsl"
 #include "modules/intersect.glsl"
 #include "modules/environment.glsl"
@@ -306,6 +305,8 @@ vec3 pathtracer(Ray ray, int depth)
 	Hit hit = trace(ray);
 	if (hit.id == -1)
 		return hit.mat.diffuse;
+
+	return hit.normal * 0.5f + 0.5f;
 
 	// Get point and direction
 	vec3 x = hit.point + hit.normal * eps;

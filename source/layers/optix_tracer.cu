@@ -19,16 +19,53 @@ namespace kobra {
 
 namespace layers {
 
-static uint3 *generate_triangles(const kobra::Raytracer *raytracer)
+static void generate_mesh_data
+		(const kobra::Raytracer *raytracer,
+		const Transform &transform,
+		HitGroupData &data)
 {
 	const Mesh &mesh = raytracer->get_mesh();
 
+	std::vector <float3> vertices(mesh.vertices());
+	std::vector <float2> uvs(mesh.vertices());
 	std::vector <uint3> triangles(mesh.triangles());
+	
+	std::vector <float3> normals(mesh.vertices());
+	std::vector <float3> tangents(mesh.vertices());
+	std::vector <float3> bitangents(mesh.vertices());
 
-	int i = 0;
+	int vertex_index = 0;
+	int uv_index = 0;
+	int triangle_index = 0;
+	
+	int normal_index = 0;
+	int tangent_index = 0;
+	int bitangent_index = 0;
+
 	for (const auto &submesh : mesh.submeshes) {
+		for (int j = 0; j < submesh.vertices.size(); j++) {
+			glm::vec3 n = submesh.vertices[j].normal;
+			glm::vec3 t = submesh.vertices[j].tangent;
+			glm::vec3 b = submesh.vertices[j].bitangent;
+			
+			glm::vec3 v = submesh.vertices[j].position;
+			glm::vec2 uv = submesh.vertices[j].tex_coords;
+
+			v = transform.apply(v);
+			n = transform.apply_vector(n);
+			t = transform.apply_vector(t);
+			b = transform.apply_vector(b);
+			
+			normals[normal_index++] = {n.x, n.y, n.z};
+			tangents[tangent_index++] = {t.x, t.y, t.z};
+			bitangents[bitangent_index++] = {b.x, b.y, b.z};
+
+			vertices[vertex_index++] = {v.x, v.y, v.z};
+			uvs[uv_index++] = {uv.x, uv.y};
+		}
+
 		for (int j = 0; j < submesh.triangles(); j++) {
-			triangles[i++] = {
+			triangles[triangle_index++] = {
 				submesh.indices[j * 3 + 0],
 				submesh.indices[j * 3 + 1],
 				submesh.indices[j * 3 + 2]
@@ -36,26 +73,14 @@ static uint3 *generate_triangles(const kobra::Raytracer *raytracer)
 		}
 	}
 
-	return cuda::make_buffer(triangles);
-}
+	data.vertices = cuda::make_buffer(vertices);
+	data.texcoords = cuda::make_buffer(uvs);
 
-static float2 *generate_texcoords(const kobra::Raytracer *raytracer)
-{
-	const Mesh &mesh = raytracer->get_mesh();
+	data.normals = cuda::make_buffer(normals);
+	data.tangents = cuda::make_buffer(tangents);
+	data.bitangents = cuda::make_buffer(bitangents);
 
-	std::vector <float2> uvs(mesh.vertices());
-
-	int i = 0;
-	for (const auto &submesh : mesh.submeshes) {
-		for (int j = 0; j < submesh.vertices.size(); j++) {
-			uvs[i++] = {
-				submesh.vertices[j].tex_coords.x,
-				submesh.vertices[j].tex_coords.y
-			};
-		}
-	}
-
-	return cuda::make_buffer(uvs);
+	data.triangles = cuda::make_buffer(triangles);
 }
 
 const std::vector <DSLB> OptixTracer::_dslb_render = {
@@ -678,6 +703,7 @@ void OptixTracer::_optix_build()
 }
 
 // Update hit group data with materials
+// TODO: also update if transforms change
 void OptixTracer::_optix_update_materials()
 {
 	// TODO: conserve memory
@@ -700,8 +726,8 @@ void OptixTracer::_optix_update_materials()
 			material.refraction = mat.refraction;
 
 			hg_sbts[i].data.material = material;
-			hg_sbts[i].data.triangles = generate_triangles(_c_raytracers[i]);
-			hg_sbts[i].data.texcoords = generate_texcoords(_c_raytracers[i]);
+
+			generate_mesh_data(_c_raytracers[i], _c_transforms[i], hg_sbts[i].data);
 
 			// Import textures if necessary
 			if (mat.has_albedo()) {
@@ -711,6 +737,15 @@ void OptixTracer::_optix_update_materials()
 
 				hg_sbts[i].data.textures.diffuse = import_vulkan_texture(*_ctx.device, diffuse);
 				hg_sbts[i].data.textures.has_diffuse = true;
+			}
+
+			if (mat.has_normal()) {
+				const ImageData &normal = TextureManager::load_texture(
+					_ctx.dev(), mat.normal_texture
+				);
+
+				hg_sbts[i].data.textures.normal = import_vulkan_texture(*_ctx.device, normal);
+				hg_sbts[i].data.textures.has_normal = true;
 			}
 
 			OPTIX_CHECK(optixSbtRecordPackHeader(_hitgroup_prog_group, &hg_sbts[i]));

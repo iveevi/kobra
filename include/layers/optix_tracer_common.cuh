@@ -45,13 +45,20 @@ struct HitGroupData
 
 	Material		material;
 
-	uint3			*triangles;
 	float2			*texcoords;
+	float3			*vertices;
+	uint3			*triangles;
+
+	float3			*normals;
+	float3			*tangents;
+	float3			*bitangents;
 
 	struct {
 		cudaTextureObject_t	diffuse;
+		cudaTextureObject_t	normal;
 
 		bool			has_diffuse;
+		bool			has_normal;
 	} textures;
 };
 
