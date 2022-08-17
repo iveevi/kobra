@@ -6,11 +6,14 @@
 #include "../../include/cuda/color.cuh"
 #include "../../include/layers/optix_tracer_common.cuh"
 
-using kobra::HitGroupData;
+using kobra::optix_rt::HitGroupData;
+using kobra::optix_rt::MissData;
+using kobra::optix_rt::AreaLight;
+using kobra::optix_rt::Material;
 
 extern "C"
 {
-	__constant__ kobra::Params params;
+	__constant__ kobra::optix_rt::Params params;
 }
 
 // Helper functionss
@@ -86,8 +89,7 @@ extern "C" __global__ void __miss__ms()
 {
 	// Background color based on ray direction
 	// TODO: implement background
-	kobra::MissData *miss_data = reinterpret_cast
-		<kobra::MissData *> (optixGetSbtDataPointer());
+	MissData *miss_data = reinterpret_cast <MissData *> (optixGetSbtDataPointer());
 
 	const float3 ray_direction = optixGetWorldRayDirection();
 
@@ -102,20 +104,6 @@ extern "C" __global__ void __miss__ms()
 	unsigned int i1 = optixGetPayload_1();
 	rp = unpack_point <RayPacket> (i0, i1);
 	rp->value = make_float3(c.x, c.y, c.z);
-}
-
-static __forceinline__ __device__ float4 sample_texture
-		(HitGroupData *hit_data, cudaTextureObject_t tex, int prim, float2 bary)
-{
-	uint3 triangle = hit_data->triangles[prim];
-
-	float2 uv1 = hit_data->texcoords[triangle.x];
-	float2 uv2 = hit_data->texcoords[triangle.y];
-	float2 uv3 = hit_data->texcoords[triangle.z];
-
-	float2 uv = (1 - bary.x - bary.y) * uv1 + bary.x * uv2 + bary.y * uv3;
-
-	return tex2D <float4> (tex, uv.x, uv.y);
 }
 
 struct mat3 {
@@ -141,17 +129,21 @@ __device__ __forceinline__ float3 operator*(mat3 m, float3 v)
 	);
 }
 
-extern "C" __global__ void __closesthit__ch()
+static __forceinline__ __device__ float4 sample_texture
+		(HitGroupData *hit_data, cudaTextureObject_t tex, uint3 triangle, float2 bary)
 {
-	// Get data from the SBT
-	HitGroupData *hit_data = reinterpret_cast <HitGroupData *> (optixGetSbtDataPointer());
+	float2 uv1 = hit_data->texcoords[triangle.x];
+	float2 uv2 = hit_data->texcoords[triangle.y];
+	float2 uv3 = hit_data->texcoords[triangle.z];
 
-	float2 bary = optixGetTriangleBarycentrics();
+	float2 uv = (1 - bary.x - bary.y) * uv1 + bary.x * uv2 + bary.y * uv3;
 
-	int primitive_index = optixGetPrimitiveIndex();
+	return tex2D <float4> (tex, uv.x, uv.y);
+}
 
-	uint3 triangle = hit_data->triangles[primitive_index];
-
+static __forceinline__ __device__ float3 calculate_normal
+		(HitGroupData *hit_data, uint3 triangle, float2 bary)
+{
 	float3 n1 = hit_data->normals[triangle.x];
 	float3 n2 = hit_data->normals[triangle.y];
 	float3 n3 = hit_data->normals[triangle.z];
@@ -164,7 +156,7 @@ extern "C" __global__ void __closesthit__ch()
 	if (hit_data->textures.has_normal) {
 		float4 n4 = sample_texture(hit_data,
 			hit_data->textures.normal,
-			primitive_index, bary
+			triangle, bary
 		);
 
 		float3 n = 2 * make_float3(n4.x, n4.y, n4.z) - 1;
@@ -188,16 +180,79 @@ extern "C" __global__ void __closesthit__ch()
 		);
 
 		normal = normalize(tbn * n);
-	} else {
 	}
 
-	// float3 color = get_diffuse(hit_data);
-	float3 color = 0.5f * normal + 0.5f;
+	return normal;
+}
+
+extern "C" __global__ void __closesthit__ch()
+{
+	// Get data from the SBT
+	HitGroupData *hit_data = reinterpret_cast <HitGroupData *> (optixGetSbtDataPointer());
+
+	/* Get hit data
+	float2 bary = optixGetTriangleBarycentrics();
+	int primitive_index = optixGetPrimitiveIndex();
+	uint3 triangle = hit_data->triangles[primitive_index];
+	Material material = hit_data->material;
+
+	float3 diffuse = material.diffuse;
+	if (hit_data->textures.has_diffuse) {
+		diffuse = make_float3(
+			sample_texture(hit_data,
+				hit_data->textures.diffuse,
+				triangle, bary
+			)
+		);
+	}
+
+	float3 color = make_float3(0);
+
+	float3 v = optixGetWorldRayOrigin();
+	float3 x = hit_data->vertices[triangle.x] * (1 - bary.x - bary.y) +
+		hit_data->vertices[triangle.y] * bary.x +
+		hit_data->vertices[triangle.z] * bary.y;
+	float3 wi = -optixGetWorldRayDirection();
+	float3 n = calculate_normal(hit_data, triangle, bary);
+
+	for (int i = 0; i < hit_data->n_area_lights; i++) {
+		AreaLight al = hit_data->area_lights[i];
+
+		float3 ra = al.a - x;
+		float3 rb = ra + al.ab;
+		float3 rc = rb + al.ac;
+		float3 rd = rc + al.ab + al.ac;
+
+		float dot_rab = dot(ra, rb)/(length(ra) * length(rb));
+		float dot_rbc = dot(rb, rc)/(length(rb) * length(rc));
+		float dot_rcd = dot(rc, rd)/(length(rc) * length(rd));
+		float dot_rad = dot(ra, rd)/(length(ra) * length(rd));
+
+		float theta1 = acos(dot_rab);
+		float theta2 = acos(dot_rbc);
+		float theta3 = acos(dot_rcd);
+		float theta4 = acos(dot_rad);
+
+		float3 gamma1 = normalize(cross(ra, rb));
+		float3 gamma2 = normalize(cross(rb, rc));
+		float3 gamma3 = normalize(cross(rc, rd));
+		float3 gamma4 = normalize(cross(ra, rd));
+
+		float3 irradiace = theta1 * gamma1
+			+ theta2 * gamma2
+			+ theta3 * gamma3
+			+ theta4 * gamma4;
+
+		float cos_theta = max(dot(n, irradiace), 0.0f);
+		color += 0.5f * material.diffuse * al.intensity * cos_theta/M_PI;
+	} */
+
+	// color = make_float3(length(x)/20.0f);
 
 	// Transfer to payload
 	RayPacket *rp;
 	unsigned int i0 = optixGetPayload_0();
 	unsigned int i1 = optixGetPayload_1();
 	rp = unpack_point <RayPacket> (i0, i1);
-	rp->value = color;
+	rp->value = hit_data->material.diffuse;
 }

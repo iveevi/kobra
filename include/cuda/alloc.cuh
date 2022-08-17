@@ -80,6 +80,14 @@ inline T *make_buffer(const std::vector <T> &src)
 	return dst;
 }
 
+template <class T>
+inline CUdeviceptr make_buffer_ptr(const std::vector <T> &src)
+{
+	CUdeviceptr dst = alloc(src.size() * sizeof(T));
+	copy(dst, src);
+	return dst;
+}
+
 // Free
 template <class T>
 inline void free(T *ptr)

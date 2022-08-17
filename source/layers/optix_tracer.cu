@@ -22,7 +22,7 @@ namespace layers {
 static void generate_mesh_data
 		(const kobra::Raytracer *raytracer,
 		const Transform &transform,
-		HitGroupData &data)
+		optix_rt::HitGroupData &data)
 {
 	const Mesh &mesh = raytracer->get_mesh();
 
@@ -90,7 +90,7 @@ const std::vector <DSLB> OptixTracer::_dslb_render = {
 	}
 };
 
-template <typename T>
+template <class T>
 struct Record {
 	__align__ (OPTIX_SBT_RECORD_ALIGNMENT)
 	char header[OPTIX_SBT_RECORD_HEADER_SIZE];
@@ -98,9 +98,9 @@ struct Record {
 	T data;
 };
 
-typedef Record <RayGenData>     RayGenSbtRecord;
-typedef Record <MissData>       MissSbtRecord;
-typedef Record <HitGroupData>   HitGroupSbtRecord;
+typedef Record <optix_rt::RayGenData>     RayGenSbtRecord;
+typedef Record <optix_rt::MissData>       MissSbtRecord;
+typedef Record <optix_rt::HitGroupData>   HitGroupSbtRecord;
 
 inline float3 to_f3(const glm::vec3 &v)
 {
@@ -197,6 +197,10 @@ void OptixTracer::render(const vk::raii::CommandBuffer &cmd,
 
 	std::vector <const kobra::Raytracer *> raytracers;
 	std::vector <Transform> raytracer_transforms;
+
+	std::vector <const Light *> lights;
+	std::vector <const Transform *> light_transforms;
+
 	bool dirty_raytracers = false;
 	int raytracers_index = 0;
 
@@ -221,12 +225,23 @@ void OptixTracer::render(const vk::raii::CommandBuffer &cmd,
 			raytracers.push_back(raytracer);
 			raytracers_index++;
 		}
+
+		if (ecs.exists <Light> (i)) {
+			const Light *light = &ecs.get <Light> (i);
+
+			if (light->type == Light::eArea) {
+				lights.push_back(&ecs.get <Light> (i));
+				light_transforms.push_back(&ecs.get <Transform> (i));
+			}
+		}
 	}
 
 	if (dirty_raytracers) {
 		KOBRA_LOG_FILE(Log::INFO) << "Need to rebuild AS\n";
 		_c_raytracers = raytracers;
 		_c_transforms = raytracer_transforms;
+		_cached.lights = lights;
+		_cached.light_transforms = light_transforms;
 		_optix_build();
 	}
 
@@ -325,7 +340,8 @@ void OptixTracer::_initialize_optix()
 	// Associate a CUDA context (and therefore a specific GPU) with this
 	// device context
 	CUcontext cuCtx = 0;  // zero means take the current context
-	OPTIX_CHECK( optixDeviceContextCreate( cuCtx, &options, &_optix_ctx) );
+
+	OPTIX_CHECK(optixDeviceContextCreate( cuCtx, &options, &_optix_ctx));
 
 	// Create the OptiX module
 	OptixPipelineCompileOptions pipeline_compile_options = {};
@@ -352,7 +368,9 @@ void OptixTracer::_initialize_optix()
 
 #pragma message"OptiX debug enabled"
 
-		pipeline_compile_options.exceptionFlags = OPTIX_EXCEPTION_FLAG_DEBUG | OPTIX_EXCEPTION_FLAG_TRACE_DEPTH | OPTIX_EXCEPTION_FLAG_STACK_OVERFLOW;
+		pipeline_compile_options.exceptionFlags = OPTIX_EXCEPTION_FLAG_DEBUG
+			| OPTIX_EXCEPTION_FLAG_TRACE_DEPTH
+			| OPTIX_EXCEPTION_FLAG_STACK_OVERFLOW;
 
 #else
 
@@ -369,7 +387,7 @@ void OptixTracer::_initialize_optix()
 
 		size_t sizeof_log = sizeof( log );
 
-		OPTIX_CHECK_LOG( optixModuleCreateFromPTX(
+		OPTIX_CHECK_LOG(optixModuleCreateFromPTX(
 					_optix_ctx,
 					&module_compile_options,
 					&pipeline_compile_options,
@@ -378,7 +396,7 @@ void OptixTracer::_initialize_optix()
 					log,
 					&sizeof_log,
 					&_optix_module
-					) );
+					));
 	}
 
 	//
@@ -537,20 +555,12 @@ void OptixTracer::_optix_build()
 	gas_accel_options.operation  = OPTIX_BUILD_OPERATION_BUILD;
 
 	std::vector <OptixTraversableHandle> instance_gas(_c_raytracers.size());
+	std::vector <OptixTraversableHandle> light_gas(_cached.lights.size());
 	
 	// Flags
 	const uint32_t triangle_input_flags[1] = {OPTIX_GEOMETRY_FLAG_NONE};
 
 	for (int i = 0; i < _c_raytracers.size(); i++) {
-		// Prepare the instance transform
-		glm::mat4 mat = _c_transforms[i].matrix();
-
-		float transform[12] = {
-			mat[0][0], mat[1][0], mat[2][0], mat[3][0],
-			mat[0][1], mat[1][1], mat[2][1], mat[3][1],
-			mat[0][2], mat[1][2], mat[2][2], mat[3][2]
-		};
-
 		// Prepare instance vertices and triangles
 		std::vector <float3> vertices;
 		std::vector <uint3> triangles;
@@ -578,15 +588,8 @@ void OptixTracer::_optix_build()
 
 		build_input.type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
 
-		CUdeviceptr d_vertices = cuda::alloc(vertices.size() * sizeof(float3));
-		CUdeviceptr d_triangles = cuda::alloc(triangles.size() * sizeof(uint3));
-
-		// TODO: alloc and memcpy in one step function
-		CUdeviceptr d_transform = cuda::alloc(12 * sizeof(float));
-
-		cuda::copy(d_vertices, vertices);
-		cuda::copy(d_triangles, triangles);
-		cuda::copy(d_transform, transform, 12);
+		CUdeviceptr d_vertices = cuda::make_buffer_ptr(vertices);
+		CUdeviceptr d_triangles = cuda::make_buffer_ptr(triangles);
 
 		OptixBuildInputTriangleArray &triangle_array = build_input.triangleArray;
 		triangle_array.vertexFormat	= OPTIX_VERTEX_FORMAT_FLOAT3;
@@ -637,8 +640,88 @@ void OptixTracer::_optix_build()
 		// cuda::free(d_transform); // TODO: can be freed after all instances are built
 	}
 
+	
+	// Lights (a cube for now)
+	Mesh box = Mesh::box({0, 0, 0}, {0.5, 0.01, 0.5});
+
+	std::vector <float3> vertices;
+	std::vector <uint3> triangles;
+
+	for (auto s : box.submeshes) {
+		for (int j = 0; j < s.indices.size(); j += 3) {
+			std::cout << "tri " << s.indices[j] << " " << s.indices[j + 1] << " " << s.indices[j + 2] << std::endl;
+			triangles.push_back({
+				s.indices[j],
+				s.indices[j + 1],
+				s.indices[j + 2]
+			});
+		}
+
+		for (int j = 0; j < s.vertices.size(); j++) {
+			std::cout << "vert " << s.vertices[j].position.x << " " << s.vertices[j].position.y << " " << s.vertices[j].position.z << std::endl;
+			auto p = s.vertices[j].position;
+			vertices.push_back(to_f3(p));
+		}
+	}
+
+	CUdeviceptr d_vertices = cuda::make_buffer_ptr(vertices);
+	CUdeviceptr d_triangles = cuda::make_buffer_ptr(triangles);
+
+	// Prepare the instance transform
+	for (int i = 0; i < _cached.lights.size(); i++) {
+		// Create the build input
+		OptixBuildInput build_input {};
+
+		build_input.type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
+
+		OptixBuildInputTriangleArray &triangle_array = build_input.triangleArray;
+		triangle_array.vertexFormat	= OPTIX_VERTEX_FORMAT_FLOAT3;
+		triangle_array.numVertices	= vertices.size();
+		triangle_array.vertexBuffers	= &d_vertices;
+
+		triangle_array.indexFormat	= OPTIX_INDICES_FORMAT_UNSIGNED_INT3;
+		triangle_array.numIndexTriplets	= triangles.size();
+		triangle_array.indexBuffer	= d_triangles;
+
+		triangle_array.flags		= triangle_input_flags;
+
+		// SBT record properties
+		triangle_array.numSbtRecords	= 1;
+		triangle_array.sbtIndexOffsetBuffer = 0;
+		triangle_array.sbtIndexOffsetStrideInBytes = 0;
+		triangle_array.sbtIndexOffsetSizeInBytes = 0;
+
+		// Build GAS
+		CUdeviceptr d_gas_output;
+		CUdeviceptr d_gas_tmp;
+
+		OptixAccelBufferSizes gas_buffer_sizes;
+		OPTIX_CHECK(optixAccelComputeMemoryUsage(
+			_optix_ctx, &gas_accel_options,
+			&build_input, 1,
+			&gas_buffer_sizes
+		));
+
+		d_gas_output = cuda::alloc(gas_buffer_sizes.outputSizeInBytes);
+		d_gas_tmp = cuda::alloc(gas_buffer_sizes.tempSizeInBytes);
+
+		OptixTraversableHandle handle;
+		OPTIX_CHECK(optixAccelBuild(_optix_ctx,
+			0, &gas_accel_options,
+			&build_input, 1,
+			d_gas_tmp, gas_buffer_sizes.tempSizeInBytes,
+			d_gas_output, gas_buffer_sizes.outputSizeInBytes,
+			&handle, nullptr, 0
+		));
+
+		light_gas[i] = handle;
+
+		// Free data at the end
+		cuda::free(d_gas_tmp);
+	}
+
 	// Build instances and top level acceleration structure
-	std::vector <OptixInstance> instances(_c_raytracers.size());
+	std::vector <OptixInstance> instances;
 
 	for (int i = 0; i < _c_raytracers.size(); i++) {
 		// Prepare the instance transform
@@ -651,17 +734,39 @@ void OptixTracer::_optix_build()
 			mat[0][2], mat[1][2], mat[2][2], mat[3][2]
 		};
 
-		memcpy(instances[i].transform, transform, sizeof(float) * 12);
+		OptixInstance instance {};
+		memcpy(instance.transform, transform, sizeof(float) * 12);
 
 		// Set the instance handle
-		instances[i].traversableHandle = instance_gas[i];
-		instances[i].visibilityMask = 0xFF;
-		instances[i].sbtOffset = i;
+		instance.traversableHandle = instance_gas[i];
+		instance.visibilityMask = 0xFF;
+		instance.sbtOffset = i;
+
+		instances.push_back(instance);
 	}
 
-	// Copy the instances to the device
-	CUdeviceptr d_instances = cuda::alloc(instances.size() * sizeof(OptixInstance));
-	cuda::copy(d_instances, instances);
+	for (int i = 0; i < _cached.lights.size(); i++) {
+		// Prepare the instance transform
+		glm::mat4 mat = _cached.light_transforms[i]->matrix();
+
+		float transform[12] = {
+			mat[0][0], mat[1][0], mat[2][0], mat[3][0],
+			mat[0][1], mat[1][1], mat[2][1], mat[3][1],
+			mat[0][2], mat[1][2], mat[2][2], mat[3][2]
+		};
+
+		OptixInstance instance {};
+		memcpy(instance.transform, transform, sizeof(float) * 12);
+
+		// Set the instance handle
+		instance.traversableHandle = light_gas[i];
+		instance.visibilityMask = 0xFF;
+		instance.sbtOffset = i + _c_raytracers.size();
+
+		instances.push_back(instance);
+	}
+
+	CUdeviceptr d_instances = cuda::make_buffer_ptr(instances);
 
 	// Create the top level acceleration structure
 	OptixBuildInput ias_build_input {};
@@ -704,19 +809,48 @@ void OptixTracer::_optix_build()
 
 // Update hit group data with materials
 // TODO: also update if transforms change
+// TODO: refactor to sbts
 void OptixTracer::_optix_update_materials()
 {
-	// TODO: conserve memory
 	static std::vector <HitGroupSbtRecord> hg_sbts;
+	static std::vector <optix_rt::AreaLight> area_lights;
 
-	// Update if necessary
-	if (hg_sbts.size() != _c_raytracers.size()) {
-		hg_sbts.resize(_c_raytracers.size());
+	// Update area lights
+	if (area_lights.size() != _cached.lights.size()) {
+		area_lights.resize(_cached.lights.size());
 
+		for (int i = 0; i < area_lights.size(); i++) {
+			const Light *light = _cached.lights[i];
+			const Transform *transform = _cached.light_transforms[i];
+			
+			glm::vec3 a {-0.5f, 0, -0.5f};
+			glm::vec3 b {0.5f, 0, -0.5f};
+			glm::vec3 c {-0.5f, 0, 0.5f};
+
+			a = transform->apply(a);
+			b = transform->apply(b);
+			c = transform->apply(c);
+
+			area_lights[i].a = to_f3(a);
+			area_lights[i].ab = to_f3(b - a);
+			area_lights[i].ac = to_f3(c - a);
+			area_lights[i].intensity
+				= to_f3(light->power * light->color);
+		}
+
+		_buffers.area_lights = (CUdeviceptr) cuda::make_buffer(area_lights);
+	}
+
+	// Update hit records if necessary
+	if (hg_sbts.size() != _c_raytracers.size() + _cached.lights.size()) {
+		hg_sbts.resize(_c_raytracers.size() + _cached.lights.size());
+
+		// Regular raytracers
 		for (int i = 0; i < _c_raytracers.size(); i++) {
 			Material mat = _c_raytracers[i]->get_material();
 
-			HitGroupData::Material material;
+			// Material
+			optix_rt::Material material;
 			material.diffuse = to_f3(mat.diffuse);
 			material.specular = to_f3(mat.specular);
 			material.emission = to_f3(mat.emission);
@@ -748,23 +882,34 @@ void OptixTracer::_optix_update_materials()
 				hg_sbts[i].data.textures.has_normal = true;
 			}
 
+			// Lights
+			hg_sbts[i].data.area_lights = (optix_rt::AreaLight *) _buffers.area_lights;
+			hg_sbts[i].data.n_area_lights = area_lights.size();
+
 			OPTIX_CHECK(optixSbtRecordPackHeader(_hitgroup_prog_group, &hg_sbts[i]));
 		}
 
-		// Upload to device
-		_optix_hg_sbt = cuda::alloc(sizeof(HitGroupSbtRecord) * _c_raytracers.size());
-		cuda::copy(_optix_hg_sbt, hg_sbts);
+		// Area lights
+		for (int i = 0; i < _cached.lights.size(); i++) {
+			hg_sbts[i + _c_raytracers.size()].data.area_lights = &area_lights[i];
+			hg_sbts[i + _c_raytracers.size()].data.n_area_lights = 1;
+			hg_sbts[i + _c_raytracers.size()].data.material.diffuse
+				= to_f3(_cached.lights[i]->color);
+			OPTIX_CHECK(optixSbtRecordPackHeader(_hitgroup_prog_group, &hg_sbts[i + _c_raytracers.size()]));
+		}
+
+		_optix_hg_sbt = (CUdeviceptr) cuda::make_buffer(hg_sbts);
 
 		// Update SBT
 		_optix_sbt.hitgroupRecordBase = _optix_hg_sbt;
-		_optix_sbt.hitgroupRecordCount = _c_raytracers.size();
+		_optix_sbt.hitgroupRecordCount = hg_sbts.size();
 		_optix_sbt.hitgroupRecordStrideInBytes = sizeof(HitGroupSbtRecord);
 	}
 }
 
 void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 {
-	Params params;
+	optix_rt::Params params;
 	params.image        = _result_buffer.dev <uchar4> ();
 	params.image_width  = width;
 	params.image_height = height;
@@ -777,7 +922,8 @@ void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 	params.cam_w = to_f3(uvw.w);
 
 	CUdeviceptr d_param;
-	CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_param ), sizeof( Params ) ) );
+	CUDA_CHECK( cudaMalloc( reinterpret_cast<void**> (&d_param),
+				sizeof(optix_rt::Params)));
 	CUDA_CHECK( cudaMemcpy(
 				reinterpret_cast<void*>( d_param ),
 				&params, sizeof( params ),
@@ -785,7 +931,7 @@ void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 			      ) );
 
 	OPTIX_CHECK( optixLaunch( _optix_pipeline, _optix_stream, d_param,
-				sizeof( Params ), &_optix_sbt, width, height,
+				sizeof(optix_rt::Params), &_optix_sbt, width, height,
 				1) );
 	CUDA_SYNC_CHECK();
 

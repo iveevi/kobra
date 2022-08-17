@@ -4,7 +4,12 @@
 // OptiX headers
 #include <optix.h>
 
+// Engine headers
+#include "../cuda/math.cuh"
+
 namespace kobra {
+
+namespace optix_rt {
 
 struct Params
 {
@@ -14,6 +19,29 @@ struct Params
 	float3			cam_eye;
 	float3			cam_u, cam_v, cam_w;
 	OptixTraversableHandle	handle;
+};
+
+// Material type
+struct Material {
+	float3		diffuse;
+	float3		specular;
+	float3		emission;
+	float3		ambient;
+	float		shininess;
+	float		roughness;
+	float		refraction;
+};
+
+// Light type
+struct AreaLight {
+	float3 a;
+	float3 ab;
+	float3 ac;
+	float3 intensity;
+
+	__forceinline__ __device__ float area() {
+		return length(cross(ab, ac));
+	}
 };
 
 struct RayGenData
@@ -32,19 +60,7 @@ struct MissData
 
 struct HitGroupData
 {
-	// Materials
-	struct Material {
-		float3		diffuse;
-		float3		specular;
-		float3		emission;
-		float3		ambient;
-		float		shininess;
-		float		roughness;
-		float		refraction;
-	};
-
-	Material		material;
-
+	// Mesh data
 	float2			*texcoords;
 	float3			*vertices;
 	uint3			*triangles;
@@ -53,6 +69,9 @@ struct HitGroupData
 	float3			*tangents;
 	float3			*bitangents;
 
+	// Material and textures
+	Material		material;
+
 	struct {
 		cudaTextureObject_t	diffuse;
 		cudaTextureObject_t	normal;
@@ -60,7 +79,13 @@ struct HitGroupData
 		bool			has_diffuse;
 		bool			has_normal;
 	} textures;
+
+	// Light data
+	AreaLight		*area_lights;
+	int			n_area_lights;
 };
+
+}
 
 }
 

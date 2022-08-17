@@ -42,9 +42,12 @@ class OptixTracer {
 	CUdeviceptr			_optix_hg_sbt = 0;
 	CUdeviceptr			_optix_miss_sbt = 0;
 
-	CUdeviceptr			_d_materials = 0;
-	size_t				_d_materials_size = 0;
+	// Buffers
+	struct {
+		CUdeviceptr		area_lights;
+	} _buffers;
 
+	// Output resources
 	cuda::BufferData		_result_buffer;
 	std::vector <uint32_t>		_output;
 
@@ -55,7 +58,12 @@ class OptixTracer {
 	cudaTextureObject_t		_tex_env_map = 0;
 	const ImageData			*_v_environment_map = nullptr;
 
-	// Cached ryatracer data
+	// Cached entity data
+	struct {
+		std::vector <const Light *> lights;
+		std::vector <const Transform *> light_transforms;
+	} _cached;
+
 	std::vector <const kobra::Raytracer *>
 					_c_raytracers;
 	std::vector <Transform>		_c_transforms;

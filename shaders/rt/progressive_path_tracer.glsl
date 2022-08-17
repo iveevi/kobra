@@ -306,8 +306,6 @@ vec3 pathtracer(Ray ray, int depth)
 	if (hit.id == -1)
 		return hit.mat.diffuse;
 
-	return hit.normal * 0.5f + 0.5f;
-
 	// Get point and direction
 	vec3 x = hit.point + hit.normal * eps;
 	vec3 wo = -ray.direction;
