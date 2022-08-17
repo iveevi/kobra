@@ -6,6 +6,7 @@
 
 // Engine headers
 #include "../cuda/math.cuh"
+#include "../types.hpp"
 
 namespace kobra {
 
@@ -18,7 +19,9 @@ struct Params
 	unsigned int		image_height;
 	float3			cam_eye;
 	float3			cam_u, cam_v, cam_w;
+
 	OptixTraversableHandle	handle;
+	OptixTraversableHandle	handle_shadow;
 };
 
 // Material type
@@ -30,6 +33,7 @@ struct Material {
 	float		shininess;
 	float		roughness;
 	float		refraction;
+	Shading		type;
 };
 
 // Light type

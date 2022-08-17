@@ -178,7 +178,7 @@ void OptixTracer::environment_map(const std::string &path)
 	miss_record.data.bg_color = float3 {0.0f, 0.0f, 0.0f};
 	miss_record.data.bg_tex = import_vulkan_texture(*_ctx.device, *_v_environment_map);
 
-	OPTIX_CHECK(optixSbtRecordPackHeader(_miss_prog_group, &miss_record));
+	OPTIX_CHECK(optixSbtRecordPackHeader(_programs.miss_radiance, &miss_record));
 	cuda::copy(_optix_miss_sbt, &miss_record, 1);
 }
 
@@ -324,7 +324,7 @@ void OptixTracer::_initialize_optix()
 {
 	// Storage for logs
 	static char log[1024];
-	size_t sizeof_log = sizeof( log );
+	static size_t sizeof_log = sizeof(log);
 
 	// Initialize CUDA
 	CUDA_CHECK( cudaFree( 0 ) );
@@ -399,57 +399,83 @@ void OptixTracer::_initialize_optix()
 					));
 	}
 
-	//
 	// Create program groups
-	//
-	OptixProgramGroup raygen_prog_group   = nullptr;
-	
 	{
-		OptixProgramGroupOptions program_group_options   = {}; // Initialize to zeros
+		// Default program group option
+		OptixProgramGroupOptions program_group_options = {};
 
-		OptixProgramGroupDesc raygen_prog_group_desc    = {}; //
-		raygen_prog_group_desc.kind                     = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
-		raygen_prog_group_desc.raygen.module            = _optix_module;
-		raygen_prog_group_desc.raygen.entryFunctionName = "__raygen__rg";
-		OPTIX_CHECK_LOG( optixProgramGroupCreate(
-					_optix_ctx,
-					&raygen_prog_group_desc,
-					1,   // num program groups
-					&program_group_options,
-					log,
-					&sizeof_log,
-					&raygen_prog_group
-					) );
+		// TODO: reate all at once
+		OptixProgramGroupDesc raygen_program_desc = {
+			.kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
+			.raygen = {
+				.module = _optix_module,
+				.entryFunctionName = "__raygen__rg"
+			}
+		};
 
-		OptixProgramGroupDesc miss_prog_group_desc  = {};
-		miss_prog_group_desc.kind                   = OPTIX_PROGRAM_GROUP_KIND_MISS;
-		miss_prog_group_desc.miss.module            = _optix_module;
-		miss_prog_group_desc.miss.entryFunctionName = "__miss__ms";
-		sizeof_log = sizeof( log );
-		OPTIX_CHECK_LOG( optixProgramGroupCreate(
-					_optix_ctx,
-					&miss_prog_group_desc,
-					1,   // num program groups
-					&program_group_options,
-					log,
-					&sizeof_log,
-					&_miss_prog_group
-					) );
+		OPTIX_CHECK_LOG(optixProgramGroupCreate(
+			_optix_ctx,
+			&raygen_program_desc, 1,
+			&program_group_options,
+			log, &sizeof_log,
+			&_programs.raygen
+		));
 
-		OptixProgramGroupDesc hitgroup_prog_group_desc = {};
-		hitgroup_prog_group_desc.kind                         = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
-		hitgroup_prog_group_desc.hitgroup.moduleCH            = _optix_module;
-		hitgroup_prog_group_desc.hitgroup.entryFunctionNameCH = "__closesthit__ch";
-		sizeof_log = sizeof( log );
-		OPTIX_CHECK_LOG( optixProgramGroupCreate(
-					_optix_ctx,
-					&hitgroup_prog_group_desc,
-					1,   // num program groups
-					&program_group_options,
-					log,
-					&sizeof_log,
-					&_hitgroup_prog_group
-					) );
+		// Miss programs
+		OptixProgramGroupDesc miss_program_desc = {
+			.kind = OPTIX_PROGRAM_GROUP_KIND_MISS,
+			.miss = {
+				.module = _optix_module,
+			}
+		};
+	
+		// Radiance miss program
+		miss_program_desc.miss.entryFunctionName = "__miss__radiance";
+		OPTIX_CHECK_LOG(optixProgramGroupCreate(
+			_optix_ctx,
+			&miss_program_desc, 1,
+			&program_group_options,
+			log, &sizeof_log,
+			&_programs.miss_radiance
+		));
+
+		// Shadow miss program
+		miss_program_desc.miss.entryFunctionName = "__miss__shadow";
+		OPTIX_CHECK_LOG(optixProgramGroupCreate(
+			_optix_ctx,
+			&miss_program_desc, 1,
+			&program_group_options,
+			log, &sizeof_log,
+			&_programs.miss_shadow
+		));
+
+		// Hit programs
+		OptixProgramGroupDesc hitgroup_program_desc = {
+			.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
+			.hitgroup = {
+				.moduleCH = _optix_module,
+			}
+		};
+
+		// Radiance hit program
+		hitgroup_program_desc.hitgroup.entryFunctionNameCH = "__closesthit__radiance";
+		OPTIX_CHECK_LOG(optixProgramGroupCreate(
+			_optix_ctx,
+			&hitgroup_program_desc, 1,
+			&program_group_options,
+			log, &sizeof_log,
+			&_programs.hit_radiance
+		));
+
+		// Shadow hit program
+		hitgroup_program_desc.hitgroup.entryFunctionNameCH = "__closesthit__shadow";
+		OPTIX_CHECK_LOG(optixProgramGroupCreate(
+			_optix_ctx,
+			&hitgroup_program_desc, 1,
+			&program_group_options,
+			log, &sizeof_log,
+			&_programs.hit_shadow
+		));
 	}
 
 	//
@@ -457,14 +483,21 @@ void OptixTracer::_initialize_optix()
 	//
 	_optix_pipeline = nullptr;
 	{
-		const uint32_t    max_trace_depth  = 1;
-		OptixProgramGroup program_groups[] = { raygen_prog_group,
-			_miss_prog_group, _hitgroup_prog_group };
+		const int max_trace_depth = 2;
+
+		OptixProgramGroup program_groups[] = {
+			_programs.raygen,
+			_programs.hit_radiance,
+			_programs.hit_shadow,
+			_programs.miss_radiance,
+			_programs.miss_shadow
+		};
 
 		OptixPipelineLinkOptions pipeline_link_options = {};
+		
 		pipeline_link_options.maxTraceDepth          = max_trace_depth;
 		pipeline_link_options.debugLevel             = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
-		size_t sizeof_log = sizeof( log );
+
 		OPTIX_CHECK_LOG( optixPipelineCreate(
 					_optix_ctx,
 					&pipeline_compile_options,
@@ -505,7 +538,7 @@ void OptixTracer::_initialize_optix()
 	const size_t raygen_record_size = sizeof( RayGenSbtRecord );
 	CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &raygen_record ), raygen_record_size ) );
 	RayGenSbtRecord rg_sbt;
-	OPTIX_CHECK( optixSbtRecordPackHeader( raygen_prog_group, &rg_sbt ) );
+	OPTIX_CHECK( optixSbtRecordPackHeader(_programs.raygen, &rg_sbt ) );
 	CUDA_CHECK( cudaMemcpy(
 				reinterpret_cast<void*>( raygen_record ),
 				&rg_sbt,
@@ -513,28 +546,36 @@ void OptixTracer::_initialize_optix()
 				cudaMemcpyHostToDevice
 			      ) );
 
-	// Ray miss program
-	_optix_miss_sbt = cuda::alloc(sizeof(MissSbtRecord));
-	
-	MissSbtRecord ms_sbt;
-	ms_sbt.data = {0.6f, 0.6f, 0.9f};
+	// Ray miss records
+	std::vector <MissSbtRecord> miss_sbt_records {
+		MissSbtRecord {.data = {0.6f, 0.6f, 0.6f}}, {}
+	};
+		
+	OPTIX_CHECK(optixSbtRecordPackHeader(
+		_programs.miss_radiance,
+		&miss_sbt_records[0]
+	));
 
-	OPTIX_CHECK(optixSbtRecordPackHeader(_miss_prog_group, &ms_sbt));
-	cuda::copy(_optix_miss_sbt, &ms_sbt, 1);
+	OPTIX_CHECK(optixSbtRecordPackHeader(
+		_programs.miss_shadow,
+		&miss_sbt_records[1]
+	));
+
+	_optix_miss_sbt = cuda::make_buffer_ptr(miss_sbt_records);
 
 	// Ray closest hit program
 	_optix_hg_sbt = cuda::alloc(sizeof(HitGroupSbtRecord));
 	
 	HitGroupSbtRecord hg_sbt;
 
-	OPTIX_CHECK(optixSbtRecordPackHeader(_hitgroup_prog_group, &hg_sbt));
+	OPTIX_CHECK(optixSbtRecordPackHeader(_programs.hit_radiance, &hg_sbt));
 	cuda::copy(_optix_hg_sbt, &hg_sbt, 1);
 
 	_optix_sbt = OptixShaderBindingTable {};
 	_optix_sbt.raygenRecord                = raygen_record;
 	_optix_sbt.missRecordBase              = _optix_miss_sbt;
-	_optix_sbt.missRecordStrideInBytes     = sizeof( MissSbtRecord );
-	_optix_sbt.missRecordCount             = 1;
+	_optix_sbt.missRecordStrideInBytes     = sizeof(MissSbtRecord);
+	_optix_sbt.missRecordCount             = 2;
 	_optix_sbt.hitgroupRecordBase          = _optix_hg_sbt;
 	_optix_sbt.hitgroupRecordStrideInBytes = sizeof(HitGroupSbtRecord);
 	_optix_sbt.hitgroupRecordCount         = 1;
@@ -635,9 +676,6 @@ void OptixTracer::_optix_build()
 
 		// Free data at the end
 		cuda::free(d_gas_tmp);
-		// cuda::free(d_vertices);
-		// cuda::free(d_triangles);
-		// cuda::free(d_transform); // TODO: can be freed after all instances are built
 	}
 
 	
@@ -649,7 +687,6 @@ void OptixTracer::_optix_build()
 
 	for (auto s : box.submeshes) {
 		for (int j = 0; j < s.indices.size(); j += 3) {
-			std::cout << "tri " << s.indices[j] << " " << s.indices[j + 1] << " " << s.indices[j + 2] << std::endl;
 			triangles.push_back({
 				s.indices[j],
 				s.indices[j + 1],
@@ -658,7 +695,6 @@ void OptixTracer::_optix_build()
 		}
 
 		for (int j = 0; j < s.vertices.size(); j++) {
-			std::cout << "vert " << s.vertices[j].position.x << " " << s.vertices[j].position.y << " " << s.vertices[j].position.z << std::endl;
 			auto p = s.vertices[j].position;
 			vertices.push_back(to_f3(p));
 		}
@@ -722,6 +758,7 @@ void OptixTracer::_optix_build()
 
 	// Build instances and top level acceleration structure
 	std::vector <OptixInstance> instances;
+	std::vector <OptixInstance> instances_no_lights;
 
 	for (int i = 0; i < _c_raytracers.size(); i++) {
 		// Prepare the instance transform
@@ -743,6 +780,7 @@ void OptixTracer::_optix_build()
 		instance.sbtOffset = i;
 
 		instances.push_back(instance);
+		instances_no_lights.push_back(instance);
 	}
 
 	for (int i = 0; i < _cached.lights.size(); i++) {
@@ -766,45 +804,88 @@ void OptixTracer::_optix_build()
 		instances.push_back(instance);
 	}
 
+	// Create two top level acceleration structures
+	//	one for pure objects
+	//	one for objects and lights
 	CUdeviceptr d_instances = cuda::make_buffer_ptr(instances);
+	CUdeviceptr d_instances_no_lights = cuda::make_buffer_ptr(instances_no_lights);
 
-	// Create the top level acceleration structure
-	OptixBuildInput ias_build_input {};
-	ias_build_input.type = OPTIX_BUILD_INPUT_TYPE_INSTANCES;
-	ias_build_input.instanceArray.instances = d_instances;
-	ias_build_input.instanceArray.numInstances = instances.size();
+	// TLAS for objects and lights
+	{
+		OptixBuildInput ias_build_input {};
+		ias_build_input.type = OPTIX_BUILD_INPUT_TYPE_INSTANCES;
+		ias_build_input.instanceArray.instances = d_instances;
+		ias_build_input.instanceArray.numInstances = instances.size();
 
-	// IAS options
-	OptixAccelBuildOptions ias_accel_options {};
-	ias_accel_options.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
-	ias_accel_options.operation = OPTIX_BUILD_OPERATION_BUILD;
+		// IAS options
+		OptixAccelBuildOptions ias_accel_options {};
+		ias_accel_options.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
+		ias_accel_options.operation = OPTIX_BUILD_OPERATION_BUILD;
 
-	// IAS buffer sizes
-	OptixAccelBufferSizes ias_buffer_sizes;
-	OPTIX_CHECK(optixAccelComputeMemoryUsage(
-		_optix_ctx, &ias_accel_options,
-		&ias_build_input, 1,
-		&ias_buffer_sizes
-	));
+		// IAS buffer sizes
+		OptixAccelBufferSizes ias_buffer_sizes;
+		OPTIX_CHECK(optixAccelComputeMemoryUsage(
+			_optix_ctx, &ias_accel_options,
+			&ias_build_input, 1,
+			&ias_buffer_sizes
+		));
 
-	KOBRA_LOG_FUNC(Log::INFO) << "IAS buffer sizes: " << ias_buffer_sizes.tempSizeInBytes << " " << ias_buffer_sizes.outputSizeInBytes << std::endl;
+		KOBRA_LOG_FUNC(Log::INFO) << "IAS buffer sizes: " << ias_buffer_sizes.tempSizeInBytes << " " << ias_buffer_sizes.outputSizeInBytes << std::endl;
 
-	// Allocate the IAS
-	CUdeviceptr d_ias_output = cuda::alloc(ias_buffer_sizes.outputSizeInBytes);
-	CUdeviceptr d_ias_tmp = cuda::alloc(ias_buffer_sizes.tempSizeInBytes);
+		// Allocate the IAS
+		CUdeviceptr d_ias_output = cuda::alloc(ias_buffer_sizes.outputSizeInBytes);
+		CUdeviceptr d_ias_tmp = cuda::alloc(ias_buffer_sizes.tempSizeInBytes);
 
-	// Build the IAS
-	OPTIX_CHECK(optixAccelBuild(_optix_ctx,
-		0, &ias_accel_options,
-		&ias_build_input, 1,
-		d_ias_tmp, ias_buffer_sizes.tempSizeInBytes,
-		d_ias_output, ias_buffer_sizes.outputSizeInBytes,
-		&_optix_traversable, nullptr, 0
-	));
+		// Build the IAS
+		OPTIX_CHECK(optixAccelBuild(_optix_ctx,
+			0, &ias_accel_options,
+			&ias_build_input, 1,
+			d_ias_tmp, ias_buffer_sizes.tempSizeInBytes,
+			d_ias_output, ias_buffer_sizes.outputSizeInBytes,
+			&_traversables.all_objects, nullptr, 0
+		));
 
-	// Free the memory
-	// cuda::free(d_instances);
-	// cuda::free(d_ias_tmp);
+		cuda::free(d_ias_tmp);
+	}
+
+	// TLAS for pure objects
+	{
+		// TODO: helper function
+		OptixBuildInput ias_build_input {};
+		ias_build_input.type = OPTIX_BUILD_INPUT_TYPE_INSTANCES;
+		ias_build_input.instanceArray.instances = d_instances_no_lights;
+		ias_build_input.instanceArray.numInstances = instances_no_lights.size();
+
+		// IAS options
+		OptixAccelBuildOptions ias_accel_options {};
+		ias_accel_options.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
+		ias_accel_options.operation = OPTIX_BUILD_OPERATION_BUILD;
+
+		// IAS buffer sizes
+		OptixAccelBufferSizes ias_buffer_sizes;
+		OPTIX_CHECK(optixAccelComputeMemoryUsage(
+			_optix_ctx, &ias_accel_options,
+			&ias_build_input, 1,
+			&ias_buffer_sizes
+		));
+
+		KOBRA_LOG_FUNC(Log::INFO) << "IAS buffer sizes: " << ias_buffer_sizes.tempSizeInBytes << " " << ias_buffer_sizes.outputSizeInBytes << std::endl;
+
+		// Allocate the IAS
+		CUdeviceptr d_ias_output = cuda::alloc(ias_buffer_sizes.outputSizeInBytes);
+		CUdeviceptr d_ias_tmp = cuda::alloc(ias_buffer_sizes.tempSizeInBytes);
+
+		// Build the IAS
+		OPTIX_CHECK(optixAccelBuild(_optix_ctx,
+			0, &ias_accel_options,
+			&ias_build_input, 1,
+			d_ias_tmp, ias_buffer_sizes.tempSizeInBytes,
+			d_ias_output, ias_buffer_sizes.outputSizeInBytes,
+			&_traversables.pure_objects, nullptr, 0
+		));
+
+		cuda::free(d_ias_tmp);
+	}
 }
 
 // Update hit group data with materials
@@ -842,8 +923,9 @@ void OptixTracer::_optix_update_materials()
 	}
 
 	// Update hit records if necessary
-	if (hg_sbts.size() != _c_raytracers.size() + _cached.lights.size()) {
-		hg_sbts.resize(_c_raytracers.size() + _cached.lights.size());
+	int required_size = 2 * (_c_raytracers.size() + _cached.lights.size());
+	if (hg_sbts.size() != required_size) {
+		hg_sbts.clear();
 
 		// Regular raytracers
 		for (int i = 0; i < _c_raytracers.size(); i++) {
@@ -858,10 +940,12 @@ void OptixTracer::_optix_update_materials()
 			material.shininess = mat.shininess;
 			material.roughness = mat.roughness;
 			material.refraction = mat.refraction;
+			material.type = mat.type;
 
-			hg_sbts[i].data.material = material;
+			HitGroupSbtRecord hg_sbt {};
+			hg_sbt.data.material = material;
 
-			generate_mesh_data(_c_raytracers[i], _c_transforms[i], hg_sbts[i].data);
+			generate_mesh_data(_c_raytracers[i], _c_transforms[i], hg_sbt.data);
 
 			// Import textures if necessary
 			if (mat.has_albedo()) {
@@ -869,8 +953,8 @@ void OptixTracer::_optix_update_materials()
 					_ctx.dev(), mat.albedo_texture
 				);
 
-				hg_sbts[i].data.textures.diffuse = import_vulkan_texture(*_ctx.device, diffuse);
-				hg_sbts[i].data.textures.has_diffuse = true;
+				hg_sbt.data.textures.diffuse = import_vulkan_texture(*_ctx.device, diffuse);
+				hg_sbt.data.textures.has_diffuse = true;
 			}
 
 			if (mat.has_normal()) {
@@ -878,24 +962,43 @@ void OptixTracer::_optix_update_materials()
 					_ctx.dev(), mat.normal_texture
 				);
 
-				hg_sbts[i].data.textures.normal = import_vulkan_texture(*_ctx.device, normal);
-				hg_sbts[i].data.textures.has_normal = true;
+				hg_sbt.data.textures.normal = import_vulkan_texture(*_ctx.device, normal);
+				hg_sbt.data.textures.has_normal = true;
 			}
 
 			// Lights
-			hg_sbts[i].data.area_lights = (optix_rt::AreaLight *) _buffers.area_lights;
-			hg_sbts[i].data.n_area_lights = area_lights.size();
+			hg_sbt.data.area_lights = (optix_rt::AreaLight *) _buffers.area_lights;
+			hg_sbt.data.n_area_lights = area_lights.size();
 
-			OPTIX_CHECK(optixSbtRecordPackHeader(_hitgroup_prog_group, &hg_sbts[i]));
+			OPTIX_CHECK(optixSbtRecordPackHeader(_programs.hit_radiance, &hg_sbt));
+			hg_sbts.push_back(hg_sbt);
+
+			/* OPTIX_CHECK(optixSbtRecordPackHeader(_programs.hit_shadow, &hg_sbt));
+			hg_sbts.push_back(hg_sbt); */
 		}
 
 		// Area lights
 		for (int i = 0; i < _cached.lights.size(); i++) {
-			hg_sbts[i + _c_raytracers.size()].data.area_lights = &area_lights[i];
-			hg_sbts[i + _c_raytracers.size()].data.n_area_lights = 1;
-			hg_sbts[i + _c_raytracers.size()].data.material.diffuse
+			HitGroupSbtRecord hg_sbt {};
+			hg_sbt.data.area_lights = &area_lights[i];
+			hg_sbt.data.n_area_lights = 1;
+			hg_sbt.data.material.diffuse
 				= to_f3(_cached.lights[i]->color);
-			OPTIX_CHECK(optixSbtRecordPackHeader(_hitgroup_prog_group, &hg_sbts[i + _c_raytracers.size()]));
+			hg_sbt.data.material.type = Shading::eEmissive;
+
+			OPTIX_CHECK(optixSbtRecordPackHeader(_programs.hit_radiance, &hg_sbt));
+			hg_sbts.push_back(hg_sbt);
+
+			/* OPTIX_CHECK(optixSbtRecordPackHeader(_programs.hit_shadow, &hg_sbt));
+			hg_sbts.push_back(hg_sbt); */
+		}
+
+		// Duplicate the SBTs for the shadow program
+		int size = hg_sbts.size();
+		for (int i = 0; i < size; i++) {
+			HitGroupSbtRecord hg_sbt = hg_sbts[i];
+			OPTIX_CHECK(optixSbtRecordPackHeader(_programs.hit_shadow, &hg_sbt));
+			hg_sbts.push_back(hg_sbt);
 		}
 
 		_optix_hg_sbt = (CUdeviceptr) cuda::make_buffer(hg_sbts);
@@ -904,6 +1007,22 @@ void OptixTracer::_optix_update_materials()
 		_optix_sbt.hitgroupRecordBase = _optix_hg_sbt;
 		_optix_sbt.hitgroupRecordCount = hg_sbts.size();
 		_optix_sbt.hitgroupRecordStrideInBytes = sizeof(HitGroupSbtRecord);
+
+		KOBRA_LOG_FILE(Log::INFO) << "Updated SBT with "
+			<< hg_sbts.size() << " records\n";
+
+		// Dump SBT (at least headers)
+		for (int i = 0; i < hg_sbts.size(); i++) {
+			std::cout << "SBT record " << i << ": ";
+
+			// Write header in hex
+			uint64_t *header = (uint64_t *) &hg_sbts[i];
+			for (int j = 0; j < OPTIX_SBT_RECORD_HEADER_SIZE/sizeof(uint64_t); j++) {
+				std::cout << std::hex << header[j] << "";
+			}
+
+			std::cout << std::endl;
+		}
 	}
 }
 
@@ -913,7 +1032,8 @@ void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 	params.image        = _result_buffer.dev <uchar4> ();
 	params.image_width  = width;
 	params.image_height = height;
-	params.handle       = _optix_traversable;
+	params.handle       = _traversables.all_objects;
+	params.handle_shadow = _traversables.pure_objects;
 	params.cam_eye      = to_f3(transform.position);
 
 	auto uvw = kobra::uvw_frame(camera, transform);

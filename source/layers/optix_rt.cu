@@ -85,7 +85,7 @@ extern "C" __global__ void __raygen__rg()
 		= kobra::cuda::make_color(ray_packet.value);
 }
 
-extern "C" __global__ void __miss__ms()
+extern "C" __global__ void __miss__radiance()
 {
 	// Background color based on ray direction
 	// TODO: implement background
@@ -104,6 +104,14 @@ extern "C" __global__ void __miss__ms()
 	unsigned int i1 = optixGetPayload_1();
 	rp = unpack_point <RayPacket> (i0, i1);
 	rp->value = make_float3(c.x, c.y, c.z);
+}
+
+extern "C" __global__ void __miss__shadow()
+{
+	unsigned int i0 = optixGetPayload_0();
+	unsigned int i1 = optixGetPayload_1();
+	bool *vis = unpack_point <bool> (i0, i1);
+	*vis = true;
 }
 
 struct mat3 {
@@ -185,12 +193,23 @@ static __forceinline__ __device__ float3 calculate_normal
 	return normal;
 }
 
-extern "C" __global__ void __closesthit__ch()
-{
+extern "C" __global__ void __closesthit__radiance()
+{	
+	// Get payload
+	RayPacket *rp;
+	unsigned int i0 = optixGetPayload_0();
+	unsigned int i1 = optixGetPayload_1();
+	rp = unpack_point <RayPacket> (i0, i1);
+
 	// Get data from the SBT
 	HitGroupData *hit_data = reinterpret_cast <HitGroupData *> (optixGetSbtDataPointer());
 
-	/* Get hit data
+	if (hit_data->material.type == Shading::eEmissive) {
+		rp->value = hit_data->material.diffuse;
+		return;
+	}
+
+	// Get hit data
 	float2 bary = optixGetTriangleBarycentrics();
 	int primitive_index = optixGetPrimitiveIndex();
 	uint3 triangle = hit_data->triangles[primitive_index];
@@ -218,41 +237,34 @@ extern "C" __global__ void __closesthit__ch()
 	for (int i = 0; i < hit_data->n_area_lights; i++) {
 		AreaLight al = hit_data->area_lights[i];
 
-		float3 ra = al.a - x;
-		float3 rb = ra + al.ab;
-		float3 rc = rb + al.ac;
-		float3 rd = rc + al.ab + al.ac;
+		float3 mid = al.a + (al.ab + al.ac) * 0.5f;
 
-		float dot_rab = dot(ra, rb)/(length(ra) * length(rb));
-		float dot_rbc = dot(rb, rc)/(length(rb) * length(rc));
-		float dot_rcd = dot(rc, rd)/(length(rc) * length(rd));
-		float dot_rad = dot(ra, rd)/(length(ra) * length(rd));
+		// Shadow ray
+		bool vis = false;
+		unsigned int j0, j1;
+		pack_pointer <bool> (&vis, j0, j1);
 
-		float theta1 = acos(dot_rab);
-		float theta2 = acos(dot_rbc);
-		float theta3 = acos(dot_rcd);
-		float theta4 = acos(dot_rad);
+		float3 shadow_origin = x + n * 0.0001f;
+		float3 shadow_direction = mid - shadow_origin;
 
-		float3 gamma1 = normalize(cross(ra, rb));
-		float3 gamma2 = normalize(cross(rb, rc));
-		float3 gamma3 = normalize(cross(rc, rd));
-		float3 gamma4 = normalize(cross(ra, rd));
+		// TODO: max time show be distance to light
+		optixTrace(params.handle_shadow,
+			shadow_origin, shadow_direction,
+			0, 1e16f, 0,
+			OptixVisibilityMask(255),
+			OPTIX_RAY_FLAG_NONE,
+			5, 0, 1,
+			j0, j1
+		);
 
-		float3 irradiace = theta1 * gamma1
-			+ theta2 * gamma2
-			+ theta3 * gamma3
-			+ theta4 * gamma4;
-
-		float cos_theta = max(dot(n, irradiace), 0.0f);
-		color += 0.5f * material.diffuse * al.intensity * cos_theta/M_PI;
-	} */
+		if (vis)
+			color += material.diffuse;
+	}
 
 	// color = make_float3(length(x)/20.0f);
 
 	// Transfer to payload
-	RayPacket *rp;
-	unsigned int i0 = optixGetPayload_0();
-	unsigned int i1 = optixGetPayload_1();
-	rp = unpack_point <RayPacket> (i0, i1);
-	rp->value = hit_data->material.diffuse;
+	rp->value = color;
 }
+
+extern "C" __global__ void __closesthit__shadow() {}

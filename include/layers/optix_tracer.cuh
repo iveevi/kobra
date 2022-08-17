@@ -32,12 +32,23 @@ class OptixTracer {
 	OptixDeviceContext		_optix_ctx = nullptr;
 	OptixModule			_optix_module = nullptr;
 	OptixPipeline			_optix_pipeline = nullptr;
-	OptixTraversableHandle		_optix_traversable;
 	OptixShaderBindingTable		_optix_sbt;
 	CUstream			_optix_stream;
 
-	OptixProgramGroup		_hitgroup_prog_group = nullptr;
-	OptixProgramGroup		_miss_prog_group = nullptr;
+	// OptiX acceleration structures
+	struct {
+		OptixTraversableHandle	pure_objects;
+		OptixTraversableHandle	all_objects;
+	} _traversables;
+
+	// OptiX program groups
+	struct {
+		OptixProgramGroup	raygen = nullptr;
+		OptixProgramGroup	hit_radiance = nullptr;
+		OptixProgramGroup	hit_shadow = nullptr;
+		OptixProgramGroup	miss_radiance = nullptr;
+		OptixProgramGroup	miss_shadow = nullptr;
+	} _programs;
 
 	CUdeviceptr			_optix_hg_sbt = 0;
 	CUdeviceptr			_optix_miss_sbt = 0;
