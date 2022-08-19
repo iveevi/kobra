@@ -52,7 +52,7 @@ builds:
   - optix_ptx:
     - sources: source/layers/optix_rt.cu
     - idirs: includes
-    - flags: '-ptx -g'
+    - flags: '-ptx -g -lineinfo'
     - options: 'nolink, output_dir=./bin/ptx, output_format={filename}.ptx'
   - glsl_compute:
     - sources: shaders/rt/progressive_path_tracer.glsl

@@ -45,9 +45,12 @@ static __forceinline__ __device__ void make_ray(uint3 idx, uint3 dim, float3 &or
 }
 
 // Ray packet data
-struct RayPacket
-{
+struct RayPacket {
+	float3 throughput;
 	float3 value;
+	float3 seed;
+	int depth;
+
 };
 
 extern "C" __global__ void __raygen__rg()
@@ -64,6 +67,10 @@ extern "C" __global__ void __raygen__rg()
 
 	// Pack payload
 	RayPacket ray_packet;
+	ray_packet.throughput = {1.0f, 1.0f, 1.0f};
+	ray_packet.value = {0.0f, 0.0f, 0.0f};
+	ray_packet.seed = {float(idx.x), float(idx.y), params.time};
+	ray_packet.depth = 0;
 
 	unsigned int i0, i1;
 	pack_pointer(&ray_packet, i0, i1);
@@ -103,7 +110,7 @@ extern "C" __global__ void __miss__radiance()
 	unsigned int i0 = optixGetPayload_0();
 	unsigned int i1 = optixGetPayload_1();
 	rp = unpack_point <RayPacket> (i0, i1);
-	rp->value = make_float3(c.x, c.y, c.z);
+	rp->value += rp->throughput * make_float3(c);
 }
 
 extern "C" __global__ void __miss__shadow()
@@ -137,26 +144,380 @@ __device__ __forceinline__ float3 operator*(mat3 m, float3 v)
 	);
 }
 
+#define MAX_DEPTH 5
+
+__device__ float fract(float x)
+{
+	return x - floor(x);
+}
+
+__device__ float3 fract(float3 x)
+{
+	return make_float3(
+		fract(x.x),
+		fract(x.y),
+		fract(x.z)
+	);
+}
+
+__device__ uint3 operator+(uint3 a, unsigned int b)
+{
+	return make_uint3(a.x + b, a.y + b, a.z + b);
+}
+
+__device__ uint3 operator>>(uint3 a, unsigned int b)
+{
+	return make_uint3(a.x >> b, a.y >> b, a.z >> b);
+}
+
+__device__ uint3 &operator&=(uint3 &a, uint3 b)
+{
+	a.x &= b.x;
+	a.y &= b.y;
+	a.z &= b.z;
+	return a;
+}
+
+__device__ uint3 &operator|=(uint3 &a, uint3 b)
+{
+	a.x |= b.x;
+	a.y |= b.y;
+	a.z |= b.z;
+	return a;
+}
+
+__device__ uint3 &operator^=(uint3 &a, uint3 b)
+{
+	a.x ^= b.x;
+	a.y ^= b.y;
+	a.z ^= b.z;
+	return a;
+}
+
+// Random number generation
+__device__ uint3 pcg3d(uint3 v)
+{
+	v = v * 1664525u + 1013904223u;
+	v.x += v.y * v.z;
+	v.y += v.z * v.x;
+	v.z += v.x * v.y;
+	v ^= v >> 16u;
+	v.x += v.y * v.z;
+	v.y += v.z * v.x;
+	v.z += v.x * v.y;
+	return v;
+}
+
+__device__ unsigned int rand(unsigned int lim)
+{
+	const uint3 v = pcg3d(make_uint3(
+		optixGetLaunchIndex().x,
+		optixGetLaunchIndex().y,
+		optixGetLaunchIndex().z
+	));
+
+	return (v.x + v.y - v.z) % lim;
+}
+
+__device__ float3 random3(float3 &seed)
+{
+	uint3 v = *reinterpret_cast <uint3*> (&seed);
+	v = pcg3d(v);
+	v &= make_uint3(0x007fffffu);
+	v |= make_uint3(0x3f800000u);
+	float3 r = *reinterpret_cast <float3*> (&v);
+	seed = r - 1.0f;
+	return seed;
+}
+
+__device__ float3 random_sphere(float3 &seed)
+{
+	float3 r = random3(seed);
+	float ang1 = (r.x + 1.0f) * M_PI;	
+	float u = r.y;
+	float u2 = u * u;
+	
+	float sqrt1MinusU2 = sqrt(1.0 - u2);
+	
+	float x = sqrt1MinusU2 * cos(ang1);
+	float y = sqrt1MinusU2 * sin(ang1);
+	float z = u;
+
+	return float3 {x, y, z};
+}
+
+// GGX microfacet distribution function
+__device__ float ggx_d(float3 n, float3 h, Material mat)
+{
+	float alpha = mat.roughness;
+	float theta = acos(clamp(dot(n, h), 0.0f, 0.999f));
+	
+	return (alpha * alpha)
+		/ (M_PI * pow(theta, 4)
+		* pow(alpha * alpha + tan(theta) * tan(theta), 2.0f));
+}
+
+// Smith shadow-masking function (single)
+__device__ float G1(float3 n, float3 v, Material mat)
+{
+	if (dot(v, n) <= 0.0f)
+		return 0.0f;
+
+	float alpha = mat.roughness;
+	float theta = acos(clamp(dot(n, v), 0.0f, 0.999f));
+
+	float tan_theta = tan(theta);
+
+	float denom = 1 + sqrt(1 + alpha * alpha * tan_theta * tan_theta);
+	return 2.0f/denom;
+}
+
+// Smith shadow-masking function (double)
+__device__ float G(float3 n, float3 wi, float3 wo, Material mat)
+{
+	return G1(n, wo, mat) * G1(n, wi, mat);
+}
+
+// Shlicks approximation to the Fresnel reflectance
+__device__ float3 ggx_f(float3 wi, float3 h, Material mat)
+{
+	float k = pow(1 - dot(wi, h), 5);
+	return mat.specular + (1 - mat.specular) * k;
+}
+
+// GGX specular brdf
+__device__ float3 ggx_brdf(Material mat, float3 n, float3 wi, float3 wo)
+{
+	if (dot(wi, n) <= 0.0f || dot(wo, n) <= 0.0f)
+		return float3 {0.0f, 0.0f, 0.0f};
+
+	float3 h = normalize(wi + wo);
+
+	float3 f = ggx_f(wi, h, mat);
+	float g = G(n, wi, wo, mat);
+	float d = ggx_d(n, h, mat);
+
+	float3 num = f * g * d;
+	float denom = 4 * dot(wi, n) * dot(wo, n);
+
+	return num / denom;
+}
+
+// GGX pdf
+__device__ float ggx_pdf(Material mat, float3 n, float3 wi, float3 wo)
+{
+	if (dot(wi, n) <= 0.0f || dot(wo, n) < 0.0f)
+		return 0.0f;
+
+	float3 h = normalize(wi + wo);
+
+	float avg_Kd = (mat.diffuse.x + mat.diffuse.y + mat.diffuse.z) / 3.0f;
+	float avg_Ks = (mat.specular.x + mat.specular.y + mat.specular.z) / 3.0f;
+
+	float t = 1.0f;
+	if (avg_Kd + avg_Ks > 0.0f)
+		t = max(avg_Ks/(avg_Kd + avg_Ks), 0.25f);
+
+	float term1 = dot(n, wi)/M_PI;
+	float term2 = ggx_d(n, h, mat) * dot(n, h)/(4.0f * dot(wi, h));
+
+	return (1 - t) * term1 + t * term2;
+}
+
+// Sample from GGX distribution
+__device__ float3 rotate(float3 s, float3 n)
+{
+	float3 w = n;
+	float3 a = float3 {0.0f, 1.0f, 0.0f};
+
+	if (abs(dot(w, a)) > 0.999f)
+		a = float3 {0.0f, 0.0f, 1.0f};
+
+	if (abs(dot(w, a)) > 0.999f)
+		a = float3 {0.0f, 0.0f, 1.0f};
+
+	float3 u = normalize(cross(w, a));
+	float3 v = normalize(cross(w, u));
+
+	return u * s.x + v * s.y + w * s.z;
+}
+
+__device__ float3 ggx_sample(float3 n, float3 wo, Material mat, float3 &seed)
+{
+	float avg_Kd = (mat.diffuse.x + mat.diffuse.y + mat.diffuse.z) / 3.0f;
+	float avg_Ks = (mat.specular.x + mat.specular.y + mat.specular.z) / 3.0f;
+
+	float t = 1.0f;
+	if (avg_Kd + avg_Ks > 0.0f)
+		t = max(avg_Ks/(avg_Kd + avg_Ks), 0.25f);
+
+	float3 r = random3(seed);
+	float3 eta = fract(r);
+
+	if (eta.x < t) {
+		// Specular sampling
+		float k = sqrt(eta.y/(1 - eta.y));
+		float theta = atan(k * mat.roughness);
+		float phi = 2.0f * M_PI * eta.z;
+
+		float3 h = float3 {
+			sin(theta) * cos(phi),
+			sin(theta) * sin(phi),
+			cos(theta)
+		};
+
+		h = rotate(h, n);
+
+		return reflect(-wo, h);
+	}
+
+	// Diffuse sampling
+	float theta = acos(sqrt(eta.y));
+	float phi = 2.0f * M_PI * eta.z;
+
+	float3 s = float3 {
+		sin(theta) * cos(phi),
+		sin(theta) * sin(phi),
+		cos(theta)
+	};
+
+	return rotate(s, n);
+}
+
+// BRDF of material
+__device__ float3 brdf(Material mat, float3 n, float3 wi, float3 wo)
+{
+	return ggx_brdf(mat, n, wi, wo) + mat.diffuse/M_PI;
+}
+
+// Power heurestic
+static const float p = 2.0f;
+
+__device__ float power(float pdf_f, float pdf_g)
+{
+	float f = pow(pdf_f, p);
+	float g = pow(pdf_g, p);
+
+	return f/(f + g);
+}
+
+// Area light methods
+__device__ float3 sample_area_light(AreaLight light, float3 &seed)
+{
+	float3 rand = random3(seed);
+	float u = fract(rand.x);
+	float v = fract(rand.y);
+	return light.a + u * light.ab + v * light.ac;
+}
+
+// Check shadow visibility
+__device__ bool shadow_visibility(float3 origin, float3 dir, float R)
+{
+	bool vis = false;
+	unsigned int j0, j1;
+	pack_pointer <bool> (&vis, j0, j1);
+
+	// TODO: max time show be distance to light
+	optixTrace(params.handle_shadow,
+		origin, dir,
+		0, R - 0.01f, 0,
+		OptixVisibilityMask(255),
+		OPTIX_RAY_FLAG_NONE,
+		5, 0, 1,
+		j0, j1
+	);
+
+	return vis;
+}
+
+// Trace ray into scene and get relevant information
+__device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
+		Material mat, float3 &seed)
+{
+	if (mat.type == Shading::eEmissive)
+		return float3 {0, 0, 0};
+
+	float3 contr_nee {0.0f};
+	float3 contr_brdf {0.0f};
+
+	// Random area light for NEE
+	unsigned int i = rand(hit_data->n_area_lights);
+	AreaLight light = hit_data->area_lights[0];
+
+	// NEE
+	float3 lpos = sample_area_light(light, seed);
+	float3 wi = normalize(lpos - x);
+	float R = length(lpos - x);
+
+	float3 f = brdf(mat, n, wi, wo) * dot(n, wi);
+
+	float ldot = abs(dot(light.normal(), wi));
+	if (ldot > 1e-6) {
+		float pdf_light = (R * R)/(light.area() * ldot);
+		float pdf_brdf = ggx_pdf(mat, n, wi, wo);
+
+		bool vis = shadow_visibility(x, wi, R);
+		if (pdf_light > 1e-9 && vis) {
+			float weight = power(pdf_light, pdf_brdf);
+			weight = 1.0f;
+
+			float3 intensity = light.intensity;
+			contr_nee += weight * f * intensity/pdf_light;
+		}
+	}
+
+	// BRDF
+	wi = ggx_sample(n, wo, mat, seed);
+	if (dot(wi, n) <= 0.0f)
+		return contr_nee;
+
+	f = brdf(mat, n, wi, wo) * dot(n, wi);
+
+	float pdf_brdf = ggx_pdf(mat, n, wi, wo);
+	float pdf_light = 0.0f;
+
+	// TODO: need to check intersection for lights specifically (and
+	// arbitrary ones too?)
+	bool vis = light.intersects(x, wi);
+	if (vis) {
+		// TODO: uncomment this?
+		// float R = it.time;
+		pdf_light = (R * R)/(light.area() * abs(dot(light.normal(), wi)));
+	}
+
+	if (pdf_light > 1e-9 && vis) {
+		float weight = power(pdf_light, pdf_brdf);
+		float3 intensity = light.intensity;
+		contr_brdf += weight * f * intensity/pdf_brdf;
+	}
+
+	return contr_nee + contr_brdf;
+}
+
+// Interpolate triangle values
+template <class T>
+__device__ T interpolate(T *arr, uint3 triagle, float2 bary)
+{
+	T a = arr[triagle.x];
+	T b = arr[triagle.y];
+	T c = arr[triagle.z];
+
+	return (1.0f - bary.x - bary.y) * a + bary.x * b + bary.y * c;
+}
+
+// Sample from a texture
 static __forceinline__ __device__ float4 sample_texture
 		(HitGroupData *hit_data, cudaTextureObject_t tex, uint3 triangle, float2 bary)
 {
-	float2 uv1 = hit_data->texcoords[triangle.x];
-	float2 uv2 = hit_data->texcoords[triangle.y];
-	float2 uv3 = hit_data->texcoords[triangle.z];
-
-	float2 uv = (1 - bary.x - bary.y) * uv1 + bary.x * uv2 + bary.y * uv3;
-
+	float2 uv = interpolate(hit_data->texcoords, triangle, bary);
 	return tex2D <float4> (tex, uv.x, uv.y);
 }
 
+// Calculate hit normal
 static __forceinline__ __device__ float3 calculate_normal
 		(HitGroupData *hit_data, uint3 triangle, float2 bary)
 {
-	float3 n1 = hit_data->normals[triangle.x];
-	float3 n2 = hit_data->normals[triangle.y];
-	float3 n3 = hit_data->normals[triangle.z];
-
-	float3 normal = (1 - bary.x - bary.y) * n1 + bary.x * n2 + bary.y * n3;
+	float3 normal = interpolate(hit_data->normals, triangle, bary);
 	if (dot(normal, optixGetWorldRayDirection()) > 0)
 		normal = -normal;
 	normal = normalize(normal);
@@ -170,16 +531,8 @@ static __forceinline__ __device__ float3 calculate_normal
 		float3 n = 2 * make_float3(n4.x, n4.y, n4.z) - 1;
 
 		// Tangent and bitangent
-		float3 t1 = hit_data->tangents[triangle.x];
-		float3 t2 = hit_data->tangents[triangle.y];
-		float3 t3 = hit_data->tangents[triangle.z];
-
-		float3 b1 = hit_data->bitangents[triangle.x];
-		float3 b2 = hit_data->bitangents[triangle.y];
-		float3 b3 = hit_data->bitangents[triangle.z];
-
-		float3 tangent = (1 - bary.x - bary.y) * t1 + bary.x * t2 + bary.y * t3;
-		float3 bitangent = (1 - bary.x - bary.y) * b1 + bary.x * b2 + bary.y * b3;
+		float3 tangent = interpolate(hit_data->tangents, triangle, bary);
+		float3 bitangent = interpolate(hit_data->bitangents, triangle, bary);
 
 		mat3 tbn = mat3(
 			normalize(tangent),
@@ -193,6 +546,23 @@ static __forceinline__ __device__ float3 calculate_normal
 	return normal;
 }
 
+
+// Calculate relevant material data for a hit
+__device__ void calculate_material
+		(HitGroupData *hit_data,
+		Material &mat,
+		uint3 triangle, float2 bary)
+{
+	if (hit_data->textures.has_diffuse) {
+		mat.diffuse = make_float3(
+			sample_texture(hit_data,
+				hit_data->textures.diffuse,
+				triangle, bary
+			)
+		);
+	}
+}
+
 extern "C" __global__ void __closesthit__radiance()
 {	
 	// Get payload
@@ -201,70 +571,62 @@ extern "C" __global__ void __closesthit__radiance()
 	unsigned int i1 = optixGetPayload_1();
 	rp = unpack_point <RayPacket> (i0, i1);
 
+	if (rp->depth > MAX_DEPTH)
+		return;
+
 	// Get data from the SBT
 	HitGroupData *hit_data = reinterpret_cast <HitGroupData *> (optixGetSbtDataPointer());
 
+	// TODO: check for light, not just emissive material
 	if (hit_data->material.type == Shading::eEmissive) {
-		rp->value = hit_data->material.diffuse;
+		if (rp->depth == 0)
+			rp->value = hit_data->material.emission;
+
+		rp->throughput = {0, 0, 0};
 		return;
 	}
 
-	// Get hit data
+	// Calculate relevant data for the hit
 	float2 bary = optixGetTriangleBarycentrics();
 	int primitive_index = optixGetPrimitiveIndex();
 	uint3 triangle = hit_data->triangles[primitive_index];
+
 	Material material = hit_data->material;
+	calculate_material(hit_data, material, triangle, bary);
 
-	float3 diffuse = material.diffuse;
-	if (hit_data->textures.has_diffuse) {
-		diffuse = make_float3(
-			sample_texture(hit_data,
-				hit_data->textures.diffuse,
-				triangle, bary
-			)
-		);
-	}
-
-	float3 color = make_float3(0);
-
-	float3 v = optixGetWorldRayOrigin();
-	float3 x = hit_data->vertices[triangle.x] * (1 - bary.x - bary.y) +
-		hit_data->vertices[triangle.y] * bary.x +
-		hit_data->vertices[triangle.z] * bary.y;
-	float3 wi = -optixGetWorldRayDirection();
+	float3 wo = -optixGetWorldRayDirection();
 	float3 n = calculate_normal(hit_data, triangle, bary);
+	if (dot(n, wo) <= 0.0f)
+		n = -n;
+	float3 x = interpolate(hit_data->vertices, triangle, bary)
+		+ 1e-3f * n;
 
-	for (int i = 0; i < hit_data->n_area_lights; i++) {
-		AreaLight al = hit_data->area_lights[i];
-
-		float3 mid = al.a + (al.ab + al.ac) * 0.5f;
-
-		// Shadow ray
-		bool vis = false;
-		unsigned int j0, j1;
-		pack_pointer <bool> (&vis, j0, j1);
-
-		float3 shadow_origin = x + n * 0.0001f;
-		float3 shadow_direction = mid - shadow_origin;
-
-		// TODO: max time show be distance to light
-		optixTrace(params.handle_shadow,
-			shadow_origin, shadow_direction,
-			0, 1e16f, 0,
-			OptixVisibilityMask(255),
-			OPTIX_RAY_FLAG_NONE,
-			5, 0, 1,
-			j0, j1
-		);
-
-		if (vis)
-			color += material.diffuse;
-	}
-
-	// color = make_float3(length(x)/20.0f);
+	float3 direct = Ld(hit_data, x, wo, n, material, rp->seed);
 
 	// Transfer to payload
-	rp->value = color;
+	rp->value += direct * rp->throughput;
+
+	// Generate new ray
+	float3 wi = ggx_sample(n, wo, material, rp->seed);
+	float pdf = ggx_pdf(material, n, wi, wo);
+
+	if (pdf <= 1e-9)
+		return;
+
+	float3 f = brdf(material, n, wi, wo) * abs(dot(n, wi));
+	float3 T = f/pdf;
+
+	rp->throughput *= T;
+	rp->depth++;
+
+	// Recursive raytrace
+	optixTrace(params.handle,
+		x, wi,
+		0.0f, 1e16f, 0.0f,
+		OptixVisibilityMask(255), OPTIX_RAY_FLAG_NONE,
+		0, 0, 0,
+		i0, i1
+	);
 }
 
 extern "C" __global__ void __closesthit__shadow() {}

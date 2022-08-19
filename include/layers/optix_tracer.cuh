@@ -9,6 +9,7 @@
 #include "../backend.hpp"
 #include "../cuda/buffer_data.cuh"
 #include "../ecs.hpp"
+#include "../timer.hpp"
 
 namespace kobra {
 
@@ -160,11 +161,15 @@ public:
 	// Staging buffer for OptiX output
 	BufferData _staging = nullptr;
 
+	Timer timer;
+
 	// Constructor
 	OptixTracer(const Context &ctx, const vk::AttachmentLoadOp &load)
 			: _ctx(ctx), _result_buffer(width * height * 4) {
 		_initialize_optix();
 		_initialize_vulkan_structures(load);
+
+		timer.start();
 
 		// Allocate image and sampler
 		_result = ImageData(

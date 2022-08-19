@@ -318,7 +318,7 @@ void OptixTracer::render(const vk::raii::CommandBuffer &cmd,
 // Private methods //
 /////////////////////
 
-#define KOPTIX_DEBUG
+// #define KOPTIX_DEBUG
 
 void OptixTracer::_initialize_optix()
 {
@@ -483,7 +483,7 @@ void OptixTracer::_initialize_optix()
 	//
 	_optix_pipeline = nullptr;
 	{
-		const int max_trace_depth = 2;
+		const int max_trace_depth = 15;
 
 		OptixProgramGroup program_groups[] = {
 			_programs.raygen,
@@ -982,7 +982,7 @@ void OptixTracer::_optix_update_materials()
 			HitGroupSbtRecord hg_sbt {};
 			hg_sbt.data.area_lights = &area_lights[i];
 			hg_sbt.data.n_area_lights = 1;
-			hg_sbt.data.material.diffuse
+			hg_sbt.data.material.emission
 				= to_f3(_cached.lights[i]->color);
 			hg_sbt.data.material.type = Shading::eEmissive;
 
@@ -1007,39 +1007,29 @@ void OptixTracer::_optix_update_materials()
 		_optix_sbt.hitgroupRecordBase = _optix_hg_sbt;
 		_optix_sbt.hitgroupRecordCount = hg_sbts.size();
 		_optix_sbt.hitgroupRecordStrideInBytes = sizeof(HitGroupSbtRecord);
-
-		KOBRA_LOG_FILE(Log::INFO) << "Updated SBT with "
-			<< hg_sbts.size() << " records\n";
-
-		// Dump SBT (at least headers)
-		for (int i = 0; i < hg_sbts.size(); i++) {
-			std::cout << "SBT record " << i << ": ";
-
-			// Write header in hex
-			uint64_t *header = (uint64_t *) &hg_sbts[i];
-			for (int j = 0; j < OPTIX_SBT_RECORD_HEADER_SIZE/sizeof(uint64_t); j++) {
-				std::cout << std::hex << header[j] << "";
-			}
-
-			std::cout << std::endl;
-		}
 	}
 }
 
 void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 {
 	optix_rt::Params params;
+
 	params.image        = _result_buffer.dev <uchar4> ();
 	params.image_width  = width;
 	params.image_height = height;
+
 	params.handle       = _traversables.all_objects;
 	params.handle_shadow = _traversables.pure_objects;
+
 	params.cam_eye      = to_f3(transform.position);
 
 	auto uvw = kobra::uvw_frame(camera, transform);
 	params.cam_u = to_f3(uvw.u);
 	params.cam_v = to_f3(uvw.v);
 	params.cam_w = to_f3(uvw.w);
+
+	float ms = timer.elapsed_start();
+	params.time = sin(ms * 12.3243f) * cos(1 - ms * 0.123f);
 
 	CUdeviceptr d_param;
 	CUDA_CHECK( cudaMalloc( reinterpret_cast<void**> (&d_param),

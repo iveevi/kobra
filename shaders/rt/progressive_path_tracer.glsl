@@ -241,9 +241,9 @@ vec3 Ld(vec3 x, vec3 wo, vec3 n, Material mat)
 	}
 
 	if (pdf_light > 1e-9 && trace(ray_light).id == light_id) {
-		float weight = power(pdf_light, pdf_brdf);
+		float weight = power(pdf_brdf, pdf_light);
 		vec3 intensity = light.color * light.power;
-		contr_brdf += weight * f * intensity/pdf_light;
+		contr_brdf += weight * f * intensity/pdf_brdf;
 	}
 
 	return contr_nee + contr_brdf;
@@ -268,6 +268,9 @@ vec3 Lo(vec3 x, vec3 wo, vec3 n, Material mat, int depth)
 		// Generate random direction
 		vec3 wi = ggx_sample(n, wo, mat);
 		float pdf = ggx_pdf(mat, n, wi, wo);
+
+		if (pdf < 1e-9)
+			break;
 
 		vec3 f = brdf(mat, n, wi, wo) * abs(dot(n, wi));
 		vec3 T = f/pdf;
@@ -295,6 +298,7 @@ vec3 Lo(vec3 x, vec3 wo, vec3 n, Material mat, int depth)
 		n = hit.normal;
 		mat = hit.mat;
 		throughput *= T/(1 - q);
+		wo = -wi;
 	}
 
 	return contr;
@@ -352,7 +356,7 @@ void main()
 	vec3 color = pathtracer(ray, MAX_DEPTH);
 	vec3 pcolor = cast_color(frame.pixels[index]);
 	pcolor = pow(pcolor, vec3(2.2));
-	color = (color + pcolor * pc.present)/(pc.present + 1.0f);
+	// color = (color + pcolor * pc.present)/(pc.present + 1.0f);
 	color = pow(color, vec3(1.0/2.2));
 	frame.pixels[index] = cast_color(color);
 }

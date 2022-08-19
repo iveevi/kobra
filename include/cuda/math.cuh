@@ -95,7 +95,6 @@ KCUDA_INLINE KCUDA_HOST_DEVICE float clamp( const float f, const float a, const 
     return fmaxf( a, fminf( f, b ) );
 }
 
-
 /* float2 functions */
 /******************************************************************************/
 
@@ -532,6 +531,12 @@ KCUDA_INLINE KCUDA_HOST_DEVICE float3 floor(const float3& v)
 KCUDA_INLINE KCUDA_HOST_DEVICE float3 reflect(const float3& i, const float3& n)
 {
   return i - 2.0f * n * dot(n,i);
+}
+
+// absolute value
+KCUDA_INLINE KCUDA_HOST_DEVICE float3 abs(const float3 &v)
+{
+	return make_float3(fabs(v.x), fabs(v.y), fabs(v.z));
 }
 
 /** Faceforward
