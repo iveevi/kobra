@@ -23,10 +23,7 @@ const float p = 2.0f;
 float ggx_d(vec3 n, vec3 h, Material mat)
 {
 	float alpha = mat.roughness;
-	float theta = acos(clamp(dot(n, h), 0, 1));
-	if (dot(n, h) >= 1.0f)
-		theta = 0.0f;
-
+	float theta = acos(clamp(dot(n, h), 0, 0.999f));
 	return (alpha * alpha)
 		/ (PI * pow(theta, 4)
 		* pow(alpha * alpha + tan(theta) * tan(theta), 2.0f));
@@ -39,9 +36,7 @@ float G1(vec3 n, vec3 v, Material mat)
 		return 0.0f;
 
 	float alpha = mat.roughness;
-	float theta = acos(clamp(dot(n, v), 0, 1));
-	if (dot(n, v) >= 1.0f)
-		theta = 0.0f;
+	float theta = acos(clamp(dot(n, v), 0, 0.999f));
 
 	float tan_theta = tan(theta);
 
@@ -186,9 +181,6 @@ vec3 sample_area_light(AreaLight light)
 // Direct lighting
 vec3 Ld(vec3 x, vec3 wo, vec3 n, Material mat)
 {
-	if (mat.type == SHADING_EMISSIVE)
-		return vec3(0.0f);
-
 	vec3 contr_nee = vec3(0.0f);
 	vec3 contr_brdf = vec3(0.0f);
 
@@ -256,6 +248,9 @@ vec3 Lo(vec3 x, vec3 wo, vec3 n, Material mat, int depth)
 	vec3 throughput = vec3(1.0f);
 
 	for (int i = 0; i < depth; i++) {
+		if (mat.type == SHADING_EMISSIVE)
+			break;
+
 		// Fix normal
 		n = normalize(n);
 		if (dot(n, wo) <= 0.0f)
