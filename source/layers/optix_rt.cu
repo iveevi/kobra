@@ -609,7 +609,13 @@ extern "C" __global__ void __closesthit__radiance()
 	float3 f = brdf(material, n, wi, wo) * abs(dot(n, wi));
 	float3 T = f/pdf;
 
-	rp->throughput *= T;
+	// Russian roulette
+	float p = max(T.x, max(T.y, T.z));
+	float q = 1 - min(1.0f, p);
+	if (fract(rp->seed.x) < q)
+		return;
+
+	rp->throughput *= T/(1 - q);
 	rp->depth++;
 
 	// Recursive raytrace
