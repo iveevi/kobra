@@ -435,9 +435,6 @@ __device__ bool shadow_visibility(float3 origin, float3 dir, float R)
 __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 		Material mat, float3 &seed)
 {
-	if (mat.type == Shading::eEmissive)
-		return float3 {0, 0, 0};
-
 	float3 contr_nee {0.0f};
 	float3 contr_brdf {0.0f};
 
@@ -460,8 +457,6 @@ __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 		bool vis = shadow_visibility(x, wi, R);
 		if (pdf_light > 1e-9 && vis) {
 			float weight = power(pdf_light, pdf_brdf);
-			weight = 1.0f;
-
 			float3 intensity = light.intensity;
 			contr_nee += weight * f * intensity/pdf_light;
 		}
@@ -479,15 +474,14 @@ __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 
 	// TODO: need to check intersection for lights specifically (and
 	// arbitrary ones too?)
-	bool vis = light.intersects(x, wi);
-	if (vis) {
-		// TODO: uncomment this?
-		// float R = it.time;
-		pdf_light = (R * R)/(light.area() * abs(dot(light.normal(), wi)));
-	}
+	float ltime = light.intersects(x, wi);
+	if (ltime <= 0.0f)
+		return contr_nee;
 
-	if (pdf_light > 1e-9 && vis) {
-		float weight = power(pdf_light, pdf_brdf);
+	R = ltime;
+	pdf_light = (R * R)/(light.area() * abs(dot(light.normal(), wi)));
+	if (pdf_light > 1e-9) {
+		float weight = power(pdf_brdf, pdf_light);
 		float3 intensity = light.intensity;
 		contr_brdf += weight * f * intensity/pdf_brdf;
 	}
@@ -511,7 +505,7 @@ static __forceinline__ __device__ float4 sample_texture
 		(HitGroupData *hit_data, cudaTextureObject_t tex, uint3 triangle, float2 bary)
 {
 	float2 uv = interpolate(hit_data->texcoords, triangle, bary);
-	return tex2D <float4> (tex, uv.x, uv.y);
+	return tex2D <float4> (tex, uv.x, 1 - uv.y);
 }
 
 // Calculate hit normal
@@ -565,7 +559,7 @@ __device__ void calculate_material
 }
 
 extern "C" __global__ void __closesthit__radiance()
-{	
+{
 	// Get payload
 	RayPacket *rp;
 	unsigned int i0 = optixGetPayload_0();
@@ -580,9 +574,7 @@ extern "C" __global__ void __closesthit__radiance()
 
 	// TODO: check for light, not just emissive material
 	if (hit_data->material.type == Shading::eEmissive) {
-		if (rp->depth == 0)
-			rp->value = hit_data->material.emission;
-
+		rp->value += rp->throughput * hit_data->material.emission;
 		rp->throughput = {0, 0, 0};
 		return;
 	}

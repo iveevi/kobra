@@ -45,7 +45,7 @@ struct Material {
 	Shading		type;
 };
 
-__forceinline__ __device__ bool intersects_triangle
+__forceinline__ __device__ float intersects_triangle
 		(float3 v1, float3 v2, float3 v3,
 		 float3 origin, float3 dir)
 {
@@ -54,17 +54,18 @@ __forceinline__ __device__ bool intersects_triangle
 	float3 s1 = cross(dir, e2);
 	float divisor = dot(s1, e1);
 	if (divisor == 0.0)
-		return false;
+		return -1;
 	float3 s = origin - v1;
 	float inv_divisor = 1.0 / divisor;
 	float b1 = dot(s, s1) * inv_divisor;
 	if (b1 < 0.0 || b1 > 1.0)
-		return false;
+		return -1;
 	float3 s2 = cross(s, e1);
 	float b2 = dot(dir, s2) * inv_divisor;
 	if (b2 < 0.0 || b1 + b2 > 1.0)
-		return false;
-	return true;
+		return -1;
+	float t = dot(e2, s2) * inv_divisor;
+	return t;
 }
 
 // Light type
@@ -82,14 +83,23 @@ struct AreaLight {
 		return normalize(cross(ab, ac));
 	}
 
-	__forceinline__ __device__ bool intersects(float3 origin, float3 dir) {
+	__forceinline__ __device__ float intersects(float3 origin, float3 dir) {
 		float3 v1 = a;
 		float3 v2 = a + ab;
 		float3 v3 = a + ac;
 		float3 v4 = a + ab + ac;
 
-		return intersects_triangle(v1, v2, v3, origin, dir) ||
-			   intersects_triangle(v2, v3, v4, origin, dir);
+		float t1 = intersects_triangle(v1, v2, v3, origin, dir);
+		float t2 = intersects_triangle(v2, v3, v4, origin, dir);
+
+		if (t1 < 0.0 && t2 < 0.0)
+			return -1.0;
+		if (t1 < 0.0)
+			return t2;
+		if (t2 < 0.0)
+			return t1;
+
+		return min(t1, t2);
 	}
 };
 

@@ -207,8 +207,6 @@ vec3 Ld(vec3 x, vec3 wo, vec3 n, Material mat)
 
 		if (pdf_light > 1e-9 && hit_light.id == light_id) {
 			float weight = power(pdf_light, pdf_brdf);
-			weight = 1.0f;
-
 			vec3 intensity = light.color * light.power;
 			contr_nee += weight * f * intensity/pdf_light;
 		}
@@ -227,12 +225,12 @@ vec3 Ld(vec3 x, vec3 wo, vec3 n, Material mat)
 	Ray ray_light = Ray(x, wi, 0, 0);
 	Intersection it = intersection_light(ray_light, light);
 
-	if (it.time != -1) {
-		float R = it.time;
-		pdf_light = (R * R)/(area(light) * abs(dot(normal(light), wi)));
-	}
+	if (it.time <= -1)
+		return contr_nee;
 
-	if (pdf_light > 1e-9 && trace(ray_light).id == light_id) {
+	R = it.time;
+	pdf_light = (R * R)/(area(light) * abs(dot(normal(light), wi)));
+	if (pdf_light > 1e-9) {
 		float weight = power(pdf_brdf, pdf_light);
 		vec3 intensity = light.color * light.power;
 		contr_brdf += weight * f * intensity/pdf_brdf;
@@ -248,8 +246,10 @@ vec3 Lo(vec3 x, vec3 wo, vec3 n, Material mat, int depth)
 	vec3 throughput = vec3(1.0f);
 
 	for (int i = 0; i < depth; i++) {
-		if (mat.type == SHADING_EMISSIVE)
+		if (mat.type == SHADING_EMISSIVE) {
+			contr += throughput * mat.emission;
 			break;
+		}
 
 		// Fix normal
 		n = normalize(n);
@@ -309,7 +309,7 @@ vec3 pathtracer(Ray ray, int depth)
 	vec3 x = hit.point + hit.normal * eps;
 	vec3 wo = -ray.direction;
 
-	vec3 color = hit.mat.emission + Lo(x, wo, hit.normal, hit.mat, 5);
+	vec3 color = Lo(x, wo, hit.normal, hit.mat, 5);
 	return clamp(color, 0.0f, 1.0f);
 }
 
