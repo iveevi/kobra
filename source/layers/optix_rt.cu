@@ -87,9 +87,10 @@ extern "C" __global__ void __raygen__rg()
 	// Unpack payload
 	ray_packet = *unpack_point <RayPacket> (i0, i1);
 
-	// Record results in our output raster
-	params.image[idx.y * params.image_width + idx.x]
-		= kobra::cuda::make_color(ray_packet.value);
+	// Record the results
+	int index = idx.x + params.image_width * idx.y;
+	params.pbuffer[index] = (ray_packet.value + params.pbuffer[index] * params.accumulated)/(params.accumulated + 1);
+	params.image[index] = kobra::cuda::make_color(params.pbuffer[index]);
 }
 
 extern "C" __global__ void __miss__radiance()

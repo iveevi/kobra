@@ -356,7 +356,7 @@ void main()
 	vec3 color = pathtracer(ray, MAX_DEPTH);
 	vec3 pcolor = cast_color(frame.pixels[index]);
 	pcolor = pow(pcolor, vec3(2.2));
-	// color = (color + pcolor * pc.present)/(pc.present + 1.0f);
+	color = (color + pcolor * pc.present)/(pc.present + 1.0f);
 	color = pow(color, vec3(1.0/2.2));
 	frame.pixels[index] = cast_color(color);
 }

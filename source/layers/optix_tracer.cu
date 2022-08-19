@@ -226,6 +226,7 @@ void OptixTracer::render(const vk::raii::CommandBuffer &cmd,
 			raytracers_index++;
 		}
 
+		// TODO: check dirty lights
 		if (ecs.exists <Light> (i)) {
 			const Light *light = &ecs.get <Light> (i);
 
@@ -234,6 +235,13 @@ void OptixTracer::render(const vk::raii::CommandBuffer &cmd,
 				light_transforms.push_back(&ecs.get <Transform> (i));
 			}
 		}
+	}
+
+	// Dirty means reset samples
+	bool dirty = (_cached.camera_transform != camera_transform);
+	if (dirty) {
+		_cached.camera_transform = camera_transform;
+		_accumulated = 0;
 	}
 
 	if (dirty_raytracers) {
@@ -1014,9 +1022,12 @@ void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 {
 	optix_rt::Params params;
 
+	params.pbuffer = (float3 *) _buffers.pbuffer;
 	params.image        = _result_buffer.dev <uchar4> ();
 	params.image_width  = width;
 	params.image_height = height;
+
+	params.accumulated = _accumulated++;
 
 	params.handle       = _traversables.all_objects;
 	params.handle_shadow = _traversables.pure_objects;

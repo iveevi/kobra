@@ -8,6 +8,7 @@
 // Engine headers
 #include "../backend.hpp"
 #include "../cuda/buffer_data.cuh"
+#include "../cuda/alloc.cuh"
 #include "../ecs.hpp"
 #include "../timer.hpp"
 
@@ -57,6 +58,7 @@ class OptixTracer {
 	// Buffers
 	struct {
 		CUdeviceptr		area_lights;
+		CUdeviceptr		pbuffer;
 	} _buffers;
 
 	// Output resources
@@ -72,8 +74,9 @@ class OptixTracer {
 
 	// Cached entity data
 	struct {
-		std::vector <const Light *> lights;
-		std::vector <const Transform *> light_transforms;
+		std::vector <const Light *> lights {};
+		std::vector <const Transform *> light_transforms {};
+		Transform camera_transform {};
 	} _cached;
 
 	std::vector <const kobra::Raytracer *>
@@ -162,10 +165,14 @@ public:
 	BufferData _staging = nullptr;
 
 	Timer timer;
+	int _accumulated = 0;
 
 	// Constructor
 	OptixTracer(const Context &ctx, const vk::AttachmentLoadOp &load)
 			: _ctx(ctx), _result_buffer(width * height * 4) {
+		// Initialize buffers
+		_buffers.pbuffer = cuda::alloc(width * height * sizeof(float3));
+
 		_initialize_optix();
 		_initialize_vulkan_structures(load);
 

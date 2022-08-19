@@ -14,6 +14,8 @@ namespace optix_rt {
 
 struct Params
 {
+	float3			*pbuffer;
+
 	uchar4			*image;
 	unsigned int		image_width;
 	unsigned int		image_height;
@@ -24,6 +26,8 @@ struct Params
 	float3			cam_w;
 
 	float			time;
+
+	int			accumulated;
 
 	OptixTraversableHandle	handle;
 	OptixTraversableHandle	handle_shadow;
