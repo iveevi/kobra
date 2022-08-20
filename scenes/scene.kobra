@@ -19,6 +19,7 @@ roughness: 0.050000
 refraction: 1.000000
 albedo_texture: 0
 normal_texture: 0
+roughness_texture: 0
 shading_type: Diffuse 
 
 [MESH]
@@ -47,6 +48,7 @@ roughness: 0.00000
 refraction: 1.000000
 albedo_texture: resources/wood_floor_albedo.jpg
 normal_texture: resources/wood_floor_normal.jpg
+roughness_texture: 0
 shading_type: Diffuse 
 
 [MESH]
@@ -75,6 +77,7 @@ roughness: 0.001000
 refraction: 1.000000
 albedo_texture: 0
 normal_texture: 0
+roughness_texture: 0
 shading_type: Reflection 
 
 [MESH]
@@ -103,6 +106,7 @@ roughness: 0.000000
 refraction: 1.500000
 albedo_texture: 0
 normal_texture: 0
+roughness_texture: 0
 shading_type: Reflection Transmission 
 
 [MESH]
@@ -126,7 +130,7 @@ fov: 45.000000
 aspect: 1.000000
 
 [ENTITY]
-name: Light 2
+name: Light
 
 [TRANSFORM]
 position: 5.000000 10.000000 0.000000

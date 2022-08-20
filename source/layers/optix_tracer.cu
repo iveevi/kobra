@@ -667,6 +667,9 @@ void OptixTracer::_optix_build()
 			&build_input, 1,
 			&gas_buffer_sizes
 		));
+		
+		KOBRA_LOG_FUNC(Log::INFO) << "GAS buffer sizes: " << gas_buffer_sizes.tempSizeInBytes
+			<< " " << gas_buffer_sizes.outputSizeInBytes << std::endl;
 
 		d_gas_output = cuda::alloc(gas_buffer_sizes.outputSizeInBytes);
 		d_gas_tmp = cuda::alloc(gas_buffer_sizes.tempSizeInBytes);
@@ -745,6 +748,9 @@ void OptixTracer::_optix_build()
 			&build_input, 1,
 			&gas_buffer_sizes
 		));
+		
+		KOBRA_LOG_FUNC(Log::INFO) << "Light GAS buffer sizes: " << gas_buffer_sizes.tempSizeInBytes
+			<< " " << gas_buffer_sizes.outputSizeInBytes << std::endl;
 
 		d_gas_output = cuda::alloc(gas_buffer_sizes.outputSizeInBytes);
 		d_gas_tmp = cuda::alloc(gas_buffer_sizes.tempSizeInBytes);
@@ -927,6 +933,8 @@ void OptixTracer::_optix_update_materials()
 				= to_f3(light->power * light->color);
 		}
 
+		KOBRA_LOG_FUNC(Log::INFO) << "Number of area lights: " << area_lights.size() << std::endl;
+
 		_buffers.area_lights = (CUdeviceptr) cuda::make_buffer(area_lights);
 	}
 
@@ -956,6 +964,7 @@ void OptixTracer::_optix_update_materials()
 			generate_mesh_data(_c_raytracers[i], _c_transforms[i], hg_sbt.data);
 
 			// Import textures if necessary
+			// TODO: method?
 			if (mat.has_albedo()) {
 				const ImageData &diffuse = TextureManager::load_texture(
 					_ctx.dev(), mat.albedo_texture
@@ -974,6 +983,15 @@ void OptixTracer::_optix_update_materials()
 				hg_sbt.data.textures.has_normal = true;
 			}
 
+			if (mat.has_roughness()) {
+				const ImageData &roughness = TextureManager::load_texture(
+					_ctx.dev(), mat.roughness_texture
+				);
+
+				hg_sbt.data.textures.roughness = import_vulkan_texture(*_ctx.device, roughness);
+				hg_sbt.data.textures.has_roughness = true;
+			}
+
 			// Lights
 			hg_sbt.data.area_lights = (optix_rt::AreaLight *) _buffers.area_lights;
 			hg_sbt.data.n_area_lights = area_lights.size();
@@ -988,7 +1006,7 @@ void OptixTracer::_optix_update_materials()
 		// Area lights
 		for (int i = 0; i < _cached.lights.size(); i++) {
 			HitGroupSbtRecord hg_sbt {};
-			hg_sbt.data.area_lights = &area_lights[i];
+			hg_sbt.data.area_lights = (optix_rt::AreaLight *) _buffers.area_lights;
 			hg_sbt.data.n_area_lights = 1;
 			hg_sbt.data.material.emission
 				= to_f3(_cached.lights[i]->color);
@@ -1028,6 +1046,7 @@ void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 	params.image_height = height;
 
 	params.accumulated = _accumulated++;
+	params.instances = _c_raytracers.size() + _cached.lights.size();
 
 	params.handle       = _traversables.all_objects;
 	params.handle_shadow = _traversables.pure_objects;
@@ -1052,8 +1071,8 @@ void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 			      ) );
 
 	OPTIX_CHECK( optixLaunch( _optix_pipeline, _optix_stream, d_param,
-				sizeof(optix_rt::Params), &_optix_sbt, width, height,
-				1) );
+				sizeof(optix_rt::Params), &_optix_sbt,
+				width, height, 1 ) );
 	CUDA_SYNC_CHECK();
 
 	CUDA_CHECK( cudaFree( reinterpret_cast<void*>( d_param ) ) );

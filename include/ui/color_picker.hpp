@@ -20,11 +20,6 @@ namespace ui {
 struct ColorPicker {
 	ui::Rect r_saturation;
 	ui::Rect r_hue;
-	ui::Rect r_result;
-
-	// TODO: remove all text from color picker
-	ui::Text t_label;
-	ui::Text t_color;
 
 	ui::Button b_square;
 	ui::Button b_saturation;
@@ -124,7 +119,6 @@ struct ColorPicker {
 		b_hue_slider.shape()->max = {r_hue.max.x + 2.0f, y + button_size/2.0f};
 
 		r_saturation.color.x = hue/360.0f;
-		r_result.color = color;
 
 		glm::vec3 hue_color = hue_to_rgb(hue, 1.0f, 0.5f);
 		b_hue_slider.set_idle(hue_color);
@@ -135,10 +129,7 @@ struct ColorPicker {
 		b_saturation.set_hover(color * 0.5f);
 		b_saturation.set_pressed(color * 0.75f);
 
-		// Set text
-		t_color.text = common::sprintf("%.2f %.2f %.2f", color.x, color.y, color.z),
-		t_color.anchor.x = r_hue.max.x - fr->size(t_color).x - 5.0f;
-
+		// Set ref
 		if (ref)
 			*ref = color;
 	}
@@ -182,7 +173,6 @@ struct ColorPicker {
 
 		// Set color
 		glm::vec3 color = hue_to_rgb(hue, saturation.x, 1 - saturation.y);
-		r_result.color = color;
 
 		// Set position of button
 		glm::vec2 size_2 = glm::vec2 {button_size, button_size}/2.0f;
@@ -193,10 +183,7 @@ struct ColorPicker {
 		b_saturation.set_hover(color * 0.5f);
 		b_saturation.set_pressed(color * 0.75f);
 
-		// Set text
-		t_color.text = common::sprintf("%.2f %.2f %.2f", color.x, color.y, color.z),
-		t_color.anchor.x = r_hue.max.x - fr->size(t_color).x - 5.0f;
-
+		// Set ref
 		if (ref)
 			*ref = color;
 	}
@@ -294,29 +281,6 @@ struct ColorPicker {
 		// Result panel
 		float offset = 5.0f + button_size/2.0f;
 		float result_size = 15.0f;
-		r_result = ui::Rect(
-			{min.x + 5.0f, max.y + offset},
-			{min.x + result_size + 5.0f, max.y + result_size + offset},
-			r_saturation.color,
-			0.005f
-		);
-
-		// Text
-		t_label = ui::Text(
-			args.label,
-			{min.x + result_size + 10.0f, max.y + offset},
-			glm::vec3 {1.0},
-			0.4f
-		);
-
-		t_color = ui::Text {
-			"text",
-			{max.x, max.y + offset},
-			glm::vec3 {1.0},
-			0.4f
-		};
-
-		t_color.anchor.x -= fr->size(t_color).x + 5.0f;
 
 		// Buttons
 		ui::Button::Args button_args = ui::Button::Args {};
@@ -387,9 +351,6 @@ struct ColorPicker {
 			ref(other.ref),
 			r_saturation(other.r_saturation),
 			r_hue(other.r_hue),
-			r_result(other.r_result),
-			t_label(other.t_label),
-			t_color(other.t_color),
 			b_square(std::move(other.b_square)),
 			b_saturation(std::move(other.b_saturation)),
 			b_square_hue(std::move(other.b_square_hue)),
@@ -415,10 +376,6 @@ struct ColorPicker {
 
 		r_saturation = other.r_saturation;
 		r_hue = other.r_hue;
-		r_result = other.r_result;
-
-		t_label = other.t_label;
-		t_color = other.t_color;
 
 		b_square = std::move(other.b_square);
 		b_saturation = std::move(other.b_saturation);
@@ -447,13 +404,13 @@ struct ColorPicker {
 
 	std::vector <ui::Rect *> shapes() {
 		return {
-			&r_saturation, &r_hue, &r_result,
+			&r_saturation, &r_hue,
 			b_saturation.shape(), b_hue_slider.shape()
 		};
 	}
 
 	std::vector <ui::Text> texts() {
-		return {t_label, t_color};
+		return {};
 	}
 };
 

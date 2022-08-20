@@ -17,10 +17,12 @@
 #include "include/ui/color_picker.hpp"
 #include "include/ui/slider.hpp"
 #include "tinyfiledialogs.h"
+#include <sched.h>
 
 using namespace kobra;
 
 // Scene path
+// std::string scene_path = "~/models/sponza/scene.kobra";
 std::string scene_path = "scenes/scene.kobra";
 
 // Test app
@@ -65,7 +67,7 @@ struct ECSApp : public BaseApp {
 			// TODO: modify this constructor for the rectangle
 			r_background.min = glm::vec2 {5.0f, 5.0f};
 			r_background.max = glm::vec2 {scene_graph_width - 5, window_size.y - 5};
-			r_background.color = glm::vec3 {0.6f, 0.7, 0.6f};
+			r_background.color = glm::vec3 {0.6f};
 			r_background.radius = 0.005f;
 		}
 
@@ -99,9 +101,9 @@ struct ECSApp : public BaseApp {
 					button_args.min = {10, y},
 					button_args.max = {scene_graph_width - 10, y + 30.0f},
 					button_args.radius = 0.005f,
-					button_args.idle = glm::vec3 {0.6, 0.7, 0.6},
-					button_args.hover = glm::vec3 {0.7, 0.8, 0.7},
-					button_args.pressed = glm::vec3 {0.65, 0.8, 0.65},
+					button_args.idle = glm::vec3 {0.6, 0.6, 0.7},
+					button_args.hover = glm::vec3 {0.7, 0.7, 0.8},
+					button_args.pressed = glm::vec3 {0.65, 0.65, 0.75},
 					button_args.on_click = {{&selected_entity, _on_click {i}}},
 
 					b_entities[i] = ui::Button(mouse_events, button_args);
@@ -114,7 +116,7 @@ struct ECSApp : public BaseApp {
 				auto s = b_entities[i].shape();
 
 				if (i == selected_entity)
-					s->color = glm::vec3 {0.65, 0.8, 0.65};
+					s->color = glm::vec3 {0.65, 0.65, 0.75};
 
 				shapes.push_back(s);
 			}
@@ -136,7 +138,7 @@ struct ECSApp : public BaseApp {
 				auto t = ui::Text(
 					e.name,
 					{x + 5.0f, y},
-					glm::vec3 {0.5, 0.5, 1.0},
+					glm::vec3 {0.2},
 					0.4f
 				);
 
@@ -198,7 +200,7 @@ struct ECSApp : public BaseApp {
 		r_background = ui::Rect(
 			glm::vec2 {window_size.x - component_panel_width + 5, 5},
 			glm::vec2 {window_size.x - 5, window_size.y - 5},
-			glm::vec3 {0.6f, 0.7, 0.6f},
+			glm::vec3 {0.6f},
 			0.005f
 		);
 

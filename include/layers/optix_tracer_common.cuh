@@ -28,6 +28,7 @@ struct Params
 	float			time;
 
 	int			accumulated;
+	int			instances;
 
 	OptixTraversableHandle	handle;
 	OptixTraversableHandle	handle_shadow;
@@ -134,13 +135,15 @@ struct HitGroupData
 	struct {
 		cudaTextureObject_t	diffuse;
 		cudaTextureObject_t	normal;
+		cudaTextureObject_t	roughness;
 
-		bool			has_diffuse;
-		bool			has_normal;
+		bool			has_diffuse = false;
+		bool			has_normal = false;
+		bool			has_roughness = false;
 	} textures;
 
 	// Light data
-	AreaLight		*area_lights;
+	AreaLight		*area_lights = nullptr;
 	int			n_area_lights;
 };
 

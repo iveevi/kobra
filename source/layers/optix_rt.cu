@@ -424,7 +424,7 @@ __device__ bool shadow_visibility(float3 origin, float3 dir, float R)
 		0, R - 0.01f, 0,
 		OptixVisibilityMask(255),
 		OPTIX_RAY_FLAG_NONE,
-		5, 0, 1,
+		params.instances, 0, 1,
 		j0, j1
 	);
 
@@ -435,12 +435,15 @@ __device__ bool shadow_visibility(float3 origin, float3 dir, float R)
 __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 		Material mat, float3 &seed)
 {
+	if (hit_data->n_area_lights == 0)
+		return float3 {0.0f, 0.0f, 0.0f};
+
 	float3 contr_nee {0.0f};
 	float3 contr_brdf {0.0f};
 
 	// Random area light for NEE
 	unsigned int i = rand(hit_data->n_area_lights);
-	AreaLight light = hit_data->area_lights[0];
+	AreaLight light = hit_data->area_lights[i];
 
 	// NEE
 	float3 lpos = sample_area_light(light, seed);
@@ -466,7 +469,7 @@ __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 	wi = ggx_sample(n, wo, mat, seed);
 	if (dot(wi, n) <= 0.0f)
 		return contr_nee;
-
+	
 	f = brdf(mat, n, wi, wo) * dot(n, wi);
 
 	float pdf_brdf = ggx_pdf(mat, n, wi, wo);
@@ -556,6 +559,15 @@ __device__ void calculate_material
 			)
 		);
 	}
+
+	if (hit_data->textures.has_roughness) {
+		mat.roughness = sample_texture(hit_data,
+			hit_data->textures.roughness,
+			triangle, bary
+		).x;
+
+		mat.roughness = sqrt(mat.roughness);
+	}
 }
 
 extern "C" __global__ void __closesthit__radiance()
@@ -610,7 +622,7 @@ extern "C" __global__ void __closesthit__radiance()
 	float3 T = f/pdf;
 
 	// Russian roulette
-	float p = max(T.x, max(T.y, T.z));
+	float p = max(rp->throughput.x, max(rp->throughput.y, rp->throughput.z));
 	float q = 1 - min(1.0f, p);
 	if (fract(rp->seed.x) < q)
 		return;

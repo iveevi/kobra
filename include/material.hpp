@@ -31,6 +31,7 @@ struct Material {
 	// TODO: refactor ttexture names (diffuse, etc)
 	std::string	albedo_texture = "";
 	std::string	normal_texture = "";
+	std::string	roughness_texture = "";
 
 	// TODO: emissive termm, reafctor eEmissive to eLight?
 	Shading		type = Shading::eDiffuse;
@@ -38,14 +39,10 @@ struct Material {
 	// Properties
 	bool has_albedo() const;
 	bool has_normal() const;
-
-	// Save material to file
-	void save(std::ofstream &) const;
+	bool has_roughness() const;
 
 	// Serialize to GPU buffer
 	void serialize(std::vector <aligned_vec4> &) const;
-
-	static Material from_file(std::ifstream &, const std::string &, bool &);
 };
 
 using MaterialPtr = std::shared_ptr <Material>;

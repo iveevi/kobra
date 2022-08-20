@@ -394,6 +394,10 @@ std::optional <Mesh> Mesh::load(const std::string &path)
 	// Process the scene (root node)
 	Mesh m = process_node(scene->mRootNode, scene);
 	m._source = path;
+
+	KOBRA_LOG_FUNC(Log::INFO) << "Loaded mesh with " << m.submeshes.size()
+		<< " submeshes (#verts = " << m.vertices() << ", #triangles = "
+		<< m.triangles() << "), from " << path << std::endl;
 	return m;
 }
 

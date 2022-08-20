@@ -19,6 +19,7 @@ roughness: %f
 refraction: %f
 albedo_texture: %s
 normal_texture: %s
+roughness_texture: %s
 )";
 
 static constexpr char rasterizer_format[]
@@ -236,6 +237,7 @@ void load_material(Entity &e, std::ifstream &fin)
 {
 	static char buf_albedo[1024];
 	static char buf_normal[1024];
+	static char buf_roughness[1024];
 
 	e.add <Material> ();
 
@@ -249,7 +251,7 @@ void load_material(Entity &e, std::ifstream &fin)
 		&material.shininess,
 		&material.roughness,
 		&material.refraction,
-		buf_albedo, buf_normal
+		buf_albedo, buf_normal, buf_roughness
 	);
 
 	material.shininess = glm::clamp(material.shininess, 0.0f, 1.0f);
@@ -272,6 +274,9 @@ void load_material(Entity &e, std::ifstream &fin)
 
 	if (std::string(buf_normal) != "0")
 		material.normal_texture = buf_normal;
+
+	if (std::string(buf_roughness) != "0")
+		material.roughness_texture = buf_roughness;
 
 	material.type = *shading_from_str(value);
 }
