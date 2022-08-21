@@ -9,6 +9,7 @@
 #include "bvh.hpp"
 #include "transform.hpp"
 #include "vertex.hpp"
+#include "material.hpp"
 
 namespace kobra {
 
@@ -67,10 +68,13 @@ public:
 	// Data
 	VertexList	vertices;
 	Indices		indices;
+	Material	material;
 
 	// Constructors
-	Submesh(const VertexList &vs, const Indices &is, bool calculate_tangents = true)
-			: vertices(vs), indices(is) {
+	Submesh(const VertexList &vs, const Indices &is,
+			const Material &mat = Material(),
+			bool calculate_tangents = true)
+			: vertices(vs), indices(is), material(mat) {
 		// Process the vertex data
 		if (calculate_tangents)
 			_process_vertex_data();

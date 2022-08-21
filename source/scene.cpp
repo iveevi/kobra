@@ -366,6 +366,10 @@ void load_mesh(Entity &e, std::ifstream &fin)
 	}
 }
 
+/* std::set <uint32_t> parse_indices(std::ifstream &fin)
+{
+} */
+
 void load_rasterizer(Entity &e, std::ifstream &fin, const Device &dev)
 {
 	static char buf_mode[1024];
@@ -387,7 +391,7 @@ void load_rasterizer(Entity &e, std::ifstream &fin, const Device &dev)
 	std::string line;
 	std::getline(fin, line);
 
-	sscanf(line.c_str(), "mode: %s", buf_mode);
+	sscanf(line.c_str(), "mode: %[^\n]", buf_mode);
 
 	// Get index
 	int index = 0;

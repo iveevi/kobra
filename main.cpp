@@ -24,7 +24,7 @@ using namespace kobra;
 
 // Scene path
 // std::string scene_path = "~/models/sponza/scene.kobra";
-std::string scene_path = "scenes/ggx.kobra";
+std::string scene_path = "/home/venki/models/breakfast_room.kobra";
 
 // Test app
 struct ECSApp : public BaseApp {
@@ -243,7 +243,7 @@ struct ECSApp : public BaseApp {
 		scene.ecs.info <Mesh> ();
 	}
 
-	int mode = 2;	// 0 for raster, 1 for raytracer, 2 for OptiX
+	int mode = 0;	// 0 for raster, 1 for raytracer, 2 for OptiX
 	std::vector <std::string> mode_strs {
 		"Rasterize", "Raytrace", "OptiX"
 	};

@@ -20,6 +20,7 @@ class Raytracer;
 // Handles the rendering of an entity
 struct Renderer {
 	// TODO: make private
+	// TODO: should hold a list of materials...
 	Material *material = nullptr;
 
 	// No default constructor
@@ -36,9 +37,23 @@ struct Renderer {
 // Rasterizer component
 // 	the entity must have a Mesh component
 class Rasterizer : public Renderer {
-	BufferData	vertex_buffer = nullptr;
-	BufferData	index_buffer = nullptr;
-	size_t		indices = 0;
+	// Push constants
+	struct PushConstants {
+		glm::mat4	model;
+		glm::mat4	view;
+		glm::mat4	perspective;
+
+		glm::vec3	albedo;
+		int		type;
+		float		highlight;
+		float		has_albedo;
+		float		has_normal;
+	};
+public:
+	std::vector <BufferData>	vertex_buffer;
+	std::vector <BufferData>	index_buffer;
+	std::vector <uint32_t>		index_count;
+	std::vector <Material>		materials;
 public:
 	// Raster mode
 	RasterMode mode = RasterMode::eAlbedo;
@@ -50,7 +65,10 @@ public:
 	Rasterizer(const Device &, const Mesh &, Material *);
 
 	// Bind resources to a descriptor set
-	void bind_buffers(const vk::raii::CommandBuffer &) const;
+	void draw(const vk::raii::CommandBuffer &,
+		const vk::raii::PipelineLayout &ppl,
+		PushConstants &) const;
+
 	void bind_material(const Device &, const vk::raii::DescriptorSet &) const;
 
 	// Friends

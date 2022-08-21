@@ -577,6 +577,24 @@ __device__ void calculate_material
 
 extern "C" __global__ void __closesthit__radiance()
 {
+	static constexpr float3 colorwheel[] {
+		float3 {1, 0, 0},
+		float3 {0, 1, 0},
+		float3 {0, 0, 1},
+		float3 {1, 1, 0},
+		float3 {1, 0, 1},
+		float3 {0, 1, 1},
+		float3 {0.5, 0.5, 0.5},
+		float3 {0.5, 1, 0},
+		float3 {0, 0.5, 1},
+		float3 {1, 0.5, 0},
+	};
+
+	static constexpr size_t colorwheel_size = 10;
+
+	// Get instance index of the intersected primitive
+	int instance_index = optixGetInstanceIndex();
+
 	// Get payload
 	RayPacket *rp;
 	unsigned int i0 = optixGetPayload_0();

@@ -6,28 +6,7 @@
 #include "light_set.glsl"
 #include "highlight.glsl"
 
-// Fixed ambient light
-const float ambience = 0.1;
-
-/* TODO: move to light_set module
-vec3 point_light(vec3 light_position, vec3 position, vec3 albedo, vec3 normal)
-{
-	// Blinn Phong
-	vec3 light_dir = normalize(light_position - position);
-	vec3 n = normalize(normal);
-
-	float intensity = 5/distance(light_position, position);
-
-	float diffuse = max(dot(light_dir, n), 0.0);
-	float specular = pow(
-		max(
-			dot(light_dir, reflect(-light_dir, n)),
-			0.0
-		), 32
-	);
-
-	return albedo * intensity * (diffuse + ambience);
-} */
+const float PI = 3.1415926535897932384626433832795;
 
 void main()
 {
@@ -57,13 +36,14 @@ void main()
 	for (int i = 0; i < light_count; i++) {
 		Light light = lights[i];
 
-		// TODO: attenuation
+		// TODO: proper area light interface
+
 		vec3 ldir = normalize(light.position - position);
 		float d = distance(light.position, position);
 
-		vec3 Li = light.intensity/d;
+		vec3 Li = light.intensity/(d * d);
 
-		vec3 diffuse = albedo * max(dot(ldir, n), 0.0);
+		vec3 diffuse = albedo * max(dot(ldir, n), 0.0)/PI;
 		float specular = pow(
 			max(
 				dot(ldir, reflect(-ldir, n)),
@@ -71,7 +51,8 @@ void main()
 			), 1 // TODO: shininess
 		);
 
-		color += Li * (diffuse + vec3(specular)) + ambience;
+		// TODO: view position, material shininess, etc
+		color += Li * (diffuse) + 0.05;
 	}
 
 	// Gamma correction

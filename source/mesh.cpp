@@ -1,3 +1,6 @@
+// Standard headers
+#include <thread>
+
 // Assimp headers
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
@@ -67,7 +70,7 @@ Mesh Mesh::box(const glm::vec3 &center, const glm::vec3 &dim)
 	};
 
 	// TODO: should set source of the mesh to box, then dimensions
-	auto out = Submesh { vertices, indices };
+	auto out = Submesh {vertices, indices};
 	Mesh m = std::vector <Submesh> {out};
 	m._source = "box";
 	return m;
@@ -294,6 +297,9 @@ static Submesh process_mesh(aiMesh *mesh, const aiScene *scene)
 	VertexList vertices;
 	Indices indices;
 
+	std::cout << "\tProcessing mesh with " << mesh->mNumVertices
+		<< " vertices and " << mesh->mNumFaces << " faces" << std::endl;
+
 	// Process all the mesh's vertices
 	for (size_t i = 0; i < mesh->mNumVertices; i++) {
 		// Create a new vertex
@@ -323,6 +329,7 @@ static Submesh process_mesh(aiMesh *mesh, const aiScene *scene)
 			};
 		}
 
+
 		// TODO: material?
 
 		vertices.push_back(v);
@@ -338,7 +345,25 @@ static Submesh process_mesh(aiMesh *mesh, const aiScene *scene)
 			indices.push_back(face.mIndices[j]);
 	}
 
-	return Submesh {vertices, indices};
+	// Material
+	Material mat;
+
+	aiMaterial *material = scene->mMaterials[mesh->mMaterialIndex];
+	
+	// Get diffuse
+	aiString path;
+	if (material->GetTexture(aiTextureType_DIFFUSE, 0, &path) == AI_SUCCESS) {
+		std::cout << "\t\tFound diffuse texture: " << path.C_Str() << std::endl;
+	} else {
+		std::cout << "\t\tNo diffuse texture found" << std::endl;
+		aiColor3D diffuse;
+		material->Get(AI_MATKEY_COLOR_DIFFUSE, diffuse);
+
+		std::cout << "\t\tDiffuse color: " << diffuse.r << ", " << diffuse.g << ", " << diffuse.b << std::endl;
+		mat.diffuse = {diffuse.r, diffuse.g, diffuse.b};
+	}
+
+	return Submesh {vertices, indices, mat};
 }
 
 static Mesh process_node(aiNode *node, const aiScene *scene)
@@ -351,7 +376,11 @@ static Mesh process_node(aiNode *node, const aiScene *scene)
 	}
 
 	// Recusively process all the node's children
+	// TODO: multithreaded task system (using a threadpool, etc) in core/
+	// std::vector <Mesh> children;
+
 	for (size_t i = 0; i < node->mNumChildren; i++) {
+		std::cout << "Processing child " << i << std::endl;
 		Mesh m = process_node(node->mChildren[i], scene);
 
 		for (size_t j = 0; j < m.submeshes.size(); j++)
@@ -398,6 +427,13 @@ std::optional <Mesh> Mesh::load(const std::string &path)
 	KOBRA_LOG_FUNC(Log::INFO) << "Loaded mesh with " << m.submeshes.size()
 		<< " submeshes (#verts = " << m.vertices() << ", #triangles = "
 		<< m.triangles() << "), from " << path << std::endl;
+
+	for (auto &s : m.submeshes) {
+		std::cout << "\tSubmesh with " << s.vertices.size()
+			<< " vertices and " << s.indices.size() / 3 << " triangles"
+			<< std::endl;
+	}
+
 	return m;
 }
 

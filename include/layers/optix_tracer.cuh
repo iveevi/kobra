@@ -83,6 +83,7 @@ class OptixTracer {
 		std::vector <const Light *> lights {};
 		std::vector <const Transform *> light_transforms {};
 		Transform camera_transform {};
+		unsigned int num_instances;
 	} _cached;
 
 	std::vector <const kobra::Raytracer *>

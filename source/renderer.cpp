@@ -7,48 +7,60 @@ namespace kobra {
 
 // Rasterizer
 Rasterizer::Rasterizer(const Device &dev, const Mesh &mesh, Material *mat)
-		: Renderer(mat), indices(mesh.indices())
+		: Renderer(mat)
 {
-	// Buffer sizes
-	vk::DeviceSize vertex_buffer_size = mesh.vertices() * sizeof(Vertex);
-	vk::DeviceSize index_buffer_size = mesh.indices() * sizeof(uint32_t);
-
-	// Create buffers
-	vertex_buffer = BufferData(*dev.phdev, *dev.device,
-		vertex_buffer_size,
-		vk::BufferUsageFlagBits::eVertexBuffer,
-		vk::MemoryPropertyFlagBits::eHostVisible
-			| vk::MemoryPropertyFlagBits::eHostCoherent
-	);
-
-	index_buffer = BufferData(*dev.phdev, *dev.device,
-		index_buffer_size,
-		vk::BufferUsageFlagBits::eIndexBuffer,
-		vk::MemoryPropertyFlagBits::eHostVisible
-			| vk::MemoryPropertyFlagBits::eHostCoherent
-	);
-
-	vk::DeviceSize voffset = 0;
-	vk::DeviceSize ioffset = 0;
-
 	for (size_t i = 0; i < mesh.submeshes.size(); i++) {
+		// Allocate memory for the vertex and index buffers
 		vk::DeviceSize vbuf_size = mesh[i].vertices.size() * sizeof(Vertex);
 		vk::DeviceSize ibuf_size = mesh[i].indices.size() * sizeof(uint32_t);
 
-		// Upload data to buffers
-		vertex_buffer.upload(mesh[i].vertices, voffset);
-		index_buffer.upload(mesh[i].indices, ioffset);
+		vertex_buffer.emplace_back(*dev.phdev, *dev.device,
+			vbuf_size,
+			vk::BufferUsageFlagBits::eVertexBuffer,
+			vk::MemoryPropertyFlagBits::eHostVisible
+				| vk::MemoryPropertyFlagBits::eHostCoherent
+		);
 
-		// Increment offsets
-		voffset += vbuf_size;
-		ioffset += ibuf_size;
+		index_buffer.emplace_back(*dev.phdev, *dev.device,
+			ibuf_size,
+			vk::BufferUsageFlagBits::eIndexBuffer,
+			vk::MemoryPropertyFlagBits::eHostVisible
+				| vk::MemoryPropertyFlagBits::eHostCoherent
+		);
+
+		// Upload data to buffers
+		vertex_buffer[i].upload(mesh[i].vertices);
+		index_buffer[i].upload(mesh[i].indices);
+		index_count.push_back(mesh[i].indices.size());
+		materials.push_back(mesh[i].material);
 	}
 }
 
-void Rasterizer::bind_buffers(const vk::raii::CommandBuffer &cmd) const
+void Rasterizer::draw(const vk::raii::CommandBuffer &cmd,
+		const vk::raii::PipelineLayout &ppl,
+		PushConstants &pc) const
 {
-	cmd.bindVertexBuffers(0, *vertex_buffer.buffer, {0});
-	cmd.bindIndexBuffer(*index_buffer.buffer, 0, vk::IndexType::eUint32);
+	// TODO: parameter for whih submeshes to draw
+	pc.albedo = material->diffuse;
+	pc.type = Shading::eDiffuse;
+	pc.has_albedo = material->has_albedo();
+	pc.has_normal = material->has_normal();
+	
+	for (size_t i = 0; i < vertex_buffer.size(); i++) {
+		// Set the push constants
+		pc.albedo = materials[i].diffuse;
+
+		// Render
+		cmd.pushConstants <PushConstants> (*ppl,
+			vk::ShaderStageFlagBits::eVertex,
+			0, pc
+		);
+
+		cmd.bindVertexBuffers(0, *vertex_buffer[i].buffer, {0});
+		cmd.bindIndexBuffer(*index_buffer[i].buffer, 0, vk::IndexType::eUint32);
+
+		cmd.drawIndexed(index_count[i], 1, 0, 0, 0);
+	}
 }
 
 void Rasterizer::bind_material(const Device &dev, const vk::raii::DescriptorSet &dset) const

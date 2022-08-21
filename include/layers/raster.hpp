@@ -19,9 +19,6 @@ namespace kobra {
 namespace layers {
 
 class Raster {
-	// Push constants
-	struct PushConstants;
-
 	// Vulkan context
 	Context				_ctx;
 

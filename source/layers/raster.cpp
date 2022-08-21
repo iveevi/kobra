@@ -34,19 +34,6 @@ const std::vector <DSLB> Raster::_dsl_bindings {
 // Aux structures //
 ////////////////////
 
-struct Raster::PushConstants {
-	glm::mat4	model;
-	glm::mat4	view;
-	glm::mat4	perspective;
-
-	glm::vec3	albedo;
-	int		type;
-	float		highlight;
-	float		has_albedo;
-	float		has_normal;
-};
-
-
 struct _light {
 	alignas(16)
 	glm::vec3	position;
@@ -89,7 +76,7 @@ Raster::Raster(const Context &ctx, const vk::AttachmentLoadOp &load)
 	// Push constants
 	vk::PushConstantRange push_constants {
 		vk::ShaderStageFlagBits::eVertex,
-		0, sizeof(PushConstants)
+		0, sizeof(Rasterizer::PushConstants)
 	};
 
 	// Pipeline layout
@@ -270,13 +257,10 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 	_b_lights.upload(&lights_data, sizeof(lights_data));
 
 	// Render all rasterizer components
-	PushConstants push_constants {
+	Rasterizer::PushConstants push_constants {
 		.view = camera.view_matrix(camera_transform),
 		.perspective = camera.perspective_matrix(),
-		.type = Shading::eDiffuse,
 		.highlight = false,
-		.has_albedo = false,
-		.has_normal = false
 	};
 
 	// Render all regular meshes
@@ -304,22 +288,8 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 			*_ppl, 0, *ds, {}
 		);
 
-		// Bind vertex and index buffers
-		rasterizer->bind_buffers(cmd);
-
-		// Update push constants
-		push_constants.albedo = rasterizer->material->diffuse;
-		push_constants.has_albedo = rasterizer->material->has_albedo();
-		push_constants.has_normal = rasterizer->material->has_normal();
-
-		// Push constant
-		cmd.pushConstants <PushConstants> (
-			*_ppl, vk::ShaderStageFlagBits::eVertex,
-			0, push_constants
-		);
-
-		// Draw
-		cmd.drawIndexed(rasterizer->indices, 1, 0, 0, 0);
+		// Draw mesh
+		rasterizer->draw(cmd, _ppl, push_constants);
 	}
 
 	// Render all area lights
@@ -330,10 +300,6 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 			*get_pipeline(eAlbedo)
 		);
 
-		// Update push constants
-		push_constants.has_albedo = false;
-		push_constants.has_normal = false;
-
 		// Bind descriptor set
 		const auto &ds = _ds_components.at(_area_light);
 
@@ -342,21 +308,10 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 			*_ppl, 0, *ds, {}
 		);
 
-		// Bind vertex and index buffers
-		_area_light->bind_buffers(cmd);
-
-		for (const auto &pr: area_light_transforms) {
+		for (const auto &pr : area_light_transforms) {
 			push_constants.model = pr.first.matrix();
-			push_constants.albedo = pr.second;
-
-			// Push constant
-			cmd.pushConstants <PushConstants> (
-				*_ppl, vk::ShaderStageFlagBits::eVertex,
-				0, push_constants
-			);
-
-			// Draw
-			cmd.drawIndexed(_area_light->indices, 1, 0, 0, 0);
+			_area_light->material->diffuse = pr.second;
+			_area_light->draw(cmd, _ppl, push_constants);
 		}
 	}
 
