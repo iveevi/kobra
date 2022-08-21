@@ -217,7 +217,7 @@ source: box
 
 [MATERIAL]
 diffuse: 0 0 0
-specular: 0.5 0.5 0.5
+specular: 0.8 0.8 0.8
 emission: 0.000000 0.000000 0.000000
 ambient: 0.200000 0.200000 0.200000
 shininess: 0.000000000

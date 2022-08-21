@@ -37,6 +37,22 @@ public:
 	BufferData(const BufferData &) = delete;
 	BufferData &operator=(const BufferData &) = delete;
 
+	// Move
+	BufferData(BufferData &&other) {
+		_size = other._size;
+		_device_ptr = other._device_ptr;
+		other._size = 0;
+		other._device_ptr = nullptr;
+	}
+
+	BufferData &operator=(BufferData &&other) {
+		_size = other._size;
+		_device_ptr = other._device_ptr;
+		other._size = 0;
+		other._device_ptr = nullptr;
+		return *this;
+	}
+
 	// Get size
 	size_t size() const {
 		return _size;

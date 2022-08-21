@@ -154,8 +154,8 @@ public:
 	// Default constructor
 	OptixTracer() = default;
 
-	static constexpr unsigned int width = 1280;
-	static constexpr unsigned int height = 720;
+	int width;
+	int height;
 
 	// Resulting vulkan image
 	ImageData _result = nullptr;
@@ -168,9 +168,13 @@ public:
 	int _accumulated = 0;
 
 	// Constructor
-	OptixTracer(const Context &ctx, const vk::AttachmentLoadOp &load)
-			: _ctx(ctx), _result_buffer(width * height * 4) {
+	OptixTracer(const Context &ctx, const vk::AttachmentLoadOp &load,
+			int width_ = 1000, int height_ = 1000)
+			: _ctx(ctx),
+			width(width_),
+			height(height_) {
 		// Initialize buffers
+		_result_buffer = std::move(cuda::BufferData(width * height * sizeof(uint32_t)));
 		_buffers.pbuffer = cuda::alloc(width * height * sizeof(float3));
 
 		_initialize_optix();
@@ -220,6 +224,14 @@ public:
 	void render(const vk::raii::CommandBuffer &,
 			const vk::raii::Framebuffer &,
 			const ECS &, const RenderArea & = {{-1, -1}, {-1, -1}});
+
+	// Capture to buffer
+	std::vector <uint8_t> capture() {
+		// Copy from result buffer
+		auto result = std::vector <uint8_t> (width * height * 4);
+		_result_buffer.download(result);
+		return result;
+	}
 };
 
 }
