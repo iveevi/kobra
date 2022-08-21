@@ -178,8 +178,8 @@ struct ECSApp : public BaseApp {
 			scene_graph(scene.ecs, font_renderer, io.mouse_events) {
 		scene.load(get_device(), scene_path);
 		// raytracer.environment_map(scene.p_environment_map);
-		raytracer.environment_map("resources/skies/background_1.jpg");
-		optix_tracer.environment_map("resources/skies/background_1.jpg");
+		raytracer.environment_map("resources/skies/dark.png");
+		optix_tracer.environment_map("resources/skies/dark.png");
 
 		// Camera
 		camera = scene.ecs.get_entity("Camera");

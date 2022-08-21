@@ -38,7 +38,12 @@ static __forceinline__ __device__ void make_ray(uint3 idx, uint3 dim, float3 &or
 	const float3 U = params.cam_u;
 	const float3 V = params.cam_v;
 	const float3 W = params.cam_w;
-	const float2 d = 2.0f * make_float2(float(idx.x)/dim.x, float(idx.y)/dim.y) - 1.0f;
+
+	int index = idx.x + params.image_width * idx.y;
+	float2 d = 2.0f * make_float2(
+		float(idx.x + params.xoffset[index])/dim.x,
+		float(idx.y + params.yoffset[index])/dim.y
+	) - 1.0f;
 
 	origin = params.cam_eye;
 	direction = normalize(d.x * U + d.y * V + W);
@@ -50,7 +55,6 @@ struct RayPacket {
 	float3 value;
 	float3 seed;
 	int depth;
-
 };
 
 extern "C" __global__ void __raygen__rg()
@@ -568,8 +572,6 @@ __device__ void calculate_material
 			hit_data->textures.roughness,
 			triangle, bary
 		).x;
-
-		mat.roughness = sqrt(mat.roughness);
 	}
 }
 

@@ -15,6 +15,8 @@ namespace optix_rt {
 struct Params
 {
 	float3			*pbuffer;
+	float			*xoffset;
+	float			*yoffset;
 
 	uchar4			*image;
 	unsigned int		image_width;

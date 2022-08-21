@@ -58,7 +58,13 @@ class OptixTracer {
 	// Buffers
 	struct {
 		CUdeviceptr		area_lights;
+
 		CUdeviceptr		pbuffer;
+		CUdeviceptr		xoffset;
+		CUdeviceptr		yoffset;
+
+		std::vector <float>	h_xoffsets;
+		std::vector <float>	h_yoffsets;
 	} _buffers;
 
 	// Output resources
@@ -176,6 +182,10 @@ public:
 		// Initialize buffers
 		_result_buffer = std::move(cuda::BufferData(width * height * sizeof(uint32_t)));
 		_buffers.pbuffer = cuda::alloc(width * height * sizeof(float3));
+		_buffers.xoffset = cuda::alloc(width * height * sizeof(float));
+		_buffers.yoffset = cuda::alloc(width * height * sizeof(float));
+		_buffers.h_xoffsets.resize(width * height);
+		_buffers.h_yoffsets.resize(width * height);
 
 		_initialize_optix();
 		_initialize_vulkan_structures(load);

@@ -1036,11 +1036,67 @@ void OptixTracer::_optix_update_materials()
 	}
 }
 
+// Taken from nvidia's book
+static void generate_halton_sequence(int N, int b, std::vector <float> &dst)
+{
+	int n = 0;
+	int d = 1;
+
+	for (int i = 0; i < N; i++) {
+		int x = d - n;
+		if (x == 1) {
+			n = 1;
+			d *= b;
+		} else {
+			int y = d/b;
+			while (x <= y)
+				y /= b;
+			n = (b + 1) * y - x;
+		}
+
+		dst[i] = (float) n / (float) d;
+	}
+}
+
+static void generate_pixel_offsets(int N, std::vector <float> &x, std::vector <float> &y)
+{
+	static std::vector <int> bases {2, 3, 5, 7, 11, 13};
+
+	int r1 = rand() % bases.size();
+	int r2 = rand() % bases.size();
+
+	if (r1 == r2)
+		r2 = (r2 + 1) % bases.size();
+
+	int b1 = bases[r1];
+	int b2 = bases[r2];
+
+	generate_halton_sequence(N, b1, x);
+	generate_halton_sequence(N, b2, y);
+
+	for (int i = 0; i < N; i++) {
+		int r1 = (i + rand()) % N;
+		int r2 = (i + rand()) % N;
+
+		x[i] = x[r1] - 0.5f;
+		y[i] = y[r2] - 0.5f;
+	}
+}
+
 void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 {
+	// TODO: how to generate new noise for halton?
+	generate_pixel_offsets(width * height, _buffers.h_xoffsets, _buffers.h_yoffsets);
+	cuda::copy(_buffers.xoffset, _buffers.h_xoffsets);
+	cuda::copy(_buffers.yoffset, _buffers.h_yoffsets);
+
 	optix_rt::Params params;
 
 	params.pbuffer = (float3 *) _buffers.pbuffer;
+	
+	params.xoffset = (float *) _buffers.xoffset;
+	params.yoffset = (float *) _buffers.yoffset;
+
 	params.image        = _result_buffer.dev <uchar4> ();
 	params.image_width  = width;
 	params.image_height = height;
