@@ -1,0 +1,272 @@
+[PROPERTIES]
+environment_map: 0
+
+[ENTITY]
+name: floor
+
+[TRANSFORM]
+position: 0 -4.14615 0
+rotation: 0 0 0
+scale: 100.000000 0.100000 100.000000
+
+[MESH]
+source: box
+
+[MATERIAL]
+diffuse: 0 0 0 
+specular: 0.6 0.6 0.6
+emission: 0.000000 0.000000 0.000000
+ambient: 0 0 0
+shininess: 0.000000000
+roughness: 0.80000
+refraction: 1.000000
+albedo_texture: 0
+normal_texture: 0
+roughness_texture: 0
+shading_type: Diffuse
+
+[RASTERIZER]
+mode: Phong
+
+[RAYTRACER]
+
+[ENTITY]
+name: e1
+
+[TRANSFORM]
+position: -12.5 0 0
+rotation: 0 90 0
+scale: 1 1 1
+
+[MESH]
+source: resources/benchmark/teapot.obj
+
+[MATERIAL]
+diffuse: 0 0 0
+specular: 0.9 0.2 0.07
+emission: 0.000000 0.000000 0.000000
+ambient: 0 0 0
+shininess: 0.000000000
+roughness: 0.25000
+refraction: 1.000000
+albedo_texture: 0
+normal_texture: 0
+roughness_texture: 0
+shading_type: Diffuse
+
+[RASTERIZER]
+mode: Phong
+
+[RAYTRACER]
+
+[ENTITY]
+name: e2
+
+[TRANSFORM]
+position: -7.5 0 0
+rotation: 0 90 0
+scale: 1 1 1
+
+[MESH]
+source: resources/benchmark/teapot.obj
+
+[MATERIAL]
+diffuse: 0 0 0
+specular: 0.9 0.2 0.07
+emission: 0.000000 0.000000 0.000000
+ambient: 0 0 0
+shininess: 0.000000000
+roughness: 0.050000
+refraction: 1.000000
+albedo_texture: 0
+normal_texture: 0
+roughness_texture: 0
+shading_type: Diffuse
+
+[RASTERIZER]
+mode: Phong
+
+[RAYTRACER]
+
+[ENTITY]
+name: e3
+
+[TRANSFORM]
+position: -2.5 0 0
+rotation: 0 90 0
+scale: 1 1 1
+
+[MESH]
+source: resources/benchmark/teapot.obj
+
+[MATERIAL]
+diffuse: 0 0.55 0.1
+specular: 0.1 0.1 0.1
+emission: 0.000000 0.000000 0.000000
+ambient: 0 0 0
+shininess: 0.000000000
+roughness: 0.12000
+refraction: 1.000000
+albedo_texture: 0
+normal_texture: 0
+roughness_texture: 0
+shading_type: Diffuse
+
+[RASTERIZER]
+mode: Phong
+
+[RAYTRACER]
+
+[ENTITY]
+name: e4
+
+[TRANSFORM]
+position: 2.5 0 0
+rotation: 0 90 0
+scale: 1.000000 1.00000 1.000000
+
+[MESH]
+source: resources/benchmark/teapot.obj
+
+[MATERIAL]
+diffuse: 0.01 0.01 0.4
+specular: 0.02 0.02 0.02
+emission: 0.000000 0.000000 0.000000
+ambient: 0 0 0
+shininess: 0.000000000
+roughness: 0.010000
+refraction: 1.000000
+albedo_texture: 0
+normal_texture: 0
+roughness_texture: 0
+shading_type: Diffuse
+
+[RASTERIZER]
+mode: Phong
+
+[RAYTRACER]
+
+[ENTITY]
+name: e5
+
+[TRANSFORM]
+position: 7.5 0 0
+rotation: 0 90 0
+scale: 1.000000 1.00000 1.000000
+
+[MESH]
+source: resources/benchmark/teapot.obj
+
+[MATERIAL]
+diffuse: 0 0 0
+specular: 0 0 0
+emission: 0.000000 0.000000 0.000000
+ambient: 0 0 0
+shininess: 0.000000000
+roughness: 0.010000
+refraction: 1.000000
+albedo_texture: 0
+normal_texture: 0
+roughness_texture: 0
+shading_type: Diffuse
+
+[RASTERIZER]
+mode: Phong
+
+[RAYTRACER]
+
+[ENTITY]
+name: e6
+
+[TRANSFORM]
+position: 12.5 0 0
+rotation: 0 90 0
+scale: 1.000000 1.00000 1.000000
+
+[MESH]
+source: resources/benchmark/teapot.obj
+
+[MATERIAL]
+diffuse: 0 0 0
+specular: 1 0.17 0.1
+emission: 0.000000 0.000000 0.000000
+ambient: 0 0 0
+shininess: 0.000000000
+roughness: 0.70000
+refraction: 1.000000
+albedo_texture: 0
+normal_texture: 0
+roughness_texture: 0
+shading_type: Diffuse
+
+[RASTERIZER]
+mode: Phong
+
+[RAYTRACER]
+
+[ENTITY]
+name: back wall
+
+[TRANSFORM]
+position: 0 0 -10
+rotation: 0 0 0
+scale: 100.000000 25.00000 0.010000
+
+[MESH]
+source: box
+
+[MATERIAL]
+diffuse: 0 0 0
+specular: 0.5 0.5 0.5
+emission: 0.000000 0.000000 0.000000
+ambient: 0.200000 0.200000 0.200000
+shininess: 0.000000000
+roughness: 0.00015
+refraction: 1.000000
+albedo_texture: 0
+normal_texture: 0
+roughness_texture: 0
+shading_type: Diffuse
+
+[RASTERIZER]
+mode: Phong
+
+[RAYTRACER]
+
+[ENTITY]
+name: overhead light 1
+
+[TRANSFORM]
+position: -20 30 50
+rotation: 60 0 0
+scale: 10.000000 0.100000 10.000000
+
+[LIGHT]
+color: 1.000000 1.000000 1.000000
+power: 20.000000
+type: Area
+
+[ENTITY]
+name: overhead light 2
+
+[TRANSFORM]
+position: 10 30 50
+rotation: 60 0 0
+scale: 5.000000 0.100000 5.000000
+
+[LIGHT]
+color: 1.000000 1.000000 1.000000
+power: 50.000000
+type: Area
+
+[ENTITY]
+name: Camera
+
+[TRANSFORM]
+position: 0.000000 3.000000 10.000000
+rotation: 0.000000 0.000000 0.000000
+scale: 1.000000 1.000000 1.000000
+
+[CAMERA]
+fov: 45.000000
+aspect: 1.000000

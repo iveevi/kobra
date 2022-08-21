@@ -23,7 +23,7 @@ using namespace kobra;
 
 // Scene path
 // std::string scene_path = "~/models/sponza/scene.kobra";
-std::string scene_path = "scenes/scene.kobra";
+std::string scene_path = "scenes/ggx.kobra";
 
 // Test app
 struct ECSApp : public BaseApp {

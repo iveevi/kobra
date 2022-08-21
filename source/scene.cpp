@@ -9,6 +9,7 @@ rotation: %f %f %f
 scale: %f %f %f
 )";
 
+// TODO: source files as well...
 static constexpr char material_format[]
 = R"(diffuse: %f %f %f
 specular: %f %f %f
@@ -195,7 +196,7 @@ inline std::string get_header(std::ifstream &fin)
 }
 
 template <class ... Args>
-static void read_fmt(std::ifstream &fin, const char *fmt, Args ... args)
+static void _read_fmt(const char *header, std::ifstream &fin, const char *fmt, Args ... args)
 {
 	// Count number of lines to read
 	int count = 0;
@@ -214,9 +215,14 @@ static void read_fmt(std::ifstream &fin, const char *fmt, Args ... args)
 
 	// Parse
 	int read = sscanf(whole.c_str(), fmt, std::forward <Args> (args)...);
-	if (read != sizeof...(Args))
-		KOBRA_LOG_FUNC(Log::WARN) << "Failed to read field after #" << read << " fields\n";
+	if (read != sizeof...(Args)) {
+		KOBRA_LOG_FUNC(Log::WARN) << "[" << header
+			<< "] Failed to read field after #"
+			<< read << " fields\n";
+	}
 }
+
+#define read_fmt(fin, fmt, ...) _read_fmt(__FUNCTION__, fin, fmt, __VA_ARGS__)
 
 // Component basis
 void load_transform(Entity &e, std::ifstream &fin)
@@ -523,7 +529,7 @@ void Scene::load(const Device &dev, const std::string &path)
 			return;
 		}
 
-		read_fmt(fin, "name: %s\n", buf);
+		read_fmt(fin, "name: %1023[^\n]\n", buf);
 		Entity &e = ecs.make_entity(buf);
 
 		header = load_components(e, fin, dev);

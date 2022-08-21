@@ -25,7 +25,7 @@ float ggx_d(vec3 n, vec3 h, Material mat)
 	float alpha = mat.roughness;
 	float theta = acos(clamp(dot(n, h), 0, 0.999f));
 	return (alpha * alpha)
-		/ (PI * pow(theta, 4)
+		/ (PI * pow(cos(theta), 4)
 		* pow(alpha * alpha + tan(theta) * tan(theta), 2.0f));
 }
 

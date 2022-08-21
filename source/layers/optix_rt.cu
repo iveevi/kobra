@@ -254,7 +254,7 @@ __device__ float ggx_d(float3 n, float3 h, Material mat)
 	float theta = acos(clamp(dot(n, h), 0.0f, 0.999f));
 	
 	return (alpha * alpha)
-		/ (M_PI * pow(theta, 4)
+		/ (M_PI * pow(cos(theta), 4)
 		* pow(alpha * alpha + tan(theta) * tan(theta), 2.0f));
 }
 
@@ -355,6 +355,7 @@ __device__ float3 ggx_sample(float3 n, float3 wo, Material mat, float3 &seed)
 	float3 r = random3(seed);
 	float3 eta = fract(r);
 
+	eta.x = 0.0f;
 	if (eta.x < t) {
 		// Specular sampling
 		float k = sqrt(eta.y/(1 - eta.y));
@@ -442,7 +443,9 @@ __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 	float3 contr_brdf {0.0f};
 
 	// Random area light for NEE
-	unsigned int i = rand(hit_data->n_area_lights);
+	random3(seed);
+	unsigned int i = seed.x * hit_data->n_area_lights;
+	i = i % hit_data->n_area_lights;
 	AreaLight light = hit_data->area_lights[i];
 
 	// NEE
@@ -450,7 +453,7 @@ __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 	float3 wi = normalize(lpos - x);
 	float R = length(lpos - x);
 
-	float3 f = brdf(mat, n, wi, wo) * dot(n, wi);
+	float3 f = brdf(mat, n, wi, wo) * max(dot(n, wi), 0.0f);
 
 	float ldot = abs(dot(light.normal(), wi));
 	if (ldot > 1e-6) {
