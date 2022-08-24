@@ -83,13 +83,14 @@ extern "C" __global__ void __raygen__rg()
 	optixTrace(params.handle,
 		ray_origin, ray_direction,
 		0.0f, 1e16f, 0.0f,
-		OptixVisibilityMask(255), OPTIX_RAY_FLAG_NONE,
+		OptixVisibilityMask(255),
+		OPTIX_RAY_FLAG_NONE,
 		0, 0, 0,
 		i0, i1
 	);
 
 	// Unpack payload
-	ray_packet = *unpack_point <RayPacket> (i0, i1);
+	// ray_packet = *unpack_point <RayPacket> (i0, i1);
 
 	// Record the results
 	int index = idx.x + params.image_width * idx.y;
@@ -428,7 +429,7 @@ __device__ bool shadow_visibility(float3 origin, float3 dir, float R)
 		origin, dir,
 		0, R - 0.01f, 0,
 		OptixVisibilityMask(255),
-		OPTIX_RAY_FLAG_NONE,
+		OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT,
 		params.instances, 0, 1,
 		j0, j1
 	);
@@ -457,7 +458,7 @@ __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 	float3 wi = normalize(lpos - x);
 	float R = length(lpos - x);
 
-	float3 f = brdf(mat, n, wi, wo) * max(dot(n, wi), 0.0f);
+	float3 f = brdf(mat, n, wi, wo) * dot(n, wi);
 
 	float ldot = abs(dot(light.normal(), wi));
 	if (ldot > 1e-6) {
@@ -522,8 +523,15 @@ static __forceinline__ __device__ float4 sample_texture
 static __forceinline__ __device__ float3 calculate_normal
 		(HitGroupData *hit_data, uint3 triangle, float2 bary)
 {
+	float3 e1 = hit_data->vertices[triangle.y] - hit_data->vertices[triangle.x];
+	float3 e2 = hit_data->vertices[triangle.z] - hit_data->vertices[triangle.x];
+	float3 ng = cross(e1, e2);
+
+	if (dot(ng, optixGetWorldRayDirection()) > 0.0f)
+		ng = -ng;
+
 	float3 normal = interpolate(hit_data->normals, triangle, bary);
-	if (dot(normal, optixGetWorldRayDirection()) > 0)
+	if (dot(normal, ng) < 0.0f)
 		normal = -normal;
 	normal = normalize(normal);
 
@@ -577,24 +585,6 @@ __device__ void calculate_material
 
 extern "C" __global__ void __closesthit__radiance()
 {
-	static constexpr float3 colorwheel[] {
-		float3 {1, 0, 0},
-		float3 {0, 1, 0},
-		float3 {0, 0, 1},
-		float3 {1, 1, 0},
-		float3 {1, 0, 1},
-		float3 {0, 1, 1},
-		float3 {0.5, 0.5, 0.5},
-		float3 {0.5, 1, 0},
-		float3 {0, 0.5, 1},
-		float3 {1, 0.5, 0},
-	};
-
-	static constexpr size_t colorwheel_size = 10;
-
-	// Get instance index of the intersected primitive
-	int instance_index = optixGetInstanceIndex();
-
 	// Get payload
 	RayPacket *rp;
 	unsigned int i0 = optixGetPayload_0();
@@ -624,8 +614,9 @@ extern "C" __global__ void __closesthit__radiance()
 
 	float3 wo = -optixGetWorldRayDirection();
 	float3 n = calculate_normal(hit_data, triangle, bary);
-	if (dot(n, wo) <= 0.0f)
+	if (dot(n, wo) < 0.0f)
 		n = -n;
+
 	float3 x = interpolate(hit_data->vertices, triangle, bary)
 		+ 1e-3f * n;
 
