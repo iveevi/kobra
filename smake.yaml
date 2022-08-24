@@ -49,10 +49,15 @@ definitions:
     OGLCompiler'
 
 builds:
-  - optix_ptx:
+  - optix_ptx_debug:
     - sources: source/layers/optix_rt.cu
     - idirs: includes
     - flags: '-ptx -g -lineinfo'
+    - options: 'nolink, output_dir=./bin/ptx, output_format={filename}.ptx'
+  - optix_ptx_release:
+    - sources: source/layers/optix_rt.cu
+    - idirs: includes
+    - flags: '-ptx -O3'
     - options: 'nolink, output_dir=./bin/ptx, output_format={filename}.ptx'
   - glsl_compute:
     - sources: shaders/rt/progressive_path_tracer.glsl
@@ -64,18 +69,19 @@ builds:
     - idirs: includes
     - flags: '-std=c++17'
     - libraries: libs
-    - dependencies: optix_ptx, glsl_compute 
+    - dependencies: optix_ptx_debug, glsl_compute 
   - kobra_release:
     - sources: main.cpp, kobra_source, tinyfd_source, glslang_source
     - idirs: includes
     - flags: '-O3 -std=c++17'
     - libraries: libs
+    - dependencies: optix_ptx_release, glsl_compute 
   - kobra_debug:
     - sources: main.cpp, kobra_source, tinyfd_source, glslang_source
     - idirs: includes
     - libraries: libs
     - flags: '-g -std=c++17'
-    - dependencies: optix_ptx, glsl_compute 
+    - dependencies: optix_ptx_debug, glsl_compute 
   - kobra_wall:
     - sources: main.cpp, kobra_source, tinyfd_source, glslang_source
     - idirs: includes

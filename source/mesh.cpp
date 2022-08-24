@@ -6,8 +6,63 @@
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
+// TinyObjLoader headers
+#define TINYOBJLOADER_IMPLEMENTATION
+
+#include <tinyobjloader/tiny_obj_loader.h>
+
 // Engine headers
+#include "../include/common.hpp"
 #include "../include/mesh.hpp"
+
+// Global operators
+namespace std {
+
+inline bool operator<(const tinyobj::index_t &a, const tinyobj::index_t &b)
+{
+	return std::tie(a.vertex_index, a.normal_index, a.texcoord_index)
+		< std::tie(b.vertex_index, b.normal_index, b.texcoord_index);
+}
+
+inline bool operator==(const kobra::Vertex &a, const kobra::Vertex &b)
+{
+	return a.position == b.position
+		&& a.normal == b.normal
+		&& a.tex_coords == b.tex_coords;
+}
+
+// TODO: please make a common vector type
+template <>
+struct hash <glm::vec3> {
+	size_t operator()(const glm::vec3 &v) const
+	{
+		return ((hash <float>()(v.x)
+			^ (hash <float>()(v.y) << 1)) >> 1)
+			^ (hash <float>()(v.z) << 1);
+	}
+};
+
+template <>
+struct hash <glm::vec2> {
+	size_t operator()(const glm::vec2 &v) const
+	{
+		return ((hash <float>()(v.x)
+			^ (hash <float>()(v.y) << 1)) >> 1);
+	}
+};
+
+template <>
+struct hash <kobra::Vertex> {
+	size_t operator()(kobra::Vertex const &vertex) const
+	{
+		return ((hash <glm::vec3>()(vertex.position)
+			^ (hash <glm::vec3>()(vertex.normal) << 1)) >> 1)
+			^ (hash <glm::vec2>()(vertex.tex_coords) << 1);
+	}
+};
+
+
+}
 
 namespace kobra {
 
@@ -291,6 +346,8 @@ kmesh kmesh::make_ring(const glm::vec3 &center, float radius, float width, float
 	return kmesh {vertices, indices};
 } */
 
+namespace assimp {
+
 static Submesh process_mesh(aiMesh *mesh, const aiScene *scene, const std::string &dir)
 {
 	// Mesh data
@@ -412,19 +469,8 @@ static Mesh process_node(aiNode *node, const aiScene *scene, const std::string &
 	return Mesh {submeshes};
 }
 
-std::optional <Mesh> Mesh::load(const std::string &path)
+std::optional <Mesh> load_mesh(const std::string &path)
 {
-	// Special cases
-	if (path == "box")
-		return box({0, 0, 0}, {0.5, 0.5, 0.5});
-
-	// Check if the file exists
-	std::ifstream file(path);
-	if (!file.is_open()) {
-		Logger::error("[Mesh] Could not open file: " + path);
-		return {};
-	}
-
 	// Create the Assimp importer
 	Assimp::Importer importer;
 
@@ -443,7 +489,225 @@ std::optional <Mesh> Mesh::load(const std::string &path)
 	}
 
 	// Process the scene (root node)
-	Mesh m = process_node(scene->mRootNode, scene, common::get_directory(path));
+	return process_node(scene->mRootNode,
+		scene, common::get_directory(path)
+	);
+}
+
+}
+
+namespace tinyobjloader {
+
+std::optional <Mesh> load_mesh(const std::string &path)
+{
+	// Loader configuration
+	tinyobj::ObjReaderConfig reader_config;
+	reader_config.mtl_search_path = common::get_directory(path);
+
+	// Loader
+	tinyobj::ObjReader reader;
+	
+	// Load the mesh
+	if (!reader.ParseFromFile(path, reader_config)) {
+		// TODO: use macro, not function
+		Logger::error("[Mesh] Could not load mesh: " + path);
+
+		if (!reader.Error().empty())
+			Logger::error(reader.Error());
+		return {};
+	}
+
+	// Warnings
+	// TODO: cusotm logger headers (like optix)
+	if (!reader.Warning().empty())
+		KOBRA_LOG_FUNC(Log::WARN) << reader.Warning() << std::endl;
+
+	// Get the mesh properties
+	auto &attrib = reader.GetAttrib();
+	auto &shapes = reader.GetShapes();
+	auto &materials = reader.GetMaterials();
+
+	// Load submeshes
+	std::vector <Submesh> submeshes;
+
+	for (int i = 0; i < shapes.size(); i++) {
+		// Get the mesh
+		auto &mesh = shapes[i].mesh;
+
+		std::vector <Vertex> vertices;
+		std::vector <uint32_t> indices;
+
+		std::unordered_map <Vertex, uint32_t> unique_vertices;
+		std::map <tinyobj::index_t, uint32_t> index_map;
+
+		int offset = 0;
+		for (int f = 0; f < mesh.num_face_vertices.size(); f++) {
+			// Get the number of vertices in the face
+			int fv = mesh.num_face_vertices[f];
+
+			// Loop over vertices in the face
+			for (int v = 0; v < fv; v++) {
+				// Get the vertex index
+				tinyobj::index_t index = mesh.indices[offset + v];
+
+				if (index_map.count(index) > 0) {
+					indices.push_back(index_map[index]);
+					continue;
+				}
+
+				Vertex vertex;
+
+				vertex.position = {
+					attrib.vertices[3 * index.vertex_index + 0],
+					attrib.vertices[3 * index.vertex_index + 1],
+					attrib.vertices[3 * index.vertex_index + 2]
+				};
+
+				if (index.normal_index >= 0) {
+					vertex.normal = {
+						attrib.normals[3 * index.normal_index + 0],
+						attrib.normals[3 * index.normal_index + 1],
+						attrib.normals[3 * index.normal_index + 2]
+					};
+				} else {
+					// Compute geometric normal with
+					// respect to this face
+
+					// TODO: method
+					int pindex = (v - 1 + fv) % fv;
+					int nindex = (v + 1) % fv;
+
+					tinyobj::index_t p = mesh.indices[offset + pindex];
+					tinyobj::index_t n = mesh.indices[offset + nindex];
+
+					glm::vec3 vn = {
+						attrib.vertices[3 * p.vertex_index + 0],
+						attrib.vertices[3 * p.vertex_index + 1],
+						attrib.vertices[3 * p.vertex_index + 2]
+					};
+
+					glm::vec3 vp = {
+						attrib.vertices[3 * n.vertex_index + 0],
+						attrib.vertices[3 * n.vertex_index + 1],
+						attrib.vertices[3 * n.vertex_index + 2]
+					};
+
+					glm::vec3 e1 = vp - vertex.position;
+					glm::vec3 e2 = vn - vertex.position;
+
+					vertex.normal = glm::normalize(glm::cross(e1, e2));
+				}
+
+				if (index.texcoord_index >= 0) {
+					vertex.tex_coords = {
+						attrib.texcoords[2 * index.texcoord_index + 0],
+						attrib.texcoords[2 * index.texcoord_index + 1]
+					};
+				} else {
+					vertex.tex_coords = {0.0f, 0.0f};
+				}
+
+				// Add the vertex
+				uint32_t id;
+				if (unique_vertices.count(vertex) > 0) {
+					id = unique_vertices[vertex];
+				} else {
+					id = vertices.size();
+					unique_vertices[vertex] = id;
+					vertices.push_back(vertex);
+				}
+
+				index_map[index] = id;
+				indices.push_back(id);
+			}
+
+			// Update the offset
+			offset += fv;
+
+			// If last face, or material changes
+			// push back the submesh
+			if (f == mesh.num_face_vertices.size() - 1 ||
+					mesh.material_ids[f] != mesh.material_ids[f + 1]) {
+				// Material
+				Material mat;
+
+				tinyobj::material_t m = materials[mesh.material_ids[f]];
+				mat.diffuse = {m.diffuse[0], m.diffuse[1], m.diffuse[2]};
+				mat.specular = {m.specular[0], m.specular[1], m.specular[2]};
+				mat.ambient = {m.ambient[0], m.ambient[1], m.ambient[2]};
+				mat.emission = {m.emission[0], m.emission[1], m.emission[2]};
+				mat.shininess = m.shininess;
+
+				// Check if roughness is defined
+				if (m.roughness == 0 && m.shininess != 1000)
+					mat.roughness = 1 - m.shininess/1000;
+				else
+					mat.roughness = m.roughness;
+
+				// Albedo texture
+				if (!m.diffuse_texname.empty()) {
+					mat.albedo_texture = m.diffuse_texname;
+					mat.albedo_texture = common::resolve_path(
+						m.diffuse_texname, {reader_config.mtl_search_path}
+					);
+				}
+
+				// Normal texture
+				if (!m.normal_texname.empty()) {
+					mat.normal_texture = m.normal_texname;
+					mat.normal_texture = common::resolve_path(
+						m.normal_texname, {reader_config.mtl_search_path}
+					);
+				}
+
+				// Add submesh
+				std::cout << "Submesh " << i << ": " << vertices.size()
+					<< " vertices, " << indices.size()
+					<< " indices, material = " << m.name << std::endl;
+				submeshes.push_back(Submesh {vertices, indices, mat});
+
+				// Clear the vertices and indices
+				unique_vertices.clear();
+				vertices.clear();
+				indices.clear();
+			}
+		}
+	}
+
+	return Mesh {submeshes};
+}
+
+}
+
+std::optional <Mesh> Mesh::load(const std::string &path)
+{
+	// Special cases
+	if (path == "box")
+		return box({0, 0, 0}, {0.5, 0.5, 0.5});
+
+	// Check if the file exists
+	std::ifstream file(path);
+	if (!file.is_open()) {
+		Logger::error("[Mesh] Could not open file: " + path);
+		return {};
+	}
+
+	// Load the mesh
+	std::string ext = common::file_extension(path);
+	std::cout << "Loading mesh: " << path << " - " << ext << std::endl;
+
+	std::optional <Mesh> opt;
+	if (ext == "obj")
+		opt = tinyobjloader::load_mesh(path);
+	else
+		opt = assimp::load_mesh(path);
+	
+	if (!opt.has_value()) {
+		Logger::error("[Mesh] Could not load mesh: " + path);
+		return {};
+	}
+
+	Mesh m = opt.value();
 	m._source = path;
 
 	KOBRA_LOG_FUNC(Log::INFO) << "Loaded mesh with " << m.submeshes.size()

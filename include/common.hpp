@@ -25,6 +25,16 @@ inline bool file_exists(const std::string &file)
 	return f.good();
 }
 
+// Get file extension
+inline std::string file_extension(const std::string &file)
+{
+	std::string::size_type idx = file.rfind('.');
+
+	if (idx != std::string::npos)
+		return file.substr(idx + 1);
+	return "";
+}
+
 // Read file into a string
 inline std::string read_file(const std::string &file)
 {
