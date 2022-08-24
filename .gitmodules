@@ -16,3 +16,6 @@
 [submodule "thirdparty/termcolor"]
 	path = thirdparty/termcolor
 	url = https://github.com/ikalnytskyi/termcolor
+[submodule "thirdparty/tinyobjloader"]
+	path = thirdparty/tinyobjloader
+	url = https://github.com/tinyobjloader/tinyobjloader

@@ -41,16 +41,19 @@ void Rasterizer::draw(const vk::raii::CommandBuffer &cmd,
 		PushConstants &pc) const
 {
 	// TODO: parameter for whih submeshes to draw
-	pc.albedo = material->diffuse;
-	pc.type = Shading::eDiffuse;
-	pc.has_albedo = material->has_albedo();
-	pc.has_normal = material->has_normal();
-	
-	for (size_t i = 0; i < vertex_buffer.size(); i++) {
+	for (size_t i = 0; i < materials.size(); i++) {
 		// Set the push constants
 		pc.albedo = materials[i].diffuse;
+		pc.type = materials[i].type;
+		pc.has_albedo = materials[i].has_albedo();
+		pc.has_normal = materials[i].has_normal();
 
-		// Render
+		// Bind and render
+		cmd.bindDescriptorSets(
+			vk::PipelineBindPoint::eGraphics,
+			*ppl, 0, *_dsets[i], {}
+		);
+
 		cmd.pushConstants <PushConstants> (*ppl,
 			vk::ShaderStageFlagBits::eVertex,
 			0, pc
@@ -63,28 +66,42 @@ void Rasterizer::draw(const vk::raii::CommandBuffer &cmd,
 	}
 }
 
-void Rasterizer::bind_material(const Device &dev, const vk::raii::DescriptorSet &dset) const
+void Rasterizer::bind_material
+		(const Device &dev,
+		 const BufferData &lights_buffer,
+		 const std::function <vk::raii::DescriptorSet ()> &server) const
 {
-	std::string albedo = "blank";
-	if (material->has_albedo())
-		albedo = material->albedo_texture;
+	_dsets.clear();
+	for (int i = 0; i < materials.size(); i++) {
+		_dsets.emplace_back(server());
 
-	std::string normal = "blank";
-	if (material->has_normal())
-		normal = material->normal_texture;
+		auto &dset = _dsets.back();
+		std::string albedo = "blank";
+		if (materials[i].has_albedo())
+			albedo = materials[i].albedo_texture;
 
-	TextureManager::bind(
-		*dev.phdev, *dev.device,
-		dset, albedo,
-		// TODO: enum like RasterBindings::eAlbedo
-		RASTER_BINDING_ALBEDO_MAP
-	);
+		std::string normal = "blank";
+		if (materials[i].has_normal())
+			normal = materials[i].normal_texture;
 
-	TextureManager::bind(
-		*dev.phdev, *dev.device,
-		dset, normal,
-		RASTER_BINDING_NORMAL_MAP
-	);
+		TextureManager::bind(
+			*dev.phdev, *dev.device,
+			dset, albedo,
+			// TODO: enum like RasterBindings::eAlbedo
+			RASTER_BINDING_ALBEDO_MAP
+		);
+
+		TextureManager::bind(
+			*dev.phdev, *dev.device,
+			dset, normal,
+			RASTER_BINDING_NORMAL_MAP
+		);
+					
+		bind_ds(*dev.device, dset, lights_buffer,
+			vk::DescriptorType::eUniformBuffer,
+			RASTER_BINDING_POINT_LIGHTS
+		);
+	}
 }
 
 // Raytracer

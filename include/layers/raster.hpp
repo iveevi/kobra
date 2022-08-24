@@ -19,6 +19,7 @@ namespace kobra {
 namespace layers {
 
 class Raster {
+private:
 	// Vulkan context
 	Context				_ctx;
 
@@ -47,8 +48,7 @@ class Raster {
 	vk::raii::DescriptorSet	_make_ds() const;
 
 	// Rasterizer components to descriptor set
-	std::map <const Rasterizer *, vk::raii::DescriptorSet>
-					_ds_components;
+	Rasterizer::ResourceMap		_ds_components;
 
 	// Box mesh for area lights
 	Rasterizer			*_area_light;

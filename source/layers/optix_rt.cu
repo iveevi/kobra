@@ -460,7 +460,7 @@ __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 	float3 wi = normalize(lpos - x);
 	float R = length(lpos - x);
 
-	float3 f = brdf(mat, n, wi, wo) * dot(n, wi);
+	float3 f = brdf(mat, n, wi, wo) * max(dot(n, wi), 0.0f);
 
 	float ldot = abs(dot(light.normal(), wi));
 	if (ldot > 1e-6) {

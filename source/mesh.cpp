@@ -291,7 +291,7 @@ kmesh kmesh::make_ring(const glm::vec3 &center, float radius, float width, float
 	return kmesh {vertices, indices};
 } */
 
-static Submesh process_mesh(aiMesh *mesh, const aiScene *scene)
+static Submesh process_mesh(aiMesh *mesh, const aiScene *scene, const std::string &dir)
 {
 	// Mesh data
 	VertexList vertices;
@@ -353,26 +353,48 @@ static Submesh process_mesh(aiMesh *mesh, const aiScene *scene)
 	// Get diffuse
 	aiString path;
 	if (material->GetTexture(aiTextureType_DIFFUSE, 0, &path) == AI_SUCCESS) {
-		std::cout << "\t\tFound diffuse texture: " << path.C_Str() << std::endl;
+		mat.albedo_texture = path.C_Str();
+		mat.albedo_texture = common::resolve_path(path.C_Str(), {dir});
+		std::cout << "Resolved diffuse texture: " << mat.albedo_texture << std::endl;
+		assert(!mat.albedo_texture.empty());
 	} else {
-		std::cout << "\t\tNo diffuse texture found" << std::endl;
 		aiColor3D diffuse;
 		material->Get(AI_MATKEY_COLOR_DIFFUSE, diffuse);
-
-		std::cout << "\t\tDiffuse color: " << diffuse.r << ", " << diffuse.g << ", " << diffuse.b << std::endl;
 		mat.diffuse = {diffuse.r, diffuse.g, diffuse.b};
 	}
+
+	// Get normal texture
+	if (material->GetTexture(aiTextureType_NORMALS, 0, &path) == AI_SUCCESS) {
+		mat.normal_texture = path.C_Str();
+		mat.normal_texture = common::resolve_path(path.C_Str(), {dir});
+		std::cout << "Resolved normal texture: " << mat.normal_texture << std::endl;
+		assert(!mat.normal_texture.empty());
+	}
+
+	// Get specular
+	aiColor3D specular;
+	material->Get(AI_MATKEY_COLOR_SPECULAR, specular);
+	mat.specular = {specular.r, specular.g, specular.b};
+
+	// Get shininess
+	float shininess;
+	material->Get(AI_MATKEY_SHININESS, shininess);
+	mat.shininess = shininess;
+	mat.roughness = 1 - shininess/1000.0f;
+
+	std::cout << "Material shininess: " << mat.shininess
+		<< ", roughness: " << mat.roughness << std::endl;
 
 	return Submesh {vertices, indices, mat};
 }
 
-static Mesh process_node(aiNode *node, const aiScene *scene)
+static Mesh process_node(aiNode *node, const aiScene *scene, const std::string &dir)
 {
 	// Process all the node's meshes (if any)
 	std::vector <Submesh> submeshes;
 	for (size_t i = 0; i < node->mNumMeshes; i++) {
 		aiMesh *mesh = scene->mMeshes[node->mMeshes[i]];
-		submeshes.push_back(process_mesh(mesh, scene));
+		submeshes.push_back(process_mesh(mesh, scene, dir));
 	}
 
 	// Recusively process all the node's children
@@ -381,7 +403,7 @@ static Mesh process_node(aiNode *node, const aiScene *scene)
 
 	for (size_t i = 0; i < node->mNumChildren; i++) {
 		std::cout << "Processing child " << i << std::endl;
-		Mesh m = process_node(node->mChildren[i], scene);
+		Mesh m = process_node(node->mChildren[i], scene, dir);
 
 		for (size_t j = 0; j < m.submeshes.size(); j++)
 			submeshes.push_back(m.submeshes[j]);
@@ -409,7 +431,7 @@ std::optional <Mesh> Mesh::load(const std::string &path)
 	// Read scene
 	const aiScene *scene = importer.ReadFile(
 		path, aiProcess_Triangulate
-			| aiProcess_GenNormals
+			| aiProcess_GenSmoothNormals
 			| aiProcess_FlipUVs
 	);
 
@@ -421,7 +443,7 @@ std::optional <Mesh> Mesh::load(const std::string &path)
 	}
 
 	// Process the scene (root node)
-	Mesh m = process_node(scene->mRootNode, scene);
+	Mesh m = process_node(scene->mRootNode, scene, common::get_directory(path));
 	m._source = path;
 
 	KOBRA_LOG_FUNC(Log::INFO) << "Loaded mesh with " << m.submeshes.size()

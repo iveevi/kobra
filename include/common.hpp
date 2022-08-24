@@ -89,6 +89,40 @@ inline std::string get_path(const std::string &file, const std::string &dir)
 	return file;
 }
 
+// Lowercase
+inline std::string to_lower(const std::string &str)
+{
+	std::string s = str;
+	for (auto &c : s)
+		c = tolower(c);
+	return s;
+}
+
+// Resolve path
+inline std::string resolve_path(const std::string &file,
+		const std::vector <std::string> &dirs)
+{
+	if (file_exists(file))
+		return file;
+	if (file_exists(to_lower(file)))
+		return to_lower(file);
+
+	for (const auto &dir : dirs) {
+		std::string full = dir + "/" + file;
+		std::cout << "Trying: " << full << std::endl;
+		if (file_exists(full))
+			return full;
+
+		full = dir + "/" + to_lower(file);
+		std::cout << "Trying: " << full << std::endl;
+		if (file_exists(full))
+			return full;
+	}
+
+	KOBRA_LOG_FUNC(Log::ERROR) << "Could not resolve path: " << file << std::endl;
+	return "";
+}
+
 // Printf to string
 inline std::string sprintf(const char *fmt, ...)
 {

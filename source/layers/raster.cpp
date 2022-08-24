@@ -136,11 +136,15 @@ Raster::Raster(const Context &ctx, const vk::AttachmentLoadOp &load)
 
 		Device dev {
 			_ctx.phdev,
-				_ctx.device
+			_ctx.device
 		};
 
 		// Update descriptor set
-		_area_light->bind_material(dev, ds);
+		_area_light->bind_material(dev, _b_lights,
+			[&]() {
+				return _make_ds();
+			}
+		);
 
 		// Bind lights buffer
 		bind_ds(*_ctx.device, ds, _b_lights,
@@ -225,12 +229,10 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 				};
 
 				// Update descriptor set
-				rasterizer->bind_material(dev, ds);
-
-				// Bind lights buffer
-				bind_ds(*_ctx.device, ds, _b_lights,
-					vk::DescriptorType::eUniformBuffer,
-					RASTER_BINDING_POINT_LIGHTS
+				rasterizer->bind_material(dev, _b_lights,
+					[&]() {
+						return _make_ds();
+					}
 				);
 			}
 		}
@@ -264,6 +266,7 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 	};
 
 	// Render all regular meshes
+	// TODO: sort by pipeline
 	for (int i = 0; i < ecs.size(); i++) {
 		if (!ecs.exists <Rasterizer> (i))
 			continue;
@@ -280,12 +283,6 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 		cmd.bindPipeline(
 			vk::PipelineBindPoint::eGraphics,
 			*get_pipeline(rasterizer->mode)
-		);
-
-		// Bind descriptor set
-		cmd.bindDescriptorSets(
-			vk::PipelineBindPoint::eGraphics,
-			*_ppl, 0, *ds, {}
 		);
 
 		// Draw mesh
@@ -310,7 +307,7 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 
 		for (const auto &pr : area_light_transforms) {
 			push_constants.model = pr.first.matrix();
-			_area_light->material->diffuse = pr.second;
+			_area_light->materials[0].diffuse = pr.second;
 			_area_light->draw(cmd, _ppl, push_constants);
 		}
 	}

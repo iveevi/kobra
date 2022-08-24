@@ -141,9 +141,6 @@ static void generate_submesh_data
 	data.bitangents = cuda::make_buffer(bitangents);
 
 	data.triangles = cuda::make_buffer(triangles);
-
-	/* data.n_vertices = vertices.size();
-	data.n_triangles = triangles.size(); */
 }
 
 const std::vector <DSLB> OptixTracer::_dslb_render = {
@@ -1025,7 +1022,8 @@ void OptixTracer::_optix_update_materials()
 
 		// Regular raytracers (submeshes)
 		for (int i = 0; i < _cached.submeshes.size(); i++) {
-			Material mat = _c_raytracers[0]->get_material();
+			const Submesh *submesh = _cached.submeshes[i];
+			Material mat = submesh->material;
 
 			// Material
 			optix_rt::Material material;
@@ -1041,12 +1039,10 @@ void OptixTracer::_optix_update_materials()
 			HitGroupSbtRecord hg_sbt {};
 			hg_sbt.data.material = material;
 
-			// TODO: use _cached.submesh_transforms instead of
-			// this...
-			generate_submesh_data(*_cached.submeshes[i],
+			generate_submesh_data(*submesh,
 					*_cached.submesh_transforms[i], hg_sbt.data);
 
-			/* Import textures if necessary
+			// Import textures if necessary
 			// TODO: method?
 			if (mat.has_albedo()) {
 				const ImageData &diffuse = TextureManager::load_texture(
@@ -1073,7 +1069,7 @@ void OptixTracer::_optix_update_materials()
 
 				hg_sbt.data.textures.roughness = import_vulkan_texture(*_ctx.device, roughness);
 				hg_sbt.data.textures.has_roughness = true;
-			} */
+			}
 
 			// Lights
 			hg_sbt.data.area_lights = (optix_rt::AreaLight *) _buffers.area_lights;
@@ -1088,8 +1084,7 @@ void OptixTracer::_optix_update_materials()
 			HitGroupSbtRecord hg_sbt {};
 			hg_sbt.data.area_lights = (optix_rt::AreaLight *) _buffers.area_lights;
 			hg_sbt.data.n_area_lights = 1;
-			hg_sbt.data.material.emission
-				= to_f3(_cached.lights[i]->color);
+			hg_sbt.data.material.emission = to_f3(_cached.lights[i]->color);
 			hg_sbt.data.material.type = Shading::eEmissive;
 
 			OPTIX_CHECK(optixSbtRecordPackHeader(_programs.hit_radiance, &hg_sbt));
@@ -1170,7 +1165,9 @@ static void generate_pixel_offsets(int N, std::vector <float> &x, std::vector <f
 void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 {
 	// TODO: refresh every x samples
-	if (_accumulated + 1 % 10 == 0) {
+	static bool first = true;
+	if (first) {
+		first = false;
 		generate_pixel_offsets(width * height, _buffers.h_xoffsets, _buffers.h_yoffsets);
 		cuda::copy(_buffers.xoffset, _buffers.h_xoffsets);
 		cuda::copy(_buffers.yoffset, _buffers.h_yoffsets);

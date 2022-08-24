@@ -1,6 +1,9 @@
 #ifndef KOBRA_RENDERER_H_
 #define KOBRA_RENDERER_H_
 
+// Standard headers
+#include <map>
+
 // Engine headers
 #include "backend.hpp"
 #include "enums.hpp"
@@ -49,11 +52,16 @@ class Rasterizer : public Renderer {
 		float		has_albedo;
 		float		has_normal;
 	};
-public:
+	
+	using ResourceMap = std::map <const Rasterizer *, vk::raii::DescriptorSet>;
+
 	std::vector <BufferData>	vertex_buffer;
 	std::vector <BufferData>	index_buffer;
 	std::vector <uint32_t>		index_count;
 	std::vector <Material>		materials;
+
+	mutable std::vector <vk::raii::DescriptorSet>
+					_dsets = {};
 public:
 	// Raster mode
 	RasterMode mode = RasterMode::eAlbedo;
@@ -69,7 +77,9 @@ public:
 		const vk::raii::PipelineLayout &ppl,
 		PushConstants &) const;
 
-	void bind_material(const Device &, const vk::raii::DescriptorSet &) const;
+	void bind_material(const Device &,
+		const BufferData &,
+		const std::function <vk::raii::DescriptorSet ()> &) const;
 
 	// Friends
 	friend class layers::Raster;
