@@ -260,6 +260,7 @@ void OptixTracer::render(const vk::raii::CommandBuffer &cmd,
 
 	std::vector <const kobra::Raytracer *> raytracers;
 	std::vector <Transform> raytracer_transforms;
+	std::vector <const Transform *> raytracer_transforms_ptr;
 
 	std::vector <const Light *> lights;
 	std::vector <const Transform *> light_transforms;
@@ -285,6 +286,7 @@ void OptixTracer::render(const vk::raii::CommandBuffer &cmd,
 				dirty_raytracers = true;
 			// TODO: also check for content changes in the component
 			raytracer_transforms.push_back(ecs.get <Transform> (i));
+			raytracer_transforms_ptr.push_back(&ecs.get <Transform> (i));
 			raytracers.push_back(raytracer);
 			raytracers_index++;
 		}
@@ -315,9 +317,14 @@ void OptixTracer::render(const vk::raii::CommandBuffer &cmd,
 		_cached.light_transforms = light_transforms;
 
 		_cached.submeshes.clear();
-		for (auto *r : _c_raytracers) {
-			for (const auto &s : r->get_mesh().submeshes)
+		_cached.submesh_transforms.clear();
+
+		for (int i = 0; i < _c_raytracers.size(); i++) {
+			const kobra::Raytracer *r = _c_raytracers[i];
+			for (const auto &s : r->get_mesh().submeshes) {
 				_cached.submeshes.push_back(&s);
+				_cached.submesh_transforms.push_back(raytracer_transforms_ptr[i]);
+			}
 		}
 
 		_optix_build();
@@ -765,90 +772,6 @@ void OptixTracer::_optix_build()
 		cuda::free(d_gas_tmp);
 	}
 
-	/* for (int i = 0; i < _c_raytracers.size(); i++) {
-		// Prepare instance vertices and triangles
-		std::vector <float3> vertices;
-		std::vector <uint3> triangles;
-		
-		// TODO: raytracer method
-		const Mesh &mesh = _c_raytracers[i]->get_mesh();
-
-		for (auto s : mesh.submeshes) {
-			for (int j = 0; j < s.indices.size(); j += 3) {
-				triangles.push_back({
-					s.indices[j],
-					s.indices[j + 1],
-					s.indices[j + 2]
-				});
-			}
-
-			for (int j = 0; j < s.vertices.size(); j++) {
-				auto p = s.vertices[j].position;
-				vertices.push_back(to_f3(p));
-			}
-		}
-
-		// Create the build input
-		OptixBuildInput build_input {};
-
-		build_input.type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
-
-		CUdeviceptr d_vertices = cuda::make_buffer_ptr(vertices);
-		CUdeviceptr d_triangles = cuda::make_buffer_ptr(triangles);
-
-		OptixBuildInputTriangleArray &triangle_array = build_input.triangleArray;
-		triangle_array.vertexFormat	= OPTIX_VERTEX_FORMAT_FLOAT3;
-		triangle_array.numVertices	= vertices.size();
-		triangle_array.vertexBuffers	= &d_vertices;
-
-		triangle_array.indexFormat	= OPTIX_INDICES_FORMAT_UNSIGNED_INT3;
-		triangle_array.numIndexTriplets	= triangles.size();
-		triangle_array.indexBuffer	= d_triangles;
-
-		triangle_array.flags		= triangle_input_flags;
-
-		// SBT record properties
-		triangle_array.numSbtRecords	= 1;
-		triangle_array.sbtIndexOffsetBuffer = 0;
-		triangle_array.sbtIndexOffsetStrideInBytes = 0;
-		triangle_array.sbtIndexOffsetSizeInBytes = 0;
-
-		// Build GAS
-		CUdeviceptr d_gas_output;
-		CUdeviceptr d_gas_tmp;
-
-		OptixAccelBufferSizes gas_buffer_sizes;
-		OPTIX_CHECK(optixAccelComputeMemoryUsage(
-			_optix_ctx, &gas_accel_options,
-			&build_input, 1,
-			&gas_buffer_sizes
-		));
-		
-		KOBRA_LOG_FUNC(Log::INFO) << "GAS buffer sizes: " << gas_buffer_sizes.tempSizeInBytes
-			<< " " << gas_buffer_sizes.outputSizeInBytes << std::endl;
-
-		d_gas_output = cuda::alloc(gas_buffer_sizes.outputSizeInBytes);
-		d_gas_tmp = cuda::alloc(gas_buffer_sizes.tempSizeInBytes);
-
-		OptixTraversableHandle handle;
-		OPTIX_CHECK(optixAccelBuild(_optix_ctx,
-			0, &gas_accel_options,
-			&build_input, 1,
-			d_gas_tmp, gas_buffer_sizes.tempSizeInBytes,
-			d_gas_output, gas_buffer_sizes.outputSizeInBytes,
-			&handle, nullptr, 0
-		));
-
-		instance_gas[i] = handle;
-
-		// Free data at the end
-		cuda::free(d_vertices);
-		cuda::free(d_triangles);
-
-		cuda::free(d_gas_tmp);
-	} */
-
-	
 	// Lights (a cube for now)
 	Mesh box = Mesh::box({0, 0, 0}, {0.5, 0.01, 0.5});
 
@@ -934,7 +857,7 @@ void OptixTracer::_optix_build()
 	std::vector <OptixInstance> instances_no_lights;
 
 	for (int i = 0; i < _cached.submeshes.size(); i++) {
-		glm::mat4 mat = _c_transforms[0].matrix();
+		glm::mat4 mat = _cached.submesh_transforms[i]->matrix();
 
 		float transform[12] = {
 			mat[0][0], mat[1][0], mat[2][0], mat[3][0],
@@ -953,29 +876,6 @@ void OptixTracer::_optix_build()
 		instances.push_back(instance);
 		instances_no_lights.push_back(instance);
 	}
-
-	/* for (int i = 0; i < _c_raytracers.size(); i++) {
-		// Prepare the instance transform
-		// TODO: keep in a separate array
-		glm::mat4 mat = _c_transforms[i].matrix();
-
-		float transform[12] = {
-			mat[0][0], mat[1][0], mat[2][0], mat[3][0],
-			mat[0][1], mat[1][1], mat[2][1], mat[3][1],
-			mat[0][2], mat[1][2], mat[2][2], mat[3][2]
-		};
-
-		OptixInstance instance {};
-		memcpy(instance.transform, transform, sizeof(float) * 12);
-
-		// Set the instance handle
-		instance.traversableHandle = instance_gas[i];
-		instance.visibilityMask = 0xFF;
-		instance.sbtOffset = i;
-
-		instances.push_back(instance);
-		instances_no_lights.push_back(instance);
-	} */
 
 	for (int i = 0; i < _cached.lights.size(); i++) {
 		// Prepare the instance transform
@@ -1124,7 +1024,7 @@ void OptixTracer::_optix_update_materials()
 		hg_sbts.clear();
 
 		// Regular raytracers (submeshes)
-		for (const Submesh *s : _cached.submeshes) {
+		for (int i = 0; i < _cached.submeshes.size(); i++) {
 			Material mat = _c_raytracers[0]->get_material();
 
 			// Material
@@ -1141,11 +1041,10 @@ void OptixTracer::_optix_update_materials()
 			HitGroupSbtRecord hg_sbt {};
 			hg_sbt.data.material = material;
 
-			// generate_mesh_data(_c_raytracers[0], _c_transforms[0], hg_sbt.data);
-
 			// TODO: use _cached.submesh_transforms instead of
 			// this...
-			generate_submesh_data(*s, _c_transforms[0], hg_sbt.data);
+			generate_submesh_data(*_cached.submeshes[i],
+					*_cached.submesh_transforms[i], hg_sbt.data);
 
 			/* Import textures if necessary
 			// TODO: method?
@@ -1184,65 +1083,6 @@ void OptixTracer::_optix_update_materials()
 			hg_sbts.push_back(hg_sbt);
 		}
 
-		/* for (int i = 0; i < _c_raytracers.size(); i++) {
-			Material mat = _c_raytracers[i]->get_material();
-
-			// Material
-			optix_rt::Material material;
-			material.diffuse = to_f3(mat.diffuse);
-			material.specular = to_f3(mat.specular);
-			material.emission = to_f3(mat.emission);
-			material.ambient = to_f3(mat.ambient);
-			material.shininess = mat.shininess;
-			material.roughness = mat.roughness;
-			material.refraction = mat.refraction;
-			material.type = mat.type;
-
-			HitGroupSbtRecord hg_sbt {};
-			hg_sbt.data.material = material;
-
-			generate_mesh_data(_c_raytracers[i], _c_transforms[i], hg_sbt.data);
-
-			// Import textures if necessary
-			// TODO: method?
-			if (mat.has_albedo()) {
-				const ImageData &diffuse = TextureManager::load_texture(
-					_ctx.dev(), mat.albedo_texture
-				);
-
-				hg_sbt.data.textures.diffuse = import_vulkan_texture(*_ctx.device, diffuse);
-				hg_sbt.data.textures.has_diffuse = true;
-			}
-
-			if (mat.has_normal()) {
-				const ImageData &normal = TextureManager::load_texture(
-					_ctx.dev(), mat.normal_texture
-				);
-
-				hg_sbt.data.textures.normal = import_vulkan_texture(*_ctx.device, normal);
-				hg_sbt.data.textures.has_normal = true;
-			}
-
-			if (mat.has_roughness()) {
-				const ImageData &roughness = TextureManager::load_texture(
-					_ctx.dev(), mat.roughness_texture
-				);
-
-				hg_sbt.data.textures.roughness = import_vulkan_texture(*_ctx.device, roughness);
-				hg_sbt.data.textures.has_roughness = true;
-			}
-
-			// Lights
-			hg_sbt.data.area_lights = (optix_rt::AreaLight *) _buffers.area_lights;
-			hg_sbt.data.n_area_lights = area_lights.size();
-
-			OPTIX_CHECK(optixSbtRecordPackHeader(_programs.hit_radiance, &hg_sbt));
-			hg_sbts.push_back(hg_sbt);
-
-			// OPTIX_CHECK(optixSbtRecordPackHeader(_programs.hit_shadow, &hg_sbt));
-			// hg_sbts.push_back(hg_sbt);
-		} */
-
 		// Area lights
 		for (int i = 0; i < _cached.lights.size(); i++) {
 			HitGroupSbtRecord hg_sbt {};
@@ -1254,9 +1094,6 @@ void OptixTracer::_optix_update_materials()
 
 			OPTIX_CHECK(optixSbtRecordPackHeader(_programs.hit_radiance, &hg_sbt));
 			hg_sbts.push_back(hg_sbt);
-
-			/* OPTIX_CHECK(optixSbtRecordPackHeader(_programs.hit_shadow, &hg_sbt));
-			hg_sbts.push_back(hg_sbt); */
 		}
 
 		// Duplicate the SBTs for the shadow program
@@ -1332,12 +1169,8 @@ static void generate_pixel_offsets(int N, std::vector <float> &x, std::vector <f
 
 void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 {
-	// TODO: how to generate new noise for halton?
-	static bool first = true;
-
 	// TODO: refresh every x samples
-	if (first) {
-		first = false;
+	if (_accumulated + 1 % 10 == 0) {
 		generate_pixel_offsets(width * height, _buffers.h_xoffsets, _buffers.h_yoffsets);
 		cuda::copy(_buffers.xoffset, _buffers.h_xoffsets);
 		cuda::copy(_buffers.yoffset, _buffers.h_yoffsets);

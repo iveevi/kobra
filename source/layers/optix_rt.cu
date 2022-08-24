@@ -84,7 +84,7 @@ extern "C" __global__ void __raygen__rg()
 		ray_origin, ray_direction,
 		0.0f, 1e16f, 0.0f,
 		OptixVisibilityMask(255),
-		OPTIX_RAY_FLAG_NONE,
+		OPTIX_RAY_FLAG_DISABLE_ANYHIT,
 		0, 0, 0,
 		i0, i1
 	);
@@ -429,7 +429,9 @@ __device__ bool shadow_visibility(float3 origin, float3 dir, float R)
 		origin, dir,
 		0, R - 0.01f, 0,
 		OptixVisibilityMask(255),
-		OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT,
+		OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT
+			| OPTIX_RAY_FLAG_DISABLE_ANYHIT
+			| OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT,
 		params.instances, 0, 1,
 		j0, j1
 	);
@@ -530,9 +532,12 @@ static __forceinline__ __device__ float3 calculate_normal
 	if (dot(ng, optixGetWorldRayDirection()) > 0.0f)
 		ng = -ng;
 
+	ng = normalize(ng);
+
 	float3 normal = interpolate(hit_data->normals, triangle, bary);
 	if (dot(normal, ng) < 0.0f)
-		normal = -normal;
+		normal -= 2.0f * dot(normal, ng) * ng;
+
 	normal = normalize(normal);
 
 	if (hit_data->textures.has_normal) {
@@ -614,9 +619,6 @@ extern "C" __global__ void __closesthit__radiance()
 
 	float3 wo = -optixGetWorldRayDirection();
 	float3 n = calculate_normal(hit_data, triangle, bary);
-	if (dot(n, wo) < 0.0f)
-		n = -n;
-
 	float3 x = interpolate(hit_data->vertices, triangle, bary)
 		+ 1e-3f * n;
 

@@ -409,7 +409,7 @@ std::optional <Mesh> Mesh::load(const std::string &path)
 	// Read scene
 	const aiScene *scene = importer.ReadFile(
 		path, aiProcess_Triangulate
-			| aiProcess_GenSmoothNormals
+			| aiProcess_GenNormals
 			| aiProcess_FlipUVs
 	);
 

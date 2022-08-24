@@ -85,6 +85,8 @@ class OptixTracer {
 		Transform camera_transform {};
 
 		std::vector <const Submesh *> submeshes {};
+		std::vector <const Transform *> submesh_transforms {};
+
 		unsigned int num_instances;
 	} _cached;
 
