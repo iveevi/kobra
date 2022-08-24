@@ -6,7 +6,7 @@
 
 // Engine headers
 #include "../cuda/math.cuh"
-#include "../types.hpp"
+#include "../cuda/material.cuh"
 
 namespace kobra {
 
@@ -36,21 +36,9 @@ struct Params
 	OptixTraversableHandle	handle_shadow;
 };
 
-// Material type
-struct Material {
-	float3		diffuse;
-	float3		specular;
-	float3		emission;
-	float3		ambient;
-	float		shininess;
-	float		roughness;
-	float		refraction;
-	Shading		type;
-};
-
 __forceinline__ __device__ float intersects_triangle
 		(float3 v1, float3 v2, float3 v3,
-		 float3 origin, float3 dir)
+		float3 origin, float3 dir)
 {
 	float3 e1 = v2 - v1;
 	float3 e2 = v3 - v1;
@@ -132,7 +120,7 @@ struct HitGroupData
 	float3			*bitangents;
 
 	// Material and textures
-	Material		material;
+	cuda::Material		material;
 
 	struct {
 		cudaTextureObject_t	diffuse;

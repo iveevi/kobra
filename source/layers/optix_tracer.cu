@@ -1026,7 +1026,7 @@ void OptixTracer::_optix_update_materials()
 			Material mat = submesh->material;
 
 			// Material
-			optix_rt::Material material;
+			cuda::Material material;
 			material.diffuse = to_f3(mat.diffuse);
 			material.specular = to_f3(mat.specular);
 			material.emission = to_f3(mat.emission);
@@ -1151,14 +1151,8 @@ static void generate_pixel_offsets(int N, std::vector <float> &x, std::vector <f
 	generate_halton_sequence(N, b2, y);
 
 	for (int i = 0; i < N; i++) {
-		int r1 = rand() % N + N;
-		int r2 = rand() % N + N;
-
-		r1 = (i + r1) % N;
-		r2 = (i + r2) % N;
-
-		x[i] = x[r1] - 0.5f;
-		y[i] = y[r2] - 0.5f;
+		x[i] -= 0.5f;
+		y[i] -= 0.5f;
 	}
 }
 

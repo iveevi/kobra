@@ -4,12 +4,16 @@
 // Engine headers
 #include "../../include/cuda/math.cuh"
 #include "../../include/cuda/color.cuh"
+#include "../../include/cuda/random.cuh"
+#include "../../include/cuda/brdf.cuh"
 #include "../../include/layers/optix_tracer_common.cuh"
 
 using kobra::optix_rt::HitGroupData;
 using kobra::optix_rt::MissData;
 using kobra::optix_rt::AreaLight;
-using kobra::optix_rt::Material;
+
+using kobra::cuda::Material;
+using kobra::cuda::GGX;
 
 extern "C"
 {
@@ -33,16 +37,24 @@ static __forceinline__ __device__ void pack_pointer(T * ptr, uint32_t &i0, uint3
 	i1 = uptr & 0x00000000ffffffff;
 }
 
-static __forceinline__ __device__ void make_ray(uint3 idx, uint3 dim, float3 &origin, float3 &direction)
+static __forceinline__ __device__ void make_ray
+		(uint3 idx, uint3 dim,
+		 float3 &origin, float3 &direction,
+		 float3 &seed)
 {
 	const float3 U = params.cam_u;
 	const float3 V = params.cam_v;
 	const float3 W = params.cam_w;
 
 	int index = idx.x + params.image_width * idx.y;
+
+	// TODO: jittered halton sequence
+	float xoffset = fract(random3(seed).x) - 0.5f;
+	float yoffset = fract(random3(seed).y) - 0.5f;
+
 	float2 d = 2.0f * make_float2(
-		float(idx.x + params.xoffset[index])/dim.x,
-		float(idx.y + params.yoffset[index])/dim.y
+		float(idx.x + xoffset)/dim.x,
+		float(idx.y + yoffset)/dim.y
 	) - 1.0f;
 
 	origin = params.cam_eye;
@@ -63,18 +75,18 @@ extern "C" __global__ void __raygen__rg()
 	const uint3 idx = optixGetLaunchIndex();
 	const uint3 dim = optixGetLaunchDimensions();
 
-	// Generate ray
-	float3 ray_origin;
-	float3 ray_direction;
-
-	make_ray(idx, dim, ray_origin, ray_direction);
-
 	// Pack payload
 	RayPacket ray_packet;
 	ray_packet.throughput = {1.0f, 1.0f, 1.0f};
 	ray_packet.value = {0.0f, 0.0f, 0.0f};
 	ray_packet.seed = {float(idx.x), float(idx.y), params.time};
 	ray_packet.depth = 0;
+
+	// Generate ray
+	float3 ray_origin;
+	float3 ray_direction;
+
+	make_ray(idx, dim, ray_origin, ray_direction, ray_packet.seed);
 
 	unsigned int i0, i1;
 	pack_pointer(&ray_packet, i0, i1);
@@ -91,6 +103,7 @@ extern "C" __global__ void __raygen__rg()
 
 	// Record the results
 	int index = idx.x + params.image_width * idx.y;
+	// params.pbuffer[index] = ray_packet.value;
 	params.pbuffer[index] = (ray_packet.value + params.pbuffer[index] * params.accumulated)/(params.accumulated + 1);
 	params.image[index] = kobra::cuda::make_color(params.pbuffer[index]);
 }
@@ -149,249 +162,22 @@ __device__ __forceinline__ float3 operator*(mat3 m, float3 v)
 
 #define MAX_DEPTH 5
 
-__device__ float fract(float x)
+// Evaluate BRDF of material
+__device__ float3 brdf(const Material &mat, float3 n, float3 wi, float3 wo)
 {
-	return x - floor(x);
+	return GGX::brdf(mat, n, wi, wo) + mat.diffuse/M_PI;
 }
 
-__device__ float3 fract(float3 x)
+// Evaluate PDF of BRDF
+__device__ float pdf(const Material &mat, float3 n, float3 wi, float3 wo)
 {
-	return make_float3(
-		fract(x.x),
-		fract(x.y),
-		fract(x.z)
-	);
+	return GGX::pdf(mat, n, wi, wo);
 }
 
-__device__ uint3 operator+(uint3 a, unsigned int b)
+// Sample BRDF
+__device__ float3 sample(const Material &mat, float3 n, float3 wo, float3 &seed)
 {
-	return make_uint3(a.x + b, a.y + b, a.z + b);
-}
-
-__device__ uint3 operator>>(uint3 a, unsigned int b)
-{
-	return make_uint3(a.x >> b, a.y >> b, a.z >> b);
-}
-
-__device__ uint3 &operator&=(uint3 &a, uint3 b)
-{
-	a.x &= b.x;
-	a.y &= b.y;
-	a.z &= b.z;
-	return a;
-}
-
-__device__ uint3 &operator|=(uint3 &a, uint3 b)
-{
-	a.x |= b.x;
-	a.y |= b.y;
-	a.z |= b.z;
-	return a;
-}
-
-__device__ uint3 &operator^=(uint3 &a, uint3 b)
-{
-	a.x ^= b.x;
-	a.y ^= b.y;
-	a.z ^= b.z;
-	return a;
-}
-
-// Random number generation
-__device__ uint3 pcg3d(uint3 v)
-{
-	v = v * 1664525u + 1013904223u;
-	v.x += v.y * v.z;
-	v.y += v.z * v.x;
-	v.z += v.x * v.y;
-	v ^= v >> 16u;
-	v.x += v.y * v.z;
-	v.y += v.z * v.x;
-	v.z += v.x * v.y;
-	return v;
-}
-
-__device__ unsigned int rand(unsigned int lim)
-{
-	const uint3 v = pcg3d(make_uint3(
-		optixGetLaunchIndex().x,
-		optixGetLaunchIndex().y,
-		optixGetLaunchIndex().z
-	));
-
-	return (v.x + v.y - v.z) % lim;
-}
-
-__device__ float3 random3(float3 &seed)
-{
-	uint3 v = *reinterpret_cast <uint3*> (&seed);
-	v = pcg3d(v);
-	v &= make_uint3(0x007fffffu);
-	v |= make_uint3(0x3f800000u);
-	float3 r = *reinterpret_cast <float3*> (&v);
-	seed = r - 1.0f;
-	return seed;
-}
-
-__device__ float3 random_sphere(float3 &seed)
-{
-	float3 r = random3(seed);
-	float ang1 = (r.x + 1.0f) * M_PI;	
-	float u = r.y;
-	float u2 = u * u;
-	
-	float sqrt1MinusU2 = sqrt(1.0 - u2);
-	
-	float x = sqrt1MinusU2 * cos(ang1);
-	float y = sqrt1MinusU2 * sin(ang1);
-	float z = u;
-
-	return float3 {x, y, z};
-}
-
-// GGX microfacet distribution function
-__device__ float ggx_d(float3 n, float3 h, Material mat)
-{
-	float alpha = mat.roughness;
-	float theta = acos(clamp(dot(n, h), 0.0f, 0.999f));
-	
-	return (alpha * alpha)
-		/ (M_PI * pow(cos(theta), 4)
-		* pow(alpha * alpha + tan(theta) * tan(theta), 2.0f));
-}
-
-// Smith shadow-masking function (single)
-__device__ float G1(float3 n, float3 v, Material mat)
-{
-	if (dot(v, n) <= 0.0f)
-		return 0.0f;
-
-	float alpha = mat.roughness;
-	float theta = acos(clamp(dot(n, v), 0.0f, 0.999f));
-
-	float tan_theta = tan(theta);
-
-	float denom = 1 + sqrt(1 + alpha * alpha * tan_theta * tan_theta);
-	return 2.0f/denom;
-}
-
-// Smith shadow-masking function (double)
-__device__ float G(float3 n, float3 wi, float3 wo, Material mat)
-{
-	return G1(n, wo, mat) * G1(n, wi, mat);
-}
-
-// Shlicks approximation to the Fresnel reflectance
-__device__ float3 ggx_f(float3 wi, float3 h, Material mat)
-{
-	float k = pow(1 - dot(wi, h), 5);
-	return mat.specular + (1 - mat.specular) * k;
-}
-
-// GGX specular brdf
-__device__ float3 ggx_brdf(Material mat, float3 n, float3 wi, float3 wo)
-{
-	if (dot(wi, n) <= 0.0f || dot(wo, n) <= 0.0f)
-		return float3 {0.0f, 0.0f, 0.0f};
-
-	float3 h = normalize(wi + wo);
-
-	float3 f = ggx_f(wi, h, mat);
-	float g = G(n, wi, wo, mat);
-	float d = ggx_d(n, h, mat);
-
-	float3 num = f * g * d;
-	float denom = 4 * dot(wi, n) * dot(wo, n);
-
-	return num / denom;
-}
-
-// GGX pdf
-__device__ float ggx_pdf(Material mat, float3 n, float3 wi, float3 wo)
-{
-	if (dot(wi, n) <= 0.0f || dot(wo, n) < 0.0f)
-		return 0.0f;
-
-	float3 h = normalize(wi + wo);
-
-	float avg_Kd = (mat.diffuse.x + mat.diffuse.y + mat.diffuse.z) / 3.0f;
-	float avg_Ks = (mat.specular.x + mat.specular.y + mat.specular.z) / 3.0f;
-
-	float t = 1.0f;
-	if (avg_Kd + avg_Ks > 0.0f)
-		t = max(avg_Ks/(avg_Kd + avg_Ks), 0.25f);
-
-	float term1 = dot(n, wi)/M_PI;
-	float term2 = ggx_d(n, h, mat) * dot(n, h)/(4.0f * dot(wi, h));
-
-	return (1 - t) * term1 + t * term2;
-}
-
-// Sample from GGX distribution
-__device__ float3 rotate(float3 s, float3 n)
-{
-	float3 w = n;
-	float3 a = float3 {0.0f, 1.0f, 0.0f};
-
-	if (abs(dot(w, a)) > 0.999f)
-		a = float3 {0.0f, 0.0f, 1.0f};
-
-	if (abs(dot(w, a)) > 0.999f)
-		a = float3 {0.0f, 0.0f, 1.0f};
-
-	float3 u = normalize(cross(w, a));
-	float3 v = normalize(cross(w, u));
-
-	return u * s.x + v * s.y + w * s.z;
-}
-
-__device__ float3 ggx_sample(float3 n, float3 wo, Material mat, float3 &seed)
-{
-	float avg_Kd = (mat.diffuse.x + mat.diffuse.y + mat.diffuse.z) / 3.0f;
-	float avg_Ks = (mat.specular.x + mat.specular.y + mat.specular.z) / 3.0f;
-
-	float t = 1.0f;
-	if (avg_Kd + avg_Ks > 0.0f)
-		t = max(avg_Ks/(avg_Kd + avg_Ks), 0.25f);
-
-	float3 r = random3(seed);
-	float3 eta = fract(r);
-
-	eta.x = 0.0f;
-	if (eta.x < t) {
-		// Specular sampling
-		float k = sqrt(eta.y/(1 - eta.y));
-		float theta = atan(k * mat.roughness);
-		float phi = 2.0f * M_PI * eta.z;
-
-		float3 h = float3 {
-			sin(theta) * cos(phi),
-			sin(theta) * sin(phi),
-			cos(theta)
-		};
-
-		h = rotate(h, n);
-
-		return reflect(-wo, h);
-	}
-
-	// Diffuse sampling
-	float theta = acos(sqrt(eta.y));
-	float phi = 2.0f * M_PI * eta.z;
-
-	float3 s = float3 {
-		sin(theta) * cos(phi),
-		sin(theta) * sin(phi),
-		cos(theta)
-	};
-
-	return rotate(s, n);
-}
-
-// BRDF of material
-__device__ float3 brdf(Material mat, float3 n, float3 wi, float3 wo)
-{
-	return ggx_brdf(mat, n, wi, wo) + mat.diffuse/M_PI;
+	return GGX::sample(mat, n, wo, seed);
 }
 
 // Power heurestic
@@ -462,7 +248,7 @@ __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 	float ldot = abs(dot(light.normal(), wi));
 	if (ldot > 1e-6) {
 		float pdf_light = (R * R)/(light.area() * ldot);
-		float pdf_brdf = ggx_pdf(mat, n, wi, wo);
+		float pdf_brdf = pdf(mat, n, wi, wo);
 
 		bool vis = shadow_visibility(x, wi, R);
 		if (pdf_light > 1e-9 && vis) {
@@ -473,13 +259,13 @@ __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 	}
 
 	// BRDF
-	wi = ggx_sample(n, wo, mat, seed);
+	wi = sample(mat, n, wo, seed);
 	if (dot(wi, n) <= 0.0f)
 		return contr_nee;
 	
 	f = brdf(mat, n, wi, wo) * max(dot(n, wi), 0.0f);
 
-	float pdf_brdf = ggx_pdf(mat, n, wi, wo);
+	float pdf_brdf = pdf(mat, n, wi, wo);
 	float pdf_light = 0.0f;
 
 	// TODO: need to check intersection for lights specifically (and
@@ -625,8 +411,8 @@ extern "C" __global__ void __closesthit__radiance()
 	rp->value += direct * rp->throughput;
 
 	// Generate new ray
-	float3 wi = ggx_sample(n, wo, material, rp->seed);
-	float pdf = ggx_pdf(material, n, wi, wo);
+	float3 wi = sample(material, n, wo, rp->seed);
+	float pdf = ::pdf(material, n, wi, wo);
 
 	if (pdf <= 1e-9)
 		return;
