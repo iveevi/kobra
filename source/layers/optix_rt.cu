@@ -89,9 +89,6 @@ extern "C" __global__ void __raygen__rg()
 		i0, i1
 	);
 
-	// Unpack payload
-	// ray_packet = *unpack_point <RayPacket> (i0, i1);
-
 	// Record the results
 	int index = idx.x + params.image_width * idx.y;
 	params.pbuffer[index] = (ray_packet.value + params.pbuffer[index] * params.accumulated)/(params.accumulated + 1);
@@ -480,7 +477,7 @@ __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 	if (dot(wi, n) <= 0.0f)
 		return contr_nee;
 	
-	f = brdf(mat, n, wi, wo) * dot(n, wi);
+	f = brdf(mat, n, wi, wo) * max(dot(n, wi), 0.0f);
 
 	float pdf_brdf = ggx_pdf(mat, n, wi, wo);
 	float pdf_light = 0.0f;
@@ -493,7 +490,7 @@ __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 
 	R = ltime;
 	pdf_light = (R * R)/(light.area() * abs(dot(light.normal(), wi)));
-	if (pdf_light > 1e-9) {
+	if (pdf_light > 1e-9 && pdf_brdf > 1e-9) {
 		float weight = power(pdf_brdf, pdf_light);
 		float3 intensity = light.intensity;
 		contr_brdf += weight * f * intensity/pdf_brdf;

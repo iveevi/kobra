@@ -24,7 +24,7 @@ using namespace kobra;
 
 // Scene path
 // std::string scene_path = "~/models/sponza/scene.kobra";
-std::string scene_path = "/home/venki/models/dabrovic_sponza.kobra";
+std::string scene_path = "/home/venki/models/fireplace_room.kobra";
 
 // Test app
 struct ECSApp : public BaseApp {

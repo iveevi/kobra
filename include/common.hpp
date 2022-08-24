@@ -102,18 +102,27 @@ inline std::string to_lower(const std::string &str)
 inline std::string resolve_path(const std::string &file,
 		const std::vector <std::string> &dirs)
 {
-	if (file_exists(file))
-		return file;
-	if (file_exists(to_lower(file)))
-		return to_lower(file);
+	// Replace \ with /
+	// TODO: system dependent
+	std::string f = file;
+	for (auto &c : f) {
+		if (c == '\\')
+			c = '/';
+	}
+
+	if (file_exists(f))
+		return f;
+
+	if (file_exists(to_lower(f)))
+		return to_lower(f);
 
 	for (const auto &dir : dirs) {
-		std::string full = dir + "/" + file;
+		std::string full = dir + "/" + f;
 		std::cout << "Trying: " << full << std::endl;
 		if (file_exists(full))
 			return full;
 
-		full = dir + "/" + to_lower(file);
+		full = dir + "/" + to_lower(f);
 		std::cout << "Trying: " << full << std::endl;
 		if (file_exists(full))
 			return full;

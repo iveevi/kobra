@@ -131,25 +131,15 @@ Raster::Raster(const Context &ctx, const vk::AttachmentLoadOp &load)
 		_area_light = new Rasterizer({_ctx.phdev, _ctx.device}, box, new Material());
 
 		// Setup descriptor set for area light
-		_ds_components.insert({_area_light, _make_ds()});
-		const auto &ds = _ds_components.at(_area_light);
-
-		Device dev {
-			_ctx.phdev,
-			_ctx.device
-		};
+		_cached_rasterizers.insert(_area_light);
 
 		// Update descriptor set
-		_area_light->bind_material(dev, _b_lights,
+		_area_light->bind_material(
+			{_ctx.phdev, _ctx.device},
+			_b_lights,
 			[&]() {
 				return _make_ds();
 			}
-		);
-
-		// Bind lights buffer
-		bind_ds(*_ctx.device, ds, _b_lights,
-			vk::DescriptorType::eUniformBuffer,
-			RASTER_BINDING_POINT_LIGHTS
 		);
 	}
 }
@@ -219,17 +209,13 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 			// Initialize corresponding descriptor
 			// set if not done yet
 			const Rasterizer *rasterizer = &ecs.get <Rasterizer> (i);
-			if (_ds_components.count(rasterizer) == 0) {
-				_ds_components.insert({rasterizer, _make_ds()});
-				const auto &ds = _ds_components.at(rasterizer);
 
-				Device dev {
-					_ctx.phdev,
-					_ctx.device
-				};
-
-				// Update descriptor set
-				rasterizer->bind_material(dev, _b_lights,
+			if (_cached_rasterizers.count(rasterizer) == 0) {
+				_cached_rasterizers.insert(rasterizer);
+				
+				rasterizer->bind_material(
+					{_ctx.phdev, _ctx.device},
+					_b_lights,
 					[&]() {
 						return _make_ds();
 					}
@@ -277,7 +263,6 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 
 		// Get rasterizer
 		const Rasterizer *rasterizer = &ecs.get <Rasterizer> (i);
-		const auto &ds = _ds_components.at(rasterizer);
 
 		// Bind pipeline
 		cmd.bindPipeline(
@@ -295,14 +280,6 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 		cmd.bindPipeline(
 			vk::PipelineBindPoint::eGraphics,
 			*get_pipeline(eAlbedo)
-		);
-
-		// Bind descriptor set
-		const auto &ds = _ds_components.at(_area_light);
-
-		cmd.bindDescriptorSets(
-			vk::PipelineBindPoint::eGraphics,
-			*_ppl, 0, *ds, {}
 		);
 
 		for (const auto &pr : area_light_transforms) {

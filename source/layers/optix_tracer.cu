@@ -1166,6 +1166,8 @@ void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 {
 	// TODO: refresh every x samples
 	static bool first = true;
+
+	// TODO: generate offsets in GPU
 	if (first) {
 		first = false;
 		generate_pixel_offsets(width * height, _buffers.h_xoffsets, _buffers.h_yoffsets);

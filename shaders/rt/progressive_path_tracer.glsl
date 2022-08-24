@@ -195,7 +195,7 @@ vec3 Ld(vec3 x, vec3 wo, vec3 n, Material mat)
 	vec3 wi = normalize(lpos - x);
 	float R = length(lpos - x);
 
-	vec3 f = brdf(mat, n, wi, wo) * dot(n, wi);
+	vec3 f = brdf(mat, n, wi, wo) * max(dot(n, wi), 0.0f);
 
 	float ldot = abs(dot(normal(light), wi));
 	if (ldot > 1e-6) {

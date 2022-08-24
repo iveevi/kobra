@@ -48,7 +48,7 @@ private:
 	vk::raii::DescriptorSet	_make_ds() const;
 
 	// Rasterizer components to descriptor set
-	Rasterizer::ResourceMap		_ds_components;
+	std::set <const Rasterizer *>	_cached_rasterizers;
 
 	// Box mesh for area lights
 	Rasterizer			*_area_light;
