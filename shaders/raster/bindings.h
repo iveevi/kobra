@@ -5,4 +5,6 @@ const int RASTER_BINDING_ALBEDO_MAP	= 0;
 const int RASTER_BINDING_NORMAL_MAP	= 1;
 const int RASTER_BINDING_POINT_LIGHTS	= 3;
 
+const int RASTER_BINDING_SKYBOX		= 0;
+
 #endif

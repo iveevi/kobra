@@ -23,7 +23,7 @@ struct Camera {
 	glm::mat4 perspective_matrix() const {
 		return glm::perspective(
 			glm::radians(fov),
-			aspect, 0.1f, 100.0f
+			aspect, 0.1f, 1000.0f
 		);
 	}
 

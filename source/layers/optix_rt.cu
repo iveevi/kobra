@@ -101,10 +101,15 @@ extern "C" __global__ void __raygen__rg()
 		i0, i1
 	);
 
+	// Check value
+	float3 pixel = ray_packet.value;
+	if (isnan(pixel.x) || isnan(pixel.y) || isnan(pixel.z))
+		pixel = {0.0f, 0.0f, 0.0f};
+
 	// Record the results
 	int index = idx.x + params.image_width * idx.y;
 	// params.pbuffer[index] = ray_packet.value;
-	params.pbuffer[index] = (ray_packet.value + params.pbuffer[index] * params.accumulated)/(params.accumulated + 1);
+	params.pbuffer[index] = (pixel + params.pbuffer[index] * params.accumulated)/(params.accumulated + 1);
 	params.image[index] = kobra::cuda::make_color(params.pbuffer[index]);
 }
 

@@ -36,6 +36,29 @@ private:
 
 	BufferData			_b_lights = nullptr;
 
+	// Skybox data
+	struct Skybox {
+		bool enabled = false;
+		bool initialized = false;
+
+		BufferData vertex_buffer = nullptr;
+		BufferData index_buffer = nullptr;
+
+		std::string path;
+
+		vk::raii::Pipeline pipeline = nullptr;
+		vk::raii::PipelineLayout ppl = nullptr;
+		vk::raii::DescriptorSetLayout dsl = nullptr;
+		vk::raii::DescriptorSet dset = nullptr;
+
+		static const std::vector <DSLB>	dsl_bindings;
+
+		// TODO: equiangular or 6 faces?
+	} _skybox;
+
+	// Initialize the skybox
+	void _initialize_skybox();
+
 	// Bind pipeline from raster mode
 	const vk::raii::Pipeline &get_pipeline(RasterMode);
 
@@ -58,6 +81,9 @@ public:
 
 	// Constructors
 	Raster(const Context &, const vk::AttachmentLoadOp &);
+
+	// Methods
+	void environment_map(const std::string &);
 
 	// Render
 	void render(const vk::raii::CommandBuffer &,

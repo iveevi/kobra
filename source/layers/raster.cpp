@@ -1,5 +1,6 @@
 // Engine headers
 #include "../../include/layers/raster.hpp"
+#include "../../include/texture_manager.hpp"
 #include "../../shaders/raster/bindings.h"
 
 namespace kobra {
@@ -29,6 +30,79 @@ const std::vector <DSLB> Raster::_dsl_bindings {
 		1, vk::ShaderStageFlagBits::eFragment
 	},
 };
+
+const std::vector <DSLB> Raster::Skybox::dsl_bindings {
+	DSLB {
+		RASTER_BINDING_SKYBOX,
+		vk::DescriptorType::eCombinedImageSampler,
+		1, vk::ShaderStageFlagBits::eFragment
+	},
+};
+
+//////////////////////
+// Static functions //
+//////////////////////
+
+// TODO: replace with Mesh::box
+static Mesh make_skybox()
+{
+	static const std::vector <Vertex> vertices {
+		Vertex {{-1.0f,  1.0f, -1.0f}},
+		Vertex {{-1.0f, -1.0f, -1.0f}},
+		Vertex {{1.0f, -1.0f, -1.0f}},
+		Vertex {{1.0f, -1.0f, -1.0f}},
+		Vertex {{1.0f,  1.0f, -1.0f}},
+		Vertex {{-1.0f,  1.0f, -1.0f}},
+
+		Vertex {{-1.0f, -1.0f,  1.0f}},
+		Vertex {{-1.0f, -1.0f, -1.0f}},
+		Vertex {{-1.0f,  1.0f, -1.0f}},
+		Vertex {{-1.0f,  1.0f, -1.0f}},
+		Vertex {{-1.0f,  1.0f,  1.0f}},
+		Vertex {{-1.0f, -1.0f,  1.0f}},
+
+		Vertex {{1.0f, -1.0f, -1.0f}},
+		Vertex {{1.0f, -1.0f,  1.0f}},
+		Vertex {{1.0f,  1.0f,  1.0f}},
+		Vertex {{1.0f,  1.0f,  1.0f}},
+		Vertex {{1.0f,  1.0f, -1.0f}},
+		Vertex {{1.0f, -1.0f, -1.0f}},
+
+		Vertex {{-1.0f, -1.0f,  1.0f}},
+		Vertex {{-1.0f,  1.0f,  1.0f}},
+		Vertex {{1.0f,  1.0f,  1.0f}},
+		Vertex {{1.0f,  1.0f,  1.0f}},
+		Vertex {{1.0f, -1.0f,  1.0f}},
+		Vertex {{-1.0f, -1.0f,  1.0f}},
+
+		Vertex {{-1.0f,  1.0f, -1.0f}},
+		Vertex {{1.0f,  1.0f, -1.0f}},
+		Vertex {{1.0f,  1.0f,  1.0f}},
+		Vertex {{1.0f,  1.0f,  1.0f}},
+		Vertex {{-1.0f,  1.0f,  1.0f}},
+		Vertex {{-1.0f,  1.0f, -1.0f}},
+
+		Vertex {{-1.0f, -1.0f, -1.0f}},
+		Vertex {{-1.0f, -1.0f,  1.0f}},
+		Vertex {{1.0f, -1.0f, -1.0f}},
+		Vertex {{1.0f, -1.0f, -1.0f}},
+		Vertex {{-1.0f, -1.0f,  1.0f}},
+		Vertex {{1.0f, -1.0f,  1.0f}}
+	};
+
+	static const std::vector <uint32_t> indices {
+		0, 1, 2, 2, 3, 0,
+		4, 5, 6, 6, 7, 4,
+		8, 9, 10, 10, 11, 8,
+		12, 13, 14, 14, 15, 12,
+		16, 17, 18, 18, 19, 16,
+		20, 21, 22, 22, 23, 20
+	};
+
+	return std::vector <Submesh> {
+		Submesh {vertices, indices, Material {}}
+	};
+}
 
 ////////////////////
 // Aux structures //
@@ -142,6 +216,25 @@ Raster::Raster(const Context &ctx, const vk::AttachmentLoadOp &load)
 			}
 		);
 	}
+}
+
+/////////////
+// Methods //
+/////////////
+
+void Raster::environment_map(const std::string &path)
+{
+	if (!_skybox.initialized)
+		_initialize_skybox();
+
+	_skybox.path = path;
+	_skybox.enabled = true;
+
+	// Bind to its descriptor set
+	TextureManager::bind(_ctx.dev(),
+		_skybox.dset, _skybox.path,
+		RASTER_BINDING_SKYBOX
+	);
 }
 
 ////////////
@@ -289,6 +382,36 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 		}
 	}
 
+	// Render skybox
+	if (_skybox.enabled) {
+		// Bind pipeline
+		cmd.bindPipeline(
+			vk::PipelineBindPoint::eGraphics,
+			*_skybox.pipeline
+		);
+
+		// Bind descriptor set
+		cmd.bindDescriptorSets(
+			vk::PipelineBindPoint::eGraphics,
+			*_skybox.ppl, 0, *_skybox.dset, {}
+		);
+
+		// Push constants
+		push_constants.view = glm::mat4(glm::mat3(push_constants.view));
+		cmd.pushConstants <Rasterizer::PushConstants> (
+			*_skybox.ppl,
+			vk::ShaderStageFlagBits::eVertex,
+			0, push_constants
+		);
+
+		// Draw
+		cmd.bindVertexBuffers(0, *_skybox.vertex_buffer.buffer, {0});
+		cmd.draw(36, 1, 0, 0);
+
+		/* cmd.bindIndexBuffer(*_skybox.index_buffer.buffer, 0, vk::IndexType::eUint32);
+		cmd.drawIndexed(24, 1, 0, 0, 0); */
+	}
+
 	// End
 	cmd.endRenderPass();
 }
@@ -296,6 +419,97 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 /////////////////////
 // Private methods //
 /////////////////////
+
+void Raster::_initialize_skybox()
+{
+	// Create descriptor set layout
+	_skybox.dsl = make_descriptor_set_layout(*_ctx.device, Skybox::dsl_bindings);
+
+	// Load shaders
+	auto shaders = make_shader_modules(*_ctx.device, {
+		"bin/spv/skybox_vert.spv",
+		"bin/spv/skybox_frag.spv"
+	});
+	
+	// Push constants
+	vk::PushConstantRange push_constants {
+		vk::ShaderStageFlagBits::eVertex,
+		0, sizeof(Rasterizer::PushConstants)
+	};
+
+	// Pipeline layout
+	_skybox.ppl = vk::raii::PipelineLayout(
+		*_ctx.device,
+		{{}, *_skybox.dsl, push_constants}
+	);
+
+	// Pipeline cache
+	vk::raii::PipelineCache pipeline_cache {
+		*_ctx.device,
+		vk::PipelineCacheCreateInfo()
+	};
+
+	// Pipelines
+	auto vertex_binding = Vertex::vertex_binding();
+	auto vertex_attributes = Vertex::vertex_attributes();
+
+	GraphicsPipelineInfo grp_info(*_ctx.device, _render_pass,
+		std::move(shaders[0]), nullptr,
+		std::move(shaders[1]), nullptr,
+		vk::VertexInputBindingDescription {
+			0, sizeof(Vertex),
+			vk::VertexInputRate::eVertex
+		},
+		{ 
+			vk::VertexInputAttributeDescription {
+				0, 0,
+				vk::Format::eR32G32B32Sfloat,
+				offsetof(Vertex, position)
+			},
+		},
+		_skybox.ppl, pipeline_cache,
+		true, true,
+		vk::CullModeFlagBits::eNone
+	);
+
+	// Create pipeline
+	_skybox.pipeline = make_graphics_pipeline(grp_info);
+
+	// Create descriptor set
+	auto dsets = vk::raii::DescriptorSets {
+		*_ctx.device,
+		{**_ctx.descriptor_pool, *_skybox.dsl}
+	};
+
+	_skybox.dset = std::move(dsets.front());
+
+	// Allocate box buffers
+	Submesh box = make_skybox()[0];
+	// TODO: use pure float3...
+
+	_skybox.vertex_buffer = BufferData(
+		*_ctx.phdev, *_ctx.device,
+		box.vertices.size() * sizeof(Vertex),
+		vk::BufferUsageFlagBits::eVertexBuffer,
+		vk::MemoryPropertyFlagBits::eHostVisible
+			| vk::MemoryPropertyFlagBits::eHostCoherent
+	);
+
+	_skybox.index_buffer = BufferData(
+		*_ctx.phdev, *_ctx.device,
+		box.indices.size() * sizeof(uint32_t),
+		vk::BufferUsageFlagBits::eIndexBuffer,
+		vk::MemoryPropertyFlagBits::eHostVisible
+			| vk::MemoryPropertyFlagBits::eHostCoherent
+	);
+
+	// Upload box data
+	_skybox.vertex_buffer.upload(box.vertices);
+	_skybox.index_buffer.upload(box.indices);
+
+	// Set initialization status
+	_skybox.initialized = true;
+}
 
 const vk::raii::Pipeline &Raster::get_pipeline(RasterMode mode)
 {

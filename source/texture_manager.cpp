@@ -45,7 +45,6 @@ const ImageData &TextureManager::load_texture
 	ImageData img = nullptr;
 
 	if (path == "blank") {
-		KOBRA_LOG_FUNC(Log::OK) << "Loading blank texture\n";
 		img = ImageData::blank(phdev, dev);
 		img.transition_layout(
 			dev, command_pool,
@@ -140,7 +139,6 @@ void TextureManager::bind(const vk::raii::PhysicalDevice &phdev,
 		const vk::raii::DescriptorSet &dset,
 		const std::string &path,
 		uint32_t binding) {
-	KOBRA_LOG_FUNC(Log::INFO) << "Binding texture: " << path << "\n";
 	auto descriptor = make_descriptor(phdev, device, path);
 
 	vk::WriteDescriptorSet dset_write {

@@ -1342,6 +1342,9 @@ struct GraphicsPipelineInfo {
 	bool depth_test;
 	bool depth_write;
 
+	vk::CullModeFlags cull_mode;
+	vk::FrontFace front_face;
+
 	// Constructor
 	GraphicsPipelineInfo(const vk::raii::Device &device,
 			const vk::raii::RenderPass &render_pass,
@@ -1354,7 +1357,9 @@ struct GraphicsPipelineInfo {
 			const vk::raii::PipelineLayout &pipeline_layout,
 			const vk::raii::PipelineCache &pipeline_cache,
 			bool depth_test = true,
-			bool depth_write = true)
+			bool depth_write = true,
+			vk::CullModeFlags cull_mode = vk::CullModeFlagBits::eBack,
+			vk::FrontFace front_face = vk::FrontFace::eCounterClockwise)
 			: device(device),
 			render_pass(render_pass),
 			vertex_shader(std::move(vertex_shader)),
@@ -1366,7 +1371,9 @@ struct GraphicsPipelineInfo {
 			pipeline_layout(pipeline_layout),
 			pipeline_cache(pipeline_cache),
 			depth_test(depth_test),
-			depth_write(depth_write) {}
+			depth_write(depth_write),
+			cull_mode(cull_mode),
+			front_face(front_face) {}
 };
 
 inline vk::raii::Pipeline make_graphics_pipeline(const GraphicsPipelineInfo &info)
@@ -1411,8 +1418,7 @@ inline vk::raii::Pipeline make_graphics_pipeline(const GraphicsPipelineInfo &inf
 	// Rasterization state
 	vk::PipelineRasterizationStateCreateInfo rasterization_info {
 		{}, VK_FALSE, VK_FALSE, vk::PolygonMode::eFill,
-		vk::CullModeFlagBits::eBack, vk::FrontFace::eCounterClockwise,
-		VK_FALSE, 0.0f, 0.0f, 0.0f, 1.0f
+		info.cull_mode, info.front_face, VK_FALSE, 0, 0, 0, 1
 	};
 
 	// Multisample state
@@ -1429,7 +1435,7 @@ inline vk::raii::Pipeline make_graphics_pipeline(const GraphicsPipelineInfo &inf
 
 	vk::PipelineDepthStencilStateCreateInfo depth_stencil_info {
 		{}, info.depth_test, info.depth_write,
-		vk::CompareOp::eLess, false, false,
+		vk::CompareOp::eLessOrEqual, false, false,
 		stencil_info, stencil_info
 	};
 

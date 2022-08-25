@@ -24,6 +24,23 @@ inline bool operator<(const tinyobj::index_t &a, const tinyobj::index_t &b)
 		< std::tie(b.vertex_index, b.normal_index, b.texcoord_index);
 }
 
+inline bool operator==(const tinyobj::index_t &a, const tinyobj::index_t &b)
+{
+	return std::tie(a.vertex_index, a.normal_index, a.texcoord_index)
+		== std::tie(b.vertex_index, b.normal_index, b.texcoord_index);
+}
+
+template <>
+struct hash<tinyobj::index_t>
+{
+	size_t operator()(const tinyobj::index_t &k) const
+	{
+		return ((hash<int>()(k.vertex_index)
+			^ (hash<int>()(k.normal_index) << 1)) >> 1)
+			^ (hash<int>()(k.texcoord_index) << 1);
+	}
+};
+
 inline bool operator==(const kobra::Vertex &a, const kobra::Vertex &b)
 {
 	return a.position == b.position
@@ -354,9 +371,6 @@ static Submesh process_mesh(aiMesh *mesh, const aiScene *scene, const std::strin
 	VertexList vertices;
 	Indices indices;
 
-	std::cout << "\tProcessing mesh with " << mesh->mNumVertices
-		<< " vertices and " << mesh->mNumFaces << " faces" << std::endl;
-
 	// Process all the mesh's vertices
 	for (size_t i = 0; i < mesh->mNumVertices; i++) {
 		// Create a new vertex
@@ -412,7 +426,6 @@ static Submesh process_mesh(aiMesh *mesh, const aiScene *scene, const std::strin
 	if (material->GetTexture(aiTextureType_DIFFUSE, 0, &path) == AI_SUCCESS) {
 		mat.albedo_texture = path.C_Str();
 		mat.albedo_texture = common::resolve_path(path.C_Str(), {dir});
-		std::cout << "Resolved diffuse texture: " << mat.albedo_texture << std::endl;
 		assert(!mat.albedo_texture.empty());
 	} else {
 		aiColor3D diffuse;
@@ -424,7 +437,6 @@ static Submesh process_mesh(aiMesh *mesh, const aiScene *scene, const std::strin
 	if (material->GetTexture(aiTextureType_NORMALS, 0, &path) == AI_SUCCESS) {
 		mat.normal_texture = path.C_Str();
 		mat.normal_texture = common::resolve_path(path.C_Str(), {dir});
-		std::cout << "Resolved normal texture: " << mat.normal_texture << std::endl;
 		assert(!mat.normal_texture.empty());
 	}
 
@@ -438,9 +450,6 @@ static Submesh process_mesh(aiMesh *mesh, const aiScene *scene, const std::strin
 	material->Get(AI_MATKEY_SHININESS, shininess);
 	mat.shininess = shininess;
 	mat.roughness = 1 - shininess/1000.0f;
-
-	std::cout << "Material shininess: " << mat.shininess
-		<< ", roughness: " << mat.roughness << std::endl;
 
 	return Submesh {vertices, indices, mat};
 }
@@ -459,7 +468,6 @@ static Mesh process_node(aiNode *node, const aiScene *scene, const std::string &
 	// std::vector <Mesh> children;
 
 	for (size_t i = 0; i < node->mNumChildren; i++) {
-		std::cout << "Processing child " << i << std::endl;
 		Mesh m = process_node(node->mChildren[i], scene, dir);
 
 		for (size_t j = 0; j < m.submeshes.size(); j++)
@@ -538,7 +546,7 @@ std::optional <Mesh> load_mesh(const std::string &path)
 		std::vector <uint32_t> indices;
 
 		std::unordered_map <Vertex, uint32_t> unique_vertices;
-		std::map <tinyobj::index_t, uint32_t> index_map;
+		std::unordered_map <tinyobj::index_t, uint32_t> index_map;
 
 		int offset = 0;
 		for (int f = 0; f < mesh.num_face_vertices.size(); f++) {
@@ -551,7 +559,7 @@ std::optional <Mesh> load_mesh(const std::string &path)
 				tinyobj::index_t index = mesh.indices[offset + v];
 
 				if (index_map.count(index) > 0) {
-					indices.push_back(index_map[index]);
+				    	indices.push_back(index_map[index]);
 					continue;
 				}
 
@@ -601,11 +609,15 @@ std::optional <Mesh> load_mesh(const std::string &path)
 				if (index.texcoord_index >= 0) {
 					vertex.tex_coords = {
 						attrib.texcoords[2 * index.texcoord_index + 0],
-						attrib.texcoords[2 * index.texcoord_index + 1]
+						1 - attrib.texcoords[2 * index.texcoord_index + 1]
 					};
 				} else {
 					vertex.tex_coords = {0.0f, 0.0f};
 				}
+
+				// Add the vertex to the list
+				// vertices.push_back(vertex);
+				// indices.push_back(vertices.size() - 1);
 
 				// Add the vertex
 				uint32_t id;
@@ -631,43 +643,44 @@ std::optional <Mesh> load_mesh(const std::string &path)
 				// Material
 				Material mat;
 
-				tinyobj::material_t m = materials[mesh.material_ids[f]];
-				mat.diffuse = {m.diffuse[0], m.diffuse[1], m.diffuse[2]};
-				mat.specular = {m.specular[0], m.specular[1], m.specular[2]};
-				mat.ambient = {m.ambient[0], m.ambient[1], m.ambient[2]};
-				mat.emission = {m.emission[0], m.emission[1], m.emission[2]};
-				mat.shininess = m.shininess;
+				// TODO: method
+				if (mesh.material_ids[f] < materials.size()) {
+					tinyobj::material_t m = materials[mesh.material_ids[f]];
+					mat.diffuse = {m.diffuse[0], m.diffuse[1], m.diffuse[2]};
+					mat.specular = {m.specular[0], m.specular[1], m.specular[2]};
+					mat.ambient = {m.ambient[0], m.ambient[1], m.ambient[2]};
+					mat.emission = {m.emission[0], m.emission[1], m.emission[2]};
+					mat.shininess = m.shininess;
 
-				// Check if roughness is defined
-				if (m.roughness == 0 && m.shininess != 1000)
-					mat.roughness = 1 - m.shininess/1000;
-				else
-					mat.roughness = m.roughness;
+					// Check if roughness is defined
+					if (m.roughness == 0 && m.shininess != 1000)
+						mat.roughness = 1 - m.shininess/1000;
+					else
+						mat.roughness = m.roughness;
 
-				// Albedo texture
-				if (!m.diffuse_texname.empty()) {
-					mat.albedo_texture = m.diffuse_texname;
-					mat.albedo_texture = common::resolve_path(
-						m.diffuse_texname, {reader_config.mtl_search_path}
-					);
-				}
+					// Albedo texture
+					if (!m.diffuse_texname.empty()) {
+						mat.albedo_texture = m.diffuse_texname;
+						mat.albedo_texture = common::resolve_path(
+							m.diffuse_texname, {reader_config.mtl_search_path}
+						);
+					}
 
-				// Normal texture
-				if (!m.normal_texname.empty()) {
-					mat.normal_texture = m.normal_texname;
-					mat.normal_texture = common::resolve_path(
-						m.normal_texname, {reader_config.mtl_search_path}
-					);
+					// Normal texture
+					if (!m.normal_texname.empty()) {
+						mat.normal_texture = m.normal_texname;
+						mat.normal_texture = common::resolve_path(
+							m.normal_texname, {reader_config.mtl_search_path}
+						);
+					}
 				}
 
 				// Add submesh
-				std::cout << "Submesh " << i << ": " << vertices.size()
-					<< " vertices, " << indices.size()
-					<< " indices, material = " << m.name << std::endl;
 				submeshes.push_back(Submesh {vertices, indices, mat});
 
 				// Clear the vertices and indices
 				unique_vertices.clear();
+				index_map.clear();
 				vertices.clear();
 				indices.clear();
 			}
@@ -713,12 +726,6 @@ std::optional <Mesh> Mesh::load(const std::string &path)
 	KOBRA_LOG_FUNC(Log::INFO) << "Loaded mesh with " << m.submeshes.size()
 		<< " submeshes (#verts = " << m.vertices() << ", #triangles = "
 		<< m.triangles() << "), from " << path << std::endl;
-
-	for (auto &s : m.submeshes) {
-		std::cout << "\tSubmesh with " << s.vertices.size()
-			<< " vertices and " << s.indices.size() / 3 << " triangles"
-			<< std::endl;
-	}
 
 	return m;
 }

@@ -21,7 +21,7 @@ vec3 sample_environment(Ray ray)
 
 	// Get the color
 	vec3 tex = texture(s2_environment, uv).rgb;
-
+	
 	return tex;
 }
 

@@ -64,12 +64,22 @@ builds:
     - flags: '-fshader-stage=compute'
     - compiler: glslc
     - options: 'nolink, output_dir=./bin/spv'
+  - glsl_vertex:
+    - sources: shaders/raster/skybox.vert
+    - flags: '-fshader-stage=vertex'
+    - compiler: glslc
+    - options: 'nolink, output_dir=./bin/spv, output_format={filename}_vert.spv'
+  - glsl_frag:
+    - sources: shaders/raster/skybox.frag
+    - flags: '-fshader-stage=fragment'
+    - compiler: glslc
+    - options: 'nolink, output_dir=./bin/spv, output_format={filename}_frag.spv'
   - kobra:
     - sources: main.cpp, kobra_source, tinyfd_source, glslang_source
     - idirs: includes
     - flags: '-std=c++17'
     - libraries: libs
-    - dependencies: optix_ptx_debug, glsl_compute 
+    - dependencies: optix_ptx_debug, glsl_compute, glsl_vertex, glsl_frag
   - kobra_release:
     - sources: main.cpp, kobra_source, tinyfd_source, glslang_source
     - idirs: includes

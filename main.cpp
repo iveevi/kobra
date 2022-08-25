@@ -25,6 +25,7 @@ using namespace kobra;
 // Scene path
 // std::string scene_path = "~/models/sponza/scene.kobra";
 std::string scene_path = "/home/venki/models/cornell_box.kobra";
+// std::string scene_path = "scenes/ggx.kobra";
 
 // Test app
 struct ECSApp : public BaseApp {
@@ -178,6 +179,7 @@ struct ECSApp : public BaseApp {
 			scene_graph(scene.ecs, font_renderer, io.mouse_events) {
 		scene.load(get_device(), scene_path);
 		// raytracer.environment_map(scene.p_environment_map);
+		rasterizer.environment_map("resources/skies/sunrise.jpg");
 		raytracer.environment_map("resources/skies/sunrise.jpg");
 		optix_tracer.environment_map("resources/skies/sunrise.jpg");
 
