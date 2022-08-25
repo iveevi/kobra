@@ -190,10 +190,11 @@ void BaseApp::present()
 
 	// Perform sync tasks if needed
 	if (sync_queue.size() > 0) {
+		// std::cout << "Running sync tasks...\n";
 		graphics_queue.waitIdle();
 
 		while (sync_queue.size() > 0)
-			sync_queue.do_pop();
+			sync_queue.do_pop(false);
 	}
 
 	// Result from Vulkan functions

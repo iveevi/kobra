@@ -6,8 +6,7 @@
 namespace kobra {
 
 // Rasterizer
-Rasterizer::Rasterizer(const Device &dev, const Mesh &mesh, Material *mat)
-		: Renderer(mat)
+Rasterizer::Rasterizer(const Device &dev, const Mesh &mesh)
 {
 	for (size_t i = 0; i < mesh.submeshes.size(); i++) {
 		// Allocate memory for the vertex, index, and uniform buffers
@@ -90,8 +89,8 @@ void Rasterizer::draw(const vk::raii::CommandBuffer &cmd,
 
 void Rasterizer::bind_material
 		(const Device &dev,
-		 const BufferData &lights_buffer,
-		 const std::function <vk::raii::DescriptorSet ()> &server) const
+		const BufferData &lights_buffer,
+		const std::function <vk::raii::DescriptorSet ()> &server) const
 {
 	_dsets.clear();
 	for (int i = 0; i < materials.size(); i++) {
@@ -124,7 +123,7 @@ void Rasterizer::bind_material
 			vk::DescriptorType::eUniformBuffer,
 			RASTER_BINDING_UBO
 		);
-		
+
 		// Bind lights buffer
 		bind_ds(*dev.device, dset, lights_buffer,
 			vk::DescriptorType::eUniformBuffer,
@@ -134,8 +133,7 @@ void Rasterizer::bind_material
 }
 
 // Raytracer
-Raytracer::Raytracer(Mesh *mesh_, Material *material_)
-		: Renderer(material_), mesh(mesh_) {}
+Raytracer::Raytracer(Mesh *mesh_) : mesh(mesh_) {}
 
 const Mesh &Raytracer::get_mesh() const
 {
@@ -195,33 +193,35 @@ void Raytracer::serialize_submesh(const Device &dev, const Submesh &submesh, con
 	}
 
 	// Write the material
+	Material material = submesh.material;
+
 	_material smat;
-	smat.diffuse = material->diffuse;
-	smat.specular = material->specular;
-	smat.emission = material->emission;
-	smat.ambient = material->ambient;
-	smat.shininess = material->shininess;
-	smat.roughness = material->roughness;
-	smat.refraction = material->refraction;
-	smat.albedo = material->has_albedo();
-	smat.normal = material->has_normal();
-	smat.type = material->type;
+	smat.diffuse = material.diffuse;
+	smat.specular = material.specular;
+	smat.emission = material.emission;
+	smat.ambient = material.ambient;
+	smat.shininess = material.shininess;
+	smat.roughness = material.roughness;
+	smat.refraction = material.refraction;
+	smat.albedo = material.has_albedo();
+	smat.normal = material.has_normal();
+	smat.type = material.type;
 
 	hb.materials.push_back(smat);
 
-	if (material->has_albedo()) {
+	if (material.has_albedo()) {
 		auto albedo_descriptor = TextureManager::make_descriptor(
 			*dev.phdev, *dev.device,
-			material->albedo_texture
+			material.albedo_texture
 		);
 
 		hb.albedo_textures[obj_id] = albedo_descriptor;
 	}
 
-	if (material->has_normal()) {
+	if (material.has_normal()) {
 		auto normal_descriptor = TextureManager::make_descriptor(
 			*dev.phdev, *dev.device,
-			material->normal_texture
+			material.normal_texture
 		);
 
 		hb.normal_textures[obj_id] = normal_descriptor;
@@ -237,11 +237,10 @@ void Raytracer::serialize_submesh(const Device &dev, const Submesh &submesh, con
 // Serialize
 void Raytracer::serialize(const Device &dev, const Transform &transform, HostBuffers &hb) const
 {
-	for (size_t i = 0; i < mesh->submeshes.size(); i++)
+	for (size_t i = 0; i < mesh->submeshes.size(); i++) {
 		serialize_submesh(dev, mesh->submeshes[i], transform, hb);
-
-	// Increment ID per whole mesh
-	hb.id++;
+		hb.id++;
+	}
 }
 
 }

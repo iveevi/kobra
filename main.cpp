@@ -24,7 +24,7 @@ using namespace kobra;
 
 // Scene path
 // std::string scene_path = "~/models/sponza/scene.kobra";
-std::string scene_path = "/home/venki/models/sponza.kobra";
+std::string scene_path = "/home/venki/models/cornell_box.kobra";
 // std::string scene_path = "scenes/ggx.kobra";
 
 // Test app
@@ -385,8 +385,8 @@ struct ECSApp : public BaseApp {
 
 		cmd.end();
 
-		// V-sync
-		sync_queue.push([]() {});
+		// V-sync to sync text
+		sync_queue.push({"Forced V-Sync", []() {}});
 	}
 
 	void terminate() override {

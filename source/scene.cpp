@@ -285,6 +285,12 @@ void load_material(Entity &e, std::ifstream &fin)
 		material.roughness_texture = buf_roughness;
 
 	material.type = *shading_from_str(value);
+
+	// If mesh exists, override its material
+	if (e.exists <Mesh> ()) {
+		for (auto &submesh : e.get <Mesh> ().submeshes)
+			submesh.material = material;
+	}
 }
 
 void load_mesh(Entity &e, std::ifstream &fin)
@@ -364,6 +370,13 @@ void load_mesh(Entity &e, std::ifstream &fin)
 		// Create mesh
 		e.add <Mesh> (submeshes);
 	}
+
+	// If material exists, override its material
+	if (e.exists <Material> ()) {
+		Material &material = e.get <Material> ();
+		for (auto &submesh : e.get <Mesh> ().submeshes)
+			submesh.material = material;
+	}
 }
 
 /* std::set <uint32_t> parse_indices(std::ifstream &fin)
@@ -380,12 +393,7 @@ void load_rasterizer(Entity &e, std::ifstream &fin, const Device &dev)
 		return;
 	}
 
-	if (!e.exists <Material> ()) {
-		KOBRA_LOG_FUNC(Log::WARN) << "No material for rasterizer" << std::endl;
-		return;
-	}
-
-	e.add <Rasterizer> (dev, e.get <Mesh> (), &e.get <Material> ());
+	e.add <Rasterizer> (dev, e.get <Mesh> ());
 
 	// Read mode
 	std::string line;
@@ -415,12 +423,7 @@ void load_raytracer(Entity &e, std::ifstream &fin)
 		return;
 	}
 
-	if (!e.exists <Material> ()) {
-		KOBRA_LOG_FUNC(Log::WARN) << "No material for raytracer" << std::endl;
-		return;
-	}
-
-	e.add <Raytracer> (&e.get <Mesh> (), &e.get <Material> ());
+	e.add <Raytracer> (&e.get <Mesh> ());
 }
 
 void load_camera(Entity &e, std::ifstream &fin)

@@ -31,7 +31,7 @@ inline bool operator==(const tinyobj::index_t &a, const tinyobj::index_t &b)
 }
 
 template <>
-struct hash<tinyobj::index_t>
+struct hash <tinyobj::index_t>
 {
 	size_t operator()(const tinyobj::index_t &k) const
 	{
@@ -538,6 +538,7 @@ std::optional <Mesh> load_mesh(const std::string &path)
 	// Load submeshes
 	std::vector <Submesh> submeshes;
 
+	// TODO: multithreaded task system (using a threadpool, etc) in core/
 	for (int i = 0; i < shapes.size(); i++) {
 		// Get the mesh
 		auto &mesh = shapes[i].mesh;
@@ -657,6 +658,10 @@ std::optional <Mesh> load_mesh(const std::string &path)
 						mat.roughness = 1 - m.shininess/1000;
 					else
 						mat.roughness = m.roughness;
+
+					mat.refraction = m.ior;
+					if (m.ior != 1 && (m.illum == 4 || m.illum == 7))
+						mat.type = eTransmission;
 
 					// Albedo texture
 					if (!m.diffuse_texname.empty()) {

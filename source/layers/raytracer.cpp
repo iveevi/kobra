@@ -342,7 +342,8 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 		_samplers.result = make_sampler(*_ctx.device, _samplers.result_image);
 
 		// Rebind
-		_sync_queue->push(
+		_sync_queue->push({
+			"[Raytracer] Rebinding descriptor sets",
 			[&]() {
 				bind_ds(*_ctx.device,
 					_ds_raytracing, _dev.pixels,
@@ -356,7 +357,7 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 					MESH_BINDING_PIXELS
 				);
 			}
-		);
+		});
 
 		// Return and wait for the next frame
 		return;
@@ -525,19 +526,21 @@ void Raytracer::render(const vk::raii::CommandBuffer &cmd,
 
 	if (rebinding) {
 		KOBRA_LOG_FILE(Log::WARN) << "Rebinding device buffers\n";
-		_sync_queue->push(
+		_sync_queue->push({
+			"[Raytracer] Rebinding device buffers",
 			[&]() {
 				_dev.bind(*_ctx.device, _ds_raytracing);
 			}
-		);
+		});
 
 		// TODO: check if desciptors actually changed
-		_sync_queue->push(
+		_sync_queue->push({
+			"[Raytracer] Binding image desciptors",
 			[&]() {
 				_update_samplers(_albedo_image_descriptors, MESH_BINDING_ALBEDOS);
 				_update_samplers(_normal_image_descriptors, MESH_BINDING_NORMAL_MAPS);
 			}
-		);
+		});
 
 		return;
 	}

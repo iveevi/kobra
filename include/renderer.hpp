@@ -39,7 +39,8 @@ struct Renderer {
 
 // Rasterizer component
 // 	the entity must have a Mesh component
-class Rasterizer : public Renderer {
+// 	TODO: reinherit from Renderer
+class Rasterizer {
 	// Push constants
 	struct PushConstants {
 		float		time;
@@ -91,7 +92,7 @@ public:
 	Rasterizer() = delete;
 
 	// Constructor initializes the buffers
-	Rasterizer(const Device &, const Mesh &, Material *);
+	Rasterizer(const Device &, const Mesh &);
 
 	// Bind resources to a descriptor set
 	void draw(const vk::raii::CommandBuffer &,
@@ -111,7 +112,7 @@ using RasterizerPtr = std::shared_ptr <Rasterizer>;
 // Raytracer component
 // 	Wrapper around methods for raytracing
 // 	a mesh entity
-class Raytracer : public Renderer {
+class Raytracer {
 	struct alignas(16) _material {
 		alignas(16) glm::vec3 diffuse;
 		alignas(16) glm::vec3 specular;
@@ -152,7 +153,7 @@ public:
 	Raytracer() = delete;
 
 	// Constructor sets mesh reference
-	Raytracer(Mesh *, Material *);
+	Raytracer(Mesh *);
 
 	// Get the mesh
 	const Mesh &get_mesh() const;

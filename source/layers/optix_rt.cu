@@ -66,6 +66,7 @@ struct RayPacket {
 	float3 throughput;
 	float3 value;
 	float3 seed;
+	float ior;
 	int depth;
 };
 
@@ -80,6 +81,7 @@ extern "C" __global__ void __raygen__rg()
 	ray_packet.throughput = {1.0f, 1.0f, 1.0f};
 	ray_packet.value = {0.0f, 0.0f, 0.0f};
 	ray_packet.seed = {float(idx.x), float(idx.y), params.time};
+	ray_packet.ior = 1.0f;
 	ray_packet.depth = 0;
 
 	// Generate ray
@@ -168,21 +170,24 @@ __device__ __forceinline__ float3 operator*(mat3 m, float3 v)
 #define MAX_DEPTH 5
 
 // Evaluate BRDF of material
-__device__ float3 brdf(const Material &mat, float3 n, float3 wi, float3 wo)
+__device__ float3 brdf(const Material &mat, float3 n, float3 wi,
+		float3 wo, float ior, Shading out)
 {
-	return GGX::brdf(mat, n, wi, wo) + mat.diffuse/M_PI;
+	return GGX::brdf(mat, n, wi, wo, ior, out) + mat.diffuse/M_PI;
 }
 
 // Evaluate PDF of BRDF
-__device__ float pdf(const Material &mat, float3 n, float3 wi, float3 wo)
+__device__ float pdf(const Material &mat, float3 n, float3 wi,
+		float3 wo, Shading out)
 {
-	return GGX::pdf(mat, n, wi, wo);
+	return GGX::pdf(mat, n, wi, wo, out);
 }
 
 // Sample BRDF
-__device__ float3 sample(const Material &mat, float3 n, float3 wo, float3 &seed)
+__device__ float3 sample(const Material &mat, float3 n, float3 wo,
+		float ior, float3 &seed, Shading &out)
 {
-	return GGX::sample(mat, n, wo, seed);
+	return GGX::sample(mat, n, wo, ior, seed, out);
 }
 
 // Power heurestic
@@ -229,7 +234,7 @@ __device__ bool shadow_visibility(float3 origin, float3 dir, float R)
 
 // Trace ray into scene and get relevant information
 __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
-		Material mat, float3 &seed)
+		Material mat, float ior, float3 &seed)
 {
 	if (hit_data->n_area_lights == 0)
 		return float3 {0.0f, 0.0f, 0.0f};
@@ -248,12 +253,14 @@ __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 	float3 wi = normalize(lpos - x);
 	float R = length(lpos - x);
 
-	float3 f = brdf(mat, n, wi, wo) * max(dot(n, wi), 0.0f);
+	float3 f = brdf(mat, n, wi, wo, ior, Shading::eDiffuse) * max(dot(n, wi), 0.0f);
 
 	float ldot = abs(dot(light.normal(), wi));
 	if (ldot > 1e-6) {
 		float pdf_light = (R * R)/(light.area() * ldot);
-		float pdf_brdf = pdf(mat, n, wi, wo);
+
+		// TODO: how to decide ray type for this?
+		float pdf_brdf = pdf(mat, n, wi, wo, Shading::eDiffuse);
 
 		bool vis = shadow_visibility(x, wi, R);
 		if (pdf_light > 1e-9 && vis) {
@@ -264,13 +271,14 @@ __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 	}
 
 	// BRDF
-	wi = sample(mat, n, wo, seed);
+	Shading out;
+	wi = sample(mat, n, wo, 1, seed, out);
 	if (dot(wi, n) <= 0.0f)
 		return contr_nee;
 	
-	f = brdf(mat, n, wi, wo) * max(dot(n, wi), 0.0f);
+	f = brdf(mat, n, wi, wo, ior, out) * max(dot(n, wi), 0.0f);
 
-	float pdf_brdf = pdf(mat, n, wi, wo);
+	float pdf_brdf = pdf(mat, n, wi, wo, out);
 	float pdf_light = 0.0f;
 
 	// TODO: need to check intersection for lights specifically (and
@@ -407,22 +415,22 @@ extern "C" __global__ void __closesthit__radiance()
 
 	float3 wo = -optixGetWorldRayDirection();
 	float3 n = calculate_normal(hit_data, triangle, bary);
-	float3 x = interpolate(hit_data->vertices, triangle, bary)
-		+ 1e-3f * n;
+	float3 x = interpolate(hit_data->vertices, triangle, bary);
 
-	float3 direct = Ld(hit_data, x, wo, n, material, rp->seed);
+	float3 direct = Ld(hit_data, x + 1e-3f * n, wo, n, material, rp->ior, rp->seed);
 
 	// Transfer to payload
 	rp->value += direct * rp->throughput;
 
 	// Generate new ray
-	float3 wi = sample(material, n, wo, rp->seed);
-	float pdf = ::pdf(material, n, wi, wo);
+	Shading out;
+	float3 wi = sample(material, n, wo, rp->ior, rp->seed, out);
+	float pdf = ::pdf(material, n, wi, wo, out);
 
 	if (pdf <= 1e-9)
 		return;
 
-	float3 f = brdf(material, n, wi, wo) * abs(dot(n, wi));
+	float3 f = brdf(material, n, wi, wo, rp->ior, out) * abs(dot(n, wi));
 	float3 T = f/pdf;
 
 	// Russian roulette
@@ -435,8 +443,16 @@ extern "C" __global__ void __closesthit__radiance()
 	rp->depth++;
 
 	// Recursive raytrace
+	float3 offset = 1e-3f * n;
+	if (out & Shading::eTransmission)
+		offset = -offset;
+
+	// Update ior
+	rp->ior = material.refraction;
+
+	// Recurse
 	optixTrace(params.handle,
-		x, wi,
+		x + offset, wi,
 		0.0f, 1e16f, 0.0f,
 		OptixVisibilityMask(255), OPTIX_RAY_FLAG_NONE,
 		0, 0, 0,

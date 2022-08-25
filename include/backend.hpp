@@ -61,7 +61,7 @@ struct Context {
 	}
 };
 
-using SyncTask = std::function <void ()>;
+using SyncTask = std::pair <std::string, std::function <void ()>>;
 
 class SyncQueue {
 	std::queue <SyncTask>	_handlers;
@@ -74,10 +74,12 @@ public:
 		_handlers.push(task);
 	}
 
-	void do_pop() {
+	void do_pop(bool log = true) {
 		std::lock_guard <std::mutex> lock(_mutex);
 		if (!_handlers.empty()) {
-			_handlers.front()();
+			if (log)
+				std::cout << "SyncQueue: " << _handlers.front().first << std::endl;
+			_handlers.front().second();
 			_handlers.pop();
 		}
 	}

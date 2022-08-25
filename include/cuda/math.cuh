@@ -2659,4 +2659,16 @@ float3 rotate(float3 s, float3 n)
 	return u * s.x + v * s.y + w * s.z;
 }
 
+__device__ __forceinline__
+float3 refract(float3 I, float3 N, float eta)
+{
+	float k = 1.0 - eta * eta * (1.0 - dot(N, I) * dot(N, I));
+
+	float3 R {0.0f, 0.0f, 0.0f};
+	if (k >= 0.0)
+		R = eta * I - (eta * dot(N, I) + sqrt(k)) * N;
+
+	return R;
+}
+
 #endif
