@@ -8,10 +8,11 @@
 // TODO: move layer.hpp to this directory
 // #include "../layer.hpp"
 
-#include "../backend.hpp"
-#include "../ecs.hpp"
 #include "../../shaders/raster/bindings.h"
 #include "../../shaders/raster/constants.h"
+#include "../backend.hpp"
+#include "../ecs.hpp"
+#include "../timer.hpp"
 #include "../vertex.hpp"
 
 namespace kobra {
@@ -75,6 +76,9 @@ private:
 
 	// Box mesh for area lights
 	Rasterizer			*_area_light;
+
+	// Timer
+	Timer				_timer;
 public:
 	// Default constructor
 	Raster() = default;

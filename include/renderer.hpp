@@ -42,21 +42,42 @@ struct Renderer {
 class Rasterizer : public Renderer {
 	// Push constants
 	struct PushConstants {
+		float		time;
+
+		alignas(16)
 		glm::mat4	model;
 		glm::mat4	view;
 		glm::mat4	perspective;
 
-		glm::vec3	albedo;
-		int		type;
+		alignas(16)
+		glm::vec3	view_position;
+
+		// TODO: reorganize this
+		alignas(16)
 		float		highlight;
-		float		has_albedo;
-		float		has_normal;
+	};
+
+	// Uniform buffer object
+	struct UBO {
+		alignas(16) glm::vec3 diffuse;
+		alignas(16) glm::vec3 specular;
+		alignas(16) glm::vec3 emission;
+		alignas(16) glm::vec3 ambient;
+
+		float shininess;
+		float roughness;
+
+		int type;
+		float has_albedo; // TODO: encode into a single int
+		float has_normal;
 	};
 	
 	using ResourceMap = std::map <const Rasterizer *, vk::raii::DescriptorSet>;
 
 	std::vector <BufferData>	vertex_buffer;
 	std::vector <BufferData>	index_buffer;
+	std::vector <BufferData>	ubo; // TODO: one single buffer, using
+					     // offsets...
 	std::vector <uint32_t>		index_count;
 	std::vector <Material>		materials;
 

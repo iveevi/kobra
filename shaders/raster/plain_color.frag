@@ -5,5 +5,5 @@
 
 void main()
 {
-	fragment = vec4(material.albedo, 1.0);
+	fragment = vec4(mat.diffuse, 1.0);
 }

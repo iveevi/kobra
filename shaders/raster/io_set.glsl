@@ -6,7 +6,17 @@ layout (location = 1) in vec3		normal;
 layout (location = 2) in vec2		tex_coord;
 layout (location = 3) in mat3		tbn;
 layout (location = 6) in vec3		tbn_inverse;
-layout (location = 9) flat in Material	material;
+layout (location = 9) in vec3		view_pos;
+layout (location = 10) flat in float	time;
+layout (location = 11) flat in float	highlight;
+
+// TODO: fix the location sparsity
+
+// Uniform buffer for material
+layout (binding = RASTER_BINDING_UBO) uniform MaterialBlock
+{
+	Material mat;
+};
 
 // Sampler inputs
 layout (binding = RASTER_BINDING_ALBEDO_MAP)

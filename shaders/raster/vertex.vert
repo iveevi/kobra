@@ -1,6 +1,7 @@
 #version 450
 
 #include "material.glsl"
+#include "push_constants.glsl"
 
 // Typical vertex shader
 layout (location = 0) in vec3 position;
@@ -9,25 +10,15 @@ layout (location = 2) in vec2 tex_coord;
 layout (location = 3) in vec3 tangent;
 layout (location = 4) in vec3 bitangent;
 
-// MVP matrix as push constant
-layout (push_constant) uniform PushConstants
-{
-	// Transform matrices
-	mat4 model;
-	mat4 view;
-	mat4 proj;
-
-	// Material properties
-	Material material;
-};
-
 // Out variables
 layout (location = 0) out vec3		out_position;
 layout (location = 1) out vec3		out_normal;
 layout (location = 2) out vec2		out_tex_coord;
 layout (location = 3) out mat3		out_tbn;
 layout (location = 6) out mat3		out_tbn_transpose;
-layout (location = 9) out Material	out_material;
+layout (location = 9) out vec3		out_view_pos;
+layout (location = 10) out float	out_time;
+layout (location = 11) out float	out_highlight;
 
 void main()
 {
@@ -53,6 +44,7 @@ void main()
 	out_normal		= vert_normal;
 	out_tex_coord		= vec2(tex_coord.x, 1.0 - tex_coord.y);
 	out_tbn			= tbn;
+	out_view_pos		= view_pos;
 	out_tbn_transpose	= transpose(tbn);
-	out_material		= material;
+	out_time		= time;
 }

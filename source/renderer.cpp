@@ -10,7 +10,7 @@ Rasterizer::Rasterizer(const Device &dev, const Mesh &mesh, Material *mat)
 		: Renderer(mat)
 {
 	for (size_t i = 0; i < mesh.submeshes.size(); i++) {
-		// Allocate memory for the vertex and index buffers
+		// Allocate memory for the vertex, index, and uniform buffers
 		vk::DeviceSize vbuf_size = mesh[i].vertices.size() * sizeof(Vertex);
 		vk::DeviceSize ibuf_size = mesh[i].indices.size() * sizeof(uint32_t);
 
@@ -28,9 +28,37 @@ Rasterizer::Rasterizer(const Device &dev, const Mesh &mesh, Material *mat)
 				| vk::MemoryPropertyFlagBits::eHostCoherent
 		);
 
+		ubo.emplace_back(*dev.phdev, *dev.device,
+			sizeof(UBO),
+			vk::BufferUsageFlagBits::eUniformBuffer,
+			vk::MemoryPropertyFlagBits::eHostVisible
+				| vk::MemoryPropertyFlagBits::eHostCoherent
+		);
+
 		// Upload data to buffers
 		vertex_buffer[i].upload(mesh[i].vertices);
 		index_buffer[i].upload(mesh[i].indices);
+
+		// UBO
+		kobra::Material mat = mesh[i].material;
+
+		UBO ubo_data {
+			.diffuse = mat.diffuse,
+			.specular = mat.specular,
+			.emission = mat.emission,
+			.ambient = mat.ambient,
+
+			.shininess = mat.shininess,
+			.roughness = mat.roughness,
+
+			.type = static_cast <int> (mat.type),
+			.has_albedo = (float) mat.has_albedo(),
+			.has_normal = (float) mat.has_normal()
+		};
+
+		ubo[i].upload(&ubo_data, sizeof(UBO));
+
+		// Other data
 		index_count.push_back(mesh[i].indices.size());
 		materials.push_back(mesh[i].material);
 	}
@@ -42,12 +70,6 @@ void Rasterizer::draw(const vk::raii::CommandBuffer &cmd,
 {
 	// TODO: parameter for whih submeshes to draw
 	for (size_t i = 0; i < materials.size(); i++) {
-		// Set the push constants
-		pc.albedo = materials[i].diffuse;
-		pc.type = materials[i].type;
-		pc.has_albedo = materials[i].has_albedo();
-		pc.has_normal = materials[i].has_normal();
-
 		// Bind and render
 		cmd.bindDescriptorSets(
 			vk::PipelineBindPoint::eGraphics,
@@ -96,7 +118,14 @@ void Rasterizer::bind_material
 			dset, normal,
 			RASTER_BINDING_NORMAL_MAP
 		);
-					
+
+		// Bind material UBO
+		bind_ds(*dev.device, dset, ubo[i],
+			vk::DescriptorType::eUniformBuffer,
+			RASTER_BINDING_UBO
+		);
+		
+		// Bind lights buffer
 		bind_ds(*dev.device, dset, lights_buffer,
 			vk::DescriptorType::eUniformBuffer,
 			RASTER_BINDING_POINT_LIGHTS

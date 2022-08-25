@@ -22,4 +22,5 @@ void main()
 	float u = atan(d.x, d.z) / (2 * PI) + 0.5;
 	float v = asin(d.y)/PI + 0.5;
 	fragment = texture(skybox, vec2(u, v));
+	fragment.xyz = pow(fragment.xyz, vec3(1.0/2.2));
 }

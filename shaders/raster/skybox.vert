@@ -1,21 +1,9 @@
 #version 450
 
-#include "material.glsl"
+#include "push_constants.glsl"
 
 // Only input is position
 layout (location = 0) in vec3 position;
-
-// MVP matrix as push constant
-layout (push_constant) uniform PushConstants
-{
-	// Transform matrices
-	mat4 model;
-	mat4 view;
-	mat4 proj;
-
-	// Material properties
-	Material material;
-};
 
 // Output direction from center
 layout (location = 0) out vec3 direction;

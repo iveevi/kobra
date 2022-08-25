@@ -8,7 +8,7 @@
 void main()
 {
 	vec3 n = normalize(normal);
-	if (material.has_normal > 0.5) {
+	if (mat.has_normal > 0.5) {
 		n = texture(normal_map, tex_coord).rgb;
 		n = 2.0 * n - 1.0;
 		n = normalize(tbn * n);

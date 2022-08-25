@@ -13,6 +13,12 @@ namespace layers {
 
 const std::vector <DSLB> Raster::_dsl_bindings {
 	DSLB {
+		RASTER_BINDING_UBO,
+		vk::DescriptorType::eUniformBuffer,
+		1, vk::ShaderStageFlagBits::eFragment
+	},
+
+	DSLB {
 		RASTER_BINDING_ALBEDO_MAP,
 		vk::DescriptorType::eCombinedImageSampler,
 		1, vk::ShaderStageFlagBits::eFragment
@@ -109,18 +115,24 @@ static Mesh make_skybox()
 ////////////////////
 
 struct _light {
-	alignas(16)
-	glm::vec3	position;
+	alignas(16) glm::vec3 position;
+	alignas(16) glm::vec3 intensity;
+};
 
-	alignas(16)
-	glm::vec3	intensity;
+struct _area_light {
+	alignas(16) glm::vec3 a;
+	alignas(16) glm::vec3 ab;
+	alignas(16) glm::vec3 ac;
+	alignas(16) glm::vec3 intensity;
 };
 
 struct Raster::LightsData {
 	int count;
+	int n_area_lights;
 
 	// TODO: max lights, not points lights
-	_light lights[MAX_POINT_LIGHTS];
+	struct _light lights[MAX_POINT_LIGHTS];
+	struct _area_light area_lights[MAX_POINT_LIGHTS];
 };
 
 //////////////////
@@ -130,6 +142,9 @@ struct Raster::LightsData {
 Raster::Raster(const Context &ctx, const vk::AttachmentLoadOp &load)
 		: _ctx(ctx)
 {
+	// Start the timer
+	_timer.start();
+
 	// Create render pass
 	_render_pass = make_render_pass(*ctx.device,
 		ctx.swapchain_format,
@@ -285,8 +300,10 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 
 	LightsData lights_data {
 		.count = 0,
+		.n_area_lights = 0
 	};
 
+	// TODO: multiple transform tables
 	std::vector <std::pair <Transform, glm::vec3>> area_light_transforms;
 
 	for (int i = 0; i < ecs.size(); i++) {
@@ -305,7 +322,7 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 
 			if (_cached_rasterizers.count(rasterizer) == 0) {
 				_cached_rasterizers.insert(rasterizer);
-				
+
 				rasterizer->bind_material(
 					{_ctx.phdev, _ctx.device},
 					_b_lights,
@@ -326,21 +343,39 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 			const auto &transform = ecs.get <Transform> (i);
 			auto pos = transform.position;
 
-			// Update lights data
+			/* Update lights data
 			_light l {.position = pos, .intensity = light->color * light->power};
-			lights_data.lights[lights_data.count++] = l;
+			lights_data.lights[lights_data.count++] = l; */
 
-			if (light->type == Light::Type::eArea)
+			if (light->type == Light::Type::eArea) {
+				glm::vec3 ab = {1, 0, 0};
+				glm::vec3 ac = {0, 0, 1};
+
+				ab = transform.apply_vector(ab);
+				ac = transform.apply_vector(ac);
+
+				struct _area_light al;
+				al.ab = ab/2.0f;
+				al.ac = ac/2.0f;
+				al.a = transform.position - al.ab - al.ac;
+				al.intensity = light->color * light->power;
+
+				lights_data.area_lights[lights_data.n_area_lights++] = al;
+
 				area_light_transforms.push_back({transform, light->color});
+			}
 		}
 	}
 
 	_b_lights.upload(&lights_data, sizeof(lights_data));
 
 	// Render all rasterizer components
+	float ms = _timer.elapsed_start();
 	Rasterizer::PushConstants push_constants {
+		.time = ms,
 		.view = camera.view_matrix(camera_transform),
 		.perspective = camera.perspective_matrix(),
+		.view_position = camera_transform.position,
 		.highlight = false,
 	};
 
@@ -407,9 +442,6 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 		// Draw
 		cmd.bindVertexBuffers(0, *_skybox.vertex_buffer.buffer, {0});
 		cmd.draw(36, 1, 0, 0);
-
-		/* cmd.bindIndexBuffer(*_skybox.index_buffer.buffer, 0, vk::IndexType::eUint32);
-		cmd.drawIndexed(24, 1, 0, 0, 0); */
 	}
 
 	// End
@@ -430,7 +462,7 @@ void Raster::_initialize_skybox()
 		"bin/spv/skybox_vert.spv",
 		"bin/spv/skybox_frag.spv"
 	});
-	
+
 	// Push constants
 	vk::PushConstantRange push_constants {
 		vk::ShaderStageFlagBits::eVertex,
@@ -460,7 +492,7 @@ void Raster::_initialize_skybox()
 			0, sizeof(Vertex),
 			vk::VertexInputRate::eVertex
 		},
-		{ 
+		{
 			vk::VertexInputAttributeDescription {
 				0, 0,
 				vk::Format::eR32G32B32Sfloat,
