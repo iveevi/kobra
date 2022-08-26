@@ -105,6 +105,7 @@ extern "C" __global__ void __raygen__rg()
 
 	// Check value
 	float3 pixel = ray_packet.value;
+	// assert(!isnan(pixel.x) && !isnan(pixel.y) && !isnan(pixel.z));
 	if (isnan(pixel.x) || isnan(pixel.y) || isnan(pixel.z))
 		pixel = {0.0f, 0.0f, 0.0f};
 
@@ -173,21 +174,30 @@ __device__ __forceinline__ float3 operator*(mat3 m, float3 v)
 __device__ float3 brdf(const Material &mat, float3 n, float3 wi,
 		float3 wo, float ior, Shading out)
 {
-	return GGX::brdf(mat, n, wi, wo, ior, out) + mat.diffuse/M_PI;
+	float3 o = GGX::brdf(mat, n, wi, wo, ior, out) + mat.diffuse/M_PI;
+	/* if (out & Shading::eTransmission) assert(!isnan(o.x) && !isnan(o.y) && !isnan(o.z));
+	else assert(!isnan(o.x) && !isnan(o.y) && !isnan(o.z)); */
+	return o;
 }
 
 // Evaluate PDF of BRDF
 __device__ float pdf(const Material &mat, float3 n, float3 wi,
 		float3 wo, Shading out)
 {
-	return GGX::pdf(mat, n, wi, wo, out);
+	float o = GGX::pdf(mat, n, wi, wo, out);
+	/* if (out & Shading::eTransmission) assert(!isnan(o));
+	else assert(!isnan(o)); */
+	return o;
 }
 
 // Sample BRDF
 __device__ float3 sample(const Material &mat, float3 n, float3 wo,
 		float ior, float3 &seed, Shading &out)
 {
-	return GGX::sample(mat, n, wo, ior, seed, out);
+	float3 o = GGX::sample(mat, n, wo, ior, seed, out);
+	/* if (out & Shading::eTransmission) assert(!isnan(o.x) && !isnan(o.y) && !isnan(o.z));
+	else assert(!isnan(o.x) && !isnan(o.y) && !isnan(o.z)); */
+	return o;
 }
 
 // Power heurestic

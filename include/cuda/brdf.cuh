@@ -87,10 +87,12 @@ struct GGX {
 			float3 wo, float ior, Shading out)
 	{
 		if (out & Shading::eTransmission) {
-			float eta = mat.refraction/ior;
+			float3 eta = make_float3(mat.refraction/ior);
 			float cos_theta_i = dot(n, wi);
-			return (eta * eta) * (1 - Fresnel(cos_theta_i, ior, mat.refraction))
-				* float3 {1, 1, 1}/abs(cos_theta_i);
+			float Fr = Fresnel(cos_theta_i, ior, mat.refraction);
+			if (abs(cos_theta_i) < 1e-4f)
+				return make_float3(0.0f);
+			return (eta * eta) * (1 - Fr)/abs(cos_theta_i);
 		}
 
 		if (dot(wi, n) <= 0.0f || dot(wo, n) <= 0.0f)

@@ -39,7 +39,7 @@ rotation: 0 90 0
 scale: 1 1 1
 
 [MESH]
-source: resources/benchmark/teapot.obj
+source: resources/uv_sphere.obj
 
 [MATERIAL]
 diffuse: 0.9 0.2 0.07
