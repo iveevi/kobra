@@ -985,13 +985,14 @@ void OptixTracer::_optix_build()
 void OptixTracer::_optix_update_materials()
 {
 	static std::vector <HitGroupSbtRecord> hg_sbts;
-	static std::vector <optix_rt::AreaLight> area_lights;
+	static std::vector <optix_rt::QuadLight> quad_lights;
+	static std::vector <optix_rt::TriangleLight> triangle_lights;
 
-	// Update area lights
-	if (area_lights.size() != _cached.lights.size()) {
-		area_lights.resize(_cached.lights.size());
+	// Update quad lights
+	if (quad_lights.size() != _cached.lights.size()) {
+		quad_lights.resize(_cached.lights.size());
 
-		for (int i = 0; i < area_lights.size(); i++) {
+		for (int i = 0; i < quad_lights.size(); i++) {
 			const Light *light = _cached.lights[i];
 			const Transform *transform = _cached.light_transforms[i];
 			
@@ -1003,16 +1004,60 @@ void OptixTracer::_optix_update_materials()
 			b = transform->apply(b);
 			c = transform->apply(c);
 
-			area_lights[i].a = to_f3(a);
-			area_lights[i].ab = to_f3(b - a);
-			area_lights[i].ac = to_f3(c - a);
-			area_lights[i].intensity
+			quad_lights[i].a = to_f3(a);
+			quad_lights[i].ab = to_f3(b - a);
+			quad_lights[i].ac = to_f3(c - a);
+			quad_lights[i].intensity
 				= to_f3(light->power * light->color);
 		}
 
-		KOBRA_LOG_FUNC(Log::INFO) << "Number of area lights: " << area_lights.size() << std::endl;
+		KOBRA_LOG_FUNC(Log::INFO) << "Number of area lights: " << quad_lights.size() << std::endl;
 
-		_buffers.area_lights = (CUdeviceptr) cuda::make_buffer(area_lights);
+		_buffers.quad_lights = (CUdeviceptr) cuda::make_buffer(quad_lights);
+	}
+
+	// Update triangle lights
+	{
+		int count = 0;
+
+		std::vector <const Submesh *> emissive_submeshes;
+		for (const Submesh *s : _cached.submeshes) {
+			if (s->material.type == eEmissive) {
+				emissive_submeshes.push_back(s);
+				count += s->triangles();
+			}
+		}
+
+		if (count != triangle_lights.size()) {
+			triangle_lights.clear();
+
+			int i = 0;
+			for (const Submesh *s : emissive_submeshes) {
+				const Transform *transform =
+					_cached.submesh_transforms[i];
+
+				for (int j = 0; j < s->triangles(); j++) {
+					uint32_t i0 = s->indices[j * 3 + 0];
+					uint32_t i1 = s->indices[j * 3 + 1];
+					uint32_t i2 = s->indices[j * 3 + 2];
+
+					glm::vec3 a = transform->apply(s->vertices[i0].position);
+					glm::vec3 b = transform->apply(s->vertices[i1].position);
+					glm::vec3 c = transform->apply(s->vertices[i2].position);
+
+					optix_rt::TriangleLight light;
+					light.a = to_f3(a);
+					light.ab = to_f3(b - a);
+					light.ac = to_f3(c - a);
+					light.intensity = to_f3(s->material.emission);
+
+					triangle_lights.push_back(light);
+				}
+			}
+
+			// Upload to GPU
+			_buffers.tri_lights = (CUdeviceptr) cuda::make_buffer(triangle_lights);
+		}
 	}
 
 	// Update hit records if necessary
@@ -1072,8 +1117,11 @@ void OptixTracer::_optix_update_materials()
 			}
 
 			// Lights
-			hg_sbt.data.area_lights = (optix_rt::AreaLight *) _buffers.area_lights;
-			hg_sbt.data.n_area_lights = area_lights.size();
+			hg_sbt.data.quad_lights = (optix_rt::QuadLight *) _buffers.quad_lights;
+			hg_sbt.data.n_quad_lights = quad_lights.size();
+
+			hg_sbt.data.tri_lights = (optix_rt::TriangleLight *) _buffers.tri_lights;
+			hg_sbt.data.n_tri_lights = triangle_lights.size();
 
 			OPTIX_CHECK(optixSbtRecordPackHeader(_programs.hit_radiance, &hg_sbt));
 			hg_sbts.push_back(hg_sbt);
@@ -1082,8 +1130,12 @@ void OptixTracer::_optix_update_materials()
 		// Area lights
 		for (int i = 0; i < _cached.lights.size(); i++) {
 			HitGroupSbtRecord hg_sbt {};
-			hg_sbt.data.area_lights = (optix_rt::AreaLight *) _buffers.area_lights;
-			hg_sbt.data.n_area_lights = 1;
+			hg_sbt.data.quad_lights = (optix_rt::QuadLight *) _buffers.quad_lights;
+			hg_sbt.data.n_quad_lights = 1;
+
+			hg_sbt.data.tri_lights = (optix_rt::TriangleLight *) _buffers.tri_lights;
+			hg_sbt.data.n_tri_lights = 1;
+
 			hg_sbt.data.material.emission = to_f3(_cached.lights[i]->color);
 			hg_sbt.data.material.type = Shading::eEmissive;
 

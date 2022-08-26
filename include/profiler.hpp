@@ -31,6 +31,22 @@ public:
 		Frame(const std::string &n, const Timer::time_point &s)
 			: name(n), start(s), time(0.0) {}
 	};
+
+	// Scoped task
+	struct ScopedFrame {
+		Profiler	*_profiler;
+
+		// Constructor
+		ScopedFrame(Profiler *p, const std::string &n)
+			: _profiler(p) {
+			_profiler->frame(n);
+		}
+
+		// Destructor
+		~ScopedFrame() {
+			_profiler->end();
+		}
+	};
 private:
 	// Frame queue
 	std::queue <Frame>	_frames;
@@ -64,6 +80,11 @@ public:
 		_mutex.lock();
 		_stack.push(frame);
 		_mutex.unlock();
+	}
+
+	// Scoped task
+	ScopedFrame scoped_frame(const std::string &name) {
+		return ScopedFrame(this, name);
 	}
 
 	// End current frame
@@ -120,7 +141,7 @@ public:
 
 		// Milliseconds
 		if (time > 1000.0f) {
-			float us = std::fmod(us, 1000.0f);
+			float us = time - std::floor(time / 1000.0f) * 1000.0f;
 			time = time / 1000.0f;
 			time_str = time_str + std::to_string((long int) us) + " us";
 			units = " ms";
@@ -128,7 +149,7 @@ public:
 
 		// Seconds
 		if (time > 1000.0f) {
-			float ms = std::fmod(ms, 1000.0f);
+			float ms = time - std::floor(time / 1000.0f) * 1000.0f;
 			time = time / 1000.0f;
 			time_str = std::to_string((long int) ms)
 				+ " ms, " + time_str;
@@ -158,5 +179,43 @@ public:
 };
 
 }
+
+#define KOBRA_PROFILING
+
+// Profiling macros
+#ifdef KOBRA_PROFILING
+
+#define CONCAT(a, b) CONCAT_INNER(a, b)
+#define CONCAT_INNER(a, b) a ## b
+
+#define KOBRA_PROFILE_TASK(name) \
+	kobra::Profiler::ScopedFrame CONCAT(sf_, CONCAT(__LINE__, __COUNTER__)) \
+		= kobra::Profiler::one().scoped_frame(#name);
+
+#define KOBRA_PROFILE_FUNCTION() \
+	KOBRA_PROFILE_TASK(__PRETTY_FUNCTION__)
+
+#define KOBRA_PROFILE_AUTO() \
+	kobra::Profiler::ScopedFrame CONCAT(sf_, CONCAT(__LINE__, __COUNTER__)) \
+		= kobra::Profiler::one().scoped_frame( \
+			std::string(__FILE__) + ":" + std::to_string(__LINE__) \
+		);
+
+#define KOBRA_PROFILE_PRINT() \
+	while (kobra::Profiler::one().size()) { \
+		kobra::Profiler::Frame frame = kobra::Profiler::one().pop(); \
+		std::cout << kobra::Profiler::pretty(frame); \
+	}
+
+#else
+
+#warning "Profiling disabled"
+
+#define KOBRA_PROFILE_TASK(name)
+#define KOBRA_PROFILE_FUNCTION()
+#define KOBRA_PROFILE_AUTO()
+#define KOBRA_PROFILE_PRINT()
+
+#endif
 
 #endif

@@ -60,21 +60,21 @@ __forceinline__ __device__ float intersects_triangle
 }
 
 // Light type
-struct AreaLight {
+struct QuadLight {
 	float3 a;
 	float3 ab;
 	float3 ac;
 	float3 intensity;
 
-	__forceinline__ __device__ float area() {
+	__forceinline__ __device__ float area() const {
 		return length(cross(ab, ac));
 	}
 
-	__forceinline__ __device__ float3 normal() {
+	__forceinline__ __device__ float3 normal() const {
 		return normalize(cross(ab, ac));
 	}
 
-	__forceinline__ __device__ float intersects(float3 origin, float3 dir) {
+	__forceinline__ __device__ float intersects(float3 origin, float3 dir) const {
 		float3 v1 = a;
 		float3 v2 = a + ab;
 		float3 v3 = a + ac;
@@ -91,6 +91,30 @@ struct AreaLight {
 			return t1;
 
 		return min(t1, t2);
+	}
+};
+
+// Triangular area light
+struct TriangleLight {
+	float3 a;
+	float3 ab;
+	float3 ac;
+	float3 intensity;
+
+	__forceinline__ __device__ float area() const {
+		return length(cross(ab, ac)) * 0.5;
+	}
+
+	__forceinline__ __device__ float3 normal() const {
+		return normalize(cross(ab, ac));
+	}
+
+	__forceinline__ __device__ float intersects(float3 origin, float3 dir) const {
+		float3 v1 = a;
+		float3 v2 = a + ab;
+		float3 v3 = a + ac;
+
+		return intersects_triangle(v1, v2, v3, origin, dir);
 	}
 };
 
@@ -133,8 +157,11 @@ struct HitGroupData
 	} textures;
 
 	// Light data
-	AreaLight		*area_lights = nullptr;
-	int			n_area_lights;
+	QuadLight		*quad_lights = nullptr;
+	int			n_quad_lights;
+
+	TriangleLight		*tri_lights = nullptr;
+	int			n_tri_lights;
 };
 
 }

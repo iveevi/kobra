@@ -98,12 +98,12 @@ builds:
     - libraries: libs
     - flags: '-std=c++17 -Wall -Werror'
   - experimental_normal:
-    - sources: experimental/main.cu, source/logger.cpp, thirdparty/optix/sutil/Camera.cpp
+    - sources: experimental/main.cpp, kobra_source
     - idirs: includes
     - flags: '-std=c++17'
     - libraries: libs
   - experimental_debug:
-    - sources: experimental/main.cu, kobra_source, tinyfd_source, glslang_source
+    - sources: experimental/main.cpp, kobra_source
     - idirs: includes
     - flags: '-std=c++17 -g'
     - libraries: libs

@@ -57,7 +57,8 @@ class OptixTracer {
 
 	// Buffers
 	struct {
-		CUdeviceptr		area_lights;
+		CUdeviceptr		quad_lights;
+		CUdeviceptr		tri_lights;
 
 		CUdeviceptr		pbuffer;
 		CUdeviceptr		xoffset;

@@ -17,6 +17,7 @@
 #include "include/ui/color_picker.hpp"
 #include "include/ui/slider.hpp"
 #include "tinyfiledialogs.h"
+#include "include/profiler.hpp"
 
 #include <stb/stb_image_write.h>
 
@@ -24,8 +25,8 @@ using namespace kobra;
 
 // Scene path
 // std::string scene_path = "~/models/sponza/scene.kobra";
-// std::string scene_path = "/home/venki/models/cornell_box.kobra";
-std::string scene_path = "scenes/ggx.kobra";
+std::string scene_path = "/home/venki/models/fireplace_room.kobra";
+// std::string scene_path = "scenes/ggx.kobra";
 
 // Test app
 struct ECSApp : public BaseApp {
@@ -177,72 +178,80 @@ struct ECSApp : public BaseApp {
 			font_renderer(get_context(), render_pass, "resources/fonts/noto_sans.ttf"),
 			shape_renderer(get_context(), render_pass),
 			scene_graph(scene.ecs, font_renderer, io.mouse_events) {
-		scene.load(get_device(), scene_path);
-		// raytracer.environment_map(scene.p_environment_map);
-		rasterizer.environment_map("resources/skies/sunrise.jpg");
-		raytracer.environment_map("resources/skies/sunrise.jpg");
-		optix_tracer.environment_map("resources/skies/sunrise.jpg");
+		{
+			KOBRA_PROFILE_TASK(Application constructor)
 
-		// Camera
-		camera = scene.ecs.get_entity("Camera");
+			scene.load(get_device(), scene_path);
 
-		// TODO: set camera properties (aspect)
-		camera.get <Camera> ().aspect = (render_max.x - render_min.x)/(render_max.y - render_min.y);
+			std::string envmap_path = "resources/skies/background_1.jpg";
 
-		// Color picker
-		color = glm::vec3 {0.86f, 0.13f, 0.13f};
-		color_picker = ui::ColorPicker {
-			io.mouse_events,
-			ui::ColorPicker::Args {
-				.min = {window_size.x - component_panel_width, 200},
-				.max = {window_size.x, 200 + 250.0f},
-				.label = "diffuse",
-				.ref = &color,
-				.font_renderer = &font_renderer
-			}
-		};
+			rasterizer.environment_map(envmap_path);
+			raytracer.environment_map(envmap_path);
+			optix_tracer.environment_map(envmap_path);
 
-		r_background = ui::Rect(
-			glm::vec2 {window_size.x - component_panel_width + 5, 5},
-			glm::vec2 {window_size.x - 5, window_size.y - 5},
-			glm::vec3 {0.6f},
-			0.005f
-		);
+			// Camera
+			camera = scene.ecs.get_entity("Camera");
 
-		auto capture_ftn = [&](void *user, glm::vec2) {
-			static const std::string path = "capture.png";
-			auto *app = (ECSApp *) user;
-			std::cout << "Capture button pressed" << std::endl;
-			std::vector <uint8_t> pixels = app->optix_tracer.capture();
+			// TODO: set camera properties (aspect)
+			camera.get <Camera> ().aspect = (render_max.x - render_min.x)/(render_max.y - render_min.y);
 
-			stbi_flip_vertically_on_write(true);
+			// Color picker
+			color = glm::vec3 {0.86f, 0.13f, 0.13f};
+			color_picker = ui::ColorPicker {
+				io.mouse_events,
+				ui::ColorPicker::Args {
+					.min = {window_size.x - component_panel_width, 200},
+					.max = {window_size.x, 200 + 250.0f},
+					.label = "diffuse",
+					.ref = &color,
+					.font_renderer = &font_renderer
+				}
+			};
 
-			int width = app->optix_tracer.width;
-			int height = app->optix_tracer.height;
-			std::cout << "\tCapture size: " << width << "x" << height << std::endl;
-			stbi_write_png(path.c_str(),
-				width, height, 4, pixels.data(),
-				width * 4
+			r_background = ui::Rect(
+				glm::vec2 {window_size.x - component_panel_width + 5, 5},
+				glm::vec2 {window_size.x - 5, window_size.y - 5},
+				glm::vec3 {0.6f},
+				0.005f
 			);
-		};
 
-		ui::Button::Args button_args {
-			{window_size.x - component_panel_width + 5, 5},
-			{window_size.x - 5, 5 + 30.0f},
-			0.005f, 0,
-			glm::vec3 {0.7, 0.6, 0.6},
-			glm::vec3 {0.8, 0.7, 0.7},
-			glm::vec3 {0.75, 0.65, 0.65},
-			GLFW_MOUSE_BUTTON_LEFT,
-			{{this, capture_ftn}}
-		};
+			auto capture_ftn = [&](void *user, glm::vec2) {
+				static const std::string path = "capture.png";
+				auto *app = (ECSApp *) user;
+				std::cout << "Capture button pressed" << std::endl;
+				std::vector <uint8_t> pixels = app->optix_tracer.capture();
 
-		capture_button = ui::Button(io.mouse_events, button_args);
+				stbi_flip_vertically_on_write(true);
 
-		// Input callbacks
-		io.mouse_events.subscribe(mouse_callback, this);
+				int width = app->optix_tracer.width;
+				int height = app->optix_tracer.height;
+				std::cout << "\tCapture size: " << width << "x" << height << std::endl;
+				stbi_write_png(path.c_str(),
+					width, height, 4, pixels.data(),
+					width * 4
+				);
+			};
 
-		scene.ecs.info <Mesh> ();
+			ui::Button::Args button_args {
+				{window_size.x - component_panel_width + 5, 5},
+				{window_size.x - 5, 5 + 30.0f},
+				0.005f, 0,
+				glm::vec3 {0.7, 0.6, 0.6},
+				glm::vec3 {0.8, 0.7, 0.7},
+				glm::vec3 {0.75, 0.65, 0.65},
+				GLFW_MOUSE_BUTTON_LEFT,
+				{{this, capture_ftn}}
+			};
+
+			capture_button = ui::Button(io.mouse_events, button_args);
+
+			// Input callbacks
+			io.mouse_events.subscribe(mouse_callback, this);
+
+			scene.ecs.info <Mesh> ();
+		}
+
+		KOBRA_PROFILE_PRINT()
 	}
 
 	int mode = 0;	// 0 for raster, 1 for raytracer, 2 for OptiX

@@ -14,6 +14,7 @@
 // Engine headers
 #include "../include/common.hpp"
 #include "../include/mesh.hpp"
+#include "../include/profiler.hpp"
 
 // Global operators
 namespace std {
@@ -367,6 +368,8 @@ namespace assimp {
 
 static Submesh process_mesh(aiMesh *mesh, const aiScene *scene, const std::string &dir)
 {
+	KOBRA_PROFILE_FUNCTION();
+
 	// Mesh data
 	VertexList vertices;
 	Indices indices;
@@ -479,6 +482,8 @@ static Mesh process_node(aiNode *node, const aiScene *scene, const std::string &
 
 std::optional <Mesh> load_mesh(const std::string &path)
 {
+	KOBRA_PROFILE_FUNCTION();
+
 	// Create the Assimp importer
 	Assimp::Importer importer;
 
@@ -508,6 +513,8 @@ namespace tinyobjloader {
 
 std::optional <Mesh> load_mesh(const std::string &path)
 {
+	KOBRA_PROFILE_FUNCTION();
+
 	// Loader configuration
 	tinyobj::ObjReaderConfig reader_config;
 	reader_config.mtl_search_path = common::get_directory(path);
@@ -540,6 +547,8 @@ std::optional <Mesh> load_mesh(const std::string &path)
 
 	// TODO: multithreaded task system (using a threadpool, etc) in core/
 	for (int i = 0; i < shapes.size(); i++) {
+		KOBRA_PROFILE_TASK(Load submesh);
+
 		// Get the mesh
 		auto &mesh = shapes[i].mesh;
 
@@ -651,17 +660,29 @@ std::optional <Mesh> load_mesh(const std::string &path)
 					mat.specular = {m.specular[0], m.specular[1], m.specular[2]};
 					mat.ambient = {m.ambient[0], m.ambient[1], m.ambient[2]};
 					mat.emission = {m.emission[0], m.emission[1], m.emission[2]};
+
+					// Check emission
+					if (length(mat.emission) > 0.0f) {
+						std::cout << "Emission: " << mat.emission.x << ", " << mat.emission.y << ", " << mat.emission.z << std::endl;
+						mat.type = eEmissive;
+					}
+
+					// Surface properties
 					mat.shininess = m.shininess;
-
-					// Check if roughness is defined
-					if (m.roughness == 0 && m.shininess != 1000)
-						mat.roughness = 1 - m.shininess/1000;
-					else
-						mat.roughness = m.roughness;
-
+					// mat.roughness = sqrt(2.0f / (mat.shininess + 2.0f));
+					mat.roughness = glm::clamp(1.0f - mat.shininess/1000.0f, 1e-3f, 0.999f);
 					mat.refraction = m.ior;
-					if (m.ior != 1 && (m.illum == 4 || m.illum == 7))
+
+					// TODO: handle types of rays/materials
+					// in the shader
+					switch (m.illum) {
+					/* case 4:
+						mat.type = Shading::eTransmission;
+						break; */
+					case 7:
 						mat.type = eTransmission;
+						break;
+					}
 
 					// Albedo texture
 					if (!m.diffuse_texname.empty()) {

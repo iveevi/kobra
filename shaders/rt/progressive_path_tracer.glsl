@@ -283,13 +283,6 @@ vec3 Lo(vec3 x, vec3 wo, vec3 n, Material mat, int depth)
 		if (dot(n, wo) <= 0.0f)
 			n = -n;
 
-		vec3 refr = refract(wo, n, 1.0f/mat.refraction);
-		float cos_theta_i = -dot(refr, n);
-		float fresnel = Fresnel(cos_theta_i, 1.0f, mat.refraction);
-		float inv_eta = mat.refraction;
-		float tr = (1.0f - fresnel) * (inv_eta * inv_eta)/abs(cos_theta_i);
-		return vec3(tr);
-
 		// Get direct lighting
 		vec3 Ld = Ld(x, wo, n, mat);
 		contr += throughput * Ld;

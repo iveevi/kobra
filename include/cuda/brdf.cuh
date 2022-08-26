@@ -111,8 +111,6 @@ struct GGX {
 			return make_float3(abs(cos_term * num/denom));
 		}
 		
-		print("GGX specular!\n");
-
 		if (dot(wi, n) <= 0.0f || dot(wo, n) <= 0.0f)
 			return float3 {0.0f, 0.0f, 0.0f};
 
@@ -133,11 +131,6 @@ struct GGX {
 	static float pdf(const Material &mat, float3 n, float3 wi,
 			float3 wo, float ior, Shading out)
 	{
-		if (out & Shading::eTransmission)
-			print("PDF - Sampled transmission\n");
-		else
-			print("PDF - Sampled reflection\n");
-
 		// TODO: refactor shading type to ray type
 		if (out & Shading::eTransmission) {
 			if (dot(wo, n) * dot(wi, n) >= 0.0f)
@@ -179,7 +172,6 @@ struct GGX {
 			float ior, float3 &seed, Shading &out)
 	{
 		if (mat.type & eTransmission) {
-			print("Sample - Sampling transmission!\n");
 			out = Shading::eTransmission;
 
 			// Sample half vector
@@ -197,17 +189,8 @@ struct GGX {
 
 			h = rotate(h, n);
 
-			print("\tSampled half vector: %f, %f, %f\n",
-				h.x, h.y, h.z);
-			print("\two = %f, %f, %f\n", wo.x, wo.y, wo.z);
-
 			// Return refracted ray
-			float3 o = normalize(refract(wo, h, ior/mat.refraction));
-			print("\tSampled ray: %f, %f, %f\n", o.x, o.y, o.z);
-			print("\tn = %f, %f, %f\n", n.x, n.y, n.z);
-			print("\two * h = %f\n", dot(wo, h));
-			print("\two * n = %f\n", dot(wo, n));
-			return o;
+			return normalize(refract(wo, h, ior/mat.refraction));
 		}
 
 		print("Sample - Sampling reflection!\n");

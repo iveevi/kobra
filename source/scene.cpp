@@ -1,4 +1,5 @@
 #include "../include/scene.hpp"
+#include "../include/profiler.hpp"
 
 namespace kobra {
 
@@ -511,6 +512,8 @@ std::string load_components(Entity &e, std::ifstream &fin, const Device &dev)
 
 void Scene::load(const Device &dev, const std::string &path)
 {
+	KOBRA_PROFILE_TASK(Scene loading)
+
 	static char buf[1024] = "";
 
 	std::ifstream fin(path);

@@ -12,7 +12,8 @@
 
 using kobra::optix_rt::HitGroupData;
 using kobra::optix_rt::MissData;
-using kobra::optix_rt::AreaLight;
+using kobra::optix_rt::QuadLight;
+using kobra::optix_rt::TriangleLight;
 
 using kobra::cuda::Material;
 using kobra::cuda::GGX;
@@ -215,11 +216,25 @@ __device__ float power(float pdf_f, float pdf_g)
 }
 
 // Area light methods
-__device__ float3 sample_area_light(AreaLight light, float3 &seed)
+__device__ float3 sample_area_light(QuadLight light, float3 &seed)
 {
 	float3 rand = random3(seed);
 	float u = fract(rand.x);
 	float v = fract(rand.y);
+	return light.a + u * light.ab + v * light.ac;
+}
+
+__device__ float3 sample_area_light(TriangleLight light, float3 &seed)
+{
+	float3 rand = random3(seed);
+	float u = fract(rand.x);
+	float v = fract(rand.y);
+	
+	if (u + v > 1.0f) {
+		u = 1.0f - u;
+		v = 1.0f - v;
+	}
+	
 	return light.a + u * light.ab + v * light.ac;
 }
 
@@ -245,21 +260,13 @@ __device__ bool shadow_visibility(float3 origin, float3 dir, float R)
 	return vis;
 }
 
-// Trace ray into scene and get relevant information
-__device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
+// Direct lighting for specific types of lights
+template <class Light>
+__device__ float3 Ld_light(const Light &light, HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 		Material mat, float ior, float3 &seed)
 {
-	if (hit_data->n_area_lights == 0)
-		return float3 {0.0f, 0.0f, 0.0f};
-
 	float3 contr_nee {0.0f};
 	float3 contr_brdf {0.0f};
-
-	// Random area light for NEE
-	random3(seed);
-	unsigned int i = seed.x * hit_data->n_area_lights;
-	i = i % hit_data->n_area_lights;
-	AreaLight light = hit_data->area_lights[i];
 
 	// NEE
 	float3 lpos = sample_area_light(light, seed);
@@ -311,6 +318,28 @@ __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 	}
 
 	return contr_nee + contr_brdf;
+}
+
+// Trace ray into scene and get relevant information
+__device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
+		Material mat, float ior, float3 &seed)
+{
+	if (hit_data->n_quad_lights == 0
+			&& hit_data->n_tri_lights == 0)
+		return float3 {0.0f, 0.0f, 0.0f};
+
+	// Random area light for NEE
+	random3(seed);
+	unsigned int i = seed.x * (hit_data->n_quad_lights + hit_data->n_tri_lights);
+	i = min(i, hit_data->n_quad_lights + hit_data->n_tri_lights - 1);
+
+	if (i < hit_data->n_quad_lights) {
+		QuadLight light = hit_data->quad_lights[i];
+		return Ld_light(light, hit_data, x, wo, n, mat, ior, seed);
+	}
+
+	TriangleLight light = hit_data->tri_lights[i - hit_data->n_quad_lights];
+	return Ld_light(light, hit_data, x, wo, n, mat, ior, seed);
 }
 
 // Interpolate triangle values
