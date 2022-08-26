@@ -1206,9 +1206,9 @@ void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 				cudaMemcpyHostToDevice
 			      ) );
 
-	OPTIX_CHECK( optixLaunch( _optix_pipeline, _optix_stream, d_param,
+	OPTIX_CHECK(optixLaunch(_optix_pipeline, _optix_stream, d_param,
 				sizeof(optix_rt::Params), &_optix_sbt,
-				width, height, 1 ) );
+				width, height, 1));
 	CUDA_SYNC_CHECK();
 
 	CUDA_CHECK( cudaFree( reinterpret_cast<void*>( d_param ) ) );

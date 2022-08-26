@@ -286,7 +286,6 @@ vec3 Lo(vec3 x, vec3 wo, vec3 n, Material mat, int depth)
 		vec3 refr = refract(wo, n, 1.0f/mat.refraction);
 		float cos_theta_i = -dot(refr, n);
 		float fresnel = Fresnel(cos_theta_i, 1.0f, mat.refraction);
-		return vec3(fresnel);
 		float inv_eta = mat.refraction;
 		float tr = (1.0f - fresnel) * (inv_eta * inv_eta)/abs(cos_theta_i);
 		return vec3(tr);

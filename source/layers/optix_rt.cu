@@ -176,17 +176,18 @@ __device__ __forceinline__ float3 operator*(mat3 m, float3 v)
 __device__ float3 brdf(const Material &mat, float3 n, float3 wi,
 		float3 wo, float ior, Shading out)
 {
-	float3 o = GGX::brdf(mat, n, wi, wo, ior, out) + mat.diffuse/M_PI;
-	/* if (out & Shading::eTransmission) assert(!isnan(o.x) && !isnan(o.y) && !isnan(o.z));
-	else assert(!isnan(o.x) && !isnan(o.y) && !isnan(o.z)); */
-	return o;
+	float3 specular = GGX::brdf(mat, n, wi, wo, ior, out);
+	if (out & Shading::eTransmission)
+		return specular;
+	
+	return specular + mat.diffuse/M_PI;
 }
 
 // Evaluate PDF of BRDF
 __device__ float pdf(const Material &mat, float3 n, float3 wi,
-		float3 wo, Shading out)
+		float3 wo, float ior, Shading out)
 {
-	float o = GGX::pdf(mat, n, wi, wo, out);
+	float o = GGX::pdf(mat, n, wi, wo, ior, out);
 	/* if (out & Shading::eTransmission) assert(!isnan(o));
 	else assert(!isnan(o)); */
 	return o;
@@ -273,7 +274,7 @@ __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 		float pdf_light = (R * R)/(light.area() * ldot);
 
 		// TODO: how to decide ray type for this?
-		float pdf_brdf = pdf(mat, n, wi, wo, mat.type);
+		float pdf_brdf = pdf(mat, n, wi, wo, ior, mat.type);
 
 		bool vis = shadow_visibility(x, wi, R);
 		if (pdf_light > 1e-9 && vis) {
@@ -292,7 +293,7 @@ __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 	print("===BRDF brdf===\n");
 	f = brdf(mat, n, wi, wo, ior, out) * max(dot(n, wi), 0.0f);
 
-	float pdf_brdf = pdf(mat, n, wi, wo, out);
+	float pdf_brdf = pdf(mat, n, wi, wo, ior, out);
 	float pdf_light = 0.0f;
 
 	// TODO: need to check intersection for lights specifically (and
@@ -443,7 +444,7 @@ extern "C" __global__ void __closesthit__radiance()
 	if (length(wi) < 1e-9)
 		return;
 
-	float pdf = ::pdf(material, n, wi, wo, out);
+	float pdf = ::pdf(material, n, wi, wo, rp->ior, out);
 
 	if (pdf <= 1e-9)
 		return;
@@ -465,7 +466,7 @@ extern "C" __global__ void __closesthit__radiance()
 	if (out & Shading::eTransmission)
 		offset = -offset;
 
-	// rp->value = GGX::brdf(material, n, wi, wo, rp->ior, out, true);
+	// rp->value = GGX::brdf(material, n, wi, wo, rp->ior, out, true)/pdf;
 	// return;
 
 	// Update ior

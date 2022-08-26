@@ -88,39 +88,27 @@ struct GGX {
 			float3 wo, float ior, Shading out, bool isrec = false)
 	{
 		if (out & Shading::eTransmission) {
-			float inv_eta = mat.refraction/ior;
-			float3 refr = refract(wo, n, 1/inv_eta);
-			if (length(refr - wi) > 1e-3f)
+			if (dot(wo, n) * dot(wi, n) >= 0.0f)
 				return make_float3(0.0f);
 
-			float cos_theta_i = -dot(wi, n);
-			float fresnel = Fresnel(cos_theta_i, ior, mat.refraction);
-			float tr = (1 - fresnel) * (inv_eta * inv_eta)/abs(cos_theta_i);
-			return make_float3(tr);
+			float eta = ior/mat.refraction;
 
-			/* print("GGX transmission!\n");
-			float cos_theta_i = dot(n, wo);
-			assert(!isnan(cos_theta_i));
-			
-			float3 refr = refract(wo, n, 1/eta.x);
-			if (length(refr - wi) > 1e-3f) {
-				print("Fake refraction: %f %f %f\n", refr.x, refr.y, refr.z);
-				print("\twi = %f %f %f\n", wi.x, wi.y, wi.z);
+			float3 h = normalize(wo - wi * eta);
 
-				/* if (isrec)
-					assert(false);
-				return make_float3(0, 0, 0);
-			}
+			float d_wo_h = dot(wo, h);
+			float d_wi_h = dot(-wi, h);
 
-			print("Cos theta i = %f\n", cos_theta_i);
+			float fr = Fresnel(d_wo_h, ior, mat.refraction);
+			float d = Microfacets::GGX(n, h, mat);
+			float g = G(n, -wi, wo, mat);
 
-			float Fr = Fresnel(cos_theta_i, ior, mat.roughness);
-			assert(!isnan(Fr));
-			print("Fresnel = %f\n", Fr);
-			return make_float3(Fr);
-			float3 o = (eta * eta) * (1 - Fr)/dot(wi, n);
-			assert(!isnan(o.x) && !isnan(o.y) && !isnan(o.z));
-			return o; */
+			float num = d * g * (1 - fr);
+			float denom = (d_wo_h + eta * d_wi_h);
+			denom *= denom;
+
+			float cos_term = (d_wo_h * d_wi_h)/(dot(wo, n) * dot(-wi, n));
+
+			return make_float3(abs(cos_term * num/denom));
 		}
 		
 		print("GGX specular!\n");
@@ -143,16 +131,27 @@ struct GGX {
 	// Evaluate the PDF
 	__device__ __forceinline__
 	static float pdf(const Material &mat, float3 n, float3 wi,
-			float3 wo, Shading out)
+			float3 wo, float ior, Shading out)
 	{
 		if (out & Shading::eTransmission)
-			print("Sampled transmission\n");
+			print("PDF - Sampled transmission\n");
 		else
-			print("Sampled reflection\n");
+			print("PDF - Sampled reflection\n");
 
 		// TODO: refactor shading type to ray type
 		if (out & Shading::eTransmission) {
-			return 1;
+			if (dot(wo, n) * dot(wi, n) >= 0.0f)
+				return 0.0f;
+
+			float eta = ior/mat.refraction;
+			float3 h = normalize(wo - wi * eta);
+
+			float sqrt_denom = dot(wo, h) + eta * dot(-wi, h);
+			float dh_dwo = (eta * eta * dot(-wi, h)) / (sqrt_denom * sqrt_denom);
+
+			float D = Microfacets::GGX(n, h, mat)
+			 	* G1(n, wo, mat) * abs(dot(wo, h))/abs(dot(wo, n));
+			return abs(D * dh_dwo);
 		}
 
 		if (dot(wi, n) <= 0.0f || dot(wo, n) < 0.0f)
@@ -168,9 +167,8 @@ struct GGX {
 			t = max(avg_Ks/(avg_Kd + avg_Ks), 0.25f);
 
 		float term1 = dot(n, wi)/M_PI;
-		float term2 = Microfacets::GGX(n, h, mat) * G(n, wi, wo, mat)
+		float term2 = Microfacets::GGX(n, h, mat) * G1(n, wo, mat)
 			* dot(wo, h) / (4 * dot(wi, h) * dot(wo, n));
-		// float term2 = Microfacets::GGX(n, h, mat) * dot(n, h)/(4.0f * dot(wi, h));
 
 		return (1 - t) * term1 + t * term2;
 	}
@@ -181,13 +179,38 @@ struct GGX {
 			float ior, float3 &seed, Shading &out)
 	{
 		if (mat.type & eTransmission) {
-			// TODO: check if both refraction and reflection are
-			// enabled and sample accordingly
-
-			// For now, just refract
+			print("Sample - Sampling transmission!\n");
 			out = Shading::eTransmission;
-			return refract(wo, n, ior/mat.refraction);
+
+			// Sample half vector
+			float3 eta = fract(random3(seed));
+			float k = sqrt(eta.y/(1 - eta.y));
+
+			float theta = atan(k * mat.roughness);
+			float phi = 2.0f * M_PI * eta.z;
+
+			float3 h = float3 {
+				sin(theta) * cos(phi),
+				sin(theta) * sin(phi),
+				cos(theta)
+			};
+
+			h = rotate(h, n);
+
+			print("\tSampled half vector: %f, %f, %f\n",
+				h.x, h.y, h.z);
+			print("\two = %f, %f, %f\n", wo.x, wo.y, wo.z);
+
+			// Return refracted ray
+			float3 o = normalize(refract(wo, h, ior/mat.refraction));
+			print("\tSampled ray: %f, %f, %f\n", o.x, o.y, o.z);
+			print("\tn = %f, %f, %f\n", n.x, n.y, n.z);
+			print("\two * h = %f\n", dot(wo, h));
+			print("\two * n = %f\n", dot(wo, n));
+			return o;
 		}
+
+		print("Sample - Sampling reflection!\n");
 
 		float avg_Kd = (mat.diffuse.x + mat.diffuse.y + mat.diffuse.z) / 3.0f;
 		float avg_Ks = (mat.specular.x + mat.specular.y + mat.specular.z) / 3.0f;
