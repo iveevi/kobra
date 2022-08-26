@@ -4,6 +4,7 @@
 #include "math.cuh"
 #include "material.cuh"
 #include "random.cuh"
+#include "debug.cuh"
 
 namespace kobra {
 
@@ -64,12 +65,12 @@ float Fresnel(float cos_theta_i, float eta_i, float eta_t)
 		cos_theta_i = -cos_theta_i;
 	}
 
-	float sin_theta_i = sqrt(1 - cos_theta_i * cos_theta_i);
-	if (eta_i * sin_theta_i > eta_t)
+	float sin_theta_i = sqrt(max(1 - cos_theta_i * cos_theta_i, 0.0f));
+	float sin_theta_t = (eta_i/eta_t) * sin_theta_i;
+	if (sin_theta_t >= 1.0f)
 		return 1.0f;
 
-	float sin_theta_t = (eta_i/eta_t) * sin_theta_i;
-	float cos_theta_t = sqrt(1 - sin_theta_t * sin_theta_t);
+	float cos_theta_t = sqrt(max(1 - sin_theta_t * sin_theta_t, 0.0f));
 
 	float r_parallel = (eta_t * cos_theta_i - eta_i * cos_theta_t)
 		/ (eta_t * cos_theta_i + eta_i * cos_theta_t);
@@ -84,16 +85,45 @@ struct GGX {
 	// Evaluate the BRDF
 	__device__ __forceinline__
 	static float3 brdf(const Material &mat, float3 n, float3 wi,
-			float3 wo, float ior, Shading out)
+			float3 wo, float ior, Shading out, bool isrec = false)
 	{
 		if (out & Shading::eTransmission) {
-			float3 eta = make_float3(mat.refraction/ior);
-			float cos_theta_i = dot(n, wi);
-			float Fr = Fresnel(cos_theta_i, ior, mat.refraction);
-			if (abs(cos_theta_i) < 1e-4f)
+			float inv_eta = mat.refraction/ior;
+			float3 refr = refract(wo, n, 1/inv_eta);
+			if (length(refr - wi) > 1e-3f)
 				return make_float3(0.0f);
-			return (eta * eta) * (1 - Fr)/abs(cos_theta_i);
+
+			float cos_theta_i = -dot(wi, n);
+			float fresnel = Fresnel(cos_theta_i, ior, mat.refraction);
+			float tr = (1 - fresnel) * (inv_eta * inv_eta)/abs(cos_theta_i);
+			return make_float3(tr);
+
+			/* print("GGX transmission!\n");
+			float cos_theta_i = dot(n, wo);
+			assert(!isnan(cos_theta_i));
+			
+			float3 refr = refract(wo, n, 1/eta.x);
+			if (length(refr - wi) > 1e-3f) {
+				print("Fake refraction: %f %f %f\n", refr.x, refr.y, refr.z);
+				print("\twi = %f %f %f\n", wi.x, wi.y, wi.z);
+
+				/* if (isrec)
+					assert(false);
+				return make_float3(0, 0, 0);
+			}
+
+			print("Cos theta i = %f\n", cos_theta_i);
+
+			float Fr = Fresnel(cos_theta_i, ior, mat.roughness);
+			assert(!isnan(Fr));
+			print("Fresnel = %f\n", Fr);
+			return make_float3(Fr);
+			float3 o = (eta * eta) * (1 - Fr)/dot(wi, n);
+			assert(!isnan(o.x) && !isnan(o.y) && !isnan(o.z));
+			return o; */
 		}
+		
+		print("GGX specular!\n");
 
 		if (dot(wi, n) <= 0.0f || dot(wo, n) <= 0.0f)
 			return float3 {0.0f, 0.0f, 0.0f};
@@ -115,6 +145,11 @@ struct GGX {
 	static float pdf(const Material &mat, float3 n, float3 wi,
 			float3 wo, Shading out)
 	{
+		if (out & Shading::eTransmission)
+			print("Sampled transmission\n");
+		else
+			print("Sampled reflection\n");
+
 		// TODO: refactor shading type to ray type
 		if (out & Shading::eTransmission) {
 			return 1;
@@ -133,7 +168,9 @@ struct GGX {
 			t = max(avg_Ks/(avg_Kd + avg_Ks), 0.25f);
 
 		float term1 = dot(n, wi)/M_PI;
-		float term2 = Microfacets::GGX(n, h, mat) * dot(n, h)/(4.0f * dot(wi, h));
+		float term2 = Microfacets::GGX(n, h, mat) * G(n, wi, wo, mat)
+			* dot(wo, h) / (4 * dot(wi, h) * dot(wo, n));
+		// float term2 = Microfacets::GGX(n, h, mat) * dot(n, h)/(4.0f * dot(wi, h));
 
 		return (1 - t) * term1 + t * term2;
 	}
@@ -147,7 +184,7 @@ struct GGX {
 			// TODO: check if both refraction and reflection are
 			// enabled and sample accordingly
 
-			// For now, just pass through
+			// For now, just refract
 			out = Shading::eTransmission;
 			return refract(wo, n, ior/mat.refraction);
 		}

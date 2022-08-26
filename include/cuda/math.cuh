@@ -2662,6 +2662,11 @@ float3 rotate(float3 s, float3 n)
 __device__ __forceinline__
 float3 refract(float3 I, float3 N, float eta)
 {
+	/* eta = 2.0f - eta;
+	float cosi = dot(I, N);
+	float3 o = (I * eta - N * (-cosi + eta * cosi));
+	return o; */
+
 	float k = 1.0 - eta * eta * (1.0 - dot(N, I) * dot(N, I));
 
 	float3 R {0.0f, 0.0f, 0.0f};

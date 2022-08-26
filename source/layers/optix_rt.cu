@@ -1,6 +1,8 @@
 // Standard headers
 #include <cstdint>
 
+// #define KCUDA_DEBUG
+
 // Engine headers
 #include "../../include/cuda/math.cuh"
 #include "../../include/cuda/color.cuh"
@@ -105,7 +107,7 @@ extern "C" __global__ void __raygen__rg()
 
 	// Check value
 	float3 pixel = ray_packet.value;
-	// assert(!isnan(pixel.x) && !isnan(pixel.y) && !isnan(pixel.z));
+	assert(!isnan(pixel.x) && !isnan(pixel.y) && !isnan(pixel.z));
 	if (isnan(pixel.x) || isnan(pixel.y) || isnan(pixel.z))
 		pixel = {0.0f, 0.0f, 0.0f};
 
@@ -263,14 +265,15 @@ __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 	float3 wi = normalize(lpos - x);
 	float R = length(lpos - x);
 
-	float3 f = brdf(mat, n, wi, wo, ior, Shading::eDiffuse) * max(dot(n, wi), 0.0f);
+	print("===NEE brdf===\n");
+	float3 f = brdf(mat, n, wi, wo, ior, mat.type) * max(dot(n, wi), 0.0f);
 
 	float ldot = abs(dot(light.normal(), wi));
 	if (ldot > 1e-6) {
 		float pdf_light = (R * R)/(light.area() * ldot);
 
 		// TODO: how to decide ray type for this?
-		float pdf_brdf = pdf(mat, n, wi, wo, Shading::eDiffuse);
+		float pdf_brdf = pdf(mat, n, wi, wo, mat.type);
 
 		bool vis = shadow_visibility(x, wi, R);
 		if (pdf_light > 1e-9 && vis) {
@@ -286,6 +289,7 @@ __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 	if (dot(wi, n) <= 0.0f)
 		return contr_nee;
 	
+	print("===BRDF brdf===\n");
 	f = brdf(mat, n, wi, wo, ior, out) * max(dot(n, wi), 0.0f);
 
 	float pdf_brdf = pdf(mat, n, wi, wo, out);
@@ -434,7 +438,11 @@ extern "C" __global__ void __closesthit__radiance()
 
 	// Generate new ray
 	Shading out;
+	print("===Recursive brdf===\n");
 	float3 wi = sample(material, n, wo, rp->ior, rp->seed, out);
+	if (length(wi) < 1e-9)
+		return;
+
 	float pdf = ::pdf(material, n, wi, wo, out);
 
 	if (pdf <= 1e-9)
@@ -456,6 +464,9 @@ extern "C" __global__ void __closesthit__radiance()
 	float3 offset = 1e-3f * n;
 	if (out & Shading::eTransmission)
 		offset = -offset;
+
+	// rp->value = GGX::brdf(material, n, wi, wo, rp->ior, out, true);
+	// return;
 
 	// Update ior
 	rp->ior = material.refraction;

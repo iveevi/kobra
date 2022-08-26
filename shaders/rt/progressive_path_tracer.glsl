@@ -239,6 +239,33 @@ vec3 Ld(vec3 x, vec3 wo, vec3 n, Material mat)
 	return contr_nee + contr_brdf;
 }
 
+float Fresnel(float cos_theta_i, float eta_i, float eta_t)
+{
+	cos_theta_i = clamp(cos_theta_i, -1.0f, 1.0f);
+	
+	if (cos_theta_i > 0.0f) {
+		float temp = eta_i;
+		eta_i = eta_t;
+		eta_t = temp;
+	} else {
+		cos_theta_i = -cos_theta_i;
+	}
+	
+	float sin_theta_i = sqrt(max(1 - cos_theta_i * cos_theta_i, 0.0f));
+	float sin_theta_t = (eta_i/eta_t) * sin_theta_i;
+	if (sin_theta_t >= 1.0f)
+		return 1.0f;
+
+	float cos_theta_t = sqrt(max(1 - sin_theta_t * sin_theta_t, 0.0f));
+
+	float r_parallel = (eta_t * cos_theta_i - eta_i * cos_theta_t)
+		/ (eta_t * cos_theta_i + eta_i * cos_theta_t);
+	float r_perpendicular = (eta_i * cos_theta_i - eta_t * cos_theta_t)
+		/ (eta_i * cos_theta_i + eta_t * cos_theta_t);
+
+	return (r_parallel * r_parallel + r_perpendicular * r_perpendicular) / 2.0f;
+}
+
 // Indirect lighting
 vec3 Lo(vec3 x, vec3 wo, vec3 n, Material mat, int depth)
 {
@@ -255,6 +282,14 @@ vec3 Lo(vec3 x, vec3 wo, vec3 n, Material mat, int depth)
 		n = normalize(n);
 		if (dot(n, wo) <= 0.0f)
 			n = -n;
+
+		vec3 refr = refract(wo, n, 1.0f/mat.refraction);
+		float cos_theta_i = -dot(refr, n);
+		float fresnel = Fresnel(cos_theta_i, 1.0f, mat.refraction);
+		return vec3(fresnel);
+		float inv_eta = mat.refraction;
+		float tr = (1.0f - fresnel) * (inv_eta * inv_eta)/abs(cos_theta_i);
+		return vec3(tr);
 
 		// Get direct lighting
 		vec3 Ld = Ld(x, wo, n, mat);
