@@ -5,11 +5,13 @@
 
 #ifdef KCUDA_DEBUG
 
+#warning "[Kobra] Debugging enabled for CUDA"
+
 #define print(...) printf(__VA_ARGS__)
 
 #else
 
-#define assert(...)
+// #define assert(...)
 #define print(...)
 
 #endif

@@ -13,11 +13,8 @@ namespace cuda {
 // Smith shadow-masking function (single)
 __device__ float G1(float3 n, float3 v, Material mat)
 {
-	if (dot(v, n) <= 0.0f)
-		return 0.0f;
-
 	float alpha = mat.roughness;
-	float theta = acos(clamp(dot(n, v), 0.0f, 0.999f));
+	float theta = acos(clamp(abs(dot(n, v)), 0.0f, 0.999f));
 
 	float tan_theta = tan(theta);
 
@@ -43,7 +40,7 @@ struct Microfacets {
 	__device__ __forceinline__
 	static float GGX(float3 n, float3 h, const Material &mat) {
 		float alpha = mat.roughness;
-		float theta = acos(clamp(dot(n, h), 0.0f, 0.999f));
+		float theta = acos(clamp(abs(dot(n, h)), 0.0f, 0.999f));
 		
 		return (alpha * alpha)
 			/ (M_PI * pow(cos(theta), 4)
@@ -55,29 +52,16 @@ struct Microfacets {
 __device__ __forceinline__
 float Fresnel(float cos_theta_i, float eta_i, float eta_t)
 {
-	cos_theta_i = clamp(cos_theta_i, -1.0f, 1.0f);
-	
-	if (cos_theta_i > 0.0f) {
-		float temp = eta_i;
-		eta_i = eta_t;
-		eta_t = temp;
-	} else {
-		cos_theta_i = -cos_theta_i;
-	}
+	float inv_eta = eta_t/eta_i;
+	float c = clamp(abs(cos_theta_i), 0.0f, 1.0f);
+	float g = sqrt(max(inv_eta * inv_eta + c * c - 1.0f, 0.0f));
 
-	float sin_theta_i = sqrt(max(1 - cos_theta_i * cos_theta_i, 0.0f));
-	float sin_theta_t = (eta_i/eta_t) * sin_theta_i;
-	if (sin_theta_t >= 1.0f)
-		return 1.0f;
+	float _f1 = (g - c)/(g + c);
+	float _f2 = 0.5f * _f1 * _f1;
+	float _f3 = (c * (g + c) - 1.0f)/(c * (g - c) + 1.0f);
+	float _f4 = 1 + _f3 * _f3;
 
-	float cos_theta_t = sqrt(max(1 - sin_theta_t * sin_theta_t, 0.0f));
-
-	float r_parallel = (eta_t * cos_theta_i - eta_i * cos_theta_t)
-		/ (eta_t * cos_theta_i + eta_i * cos_theta_t);
-	float r_perpendicular = (eta_i * cos_theta_i - eta_t * cos_theta_t)
-		/ (eta_i * cos_theta_i + eta_t * cos_theta_t);
-
-	return (r_parallel * r_parallel + r_perpendicular * r_perpendicular) / 2.0f;
+	return _f2 * _f4;
 }
 
 // Shading models
@@ -93,14 +77,14 @@ struct GGX {
 
 			float eta = ior/mat.refraction;
 
-			float3 h = normalize(wo - wi * eta);
+			float3 h = -normalize(mat.refraction * wo + ior * wi);
 
-			float d_wo_h = dot(wo, h);
-			float d_wi_h = dot(-wi, h);
+			float d_wo_h = abs(dot(wo, h));
+			float d_wi_h = abs(dot(wi, h));
 
 			float fr = Fresnel(d_wo_h, ior, mat.refraction);
 			float d = Microfacets::GGX(n, h, mat);
-			float g = G(n, -wi, wo, mat);
+			float g = G(n, wi, wo, mat);
 
 			float num = d * g * (1 - fr);
 			float denom = (d_wo_h + eta * d_wi_h);
@@ -136,14 +120,16 @@ struct GGX {
 			if (dot(wo, n) * dot(wi, n) >= 0.0f)
 				return 0.0f;
 
-			float eta = ior/mat.refraction;
-			float3 h = normalize(wo - wi * eta);
+			float3 h = -normalize(mat.refraction * wo + ior * wi);
 
-			float sqrt_denom = dot(wo, h) + eta * dot(-wi, h);
-			float dh_dwo = (eta * eta * dot(-wi, h)) / (sqrt_denom * sqrt_denom);
+			float eta = ior/mat.refraction;
+			float d_wo_h = abs(dot(wo, h));
+			float d_wi_h = abs(dot(wi, h));
+			float sqrt_denom = d_wo_h + eta * d_wi_h;
+			float dh_dwo = (eta * eta * d_wi_h) / (sqrt_denom * sqrt_denom);
 
 			float D = Microfacets::GGX(n, h, mat)
-			 	* G1(n, wo, mat) * abs(dot(wo, h))/abs(dot(wo, n));
+			 	* G1(n, wo, mat) * d_wo_h/abs(dot(wo, n));
 			return abs(D * dh_dwo);
 		}
 
@@ -192,8 +178,6 @@ struct GGX {
 			// Return refracted ray
 			return normalize(refract(wo, h, ior/mat.refraction));
 		}
-
-		print("Sample - Sampling reflection!\n");
 
 		float avg_Kd = (mat.diffuse.x + mat.diffuse.y + mat.diffuse.z) / 3.0f;
 		float avg_Ks = (mat.specular.x + mat.specular.y + mat.specular.z) / 3.0f;

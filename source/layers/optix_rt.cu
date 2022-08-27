@@ -1,7 +1,7 @@
 // Standard headers
 #include <cstdint>
 
-// #define KCUDA_DEBUG
+#define KCUDA_DEBUG
 
 // Engine headers
 #include "../../include/cuda/math.cuh"
@@ -273,7 +273,6 @@ __device__ float3 Ld_light(const Light &light, HitGroupData *hit_data, float3 x,
 	float3 wi = normalize(lpos - x);
 	float R = length(lpos - x);
 
-	print("===NEE brdf===\n");
 	float3 f = brdf(mat, n, wi, wo, ior, mat.type) * max(dot(n, wi), 0.0f);
 
 	float ldot = abs(dot(light.normal(), wi));
@@ -297,7 +296,6 @@ __device__ float3 Ld_light(const Light &light, HitGroupData *hit_data, float3 x,
 	if (dot(wi, n) <= 0.0f)
 		return contr_nee;
 	
-	print("===BRDF brdf===\n");
 	f = brdf(mat, n, wi, wo, ior, out) * max(dot(n, wi), 0.0f);
 
 	float pdf_brdf = pdf(mat, n, wi, wo, ior, out);
@@ -468,7 +466,6 @@ extern "C" __global__ void __closesthit__radiance()
 
 	// Generate new ray
 	Shading out;
-	print("===Recursive brdf===\n");
 	float3 wi = sample(material, n, wo, rp->ior, rp->seed, out);
 	if (length(wi) < 1e-9)
 		return;
@@ -495,7 +492,8 @@ extern "C" __global__ void __closesthit__radiance()
 	if (out & Shading::eTransmission)
 		offset = -offset;
 
-	// rp->value = GGX::brdf(material, n, wi, wo, rp->ior, out, true)/pdf;
+	// rp->value = GGX::brdf(material, n, wi, wo, rp->ior, out, true);
+	// rp->value = n * 0.5f + 0.5f;
 	// return;
 
 	// Update ior
