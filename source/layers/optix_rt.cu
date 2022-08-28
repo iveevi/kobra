@@ -16,7 +16,10 @@ using kobra::optix_rt::QuadLight;
 using kobra::optix_rt::TriangleLight;
 
 using kobra::cuda::Material;
+
 using kobra::cuda::GGX;
+using kobra::cuda::SpecularTransmission;
+using kobra::cuda::SpecularReflection;
 
 extern "C"
 {
@@ -108,7 +111,7 @@ extern "C" __global__ void __raygen__rg()
 
 	// Check value
 	float3 pixel = ray_packet.value;
-	assert(!isnan(pixel.x) && !isnan(pixel.y) && !isnan(pixel.z));
+	// assert(!isnan(pixel.x) && !isnan(pixel.y) && !isnan(pixel.z));
 	if (isnan(pixel.x) || isnan(pixel.y) || isnan(pixel.z))
 		pixel = {0.0f, 0.0f, 0.0f};
 
@@ -175,33 +178,55 @@ __device__ __forceinline__ float3 operator*(mat3 m, float3 v)
 
 // Evaluate BRDF of material
 __device__ float3 brdf(const Material &mat, float3 n, float3 wi,
-		float3 wo, float ior, Shading out)
+		float3 wo, bool entering, Shading out)
 {
-	float3 specular = GGX::brdf(mat, n, wi, wo, ior, out);
+	// TODO: diffuse should be in conjunction with the material
 	if (out & Shading::eTransmission)
-		return specular;
+		return SpecularTransmission::brdf(mat, n, wi, wo, entering, out);
 	
-	return specular + mat.diffuse/M_PI;
+	return mat.diffuse/M_PI + GGX::brdf(mat, n, wi, wo, entering, out);
 }
 
 // Evaluate PDF of BRDF
 __device__ float pdf(const Material &mat, float3 n, float3 wi,
-		float3 wo, float ior, Shading out)
+		float3 wo, bool entering, Shading out)
 {
-	float o = GGX::pdf(mat, n, wi, wo, ior, out);
-	/* if (out & Shading::eTransmission) assert(!isnan(o));
-	else assert(!isnan(o)); */
-	return o;
+	if (out & Shading::eTransmission)
+		return SpecularTransmission::pdf(mat, n, wi, wo, entering, out);
+	
+	return GGX::pdf(mat, n, wi, wo, entering, out);
 }
 
 // Sample BRDF
 __device__ float3 sample(const Material &mat, float3 n, float3 wo,
-		float ior, float3 &seed, Shading &out)
+		bool entering, float3 &seed, Shading &out)
 {
-	float3 o = GGX::sample(mat, n, wo, ior, seed, out);
-	/* if (out & Shading::eTransmission) assert(!isnan(o.x) && !isnan(o.y) && !isnan(o.z));
-	else assert(!isnan(o.x) && !isnan(o.y) && !isnan(o.z)); */
-	return o;
+	if (mat.type & Shading::eTransmission)
+		return SpecularTransmission::sample(mat, n, wo, entering, seed, out);
+
+	return GGX::sample(mat, n, wo, entering, seed, out);
+}
+
+// Evaluate BRDF: sample, brdf, pdf
+template <class BxDF>
+__device__ __forceinline__
+float3 eval(const Material &mat, float3 n, float3 wo, bool entering,
+		float3 &wi, float &pdf, Shading &out, float3 &seed)
+{
+	// TODo: pack ags into struct
+	wi = BxDF::sample(mat, n, wo, entering, seed, out);
+	pdf = BxDF::pdf(mat, n, wi, wo, entering, out);
+	return BxDF::brdf(mat, n, wi, wo, entering, out);
+}
+
+__device__ __forceinline__
+float3 eval(const Material &mat, float3 n, float3 wo, bool entering,
+		float3 &wi, float &pdf, Shading &out, float3 &seed)
+{
+	if (mat.type & Shading::eTransmission)
+		return eval <SpecularReflection> (mat, n, wo, entering, wi, pdf, out, seed);
+
+	return eval <GGX> (mat, n, wo, entering, wi, pdf, out, seed);
 }
 
 // Power heurestic
@@ -263,7 +288,7 @@ __device__ bool shadow_visibility(float3 origin, float3 dir, float R)
 // Direct lighting for specific types of lights
 template <class Light>
 __device__ float3 Ld_light(const Light &light, HitGroupData *hit_data, float3 x, float3 wo, float3 n,
-		Material mat, float ior, float3 &seed)
+		Material mat, bool entering, float3 &seed)
 {
 	float3 contr_nee {0.0f};
 	float3 contr_brdf {0.0f};
@@ -273,14 +298,14 @@ __device__ float3 Ld_light(const Light &light, HitGroupData *hit_data, float3 x,
 	float3 wi = normalize(lpos - x);
 	float R = length(lpos - x);
 
-	float3 f = brdf(mat, n, wi, wo, ior, mat.type) * max(dot(n, wi), 0.0f);
+	float3 f = brdf(mat, n, wi, wo, entering, mat.type) * abs(dot(n, wi));
 
 	float ldot = abs(dot(light.normal(), wi));
 	if (ldot > 1e-6) {
 		float pdf_light = (R * R)/(light.area() * ldot);
 
 		// TODO: how to decide ray type for this?
-		float pdf_brdf = pdf(mat, n, wi, wo, ior, mat.type);
+		float pdf_brdf = pdf(mat, n, wi, wo, entering, mat.type);
 
 		bool vis = shadow_visibility(x, wi, R);
 		if (pdf_light > 1e-9 && vis) {
@@ -292,13 +317,16 @@ __device__ float3 Ld_light(const Light &light, HitGroupData *hit_data, float3 x,
 
 	// BRDF
 	Shading out;
-	wi = sample(mat, n, wo, 1, seed, out);
+	// float pdf_brdf;
+
+
+	wi = sample(mat, n, wo, entering, seed, out);
 	if (dot(wi, n) <= 0.0f)
 		return contr_nee;
 	
-	f = brdf(mat, n, wi, wo, ior, out) * max(dot(n, wi), 0.0f);
+	f = brdf(mat, n, wi, wo, entering, out) * abs(dot(n, wi));
 
-	float pdf_brdf = pdf(mat, n, wi, wo, ior, out);
+	float pdf_brdf = pdf(mat, n, wi, wo, entering, out);
 	float pdf_light = 0.0f;
 
 	// TODO: need to check intersection for lights specifically (and
@@ -306,11 +334,18 @@ __device__ float3 Ld_light(const Light &light, HitGroupData *hit_data, float3 x,
 	float ltime = light.intersects(x, wi);
 	if (ltime <= 0.0f)
 		return contr_nee;
+	
+	float weight = 1.0f;
+	if (out & eTransmission) {
+		return contr_nee;
+		// pdf_light = (R * R)/(light.area() * ldot);
+	} else {
+		R = ltime;
+		pdf_light = (R * R)/(light.area() * abs(dot(light.normal(), wi)));
+		weight = power(pdf_brdf, pdf_light);
+	};
 
-	R = ltime;
-	pdf_light = (R * R)/(light.area() * abs(dot(light.normal(), wi)));
 	if (pdf_light > 1e-9 && pdf_brdf > 1e-9) {
-		float weight = power(pdf_brdf, pdf_light);
 		float3 intensity = light.intensity;
 		contr_brdf += weight * f * intensity/pdf_brdf;
 	}
@@ -320,11 +355,13 @@ __device__ float3 Ld_light(const Light &light, HitGroupData *hit_data, float3 x,
 
 // Trace ray into scene and get relevant information
 __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
-		Material mat, float ior, float3 &seed)
+		Material mat, bool entering, float3 &seed)
 {
 	if (hit_data->n_quad_lights == 0
 			&& hit_data->n_tri_lights == 0)
 		return float3 {0.0f, 0.0f, 0.0f};
+
+	// TODO: multiply result by # of total lights
 
 	// Random area light for NEE
 	random3(seed);
@@ -333,11 +370,11 @@ __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 
 	if (i < hit_data->n_quad_lights) {
 		QuadLight light = hit_data->quad_lights[i];
-		return Ld_light(light, hit_data, x, wo, n, mat, ior, seed);
+		return Ld_light(light, hit_data, x, wo, n, mat, entering, seed);
 	}
 
 	TriangleLight light = hit_data->tri_lights[i - hit_data->n_quad_lights];
-	return Ld_light(light, hit_data, x, wo, n, mat, ior, seed);
+	return Ld_light(light, hit_data, x, wo, n, mat, entering, seed);
 }
 
 // Interpolate triangle values
@@ -361,20 +398,25 @@ static __forceinline__ __device__ float4 sample_texture
 
 // Calculate hit normal
 static __forceinline__ __device__ float3 calculate_normal
-		(HitGroupData *hit_data, uint3 triangle, float2 bary)
+		(HitGroupData *hit_data, uint3 triangle, float2 bary,
+		 bool &entering)
 {
 	float3 e1 = hit_data->vertices[triangle.y] - hit_data->vertices[triangle.x];
 	float3 e2 = hit_data->vertices[triangle.z] - hit_data->vertices[triangle.x];
 	float3 ng = cross(e1, e2);
 
-	if (dot(ng, optixGetWorldRayDirection()) > 0.0f)
+	if (dot(ng, optixGetWorldRayDirection()) > 0.0f) {
 		ng = -ng;
+		entering = false;
+	} else {
+		entering = true;
+	}
 
 	ng = normalize(ng);
 
 	float3 normal = interpolate(hit_data->normals, triangle, bary);
 	if (dot(normal, ng) < 0.0f)
-		normal -= 2.0f * dot(normal, ng) * ng;
+		normal = -normal;
 
 	normal = normalize(normal);
 
@@ -455,34 +497,41 @@ extern "C" __global__ void __closesthit__radiance()
 	Material material = hit_data->material;
 	calculate_material(hit_data, material, triangle, bary);
 
+	bool entering;
 	float3 wo = -optixGetWorldRayDirection();
-	float3 n = calculate_normal(hit_data, triangle, bary);
+	float3 n = calculate_normal(hit_data, triangle, bary, entering);
 	float3 x = interpolate(hit_data->vertices, triangle, bary);
 
-	float3 direct = Ld(hit_data, x + 1e-3f * n, wo, n, material, rp->ior, rp->seed);
+	float3 direct = Ld(hit_data, x + 1e-3f * n, wo, n, material, entering, rp->seed);
 
 	// Transfer to payload
-	rp->value += direct * rp->throughput;
+	rp->value += rp->throughput * direct;
 
 	// Generate new ray
 	Shading out;
-	float3 wi = sample(material, n, wo, rp->ior, rp->seed, out);
-	if (length(wi) < 1e-9)
+	float3 wi = sample(material, n, wo, entering, rp->seed, out);
+	if (length(wi) < 1e-9) {
+		// rp->value = {0, 0, 1};
 		return;
+	}
 
-	float pdf = ::pdf(material, n, wi, wo, rp->ior, out);
+	float pdf = ::pdf(material, n, wi, wo, entering, out);
 
-	if (pdf <= 1e-9)
-		return;
-
-	float3 f = brdf(material, n, wi, wo, rp->ior, out) * abs(dot(n, wi));
+	float3 f = brdf(material, n, wi, wo, entering, out) * abs(dot(n, wi));
 	float3 T = f/pdf;
+
+	if (pdf <= 1e-9) {
+		// rp->value = {1, 0, 1};
+		return;
+	}
 
 	// Russian roulette
 	float p = max(rp->throughput.x, max(rp->throughput.y, rp->throughput.z));
 	float q = 1 - min(1.0f, p);
-	if (fract(rp->seed.x) < q)
+	if (fract(rp->seed.x) < q) {
+		// rp->value = {0, 1, 0};
 		return;
+	}
 
 	rp->throughput *= T/(1 - q);
 	rp->depth++;
@@ -490,11 +539,7 @@ extern "C" __global__ void __closesthit__radiance()
 	// Recursive raytrace
 	float3 offset = 1e-3f * n;
 	if (out & Shading::eTransmission)
-		offset = -offset;
-
-	// rp->value = GGX::brdf(material, n, wi, wo, rp->ior, out, true);
-	// rp->value = n * 0.5f + 0.5f;
-	// return;
+		offset = 1e-3f * wi;
 
 	// Update ior
 	rp->ior = material.refraction;

@@ -13,8 +13,11 @@ namespace cuda {
 // Smith shadow-masking function (single)
 __device__ float G1(float3 n, float3 v, Material mat)
 {
+	if (dot(v, n) <= 0.0f)
+		return 0.0f;
+
 	float alpha = mat.roughness;
-	float theta = acos(clamp(abs(dot(n, v)), 0.0f, 0.999f));
+	float theta = acos(clamp(dot(n, v), 0.0f, 0.999f));
 
 	float tan_theta = tan(theta);
 
@@ -40,7 +43,7 @@ struct Microfacets {
 	__device__ __forceinline__
 	static float GGX(float3 n, float3 h, const Material &mat) {
 		float alpha = mat.roughness;
-		float theta = acos(clamp(abs(dot(n, h)), 0.0f, 0.999f));
+		float theta = acos(clamp(dot(n, h), 0.0f, 0.999f));
 		
 		return (alpha * alpha)
 			/ (M_PI * pow(cos(theta), 4)
@@ -50,53 +53,173 @@ struct Microfacets {
 
 // True fresnel reflectance
 __device__ __forceinline__
-float Fresnel(float cos_theta_i, float eta_i, float eta_t)
+float FrDielectric(float cosThetaI, float etaI, float etaT)
 {
-	float inv_eta = eta_t/eta_i;
-	float c = clamp(abs(cos_theta_i), 0.0f, 1.0f);
-	float g = sqrt(max(inv_eta * inv_eta + c * c - 1.0f, 0.0f));
+	cosThetaI = clamp(cosThetaI, -1.0f, 1.0f);
+	// Potentially swap indices of refraction
+	bool entering = cosThetaI > 0.f;
+	if (!entering) {
+		float temp = etaI;
+		etaI = etaT;
+		etaT = temp;
+		cosThetaI = fabs(cosThetaI);
+	}
 
-	float _f1 = (g - c)/(g + c);
-	float _f2 = 0.5f * _f1 * _f1;
-	float _f3 = (c * (g + c) - 1.0f)/(c * (g - c) + 1.0f);
-	float _f4 = 1 + _f3 * _f3;
+	// Compute _cosThetaT_ using Snell's law
+	float sinThetaI = sqrt(fmax((float)0, 1 - cosThetaI * cosThetaI));
+	float sinThetaT = etaI / etaT * sinThetaI;
 
-	return _f2 * _f4;
+	// Handle total internal reflection
+	if (sinThetaT >= 1)
+		return 1;
+	float cosThetaT = sqrt(fmax((float)0, 1 - sinThetaT * sinThetaT));
+	float Rparl = ((etaT * cosThetaI) - (etaI * cosThetaT)) /
+		((etaT * cosThetaI) + (etaI * cosThetaT));
+	float Rperp = ((etaI * cosThetaI) - (etaT * cosThetaT)) /
+		((etaI * cosThetaI) + (etaT * cosThetaT));
+	return (Rparl * Rparl + Rperp * Rperp) / 2;
 }
 
-// Shading models
+__device__ __forceinline__
+float3 Refract(const float3 &wi, const float3 &n, float eta) {
+    float cosThetaI = dot(n, wi);
+    float sin2ThetaI = max(float(0), float(1 - cosThetaI * cosThetaI));
+    float sin2ThetaT = eta * eta * sin2ThetaI;
+
+    // Handle total internal reflection for transmission
+    if (sin2ThetaT >= 1)
+	    return reflect(wi, n);
+    float cosThetaT = sqrt(1 - sin2ThetaT);
+    return normalize(eta * -wi + (eta * cosThetaI - cosThetaT) * n);
+}
+
+////////////////////
+// Shading models //
+////////////////////
+
+// Perfect specular reflection
+struct SpecularReflection {
+	// TODO: evaluate function: sample, brdf and pdf
+
+	// TODO: tr and tf
+
+	// Evaluate the BRDF
+	__device__ __forceinline__
+	static float3 brdf(const Material &mat, float3 n, float3 wi,
+			float3 wo, bool entering, Shading out, bool isrec = false)
+	{
+		float eta_i = entering ? 1.0f : mat.refraction;
+		float eta_t = entering ? mat.refraction : 1.0f;
+
+		if (dot(wo, n) < 0) n = -n;
+		float3 refl = reflect(-wo, n);
+		if (length(refl - wi) > 1e-3f)
+			return make_float3(0.0f);
+
+		float cos_theta_i = dot(n, wo);
+		float fresnel = FrDielectric(cos_theta_i, eta_i, eta_t);
+		return make_float3(fresnel)/abs(dot(n, wi));
+	}
+
+	// Evaluate the PDF
+	__device__ __forceinline__
+	static float pdf(const Material &mat, float3 n, float3 wi,
+			float3 wo, bool entering, Shading out)
+	{
+		if (dot(wo, n) < 0) n = -n;
+		float3 refl = reflect(-wo, n);
+		if (length(refl - wi) > 1e-3f)
+			return 0.0f;
+
+		return 1;
+	}
+
+	// Sample the BRDF
+	__device__ __forceinline__
+	static float3 sample(const Material &mat, float3 n, float3 wo,
+			bool entering, float3 &seed, Shading &out)
+	{
+		if (dot(wo, n) < 0) n = -n;
+		out = Shading::eTransmission;
+		return reflect(-wo, n);
+	}
+};
+
+// Perfect specular transmission
+struct SpecularTransmission {
+	// TODO: evaluate function: sample, brdf and pdf
+
+	// TODO: tr and tf
+
+	// Evaluate the BRDF
+	__device__ __forceinline__
+	static float3 brdf(const Material &mat, float3 n, float3 wi,
+			float3 wo, bool entering, Shading out, bool isrec = false)
+	{
+		if (out & Shading::eTransmission) {
+			float eta_i = entering ? 1.0f : mat.refraction;
+			float eta_t = entering ? mat.refraction : 1.0f;
+
+			if (dot(wo, n) < 0) n = -n;
+			float3 refr = Refract(wo, n, eta_i/eta_t);
+			if (length(refr - wi) > 1e-3f)
+				return make_float3(0.0f);
+
+			float cos_theta_i = dot(n, wi);
+			float fresnel = FrDielectric(cos_theta_i, eta_i, eta_t);
+
+			float k = eta_t/eta_i;
+			float tr = (1 - fresnel) * (k * k);
+			return make_float3(tr)/abs(cos_theta_i);
+		}
+
+		assert(false);
+		return make_float3(0.0f);
+	}
+
+	// Evaluate the PDF
+	__device__ __forceinline__
+	static float pdf(const Material &mat, float3 n, float3 wi,
+			float3 wo, bool entering, Shading out)
+	{
+		float eta_i = entering ? 1.0f : mat.refraction;
+		float eta_t = entering ? mat.refraction : 1.0f;
+
+		if (dot(wo, n) < 0) n = -n;
+		float3 refr = Refract(wo, n, eta_i/eta_t);
+		if (length(refr - wi) > 1e-3f)
+			return 0.0f;
+
+		return 1;
+	}
+
+	// Sample the BRDF
+	__device__ __forceinline__
+	static float3 sample(const Material &mat, float3 n, float3 wo,
+			bool entering, float3 &seed, Shading &out)
+	{
+		if (mat.type & eTransmission) {
+			// For now, just refract
+			out = Shading::eTransmission;
+			float eta_i = entering ? 1 : mat.refraction;
+			float eta_t = entering ? mat.refraction : 1;
+			float3 np = dot(wo, n) < 0 ? -n : n;
+			return Refract(wo, np, eta_i/eta_t);
+		}
+
+		assert(false);
+		return make_float3(0.0f);
+	}
+};
+
+// Cook-Torrance GGX BRDF
 struct GGX {
 	// Evaluate the BRDF
 	__device__ __forceinline__
 	static float3 brdf(const Material &mat, float3 n, float3 wi,
-			float3 wo, float ior, Shading out, bool isrec = false)
+			float3 wo, bool entering, Shading out, bool isrec = false)
 	{
-		if (out & Shading::eTransmission) {
-			if (dot(wo, n) * dot(wi, n) >= 0.0f)
-				return make_float3(0.0f);
-
-			float eta = ior/mat.refraction;
-
-			float3 h = -normalize(mat.refraction * wo + ior * wi);
-
-			float d_wo_h = abs(dot(wo, h));
-			float d_wi_h = abs(dot(wi, h));
-
-			float fr = Fresnel(d_wo_h, ior, mat.refraction);
-			float d = Microfacets::GGX(n, h, mat);
-			float g = G(n, wi, wo, mat);
-
-			float num = d * g * (1 - fr);
-			float denom = (d_wo_h + eta * d_wi_h);
-			denom *= denom;
-
-			float cos_term = (d_wo_h * d_wi_h)/(dot(wo, n) * dot(-wi, n));
-
-			return make_float3(abs(cos_term * num/denom));
-		}
-		
-		if (dot(wi, n) <= 0.0f || dot(wo, n) <= 0.0f)
-			return float3 {0.0f, 0.0f, 0.0f};
+		if (dot(wo, n) <= 0.0f) n = -n;
 
 		float3 h = normalize(wi + wo);
 
@@ -113,28 +236,9 @@ struct GGX {
 	// Evaluate the PDF
 	__device__ __forceinline__
 	static float pdf(const Material &mat, float3 n, float3 wi,
-			float3 wo, float ior, Shading out)
+			float3 wo, bool entering, Shading out)
 	{
-		// TODO: refactor shading type to ray type
-		if (out & Shading::eTransmission) {
-			if (dot(wo, n) * dot(wi, n) >= 0.0f)
-				return 0.0f;
-
-			float3 h = -normalize(mat.refraction * wo + ior * wi);
-
-			float eta = ior/mat.refraction;
-			float d_wo_h = abs(dot(wo, h));
-			float d_wi_h = abs(dot(wi, h));
-			float sqrt_denom = d_wo_h + eta * d_wi_h;
-			float dh_dwo = (eta * eta * d_wi_h) / (sqrt_denom * sqrt_denom);
-
-			float D = Microfacets::GGX(n, h, mat)
-			 	* G1(n, wo, mat) * d_wo_h/abs(dot(wo, n));
-			return abs(D * dh_dwo);
-		}
-
-		if (dot(wi, n) <= 0.0f || dot(wo, n) < 0.0f)
-			return 0.0f;
+		if (dot(wo, n) <= 0.0f) n = -n;
 
 		float3 h = normalize(wi + wo);
 
@@ -146,8 +250,9 @@ struct GGX {
 			t = max(avg_Ks/(avg_Kd + avg_Ks), 0.25f);
 
 		float term1 = dot(n, wi)/M_PI;
-		float term2 = Microfacets::GGX(n, h, mat) * G1(n, wo, mat)
+		float term2 = Microfacets::GGX(n, h, mat) * G(n, wi, wo, mat)
 			* dot(wo, h) / (4 * dot(wi, h) * dot(wo, n));
+		// float term2 = Microfacets::GGX(n, h, mat) * dot(n, h)/(4.0f * dot(wi, h));
 
 		return (1 - t) * term1 + t * term2;
 	}
@@ -155,29 +260,9 @@ struct GGX {
 	// Sample the BRDF
 	__device__ __forceinline__
 	static float3 sample(const Material &mat, float3 n, float3 wo,
-			float ior, float3 &seed, Shading &out)
+			bool entering, float3 &seed, Shading &out)
 	{
-		if (mat.type & eTransmission) {
-			out = Shading::eTransmission;
-
-			// Sample half vector
-			float3 eta = fract(random3(seed));
-			float k = sqrt(eta.y/(1 - eta.y));
-
-			float theta = atan(k * mat.roughness);
-			float phi = 2.0f * M_PI * eta.z;
-
-			float3 h = float3 {
-				sin(theta) * cos(phi),
-				sin(theta) * sin(phi),
-				cos(theta)
-			};
-
-			h = rotate(h, n);
-
-			// Return refracted ray
-			return normalize(refract(wo, h, ior/mat.refraction));
-		}
+		if (dot(wo, n) <= 0.0f) n = -n;
 
 		float avg_Kd = (mat.diffuse.x + mat.diffuse.y + mat.diffuse.z) / 3.0f;
 		float avg_Ks = (mat.specular.x + mat.specular.y + mat.specular.z) / 3.0f;
