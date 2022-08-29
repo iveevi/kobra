@@ -12,6 +12,7 @@ definitions:
     source/extensions.cpp,
     source/formats.cpp,
     source/io/event.cpp,
+    source/layers/objectifier.cpp,
     source/layers/optix_tracer.cu,
     source/layers/raster.cpp,
     source/layers/raytracer.cpp,
@@ -65,12 +66,12 @@ builds:
     - compiler: glslc
     - options: 'nolink, output_dir=./bin/spv'
   - glsl_vertex:
-    - sources: shaders/raster/skybox.vert
+    - sources: shaders/raster/skybox.vert, shaders/raster/objectifier.vert
     - flags: '-fshader-stage=vertex'
     - compiler: glslc
     - options: 'nolink, output_dir=./bin/spv, output_format={filename}_vert.spv'
   - glsl_frag:
-    - sources: shaders/raster/skybox.frag
+    - sources: shaders/raster/skybox.frag, shaders/raster/objectifier.frag
     - flags: '-fshader-stage=fragment'
     - compiler: glslc
     - options: 'nolink, output_dir=./bin/spv, output_format={filename}_frag.spv'
@@ -85,7 +86,7 @@ builds:
     - idirs: includes
     - flags: '-O3 -std=c++17'
     - libraries: libs
-    - dependencies: optix_ptx_release, glsl_compute 
+    - dependencies: optix_ptx_debug, glsl_compute, glsl_vertex, glsl_frag
   - kobra_debug:
     - sources: main.cpp, kobra_source, tinyfd_source, glslang_source
     - idirs: includes
@@ -122,6 +123,7 @@ targets:
       - gdb: 'gdb {}'
       - cuda-gdb: 'cuda-gdb {}'
       - wall: '{}'
+      - release: '{}'
   - experimental:
     - modes: 'gdb'
     - builds:

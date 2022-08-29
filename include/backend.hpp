@@ -370,128 +370,11 @@ struct Swapchain {
 };
 
 // Transition image layout
-inline void transition_image_layout(const vk::raii::CommandBuffer &cmd,
-		const vk::Image &image,
-		const vk::Format &format,
-		const vk::ImageLayout old_layout,
-		const vk::ImageLayout new_layout)
-{
-	// Source stage
-	vk::AccessFlags src_access_mask = {};
-
-	switch (old_layout) {
-	case vk::ImageLayout::eTransferDstOptimal:
-		src_access_mask = vk::AccessFlagBits::eTransferWrite;
-		break;
-	case vk::ImageLayout::ePreinitialized:
-		src_access_mask = vk::AccessFlagBits::eHostWrite;
-		break;
-	case vk::ImageLayout::eGeneral:
-	case vk::ImageLayout::eUndefined:
-		break;
-	case vk::ImageLayout::eShaderReadOnlyOptimal:
-		src_access_mask = vk::AccessFlagBits::eShaderRead;
-		break;
-	default:
-		KOBRA_ASSERT(false, "Unsupported old layout " + vk::to_string(old_layout));
-		break;
-	}
-
-	// Pipeline stage
-	vk::PipelineStageFlags source_stage;
-	switch (old_layout) {
-	case vk::ImageLayout::eGeneral:
-	case vk::ImageLayout::ePreinitialized:
-		source_stage = vk::PipelineStageFlagBits::eHost;
-		break;
-	case vk::ImageLayout::eTransferDstOptimal:
-		source_stage = vk::PipelineStageFlagBits::eTransfer;
-		break;
-	case vk::ImageLayout::eUndefined:
-		source_stage = vk::PipelineStageFlagBits::eTopOfPipe;
-		break;
-	case vk::ImageLayout::eShaderReadOnlyOptimal:
-		source_stage = vk::PipelineStageFlagBits::eFragmentShader;
-		break;
-	default:
-		KOBRA_ASSERT(false, "Unsupported old layout " + vk::to_string(old_layout));
-		break;
-	}
-
-	// Destination stage
-	vk::AccessFlags dst_access_mask = {};
-	switch (new_layout) {
-	case vk::ImageLayout::eColorAttachmentOptimal:
-		dst_access_mask = vk::AccessFlagBits::eColorAttachmentWrite;
-		break;
-	case vk::ImageLayout::eDepthStencilAttachmentOptimal:
-		dst_access_mask = vk::AccessFlagBits::eDepthStencilAttachmentRead
-			| vk::AccessFlagBits::eDepthStencilAttachmentWrite;
-		break;
-	case vk::ImageLayout::eGeneral:
-	case vk::ImageLayout::ePresentSrcKHR:
-		break;
-	case vk::ImageLayout::eShaderReadOnlyOptimal:
-		dst_access_mask = vk::AccessFlagBits::eShaderRead;
-		break;
-	case vk::ImageLayout::eTransferSrcOptimal:
-		dst_access_mask = vk::AccessFlagBits::eTransferRead;
-		break;
-	case vk::ImageLayout::eTransferDstOptimal:
-		dst_access_mask = vk::AccessFlagBits::eTransferWrite;
-		break;
-	default:
-		KOBRA_ASSERT(false, "Unsupported new layout " + vk::to_string(new_layout));
-		break;
-	}
-
-	// Destination stage
-	vk::PipelineStageFlags destination_stage;
-	switch (new_layout) {
-	case vk::ImageLayout::eColorAttachmentOptimal:
-		destination_stage = vk::PipelineStageFlagBits::eColorAttachmentOutput; break;
-	case vk::ImageLayout::eDepthStencilAttachmentOptimal:
-		destination_stage = vk::PipelineStageFlagBits::eEarlyFragmentTests; break;
-	case vk::ImageLayout::eGeneral:
-		destination_stage = vk::PipelineStageFlagBits::eHost; break;
-	case vk::ImageLayout::ePresentSrcKHR:
-		destination_stage = vk::PipelineStageFlagBits::eBottomOfPipe; break;
-	case vk::ImageLayout::eShaderReadOnlyOptimal:
-		destination_stage = vk::PipelineStageFlagBits::eFragmentShader; break;
-	case vk::ImageLayout::eTransferDstOptimal:
-	case vk::ImageLayout::eTransferSrcOptimal:
-		destination_stage = vk::PipelineStageFlagBits::eTransfer; break;
-	default:
-		KOBRA_ASSERT(false, "Unsupported new layout " + vk::to_string(new_layout));
-		break;
-	}
-
-	// Aspect mask
-	vk::ImageAspectFlags aspect_mask;
-	if (new_layout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
-		aspect_mask = vk::ImageAspectFlagBits::eDepth;
-		if (format == vk::Format::eD32SfloatS8Uint || format == vk::Format::eD24UnormS8Uint)
-			aspect_mask |= vk::ImageAspectFlagBits::eStencil;
-	} else {
-		aspect_mask = vk::ImageAspectFlagBits::eColor;
-	}
-
-	// Create the barrier
-	vk::ImageSubresourceRange image_subresource_range {
-		aspect_mask,
-		0, 1, 0, 1
-	};
-
-	vk::ImageMemoryBarrier barrier {
-		src_access_mask, dst_access_mask,
-		old_layout, new_layout,
-		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-		image, image_subresource_range
-	};
-
-	// Add the barrier
-	return cmd.pipelineBarrier(source_stage, destination_stage, {}, {}, {}, barrier);
-}
+void transition_image_layout(const vk::raii::CommandBuffer &,
+		const vk::Image &,
+		const vk::Format &,
+		const vk::ImageLayout,
+		const vk::ImageLayout);
 
 // Image data wrapper
 struct ImageData {
@@ -825,6 +708,22 @@ public:
 
 		return data;
 	}
+	
+	template <class T>
+	void download(std::vector <T> &dat) const {
+		// Assertions
+		KOBRA_ASSERT(
+			(memory_properties & vk::MemoryPropertyFlagBits::eHostCoherent)
+				&& (memory_properties & vk::MemoryPropertyFlagBits::eHostVisible),
+			"Buffer data must be host coherent and host visible"
+		);
+
+		// Download data
+		size_t size_ = dat.size() * sizeof(T);
+		void *ptr = memory.mapMemory(0, size);
+		memcpy(dat.data(), ptr, size_);
+		memory.unmapMemory();
+	}
 
 	// Resize buffer
 	void resize(const vk::DeviceSize &size_) {
@@ -864,6 +763,13 @@ vk::DeviceAddress acceleration_structure_addr(const vk::raii::Device &, const vk
 void copy_data_to_image(const vk::raii::CommandBuffer &,
 		const vk::raii::Buffer &,
 		const vk::raii::Image &,
+		const vk::Format &,
+		uint32_t, uint32_t);
+
+// Copy image data to staging buffer
+void copy_image_to_buffer(const vk::raii::CommandBuffer &,
+		const vk::raii::Image &,
+		const vk::raii::Buffer &,
 		const vk::Format &,
 		uint32_t, uint32_t);
 
@@ -1157,7 +1063,7 @@ inline std::vector <vk::raii::Framebuffer> make_framebuffers
 		{}, *render_pass,
 		(depth_image_view == nullptr) ? 1u : 2u,
 		attachments,
-		extent.width, extent.height, 1
+		extent.width, extent.height,1
 	};
 
 	std::vector <vk::raii::Framebuffer> framebuffers;
@@ -1334,7 +1240,6 @@ struct GraphicsPipelineInfo {
 	vk::raii::ShaderModule fragment_shader;
 	const vk::SpecializationInfo *fragment_specialization = nullptr;
 
-	bool no_bindings = false;
 	vk::VertexInputBindingDescription vertex_binding;
 	std::vector <vk::VertexInputAttributeDescription> vertex_attributes;
 
@@ -1346,6 +1251,9 @@ struct GraphicsPipelineInfo {
 
 	vk::CullModeFlags cull_mode;
 	vk::FrontFace front_face;
+
+	bool no_bindings = false;
+	bool blend_enabled = true;
 
 	// Constructor
 	GraphicsPipelineInfo(const vk::raii::Device &device,
@@ -1449,7 +1357,7 @@ inline vk::raii::Pipeline make_graphics_pipeline(const GraphicsPipelineInfo &inf
 			| vk::ColorComponentFlagBits::eB
 			| vk::ColorComponentFlagBits::eA;
 
-	color_blend_attachment.blendEnable = VK_TRUE;
+	color_blend_attachment.blendEnable = info.blend_enabled;
 	color_blend_attachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
 	color_blend_attachment.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
 	color_blend_attachment.colorBlendOp = vk::BlendOp::eAdd;
@@ -1475,7 +1383,7 @@ inline vk::raii::Pipeline make_graphics_pipeline(const GraphicsPipelineInfo &inf
 	// Pipeline
 	return vk::raii::Pipeline {
 		info.device,
-		info.pipeline_cache,
+		nullptr,
 		vk::GraphicsPipelineCreateInfo {
 			{}, shader_stages,
 			&vertex_input_info,

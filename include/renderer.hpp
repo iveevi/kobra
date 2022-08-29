@@ -94,6 +94,24 @@ public:
 	// Constructor initializes the buffers
 	Rasterizer(const Device &, const Mesh &);
 
+	// Properties
+	size_t size() const {
+		return materials.size();
+	}
+
+	// Getters
+	const BufferData &get_vertex_buffer(int i) const {
+		return vertex_buffer[i];
+	}
+
+	const BufferData &get_index_buffer(int i) const {
+		return index_buffer[i];
+	}
+
+	size_t get_index_count(int i) const {
+		return index_count[i];
+	}
+
 	// Bind resources to a descriptor set
 	void draw(const vk::raii::CommandBuffer &,
 		const vk::raii::PipelineLayout &ppl,

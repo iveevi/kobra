@@ -18,6 +18,7 @@
 #include "include/ui/slider.hpp"
 #include "tinyfiledialogs.h"
 #include "include/profiler.hpp"
+#include "include/layers/objectifier.hpp"
 
 #include <stb/stb_image_write.h>
 
@@ -25,7 +26,7 @@ using namespace kobra;
 
 // Scene path
 // std::string scene_path = "~/models/sponza/scene.kobra";
-std::string scene_path = "/home/venki/models/fireplace_room.kobra";
+std::string scene_path = "/home/venki/models/cornell_box.kobra";
 // std::string scene_path = "scenes/ggx.kobra";
 
 // Test app
@@ -35,6 +36,7 @@ struct ECSApp : public BaseApp {
 	layers::FontRenderer font_renderer;
 	layers::ShapeRenderer shape_renderer;
 	layers::OptixTracer optix_tracer;
+	layers::Objectifier objectifier;
 
 	Scene scene;
 
@@ -166,6 +168,46 @@ struct ECSApp : public BaseApp {
 	ui::Rect r_background;
 	ui::Button capture_button;
 
+	std::vector <uint32_t> data;
+
+	uint32_t query(glm::vec2 uv) {
+		// TODO: Single time command buffer/tasks
+		auto cmd = make_command_buffer(device, command_pool);
+
+		// Render scene entities
+		{
+			cmd.begin({});
+
+			render(objectifier, cmd, scene.ecs,
+					camera.get <Camera> (),
+					camera.get <Transform> ());
+
+			cmd.end();
+		}
+
+		// Submit to queue
+		{
+			vk::SubmitInfo submit_info {};
+			submit_info.commandBufferCount = 1;
+			submit_info.pCommandBuffers = &*cmd;
+
+			graphics_queue.submit(submit_info, nullptr);
+			graphics_queue.waitIdle();
+		}
+
+		// Download data
+		objectifier.staging_buffer.download(data);
+
+		// Get id at corresponding uv
+		int width = objectifier.image.extent.width;
+		int height = objectifier.image.extent.height;
+
+		int x = uv.x * width;
+		int y = uv.y * height;
+
+		return data[y * width + x];
+	}
+
 	ECSApp(const vk::raii::PhysicalDevice &phdev, const std::vector <const char *> &extensions)
 			: BaseApp(phdev, "ECSApp",
 				vk::Extent2D {(uint32_t) window_size.x, (uint32_t) window_size.y},
@@ -244,6 +286,12 @@ struct ECSApp : public BaseApp {
 			};
 
 			capture_button = ui::Button(io.mouse_events, button_args);
+
+			// Objectifier
+			objectifier = layers::make_layer(get_context());
+			data.resize(objectifier.image.extent.width
+				* objectifier.image.extent.height
+			);
 
 			// Input callbacks
 			io.mouse_events.subscribe(mouse_callback, this);
@@ -391,7 +439,6 @@ struct ECSApp : public BaseApp {
 		// TODO: ui layer  will have a push interface each frame
 
 		cmd.endRenderPass();
-
 		cmd.end();
 
 		// V-sync to sync text
@@ -440,6 +487,28 @@ struct ECSApp : public BaseApp {
 		else if (event.action == GLFW_RELEASE && is_drag_button)
 			dragging = false;
 
+		// Selecting only with the select button
+		bool is_select_button = (event.button == select_button);
+		if (event.action == GLFW_PRESS && is_select_button) {
+			// TODO: should not interrupt dragging
+			
+			glm::vec2 min = app.render_min;
+			glm::vec2 max = app.render_max;
+
+			glm::vec2 uv = glm::vec2 {
+				(event.xpos - min.x) / (max.x - min.x),
+				(event.ypos - min.y) / (max.y - min.y)
+			};
+
+			bool in_bounds = ((uv.x >= 0.0f && uv.x <= 1.0f)
+				&& (uv.y >= 0.0f && uv.y <= 1.0f));
+
+			if (in_bounds) {
+				std::cout << "Selecting at " << uv.x << ", " << uv.y << std::endl;
+				std::cout << "\tquery = " << app.query(uv) << std::endl;
+			}
+		}
+
 		// Pan only when draggign
 		if (dragging) {
 			yaw -= dx * sensitivity;
@@ -479,11 +548,6 @@ int main()
 	// TODO: static lambda (FIRST)
 	auto phdev = pick_physical_device(predicate);
 
-	/* auto camera = Camera {
-		Transform { {2, 2, 6}, {-0.1, 0.3, 0} },
-		Tunings { 45.0f, 800, 800 }
-	}; */
-
 	std::cout << "Extensions:" << std::endl;
 	for (auto str : extensions)
 		std::cout << "\t" << str << std::endl;
@@ -494,8 +558,6 @@ int main()
 		VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
 		VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
 	});
-	// RTApp app(phdev, extensions);
-	// engine::RTCapture app(phdev, {1000, 1000}, extensions, scene_path, camera);
 
 	// Run the app
 	app.run();

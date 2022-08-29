@@ -785,10 +785,7 @@ void Raytracer::_initialize_vuklan_structures(const vk::AttachmentLoadOp &load)
 		std::move(shaders[1]), nullptr,
 		std::move(shaders[2]), nullptr,
 		{}, {},
-		_ppl_postprocess, vk::raii::PipelineCache {
-			*_ctx.device,
-			vk::PipelineCacheCreateInfo {}
-		}
+		_ppl_postprocess, nullptr
 	);
 
 	grp_info.no_bindings = true;
