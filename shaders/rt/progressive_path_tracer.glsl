@@ -283,9 +283,6 @@ vec3 Lo(vec3 x, vec3 wo, vec3 n, Material mat, int depth)
 		if (dot(n, wo) <= 0.0f)
 			n = -n;
 
-		vec3 refr = reflect(wo, n);
-		return refr * 0.5f + 0.5f;
-
 		// Get direct lighting
 		vec3 Ld = Ld(x, wo, n, mat);
 		contr += throughput * Ld;

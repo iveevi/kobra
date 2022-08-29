@@ -99,26 +99,12 @@ float3 Refract(const float3 &wi, const float3 &n, float eta) {
 
 // Perfect specular reflection
 struct SpecularReflection {
-	// TODO: evaluate function: sample, brdf and pdf
-
-	// TODO: tr and tf
-
 	// Evaluate the BRDF
 	__device__ __forceinline__
 	static float3 brdf(const Material &mat, float3 n, float3 wi,
 			float3 wo, bool entering, Shading out, bool isrec = false)
 	{
-		float eta_i = entering ? 1.0f : mat.refraction;
-		float eta_t = entering ? mat.refraction : 1.0f;
-
-		if (dot(wo, n) < 0) n = -n;
-		float3 refl = reflect(-wo, n);
-		if (length(refl - wi) > 1e-3f)
-			return make_float3(0.0f);
-
-		float cos_theta_i = dot(n, wo);
-		float fresnel = FrDielectric(cos_theta_i, eta_i, eta_t);
-		return make_float3(fresnel)/abs(dot(n, wi));
+		return {0, 0, 0};
 	}
 
 	// Evaluate the PDF
@@ -126,12 +112,7 @@ struct SpecularReflection {
 	static float pdf(const Material &mat, float3 n, float3 wi,
 			float3 wo, bool entering, Shading out)
 	{
-		if (dot(wo, n) < 0) n = -n;
-		float3 refl = reflect(-wo, n);
-		if (length(refl - wi) > 1e-3f)
-			return 0.0f;
-
-		return 1;
+		return 0.0f;
 	}
 
 	// Sample the BRDF
@@ -156,25 +137,7 @@ struct SpecularTransmission {
 	static float3 brdf(const Material &mat, float3 n, float3 wi,
 			float3 wo, bool entering, Shading out, bool isrec = false)
 	{
-		if (out & Shading::eTransmission) {
-			float eta_i = entering ? 1.0f : mat.refraction;
-			float eta_t = entering ? mat.refraction : 1.0f;
-
-			if (dot(wo, n) < 0) n = -n;
-			float3 refr = Refract(wo, n, eta_i/eta_t);
-			if (length(refr - wi) > 1e-3f)
-				return make_float3(0.0f);
-
-			float cos_theta_i = dot(n, wi);
-			float fresnel = FrDielectric(cos_theta_i, eta_i, eta_t);
-
-			float k = eta_t/eta_i;
-			float tr = (1 - fresnel) * (k * k);
-			return make_float3(tr)/abs(cos_theta_i);
-		}
-
-		assert(false);
-		return make_float3(0.0f);
+		return {0, 0, 0};
 	}
 
 	// Evaluate the PDF
@@ -182,15 +145,7 @@ struct SpecularTransmission {
 	static float pdf(const Material &mat, float3 n, float3 wi,
 			float3 wo, bool entering, Shading out)
 	{
-		float eta_i = entering ? 1.0f : mat.refraction;
-		float eta_t = entering ? mat.refraction : 1.0f;
-
-		if (dot(wo, n) < 0) n = -n;
-		float3 refr = Refract(wo, n, eta_i/eta_t);
-		if (length(refr - wi) > 1e-3f)
-			return 0.0f;
-
-		return 1;
+		return 0.0f;
 	}
 
 	// Sample the BRDF
@@ -198,17 +153,53 @@ struct SpecularTransmission {
 	static float3 sample(const Material &mat, float3 n, float3 wo,
 			bool entering, float3 &seed, Shading &out)
 	{
-		if (mat.type & eTransmission) {
-			// For now, just refract
-			out = Shading::eTransmission;
-			float eta_i = entering ? 1 : mat.refraction;
-			float eta_t = entering ? mat.refraction : 1;
-			float3 np = dot(wo, n) < 0 ? -n : n;
-			return Refract(wo, np, eta_i/eta_t);
-		}
+		// For now, just refract
+		out = Shading::eTransmission;
+		float eta_i = entering ? 1 : mat.refraction;
+		float eta_t = entering ? mat.refraction : 1;
+		float3 np = dot(wo, n) < 0 ? -n : n;
+		return Refract(wo, np, eta_i/eta_t);
+	}
+};
 
-		assert(false);
-		return make_float3(0.0f);
+// Fresnel modulated BRDF
+struct FresnelSpecular {
+	// Evaluate the BRDF
+	__device__ __forceinline__
+	static float3 brdf(const Material &mat, float3 n, float3 wi,
+			float3 wo, bool entering, Shading out, bool isrec = false)
+	{
+		return {0, 0, 0};
+	}
+
+	// Evaluate the PDF
+	__device__ __forceinline__
+	static float pdf(const Material &mat, float3 n, float3 wi,
+			float3 wo, bool entering, Shading out)
+	{
+		return 0.0f;
+	}
+
+	// Sample the BRDF
+	__device__ __forceinline__
+	static float3 sample(const Material &mat, float3 n, float3 wo,
+			bool entering, float3 &seed, Shading &out)
+	{
+		float eta_i = entering ? 1 : mat.refraction;
+		float eta_t = entering ? mat.refraction : 1;
+
+		float F = FrDielectric(dot(wo, n), eta_i, eta_t);
+
+		seed = random3(seed);
+		if (fract(seed.x) < F) {
+			out = Shading::eReflection;
+			return {1, 0, 0};
+			return reflect(-wo, n);
+		} else {
+			out = Shading::eTransmission;
+			return {0, 0, 1};
+			return Refract(wo, n, 1/mat.refraction);
+		}
 	}
 };
 

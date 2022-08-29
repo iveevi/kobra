@@ -20,6 +20,7 @@ using kobra::cuda::Material;
 using kobra::cuda::GGX;
 using kobra::cuda::SpecularTransmission;
 using kobra::cuda::SpecularReflection;
+using kobra::cuda::FresnelSpecular;
 
 extern "C"
 {
@@ -210,22 +211,96 @@ __device__ float3 sample(const Material &mat, float3 n, float3 wo,
 // Evaluate BRDF: sample, brdf, pdf
 template <class BxDF>
 __device__ __forceinline__
-float3 eval(const Material &mat, float3 n, float3 wo, bool entering,
+float3 eval
+(const Material &mat, float3 n, float3 wo, bool entering,
 		float3 &wi, float &pdf, Shading &out, float3 &seed)
 {
-	// TODo: pack ags into struct
-	wi = BxDF::sample(mat, n, wo, entering, seed, out);
-	pdf = BxDF::pdf(mat, n, wi, wo, entering, out);
-	return BxDF::brdf(mat, n, wi, wo, entering, out);
+	// TODO: pack ags into struct
+	wi = sample(mat, n, wo, entering, seed, out);
+	if (length(wi) < 1e-6f)
+		return make_float3(0.0f);
+
+	pdf = ::pdf(mat, n, wi, wo, entering, out);
+	if (pdf < 1e-6f)
+		return make_float3(0.0f);
+
+	return brdf(mat, n, wi, wo, entering, out);
 }
 
+template <>
+__device__ __forceinline__
+float3 eval <SpecularTransmission>
+(const Material &mat, float3 n, float3 wo, bool entering,
+		float3 &wi, float &pdf, Shading &out, float3 &seed)
+{
+	out = Shading::eTransmission;
+	float eta_i = entering ? 1 : mat.refraction;
+	float eta_t = entering ? mat.refraction : 1;
+
+	if (dot(n, wo) < 0)
+		n = -n;
+
+	float eta = eta_i/eta_t;
+	wi = kobra::cuda::Refract(wo, n, eta);
+	pdf = 1;
+
+	float fr = kobra::cuda::FrDielectric(dot(n, wi), eta_i, eta_t);
+	return make_float3(1 - fr) * (eta * eta)/abs(dot(n, wi));
+}
+
+template <>
+__device__ __forceinline__
+float3 eval <SpecularReflection>
+(const Material &mat, float3 n, float3 wo, bool entering,
+		float3 &wi, float &pdf, Shading &out, float3 &seed)
+{
+	float eta_i = entering ? 1 : mat.refraction;
+	float eta_t = entering ? mat.refraction : 1;
+
+	if (dot(n, wo) < 0)
+		n = -n;
+
+	wi = reflect(-wo, n);
+	pdf = 1;
+
+	float fr = kobra::cuda::FrDielectric(dot(n, wi), eta_i, eta_t);
+	return make_float3(fr)/abs(dot(n, wi));
+}
+
+template <>
+__device__ __forceinline__
+float3 eval <FresnelSpecular>
+(const Material &mat, float3 n, float3 wo, bool entering,
+		float3 &wi, float &pdf, Shading &out, float3 &seed)
+{
+	float eta_i = entering ? 1 : mat.refraction;
+	float eta_t = entering ? mat.refraction : 1;
+
+	float F = kobra::cuda::FrDielectric(dot(n, wo), eta_i, eta_t);
+
+	seed = random3(seed);
+	if (fract(seed.x) < F) {
+		wi = reflect(-wo, n);
+		pdf = F;
+		return make_float3(F)/abs(dot(n, wi));
+	} else {
+		out = Shading::eTransmission;
+		float eta = eta_i/eta_t;
+		wi = kobra::cuda::Refract(wo, n, eta);
+		pdf = 1 - F;
+		return make_float3(1 - F) * (eta * eta)/abs(dot(n, wi));
+	}
+}
+
+// TOdo: union in material for different shading models
 __device__ __forceinline__
 float3 eval(const Material &mat, float3 n, float3 wo, bool entering,
 		float3 &wi, float &pdf, Shading &out, float3 &seed)
 {
 	if (mat.type & Shading::eTransmission)
-		return eval <SpecularReflection> (mat, n, wo, entering, wi, pdf, out, seed);
+		return eval <FresnelSpecular> (mat, n, wo, entering, wi, pdf, out, seed);
 
+	// Fallback to GGX
 	return eval <GGX> (mat, n, wo, entering, wi, pdf, out, seed);
 }
 
@@ -317,16 +392,12 @@ __device__ float3 Ld_light(const Light &light, HitGroupData *hit_data, float3 x,
 
 	// BRDF
 	Shading out;
-	// float pdf_brdf;
+	float pdf_brdf;
 
-
-	wi = sample(mat, n, wo, entering, seed, out);
-	if (dot(wi, n) <= 0.0f)
+	f = eval(mat, n, wo, entering, wi, pdf_brdf, out, seed) * abs(dot(n, wi));
+	if (length(f) < 1e-6f)
 		return contr_nee;
-	
-	f = brdf(mat, n, wi, wo, entering, out) * abs(dot(n, wi));
 
-	float pdf_brdf = pdf(mat, n, wi, wo, entering, out);
 	float pdf_light = 0.0f;
 
 	// TODO: need to check intersection for lights specifically (and
@@ -345,6 +416,7 @@ __device__ float3 Ld_light(const Light &light, HitGroupData *hit_data, float3 x,
 		weight = power(pdf_brdf, pdf_light);
 	};
 
+	// TODO: shoot shadow ray up to R
 	if (pdf_light > 1e-9 && pdf_brdf > 1e-9) {
 		float3 intensity = light.intensity;
 		contr_brdf += weight * f * intensity/pdf_brdf;
@@ -509,29 +581,21 @@ extern "C" __global__ void __closesthit__radiance()
 
 	// Generate new ray
 	Shading out;
-	float3 wi = sample(material, n, wo, entering, rp->seed, out);
-	if (length(wi) < 1e-9) {
-		// rp->value = {0, 0, 1};
+	float3 wi;
+	float pdf;
+
+	float3 f = eval(material, n, wo, entering, wi, pdf, out, rp->seed);
+	if (length(f) < 1e-6f)
 		return;
-	}
-
-	float pdf = ::pdf(material, n, wi, wo, entering, out);
-
-	float3 f = brdf(material, n, wi, wo, entering, out) * abs(dot(n, wi));
-	float3 T = f/pdf;
-
-	if (pdf <= 1e-9) {
-		// rp->value = {1, 0, 1};
-		return;
-	}
+	
+	float3 T = f * abs(dot(wi, n))/pdf;
 
 	// Russian roulette
 	float p = max(rp->throughput.x, max(rp->throughput.y, rp->throughput.z));
 	float q = 1 - min(1.0f, p);
-	if (fract(rp->seed.x) < q) {
-		// rp->value = {0, 1, 0};
+
+	if (fract(rp->seed.x) < q)
 		return;
-	}
 
 	rp->throughput *= T/(1 - q);
 	rp->depth++;
