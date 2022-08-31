@@ -47,4 +47,5 @@ void main()
 	out_view_pos		= view_pos;
 	out_tbn_transpose	= transpose(tbn);
 	out_time		= time;
+	out_highlight		= highlight;
 }

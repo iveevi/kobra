@@ -209,6 +209,21 @@ struct ECSApp : public BaseApp {
 		return data[y * width + x];
 	}
 
+	int selected_entity = -1;
+	void highlight(int i) {
+		if (selected_entity >= 0 && selected_entity < scene.ecs.size()) {
+			auto &e = scene.ecs.get_entity(selected_entity);
+			e.get <Rasterizer> ().set_highlight(false);
+		}
+
+		if (i >= 0 && i < scene.ecs.size()) {
+			auto &e = scene.ecs.get_entity(i);
+			e.get <Rasterizer> ().set_highlight(true);
+		}
+
+		selected_entity = i;
+	}
+
 	ECSApp(const vk::raii::PhysicalDevice &phdev, const std::vector <const char *> &extensions)
 			: BaseApp(phdev, "ECSApp",
 				vk::Extent2D {(uint32_t) window_size.x, (uint32_t) window_size.y},
@@ -296,6 +311,7 @@ struct ECSApp : public BaseApp {
 
 			// Input callbacks
 			io.mouse_events.subscribe(mouse_callback, this);
+			io.keyboard_events.subscribe(keyboard_callback, this);
 
 			scene.ecs.info <Mesh> ();
 		}
@@ -446,11 +462,6 @@ struct ECSApp : public BaseApp {
 		sync_queue.push({"Forced V-Sync", []() {}});
 	}
 
-	void terminate() override {
-		if (io.input.is_key_down(GLFW_KEY_ESCAPE))
-			glfwSetWindowShouldClose(window.handle, true);
-	}
-
 	// Mouse callback
 	static void mouse_callback(void *us, const io::MouseEvent &event) {
 		static const int pan_button = GLFW_MOUSE_BUTTON_MIDDLE;
@@ -505,8 +516,8 @@ struct ECSApp : public BaseApp {
 				&& (uv.y >= 0.0f && uv.y <= 1.0f));
 
 			if (in_bounds) {
-				std::cout << "Selecting at " << uv.x << ", " << uv.y << std::endl;
-				std::cout << "\tquery = " << app.query(uv) << std::endl;
+				int query = int(app.query(uv)) - 1;
+				app.highlight(query);
 			}
 		}
 
@@ -529,6 +540,16 @@ struct ECSApp : public BaseApp {
 		py = event.ypos;
 
 		previous_dir = dir;
+	}
+
+	// Keyboard callback
+	static void keyboard_callback(void *us, const io::KeyboardEvent &event) {
+		auto &app = *static_cast <ECSApp *> (us);
+		auto &transform = app.camera.get <Transform> ();
+
+		// If escape is pressed, deselect
+		if (event.key == GLFW_KEY_ESCAPE && event.action == GLFW_PRESS)
+			app.highlight(-1);
 	}
 };
 

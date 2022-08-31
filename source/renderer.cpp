@@ -67,7 +67,8 @@ void Rasterizer::draw(const vk::raii::CommandBuffer &cmd,
 		const vk::raii::PipelineLayout &ppl,
 		PushConstants &pc) const
 {
-	// TODO: parameter for whih submeshes to draw
+	// TODO: parameter for which submeshes to draw
+	pc.highlight = highlight ? 1.0f : 0.0f;
 	for (size_t i = 0; i < materials.size(); i++) {
 		// Bind and render
 		cmd.bindDescriptorSets(

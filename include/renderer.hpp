@@ -54,7 +54,6 @@ class Rasterizer {
 		glm::vec3	view_position;
 
 		// TODO: reorganize this
-		alignas(16)
 		float		highlight;
 	};
 
@@ -81,6 +80,9 @@ class Rasterizer {
 					     // offsets...
 	std::vector <uint32_t>		index_count;
 	std::vector <Material>		materials;
+
+	// TODO: highlight should not be here
+	bool				highlight = false;
 
 	mutable std::vector <vk::raii::DescriptorSet>
 					_dsets = {};
@@ -110,6 +112,11 @@ public:
 
 	size_t get_index_count(int i) const {
 		return index_count[i];
+	}
+
+	// Setters
+	void set_highlight(bool highlight_) {
+		highlight = highlight_;
 	}
 
 	// Bind resources to a descriptor set
