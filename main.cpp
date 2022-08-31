@@ -2,13 +2,16 @@
 #include "include/backend.hpp"
 #include "include/common.hpp"
 #include "include/ecs.hpp"
+#include "include/enums.hpp"
 #include "include/io/event.hpp"
 #include "include/layers/font_renderer.hpp"
+#include "include/layers/objectifier.hpp"
 #include "include/layers/optix_tracer.cuh"
 #include "include/layers/raster.hpp"
 #include "include/layers/raytracer.hpp"
 #include "include/layers/shape_renderer.hpp"
 #include "include/logger.hpp"
+#include "include/profiler.hpp"
 #include "include/renderer.hpp"
 #include "include/scene.hpp"
 #include "include/transform.hpp"
@@ -17,8 +20,6 @@
 #include "include/ui/color_picker.hpp"
 #include "include/ui/slider.hpp"
 #include "tinyfiledialogs.h"
-#include "include/profiler.hpp"
-#include "include/layers/objectifier.hpp"
 
 #include <stb/stb_image_write.h>
 

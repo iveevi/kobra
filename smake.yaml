@@ -2,6 +2,7 @@ default_compiler: nvcc
 default_standard: c++17
 
 # TODO: detect whether nvcc exists (on non nvcc systems)
+# TODO: simpler, more pythonic language for this
 
 definitions:
   - kobra_source: 'source/app.cpp,
@@ -99,14 +100,14 @@ builds:
     - libraries: libs
     - flags: '-std=c++17 -Wall -Werror'
   - experimental_normal:
-    - sources: experimental/main.cpp, kobra_source
+    - sources: experimental/main.cpp
     - idirs: includes
-    - flags: '-std=c++17'
+    - flags: '-std=c++17 -Xcompiler -fpermissive'
     - libraries: libs
   - experimental_debug:
-    - sources: experimental/main.cpp, kobra_source
+    - sources: experimental/main.cpp
     - idirs: includes
-    - flags: '-std=c++17 -g'
+    - flags: '-std=c++17 -g -Xcompiler -fpermissive'
     - libraries: libs
 
 targets:

@@ -1,114 +1,208 @@
-#define NABU_DEBUG_PARSER
+#include <cassert>
+#include <cstring>
+#include <stack>
+#include <variant>
 
-#include <nabu/nabu.hpp>
+#include "lexer.hpp"
 
 std::string source = R"(
 # Defining components:
-box = Scene.make_entity('Box')
-box.add <Rigidbody> (mass = 200)
-box.add <Material> (diffuse = (0.5), roughness = 0.01)
-
-# More components...
-
-# Adding a UI just means assigning to UI.main:
-UI.main = final_layout # where final_layout is defined beforehand...
+x = 200 * 16 + 10.0/2.5 - 1
+y = 200.0
+z = "Hello world!"
+w = 'Hello world!'
 )";
 
-// TODO: turn into nabu language
-inline std::string to_string(const std::string &s) {
-	return s;
+struct _value {
+	enum class Type {
+		eInt, eFloat, eBool, eString,
+		eList, eDictionary, eFuncion,
+		eVec2, eVec3, eVec4, eStruct
+	} type;
+
+	static constexpr const char *type_str[] = {
+		"int", "float", "bool", "string",
+		"list", "dictionary", "function",
+		"vec2", "vec3", "vec4", "struct"
+	};
+
+	// Actual data
+	std::variant <int, float, bool, std::string> data;
+
+	// Default constructor
+	_value() : type(Type::eInt), data(0) {}
+
+	// TODO: try to be conservative with copies...
+	// Copy constructor
+	_value(const _value &other) : type(other.type),
+			data(other.data) {}
+
+	// Copy assignment
+	_value &operator=(const _value &other) {
+		type = other.type;
+		data = other.data;
+		return *this;
+	}
+
+	// Move constructor
+	_value(_value &&other) : type(other.type),
+			data(std::move(other.data)) {}
+
+	// Move assignment
+	_value &operator=(_value &&other) {
+		type = other.type;
+		data = std::move(other.data);
+		return *this;
+	}
+
+	// Easier get
+	template <class T>
+	const T &get() const {
+		return std::get <T> (data);
+	}
+};
+
+inline std::string str(const _value &v)
+{
+	std::string out = "(type: ";
+	out += _value::type_str[(int)v.type];
+
+	switch (v.type) {
+	case _value::Type::eInt:
+		out += ", value: " + std::to_string(v.get <int> ());
+		break;
+	case _value::Type::eFloat:
+		out += ", value: " + std::to_string(v.get <float> ());
+		break;
+	case _value::Type::eBool:
+		out += ", value: " + std::to_string(v.get <bool> ());
+		break;
+	case _value::Type::eString:
+		out += ", value: " + v.get <std::string> ();
+		break;
+	default:
+		break;
+	}
+
+	return out + ")";
 }
 
-// All lexicons
-struct identifier {};
-struct p_float {};
-struct p_int {};
-struct double_str {};
-struct single_str {};
+using _stack = std::vector <_value>;
 
-struct comma {};
-struct dot {};
-struct equals {};
+struct State {
+	// Value stack
+	_stack stack;
 
-struct lbracket {};
-struct rbracket {};
+	// Map from identifier to value
+	std::map <std::string, _value> variables;
 
-struct lbrace {};
-struct rbrace {};
+	void push(const _value &v) {
+		std::cout << "Pushing " << str(v) << std::endl;
+		stack.push_back(v);
+	}
 
-struct lparen {};
-struct rparen {};
+	void dump() {
+		std::cout << "=== State Dump ===" << std::endl;
+		std::cout << "Stack size: " << stack.size() << std::endl;
+		for (int i = 0; i < stack.size(); i++)
+			std::cout << "[" << i << "]: " << str(stack[i]) << std::endl;
 
-struct langle {};
-struct rangle {};
+		std::cout << "\nVariables: " << variables.size() << std::endl;
+		for (auto &p : variables)
+			std::cout << p.first << ": " << str(p.second) << std::endl;
+	}
+} state;
 
-struct comment {};
-struct space {};
+using nabu::parser::rd::alias;
+using nabu::parser::rd::option;
+using nabu::parser::rd::repeat;
+using nabu::parser::rd::grammar;
+using nabu::parser::rd::grammar_action;
 
-struct error {};
+using p_string = option <double_str, single_str>;
+using primitive = option <p_int, p_float, p_string>;
+using factor = option <primitive, identifier>;
+using term = alias <factor, multiply, factor>;
+using expression = alias <factor>;
+using statement = alias <identifier, equals, expression>;
+using input = statement;
 
-// ignore(comment)
-// ignore(space)
+register(p_string)
+register(primitive)
+register(factor)
+register(term)
+register(expression)
+register(statement)
+// register(input)
 
-// Declaring as tokens
-auto_mk_overloaded_token(identifier, "[a-zA-Z_][a-zA-Z0-9_]*", std::string, to_string);
-auto_mk_overloaded_token(p_float, "[+-]?[0-9]*\\.[0-9]+", float, std::stof);
-auto_mk_overloaded_token(p_int, "[+-]?[0-9]+", int, std::stoi);
-auto_mk_overloaded_token(double_str, "\".*\"", std::string, to_string);
-auto_mk_overloaded_token(single_str, "'.*'", std::string, to_string);
+#define enable(b) static constexpr bool available = b
 
-auto_mk_token(comma, ",");
-auto_mk_token(dot, "\\.");
-auto_mk_token(equals, "[=]");
+// TODO: is_of_type for token and lexvalue interaction
+// Action for expression: push value to stack
+#define define_action(T)							\
+	template <>								\
+	struct grammar_action <T> {						\
+		enable(true);							\
+		static void action(parser::lexicon, parser::Queue &);		\
+	};									\
+										\
+	void grammar_action <T>::action(parser::lexicon lptr, parser::Queue &q)
 
-auto_mk_token(lbracket, "\\[");
-auto_mk_token(rbracket, "\\]");
+define_action(p_int)
+{
+	_value v;
+	v.type = _value::Type::eInt;
+	v.data = get <int> (lptr);
+	state.push(v);
+}
 
-auto_mk_token(lbrace, "\\{");
-auto_mk_token(rbrace, "\\}");
+define_action(p_float)
+{
+	_value v;
+	v.type = _value::Type::eFloat;
+	v.data = get <float> (lptr);
+	state.push(v);
+}
 
-auto_mk_token(lparen, "\\(");
-auto_mk_token(rparen, "\\)");
+define_action(p_string)
+{
+	_value v;
+	v.type = _value::Type::eString;
+	v.data = get <std::string> (lptr);
+	state.push(v);
+}
 
-auto_mk_token(langle, "<");
-auto_mk_token(rangle, ">");
+template <>
+struct grammar_action <statement> {
+	enable(true);
+	static void action(parser::lexicon lptr, parser::Queue &) {
+		// Assumption is that the stack has the value
+		// to be assigned to the identifier
+		vec lvec = get <vec> (lptr);
+		state.dump();
 
-auto_mk_token(comment, "#[^\n]*");
-auto_mk_token(space, "\\s+");
+		// Get the identifier
+		// assert(lvec.size() == 3);
+		std::string id = get <std::string> (lvec[0]);
 
-auto_mk_overloaded_token(error, ".", std::string, to_string);
+		// Get value
+		assert(state.stack.size() > 0);
+		std::cout << "Assigning " << str(state.stack.back()) << " to " << id << std::endl;
+		_value v = state.stack.back();
+		state.stack.pop_back();
 
-// Define the sequence of tokens to parse
-lexlist_next(identifier, p_float);
-lexlist_next(p_float, p_int);
-lexlist_next(p_int, comma);
-lexlist_next(double_str, single_str);
-
-lexlist_next(single_str, comma);
-lexlist_next(comma, dot);
-lexlist_next(dot, equals);
-lexlist_next(equals, lparen);
-
-lexlist_next(lparen, rparen);
-lexlist_next(rparen, lbracket);
-
-lexlist_next(lbracket, rbracket);
-lexlist_next(rbracket, lbrace);
-
-lexlist_next(lbrace, rbrace);
-lexlist_next(rbrace, langle);
-
-lexlist_next(langle, rangle);
-lexlist_next(rangle, comment);
-
-lexlist_next(comment, space);
-// lexlist_next(space, error);
+		// Set variable
+		state.variables[id] = v;
+	}
+};
 
 int main()
 {
 	using namespace nabu;
 
 	parser::Queue q = parser::lexq <identifier> (source);
+
+#if 0
 
 	std::cout << "Queue size: " << q.size() << std::endl;
 	while (!q.empty()) {
@@ -122,4 +216,14 @@ int main()
 
 		std::cout << "lexicon: " << lptr->str() << std::endl;
 	}
+
+#else
+
+	using g_input = grammar <input>;
+	while (g_input::value(q));
+	state.dump();
+
+#endif
+
+	return 0;
 }

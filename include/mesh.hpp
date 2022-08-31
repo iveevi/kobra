@@ -117,6 +117,10 @@ public:
 		// Generate the BVH
 		return partition(boxes);
 	}
+	
+	// Submesh factories
+	static Submesh cylinder(int = 32);
+	static Submesh cone(int = 32);
 };
 
 // A mesh is a collection of submeshes

@@ -1,6 +1,9 @@
 // Standard headers
 #include <thread>
 
+// GLM headers
+#include <glm/gtx/rotate_vector.hpp>
+
 // Assimp headers
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
@@ -363,6 +366,187 @@ kmesh kmesh::make_ring(const glm::vec3 &center, float radius, float width, float
 	// construct and return the mesh
 	return kmesh {vertices, indices};
 } */
+
+// TODO: in math.hpp
+glm::vec3 project(const glm::vec3 &point, const glm::vec3 &normal)
+{
+	return point - glm::dot(point, normal) * normal;
+}
+
+// Unit cylinder
+Submesh Submesh::cylinder(int resolution)
+{
+	// Height is 1, radius is 0.5
+	glm::vec3 c1 = glm::vec3 {0, 0.5, 0};
+	glm::vec3 c2 = glm::vec3 {0, -0.5, 0};
+	float r = 0.5f;
+
+	// Vertices and indices
+	std::vector <Vertex> vertices;
+	std::vector <uint32_t> indices;
+
+	// Top face
+	glm::vec3 ntop = glm::vec3 {0, 1, 0};
+	for (int i = 0; i < resolution; i++) {
+		float theta = 2.0f * glm::pi <float> () * double(i) / resolution;
+		glm::vec3 p = c1 + r * glm::vec3 {glm::sin(theta), 0, glm::cos(theta)};
+		glm::vec2 t = glm::vec2 {double(i) / resolution, 0.0f};
+		vertices.push_back({p, ntop, t});
+	}
+
+	for (int i = 0; i < resolution; i++) {
+		indices.push_back(0);
+		indices.push_back(i);
+		indices.push_back((i + 1) % resolution);
+	}
+
+	// Bottom face
+	int offset = vertices.size();
+	glm::vec3 nbottom = glm::vec3 {0, -1, 0};
+	for (int i = 0; i < resolution; i++) {
+		float theta = 2.0f * glm::pi <float> () * double(i) / resolution;
+		glm::vec3 p = c2 + r * glm::vec3 {glm::sin(theta), 0, glm::cos(theta)};
+		glm::vec2 t = glm::vec2 {double(i) / resolution, 1.0f};
+		vertices.push_back({p, nbottom, t});
+	}
+
+	for (int i = 0; i < resolution; i++) {
+		indices.push_back(offset);
+		indices.push_back(offset + (i + 1) % resolution);
+		indices.push_back(offset + i);
+	}
+
+	// Lateral faces
+	offset = vertices.size();
+	for (int i = 0; i < resolution; i++) {
+		// Each face (two triangles) is made of four vertices
+		int i0 = offset + 4 * i;
+		int i1 = i0 + 1;
+		int i2 = i0 + 2;
+		int i3 = i0 + 3;
+
+		// Vertex positions
+		float theta1 = 2.0f * glm::pi <float> () * double(i) / resolution;
+		float theta2 = 2.0f * glm::pi <float> () * double(i + 1) / resolution;
+
+		glm::vec3 p0 = c1 + r * glm::vec3 {glm::sin(theta1), 0, glm::cos(theta1)};
+		glm::vec3 p1 = c1 + r * glm::vec3 {glm::sin(theta2), 0, glm::cos(theta2)};
+		glm::vec3 p2 = c2 + r * glm::vec3 {glm::sin(theta1), 0, glm::cos(theta1)};
+		glm::vec3 p3 = c2 + r * glm::vec3 {glm::sin(theta2), 0, glm::cos(theta2)};
+
+		// Vertex normals
+		glm::vec3 n0 = glm::normalize(p0 - c1);
+		glm::vec3 n1 = glm::normalize(p1 - c1);
+		glm::vec3 n2 = glm::normalize(p2 - c2);
+		glm::vec3 n3 = glm::normalize(p3 - c2);
+
+		// Vertex texture coordinates
+		glm::vec2 t0 = glm::vec2 {double(i) / resolution, 0.5f};
+		glm::vec2 t1 = glm::vec2 {double(i + 1) / resolution, 0.5f};
+		glm::vec2 t2 = glm::vec2 {double(i) / resolution, 0.0f};
+		glm::vec2 t3 = glm::vec2 {double(i + 1) / resolution, 0.0f};
+
+		// Add vertices
+		vertices.push_back({p0, n0, t0});
+		vertices.push_back({p1, n1, t1});
+		vertices.push_back({p2, n2, t2});
+		vertices.push_back({p3, n3, t3});
+
+		// Add indices
+		indices.push_back(i0);
+		indices.push_back(i2);
+		indices.push_back(i1);
+
+		indices.push_back(i1);
+		indices.push_back(i2);
+		indices.push_back(i3);
+	}
+
+	// Construct and return the mesh
+	return Submesh {vertices, indices};
+}
+
+// Unit cone
+Submesh Submesh::cone(int resolution)
+{
+	// Height is 1, radius is 0.5
+	glm::vec3 center = glm::vec3 {0, -0.5, 0};
+	glm::vec3 top = glm::vec3 {0, 0.5, 0};
+
+	float radius = 0.5f;
+
+	// Vertices and indices
+	std::vector <Vertex> vertices;
+	std::vector <uint32_t> indices;
+
+	// First normal, rotate for each vertex
+	glm::vec3 n0 = glm::normalize(glm::vec3 {0, 0.4, 0.8});
+
+	// Generate lateral face
+	for (int i = 0; i < resolution; i++) {
+		// Each triangle individually
+		int i0 = 3 * i;
+		int i1 = i0 + 1;
+		int i2 = i0 + 2;
+
+		// Angles
+		float theta1 = 2.0f * glm::pi <float> () * double(i) / resolution;
+		float theta2 = 2.0f * glm::pi <float> () * double(i + 1) / resolution;
+
+		// Positions
+		glm::vec3 p1 = center + radius * glm::vec3 {glm::sin(theta1), 0, glm::cos(theta1)};
+		glm::vec3 p2 = center + radius * glm::vec3 {glm::sin(theta2), 0, glm::cos(theta2)};
+
+		// Normals: rotate n0
+		glm::vec3 n1 = glm::rotate(n0, theta1, glm::vec3 {0, 1, 0});
+		glm::vec3 n2 = glm::rotate(n0, theta2, glm::vec3 {0, 1, 0});
+		glm::vec3 ntop = (n1 + n2)/2.0f;
+
+		// Texture coordinates
+		glm::vec2 t1 = glm::vec2 {double(i) / resolution, 0};
+		glm::vec2 t2 = glm::vec2 {double(i + 1) / resolution, 0};
+		glm::vec2 ttop = glm::vec2 {0.5f, 1.0f};
+
+		// Add vertices
+		vertices.push_back(Vertex {p1, n1, t1});
+		vertices.push_back(Vertex {p2, n2, t2});
+		vertices.push_back(Vertex {top, ntop, ttop});
+
+		// Add indices
+		indices.push_back(i0);
+		indices.push_back(i1);
+		indices.push_back(i2);
+	}
+
+	// Generate bottom face
+	glm::vec3 normal = glm::vec3 {0, -1, 0};
+
+	int offset = vertices.size();
+
+	vertices.push_back(Vertex {center, normal, glm::vec2 {0, 0}});
+	for (int i = 0; i < resolution; i++) {
+		float theta = 2.0f * glm::pi <float> () * double(i) / resolution;
+		glm::vec3 position = glm::vec3 {
+			center.x + radius * glm::sin(theta),
+			center.y,
+			center.z + radius * glm::cos(theta)
+		};
+
+		vertices.push_back(Vertex {position, normal, glm::vec2 {0, 0}});
+	}
+
+	for (int i = 0; i < resolution; i++) {
+		int oi = offset + i + 1;
+		int on = offset + 1 + (i + 1) % resolution;
+
+		indices.push_back(offset);
+		indices.push_back(on);
+		indices.push_back(oi);
+	}
+
+	// Construct and return the mesh
+	return Submesh {vertices, indices};
+}
 
 namespace assimp {
 
