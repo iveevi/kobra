@@ -20,6 +20,7 @@
 #include "include/ui/color_picker.hpp"
 #include "include/ui/slider.hpp"
 #include "tinyfiledialogs.h"
+#include "include/layers/gizmo.hpp"
 
 #include <stb/stb_image_write.h>
 
@@ -38,6 +39,7 @@ struct ECSApp : public BaseApp {
 	layers::ShapeRenderer shape_renderer;
 	layers::OptixTracer optix_tracer;
 	layers::Objectifier objectifier;
+	layers::Gizmo gizmo;
 
 	Scene scene;
 
@@ -210,15 +212,19 @@ struct ECSApp : public BaseApp {
 	}
 
 	int selected_entity = -1;
+	Transform *selected_transform = nullptr;
+
 	void highlight(int i) {
 		if (selected_entity >= 0 && selected_entity < scene.ecs.size()) {
 			auto &e = scene.ecs.get_entity(selected_entity);
 			e.get <Rasterizer> ().set_highlight(false);
+			selected_transform = nullptr;
 		}
 
 		if (i >= 0 && i < scene.ecs.size()) {
 			auto &e = scene.ecs.get_entity(i);
 			e.get <Rasterizer> ().set_highlight(true);
+			selected_transform = &e.get <Transform> ();
 		}
 
 		selected_entity = i;
@@ -308,6 +314,9 @@ struct ECSApp : public BaseApp {
 			data.resize(objectifier.image.extent.width
 				* objectifier.image.extent.height
 			);
+			
+			// Gizmo
+			gizmo = layers::Gizmo::make(get_context());
 
 			// Input callbacks
 			io.mouse_events.subscribe(mouse_callback, this);
@@ -422,6 +431,17 @@ struct ECSApp : public BaseApp {
 		else if (mode == 2)
 			optix_tracer.render(cmd, framebuffer, scene.ecs, {render_min, render_max});
 
+		// Gizmo
+		if (selected_entity != -1) {
+			layers::Gizmo::render(gizmo, layers::Gizmo::Type::eTranslate,
+				*selected_transform,
+				cmd, framebuffer,
+				camera.get <Camera> (),
+				camera.get <Transform> (),
+				{render_min, render_max}
+			);
+		}
+
 		// Start render pass
 		std::array <vk::ClearValue, 2> clear_values = {
 			vk::ClearValue {
@@ -474,6 +494,7 @@ struct ECSApp : public BaseApp {
 		static bool dragging = false;
 		static bool dragging_select = false;
 		static bool gizmo_dragging = false;
+		static bool gizmo_cache = false;
 
 		static float px = 0.0f;
 		static float py = 0.0f;
@@ -501,7 +522,34 @@ struct ECSApp : public BaseApp {
 
 		// Selecting only with the select button
 		bool is_select_button = (event.button == select_button);
-		if (event.action == GLFW_PRESS && is_select_button) {
+
+		// Letting go of drag
+		if (event.action == GLFW_RELEASE
+				&& gizmo_dragging
+				&& is_select_button) {
+			gizmo_dragging = false;
+			gizmo_cache = false;
+		}
+
+		// Dragging
+		if (gizmo_dragging && app.selected_transform != nullptr) {
+			bool null = layers::Gizmo::handle(app.gizmo,
+				layers::Gizmo::Type::eTranslate,
+				*app.selected_transform,
+				app.camera.get <Camera> (),
+				app.camera.get <Transform> (),
+				{app.render_min, app.render_max},
+				{event.xpos, event.ypos}, dir,
+				gizmo_cache
+			);
+
+			gizmo_cache = null;
+		}
+		
+		// Selection
+		if (event.action == GLFW_PRESS
+				&& !gizmo_dragging
+				&& is_select_button) {
 			// TODO: should not interrupt dragging
 			
 			glm::vec2 min = app.render_min;
@@ -518,6 +566,8 @@ struct ECSApp : public BaseApp {
 			if (in_bounds) {
 				int query = int(app.query(uv)) - 1;
 				app.highlight(query);
+				gizmo_dragging = true;
+				gizmo_cache = false;
 			}
 		}
 

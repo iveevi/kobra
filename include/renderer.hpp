@@ -79,7 +79,6 @@ class Rasterizer {
 	std::vector <BufferData>	ubo; // TODO: one single buffer, using
 					     // offsets...
 	std::vector <uint32_t>		index_count;
-	std::vector <Material>		materials;
 
 	// TODO: highlight should not be here
 	bool				highlight = false;
@@ -87,6 +86,8 @@ class Rasterizer {
 	mutable std::vector <vk::raii::DescriptorSet>
 					_dsets = {};
 public:
+	std::vector <Material>		materials;
+
 	// Raster mode
 	RasterMode mode = RasterMode::eAlbedo;
 

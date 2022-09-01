@@ -1229,7 +1229,7 @@ inline void bind_ds(const vk::raii::Device &device,
 	device.updateDescriptorSets(dset_write, nullptr);
 }
 
-// Create a graphics pipeline
+// Info for creating a graphics pipeline
 struct GraphicsPipelineInfo {
 	const vk::raii::Device &device;
 	const vk::raii::RenderPass &render_pass;
@@ -1244,16 +1244,15 @@ struct GraphicsPipelineInfo {
 	std::vector <vk::VertexInputAttributeDescription> vertex_attributes;
 
 	const vk::raii::PipelineLayout &pipeline_layout;
-	const vk::raii::PipelineCache &pipeline_cache;
+	// const vk::raii::PipelineCache &pipeline_cache = nullptr;
 
-	bool depth_test;
-	bool depth_write;
+	vk::CullModeFlags cull_mode = vk::CullModeFlagBits::eBack;
+	vk::FrontFace front_face = vk::FrontFace::eCounterClockwise;
 
-	vk::CullModeFlags cull_mode;
-	vk::FrontFace front_face;
-
-	bool no_bindings = false;
 	bool blend_enabled = true;
+	bool depth_test = true;
+	bool depth_write = true;
+	bool no_bindings = false;
 
 	// Constructor
 	GraphicsPipelineInfo(const vk::raii::Device &device,
@@ -1264,12 +1263,7 @@ struct GraphicsPipelineInfo {
 			const vk::SpecializationInfo *fragment_specialization,
 			const vk::VertexInputBindingDescription &vertex_binding,
 			const std::vector <vk::VertexInputAttributeDescription> &vertex_attributes,
-			const vk::raii::PipelineLayout &pipeline_layout,
-			const vk::raii::PipelineCache &pipeline_cache,
-			bool depth_test = true,
-			bool depth_write = true,
-			vk::CullModeFlags cull_mode = vk::CullModeFlagBits::eBack,
-			vk::FrontFace front_face = vk::FrontFace::eCounterClockwise)
+			const vk::raii::PipelineLayout &pipeline_layout)
 			: device(device),
 			render_pass(render_pass),
 			vertex_shader(std::move(vertex_shader)),
@@ -1278,130 +1272,10 @@ struct GraphicsPipelineInfo {
 			fragment_specialization(fragment_specialization),
 			vertex_binding(vertex_binding),
 			vertex_attributes(vertex_attributes),
-			pipeline_layout(pipeline_layout),
-			pipeline_cache(pipeline_cache),
-			depth_test(depth_test),
-			depth_write(depth_write),
-			cull_mode(cull_mode),
-			front_face(front_face) {}
+			pipeline_layout(pipeline_layout) {}
 };
 
-inline vk::raii::Pipeline make_graphics_pipeline(const GraphicsPipelineInfo &info)
-{
-	// Shader stages
-	std::array <vk::PipelineShaderStageCreateInfo, 2> shader_stages {
-		vk::PipelineShaderStageCreateInfo {
-			{}, vk::ShaderStageFlagBits::eVertex,
-			*info.vertex_shader, "main",
-			info.vertex_specialization
-		},
-		vk::PipelineShaderStageCreateInfo {
-			{}, vk::ShaderStageFlagBits::eFragment,
-			*info.fragment_shader, "main",
-			info.fragment_specialization
-		}
-	};
-
-	/* std::cout << "Vertex attribute formats:" << info.vertex_attributes.size() << std::endl;
-	for (const auto &attr : info.vertex_attributes) {
-		std::cout << "\t" << attr.binding << " " << attr.location << " "
-			<< vk::to_string(attr.format) << " " << attr.offset << std::endl;
-	} */
-
-	// Vertex input state
-	vk::PipelineVertexInputStateCreateInfo vertex_input_info {
-		{}, !info.no_bindings, &info.vertex_binding,
-		(uint32_t) info.vertex_attributes.size(),
-		info.vertex_attributes.data()
-	};
-
-	// Input assembly state
-	vk::PipelineInputAssemblyStateCreateInfo input_assembly_info {
-		{}, vk::PrimitiveTopology::eTriangleList, VK_FALSE
-	};
-
-	// Viewport state
-	vk::PipelineViewportStateCreateInfo viewport_state_info {
-		{}, 1, nullptr, 1, nullptr
-	};
-
-	// Rasterization state
-	vk::PipelineRasterizationStateCreateInfo rasterization_info {
-		{}, VK_FALSE, VK_FALSE, vk::PolygonMode::eFill,
-		info.cull_mode, info.front_face, VK_FALSE, 0, 0, 0, 1
-	};
-
-	// Multisample state
-	vk::PipelineMultisampleStateCreateInfo multisample_info {
-		{}, vk::SampleCountFlagBits::e1, VK_FALSE, 0.0f, nullptr,
-		VK_FALSE, VK_FALSE
-	};
-
-	// Depth stencil state
-	vk::StencilOpState stencil_info {
-		vk::StencilOp::eKeep, vk::StencilOp::eKeep, vk::StencilOp::eKeep,
-		vk::CompareOp::eAlways, 0, 0, 0
-	};
-
-	vk::PipelineDepthStencilStateCreateInfo depth_stencil_info {
-		{}, info.depth_test, info.depth_write,
-		vk::CompareOp::eLessOrEqual, false, false,
-		stencil_info, stencil_info
-	};
-
-	// Color blend state
-	vk::PipelineColorBlendAttachmentState color_blend_attachment;
-
-	color_blend_attachment.colorWriteMask = vk::ColorComponentFlagBits::eR
-			| vk::ColorComponentFlagBits::eG
-			| vk::ColorComponentFlagBits::eB
-			| vk::ColorComponentFlagBits::eA;
-
-	color_blend_attachment.blendEnable = info.blend_enabled;
-	color_blend_attachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
-	color_blend_attachment.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
-	color_blend_attachment.colorBlendOp = vk::BlendOp::eAdd;
-	color_blend_attachment.srcAlphaBlendFactor = vk::BlendFactor::eSrcAlpha;
-	color_blend_attachment.dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
-	color_blend_attachment.alphaBlendOp = vk::BlendOp::eSubtract;
-
-	vk::PipelineColorBlendStateCreateInfo color_blend_info {
-		{}, VK_FALSE, vk::LogicOp::eCopy, 1, &color_blend_attachment,
-		{ 0.0f, 0.0f, 0.0f, 0.0f }
-	};
-
-	// Dynamic state
-	std::array <vk::DynamicState, 2> dynamic_states {
-		vk::DynamicState::eViewport,
-		vk::DynamicState::eScissor
-	};
-
-	vk::PipelineDynamicStateCreateInfo dynamic_state_info {
-		{}, (uint32_t) dynamic_states.size(), dynamic_states.data()
-	};
-
-	// Pipeline
-	return vk::raii::Pipeline {
-		info.device,
-		nullptr,
-		vk::GraphicsPipelineCreateInfo {
-			{}, shader_stages,
-			&vertex_input_info,
-			&input_assembly_info,
-			nullptr,
-			&viewport_state_info,
-			&rasterization_info,
-			&multisample_info,
-			&depth_stencil_info,
-			&color_blend_info,
-			&dynamic_state_info,
-			*info.pipeline_layout,
-			*info.render_pass
-		}
-	};
-}
-
-// TODO: compiling GLSL into SPIRV in runtime
+vk::raii::Pipeline make_graphics_pipeline(const GraphicsPipelineInfo &);
 
 }
 

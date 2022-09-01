@@ -162,12 +162,16 @@ public:
 		auto attribute_descriptions = gui::Glyph::Vertex::vertex_attributes();
 
 		// Create the graphics pipeline
-		GraphicsPipelineInfo grp_info(*_ctx.device, render_pass,
+		GraphicsPipelineInfo grp_info {
+			*_ctx.device, render_pass,
 			std::move(shaders[0]), nullptr,
 			std::move(shaders[1]), nullptr,
 			binding_description, attribute_descriptions,
-			_ppl, pipeline_cache, false, false
-		);
+			_ppl
+		};
+
+		grp_info.depth_test = false;
+		grp_info.depth_write = false;
 
 		_pipeline = make_graphics_pipeline(grp_info);
 

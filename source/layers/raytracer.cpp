@@ -781,12 +781,13 @@ void Raytracer::_initialize_vuklan_structures(const vk::AttachmentLoadOp &load)
 		{{}, *_dsl_postprocess, pcr}
 	};
 		
-	GraphicsPipelineInfo grp_info(*_ctx.device, _render_pass,
+	GraphicsPipelineInfo grp_info {
+		*_ctx.device, _render_pass,
 		std::move(shaders[1]), nullptr,
 		std::move(shaders[2]), nullptr,
 		{}, {},
-		_ppl_postprocess, nullptr
-	);
+		_ppl_postprocess
+	};
 
 	grp_info.no_bindings = true;
 

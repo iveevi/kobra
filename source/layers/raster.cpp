@@ -174,22 +174,18 @@ Raster::Raster(const Context &ctx, const vk::AttachmentLoadOp &load)
 		{{}, *_dsl, push_constants}
 	);
 
-	// Pipeline cache
-	vk::raii::PipelineCache pipeline_cache {
-		*_ctx.device,
-		vk::PipelineCacheCreateInfo()
-	};
-
 	// Pipelines
 	auto vertex_binding = Vertex::vertex_binding();
 	auto vertex_attributes = Vertex::vertex_attributes();
 
-	GraphicsPipelineInfo grp_info(*_ctx.device, _render_pass,
+	// TODO: pipeline cache
+	GraphicsPipelineInfo grp_info {
+		*_ctx.device, _render_pass,
 		nullptr, nullptr,
 		nullptr, nullptr,
 		vertex_binding, vertex_attributes,
-		_ppl, pipeline_cache
-	);
+		_ppl
+	};
 
 	// Common vertex shader
 	grp_info.vertex_shader = std::move(shaders[0]);
@@ -485,7 +481,8 @@ void Raster::_initialize_skybox()
 	auto vertex_binding = Vertex::vertex_binding();
 	auto vertex_attributes = Vertex::vertex_attributes();
 
-	GraphicsPipelineInfo grp_info(*_ctx.device, _render_pass,
+	GraphicsPipelineInfo grp_info {
+		*_ctx.device, _render_pass,
 		std::move(shaders[0]), nullptr,
 		std::move(shaders[1]), nullptr,
 		vk::VertexInputBindingDescription {
@@ -499,10 +496,16 @@ void Raster::_initialize_skybox()
 				offsetof(Vertex, position)
 			},
 		},
+		_skybox.ppl
+	};
+
+/*
 		_skybox.ppl, pipeline_cache,
 		true, true,
 		vk::CullModeFlagBits::eNone
-	);
+	); */
+
+	grp_info.cull_mode = vk::CullModeFlagBits::eNone;
 
 	// Create pipeline
 	_skybox.pipeline = make_graphics_pipeline(grp_info);

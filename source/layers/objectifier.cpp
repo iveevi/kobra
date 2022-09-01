@@ -12,7 +12,7 @@ struct PushConstants {
 	glm::mat4 view;
 	glm::mat4 projection;
 	uint32_t id;
-} push_constants;
+};
 
 // Create the layer
 Objectifier make_layer(const Context &context)
@@ -94,16 +94,12 @@ Objectifier make_layer(const Context &context)
 	auto vertex_binding = Vertex::vertex_binding();
 	auto vertex_attributes = Vertex::vertex_attributes();
 
-	vk::raii::PipelineCache cache {
-		*context.device, {}
-	};
-
 	GraphicsPipelineInfo grp_info {
 		*context.device, layer.render_pass,
 		std::move(shaders[0]), nullptr,
 		std::move(shaders[1]), nullptr,
 		vertex_binding, vertex_attributes,
-		layer.ppl, cache
+		layer.ppl
 	};
 
 	grp_info.blend_enabled = false;
@@ -123,24 +119,7 @@ void render(Objectifier &layer,
 {
 	// Default render area (viewport and scissor)
 	RenderArea ra {{-1, -1}, {-1, -1}};
-	// ra.apply(cmd, layer.image.extent);
-
-	cmd.setViewport(0,
-		vk::Viewport {
-			0, 0,
-			(float) layer.image.extent.width,
-			(float) layer.image.extent.height,
-			0.0f, 1.0f
-		}
-	);
-
-	// Set scissor
-	cmd.setScissor(0,
-		vk::Rect2D {
-			vk::Offset2D {0, 0},
-			layer.image.extent
-		}
-	);
+	ra.apply(cmd, layer.image.extent);
 
 	// Clear colors
 	// TODO: easier function to use

@@ -117,8 +117,12 @@ public:
 		// Generate the BVH
 		return partition(boxes);
 	}
+
+	// Submesh modifiers
+	static void transform(Submesh &, const Transform &);
 	
 	// Submesh factories
+	static Submesh sphere(int = 16, int = 16);
 	static Submesh cylinder(int = 32);
 	static Submesh cone(int = 32);
 };

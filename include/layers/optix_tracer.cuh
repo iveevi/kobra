@@ -144,14 +144,13 @@ class OptixTracer {
 			{{}, *_dsl_render, pcr}
 		};
 
-		GraphicsPipelineInfo grp_info(*_ctx.device, _render_pass,
+		GraphicsPipelineInfo grp_info {
+			*_ctx.device, _render_pass,
 			std::move(shaders[0]), nullptr,
 			std::move(shaders[1]), nullptr,
 			{}, {},
-			_ppl, vk::raii::PipelineCache {
-				*_ctx.device, nullptr
-			}
-		);
+			_ppl
+		};
 
 		grp_info.no_bindings = true;
 

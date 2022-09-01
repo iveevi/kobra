@@ -87,7 +87,121 @@ struct hash <kobra::Vertex> {
 
 namespace kobra {
 
-// Submesh
+// Submesh modifiers
+void Submesh::transform(Submesh &submesh, const Transform &transform)
+{
+	// Transform vertices
+	for (auto &vertex : submesh.vertices) {
+		vertex.position = transform.apply(vertex.position);
+		vertex.normal = transform.apply_vector(vertex.normal);
+		vertex.tangent = transform.apply_vector(vertex.tangent);
+		vertex.bitangent = transform.apply_vector(vertex.bitangent);
+	}
+}
+
+// Submesh factories
+Submesh Submesh::sphere(int slices, int stacks)
+{
+	static const glm::vec3 center {0.0f};
+	static const float radius = 1.0f;
+
+	// Vertices and indices
+	std::vector <Vertex> vertices;
+	std::vector <uint32_t> indices;
+
+	// add top vertex
+	glm::vec3 top_vertex {center.x, center.y + radius, center.z};
+	vertices.push_back(Vertex {
+		top_vertex,
+		{0.0f, 1.0f, 0.0f},
+		{0.5f, 0.5f}
+	});
+
+	// generate vertices in the middle stacks
+	for (int i = 0; i < stacks - 1; i++) {
+		float phi = glm::pi <float> () * double(i + 1) / stacks;
+
+		// generate vertices in the slice
+		for (int j = 0; j < slices; j++) {
+			float theta = 2.0f * glm::pi <float> () * double(j) / slices;
+
+			// add vertex
+			// todo: utlility function to generate polar and
+			// spherical coordinates
+			glm::vec3 vertex {
+				center.x + radius * glm::sin(phi) * glm::cos(theta),
+				center.y + radius * glm::cos(phi),
+				center.z + radius * glm::sin(phi) * glm::sin(theta)
+			};
+
+			glm::vec3 normal {
+				glm::sin(phi) * glm::cos(theta),
+				glm::cos(phi),
+				glm::sin(phi) * glm::sin(theta)
+			};
+
+			glm::vec2 uv {
+				double(j) / slices,
+				double(i) / stacks
+			};
+
+			// add vertex
+			vertices.push_back(Vertex {
+				vertex,
+				normal,
+				uv
+			});
+		}
+	}
+
+	// add bottom vertex
+	glm::vec3 bottom_vertex {center.x, center.y - radius, center.z};
+	vertices.push_back(Vertex {
+		bottom_vertex,
+		{0.0f, -1.0f, 0.0f},
+		{0.5f, 0.5f}
+	});
+
+	// top and bottom triangles
+	for (int i = 0; i < slices; i++) {
+		// corresponding top
+		int i0 = i + 1;
+		int i1 = (i + 1) % slices + 1;
+
+		indices.push_back(0);
+		indices.push_back(i1);
+		indices.push_back(i0);
+
+		// corresponding bottom
+		i0 = i + slices * (stacks - 2) + 1;
+		i1 = (i + 1) % slices + slices * (stacks - 2) + 1;
+
+		indices.push_back(vertices.size() - 1);
+		indices.push_back(i0);
+		indices.push_back(i1);
+	}
+
+	// middle triangles
+	for (int i = 0; i < stacks - 2; i++) {
+		for (int j = 0; j < slices; j++) {
+			int i0 = i * slices + j + 1;
+			int i1 = i * slices + (j + 1) % slices + 1;
+			int i2 = (i + 1) * slices + (j + 1) % slices + 1;
+			int i3 = (i + 1) * slices + j + 1;
+
+			indices.push_back(i0);
+			indices.push_back(i1);
+			indices.push_back(i2);
+
+			indices.push_back(i0);
+			indices.push_back(i2);
+			indices.push_back(i3);
+		}
+	}
+
+	// construct and return the mesh
+	return Submesh {vertices, indices};
+}
 
 // Mesh
 Mesh Mesh::box(const glm::vec3 &center, const glm::vec3 &dim)
