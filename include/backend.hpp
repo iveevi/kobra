@@ -24,7 +24,7 @@
 #include <GLFW/glfw3.h>
 
 #define KOBRA_VALIDATION_LAYERS
-#define KOBRA_THROW_ERROR
+// #define KOBRA_THROW_ERROR
 
 // Engine headers
 #include "common.hpp"

@@ -1,7 +1,17 @@
 // Engine headers
+#include "../../include/allocator.hpp"
+#include "../../include/camera.hpp"
 #include "../../include/layers/gizmo.hpp"
 #include "../../include/vertex.hpp"
-#include "../../include/camera.hpp"
+
+// Overloaded new and delete operators
+void *operator new(size_t size) {
+	return kobra::Allocator::one().alloc(size);
+}
+
+void *operator new[](size_t size) {
+	return kobra::Allocator::one().alloc(size);
+}
 
 namespace kobra {
 
@@ -16,8 +26,6 @@ struct PushConstants {
 	alignas(16)
 	glm::vec3 color;
 };
-
-// TODO: custom memory allocator
 
 // Create rasterizer for translate gizmo
 static Rasterizer *make_translate_rasterizer(const Device &dev)

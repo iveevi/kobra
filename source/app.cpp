@@ -69,9 +69,6 @@ void App::run()
 
 	// Idle till all frames are finished
 	device.waitIdle();
-
-	// Cleanup
-	glfwDestroyWindow(window.handle);
 }
 
 // Manually terminate application
