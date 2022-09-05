@@ -1,114 +1,137 @@
-#include <cassert>
-#include <stack>
-
-#include "lexer.hpp"
-#include "value.hpp"
-#include "instruction.hpp"
+#include "grammar.hpp"
 
 std::string source = R"(
-# Defining components:
-200 * 16 + 10.0/2.5 - 1
-x = 200 * 16 + 10.0/2.5 - 1
-y = 200.0
-z = "Hello world!"
-w = 'Hello world!'
-)";
+if (false) {
+	int if_1 = 1
+} else if (true) {
+	int else_if_1 = 2
+} else if (true) {
+	int else_if_2 = 3
+} else {
+	int else_1 = 4
+}
 
-using _stack = std::vector <_value>;
+float x = 200 * 16 + 10.0/2.5 - 1
+int y = 20
+string z = "Hello world!"
+bool w = false
+
+float t = x * y
+)";
 
 machine m;
 
-using nabu::parser::rd::alias;
-using nabu::parser::rd::option;
-using nabu::parser::rd::repeat;
 using nabu::parser::rd::grammar;
-using nabu::parser::rd::grammar_action;
+using nabu::parser::_lexvalue;
 
-using p_string = option <double_str, single_str>;
-using primitive = option <p_int, p_float, p_string>;
+using clause = alias <lparen, expression, rparen>;
+using body = alias <lbrace, repeat <statement>, rbrace>;
+using conditional_body = option <statement, body>;
 
-using factor = option <primitive, identifier>;
-using mul_factor = alias <multiply, factor>;
-using div_factor = alias <divide, factor>;
+using if_branch = alias <k_if, clause, conditional_body>;
+using else_branch = alias <k_else, conditional_body>;
 
-using term = alias <factor, repeat <option <mul_factor, div_factor>>>;
-using add_term = alias <plus, term>;
-using sub_term = alias <minus, term>;
+using k_else_if = alias <k_else, k_if>;
+using else_if_branch = alias <k_else_if, clause, conditional_body>;
 
-using expression = alias <factor>;
-using statement = alias <identifier, equals, expression>;
-using input = statement;
+register(k_else_if)
+register(if_branch)
+register(else_branch)
+register(else_if_branch)
 
-register(p_string)
-register(primitive)
-register(factor)
-register(term)
-register(expression)
-register(statement)
-// register(input)
+// TODO: custom allocator for improved performance?
 
-#define enable(b) static constexpr bool available = b
+struct _addr_info {
+	int ncjmp;
+	int end;
+};
 
-// TODO: is_of_type for token and lexvalue interaction
-// Action for expression: push value to stack
-#define define_action(...)							\
-	template <>								\
-	struct grammar_action <__VA_ARGS__> {					\
-		enable(true);							\
-		static void action(parser::lexicon, parser::Queue &);		\
-	};									\
-										\
-	void grammar_action <__VA_ARGS__>					\
-		::action(parser::lexicon lptr, parser::Queue &q)
+std::map <_lexvalue *, _addr_info> branch_addresses;
 
-define_action(p_int)
+// Clauses are for braching and loops:
+// 	evaluate the expression in the clause and
+// 	only then possibly jump
+define_action(clause)
 {
-	_value v;
-	v.type = _value::Type::eInt;
-	v.data = get <int> (lptr);
-
-	push(m, v);
-	push(m, _instruction::Type::ePushTmp);
+	push(m, {_instruction::Type::eNcjmp, -1});
+	branch_addresses[lptr.get()] = {
+		(int) m.instructions.size() - 1, -1
+	};
 }
 
-define_action(p_float)
+define_action(if_branch)
 {
-	_value v;
-	v.type = _value::Type::eFloat;
-	v.data = get <float> (lptr);
+	push(m, {_instruction::Type::eJmp, -1});
 
-	push(m, v);
-	push(m, _instruction::Type::ePushTmp);
+	_lexvalue *clause = get <vec> (lptr)[1].get();
+	_addr_info &info = branch_addresses[clause];
+	info.end = m.instructions.size();
 }
 
-define_action(p_string)
+define_action(else_if_branch)
 {
-	_value v;
-	v.type = _value::Type::eString;
-	v.data = get <std::string> (lptr);
+	push(m, {_instruction::Type::eJmp, -1});
 
-	push(m, v);
-	push(m, _instruction::Type::ePushTmp);
+	_lexvalue *clause = get <vec> (lptr)[1].get();
+	_addr_info &info = branch_addresses[clause];
+	info.end = m.instructions.size();
 }
 
-define_action(add_term)
-{
-	push(m, _instruction::Type::eAdd);
-}
+using branch = alias <if_branch, repeat <else_if_branch>, option <else_branch>>;
 
-define_action(sub_term)
+define_action(branch)
 {
-	push(m, _instruction::Type::eSub);
-}
+	// Resolve jump addresses
+	std::cout << "lptr = " << lptr->str() << std::endl;
+	vec v = get <vec> (lptr);
 
-define_action(mul_factor)
-{
-	push(m, _instruction::Type::eMul);
-}
+	// Should always be 3 elements, even without else-if and else
+	assert(v.size() == 3);
 
-define_action(div_factor)
-{
-	push(m, _instruction::Type::eDiv);
+	// Get the clauses in the branch address map
+	std::vector <_lexvalue *> clauses;
+
+	// If-branch
+	_lexvalue *if_clause = get <vec> (v[0])[1].get();
+	clauses.push_back(if_clause);
+
+	// Else-if-branches
+	vec else_ifs = get <vec> (v[1]);
+	for (auto &else_if : else_ifs) {
+		_lexvalue *else_if_clause = get <vec> (else_if)[1].get();
+		clauses.push_back(else_if_clause);
+	}
+
+	// We don't need the else-branch clause,
+	// 	since it's always the last one
+	std::cout << "Clauses" << std::endl;
+	for (auto &clause : clauses)
+		std::cout << clause << std::endl;
+
+
+	std::cout << "Branch addresses" << std::endl;
+	for (auto &p : branch_addresses)
+		std::cout << p.first << " -> (" << p.second.ncjmp << ", " << p.second.end << ")" << std::endl;
+
+	// Fix negative conditional jump (eNcjmp) addresses
+	for (int i = 0; i < clauses.size(); i++) {
+		_addr_info &info = branch_addresses[clauses[i]];
+		int pc = info.ncjmp;
+		int address = info.end;
+
+		_instruction &instruction = m.instructions[pc];
+		assert(instruction.type == _instruction::Type::eNcjmp);
+		instruction.op1 = address;
+	}
+	
+	// Fix jump (eJmp) addresses after body of each branch
+	int end = m.instructions.size();
+	for (int i = 0; i < clauses.size(); i++) {
+		_addr_info &info = branch_addresses[clauses[i]];
+		_instruction &instruction = m.instructions[info.end - 1];
+		assert(instruction.type == _instruction::Type::eJmp);
+		instruction.op1 = end;
+	}
 }
 
 int main()
@@ -129,17 +152,17 @@ int main()
 			continue;
 		}
 
-		std::cout << "lexicon: " << lptr->str() << std::endl;
+		std::cout << "lexicon: " << lptr->name << " = " << lptr->str() << std::endl;
 	}
 
 #else
 
-	using mul_factor = alias <multiply, factor>;
-	using div_factor = alias <divide, factor>;
+	using g_input = grammar <branch>;
+	while (g_input::value(q));
 
-	using g_input = grammar <term, repeat <option <add_term, sub_term>>>;
-	// using g_input = grammar <alias <p_int, multiply, p_int>>;
-	g_input::value(q);
+	// Add an end instruction for padding
+	push(m, _instruction::Type::eEnd);
+
 	dump(m);
 
 	exec(m);

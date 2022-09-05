@@ -10,7 +10,8 @@ struct _value {
 	enum class Type {
 		eInt, eFloat, eBool, eString,
 		eList, eDictionary, eFuncion,
-		eVec2, eVec3, eVec4, eStruct
+		eVec2, eVec3, eVec4, eStruct,
+		eNone
 	} type;
 
 	static constexpr const char *type_str[] = {
@@ -78,7 +79,7 @@ inline std::string str(const _value &v)
 		out += ", value: " + std::to_string(v.get <float> ());
 		break;
 	case _value::Type::eBool:
-		out += ", value: " + std::to_string(v.get <bool> ());
+		out += ", value: " + std::string(v.get <bool> () ? "true" : "false");
 		break;
 	case _value::Type::eString:
 		out += ", value: " + v.get <std::string> ();
@@ -196,6 +197,8 @@ _value operator-(const _value &lhs, const _value &rhs)
 	);
 }
 
+#include <iostream>
+
 _value operator*(const _value &lhs, const _value &rhs)
 {
 	// Valid types
@@ -209,7 +212,7 @@ _value operator*(const _value &lhs, const _value &rhs)
 		return _value(enum_type <int> ::type, v_int_a * v_int_b);
 
 	else if (overload <int, float> (lhs, rhs, v_int_a, v_float_b))
-		return _value(enum_type <float> ::type, v_float_a * v_int_b);
+		return _value(enum_type <float> ::type, v_int_a * v_float_b);
 
 	else if (overload <float, float> (lhs, rhs, v_float_a, v_float_b))
 		return _value(enum_type <float> ::type, v_float_a * v_float_b);

@@ -16,27 +16,53 @@
 struct _instruction;
 
 struct machine {
+	// TODO: move to stack frame
 	std::vector <_value> stack;
 	std::queue <_value> tmp;
 
-	std::vector <_value> variables;
-	std::map <std::string, int> addresses;
+	// Stack frame
+	struct Frame {
+		std::vector <_value> mem;
+		std::vector <_value::Type> types;
+		std::map <std::string, int> map;
+
+		int add(const std::string &name, _value::Type type) {
+			int addr = mem.size();
+			map[name] = addr;
+			mem.push_back(_value());
+			types.push_back(type);
+			return addr;
+		}
+	} variables;
 
 	std::vector <_instruction> instructions;
 
 	uint32_t pc = 0;
 };
 
+void dump(const machine &);
+
+inline _value pop(machine &m)
+{
+	_value v = m.stack.back();
+	m.stack.pop_back();
+	return v;
+}
+
 // At most two operands
 struct _instruction {
 	enum class Type {
 		ePushTmp, ePushVar, ePop, eStore,
 		eAdd, eSub, eMul, eDiv, eMod,
+		eCjmp, eNcjmp, eJmp, eCall, eRet,
+		eEnd
 	} type;
 
 	static constexpr const char *type_str[] = {
 		"push_tmp", "push_var", "pop", "store",
 		"add", "sub", "mul", "div", "mod",
+		"cjmp", "ncjmp", "jmp", "call", "ret",
+		"end"
 	};
 
 	// Index of operands in stack
@@ -70,7 +96,7 @@ std::unordered_map <
 	}},
 
 	{_instruction::Type::ePushVar, [](machine &m, const _instruction &i) {
-		m.stack.push_back(m.variables[i.op1]);
+		m.stack.push_back(m.variables.mem[i.op1]);
 		m.pc++;
 	}},
 
@@ -80,8 +106,18 @@ std::unordered_map <
 	}},
 
 	{_instruction::Type::eStore, [](machine &m, const _instruction &i) {
-		m.variables[i.op1] = m.stack.back();
+		_value v = m.stack.back();
 		m.stack.pop_back();
+
+		// Make sure types are matching
+		if (v.type != m.variables.types[i.op1]) {
+			std::cerr << "Cannot assign value of type "
+				<< str(v.type) << " to type "
+				<< str(m.variables.types[i.op1]) << std::endl;
+			exit(1);
+		}
+
+		m.variables.mem[i.op1] = v;
 		m.pc++;
 	}},
 
@@ -128,6 +164,54 @@ std::unordered_map <
 		m.stack.push_back(v2/v1);
 		m.pc++;
 	}},
+
+	{_instruction::Type::eCjmp, [](machine &m, const _instruction &i) {
+		// Check previous stack value,
+		//   then jump if true
+		_value v = pop(m);
+
+		if (v.type != _value::Type::eBool) {
+			std::cerr << "Conditional clauses must be of type bool" << std::endl;
+			std::cerr << "\tgot: " << str(v) << std::endl;
+			exit(1);
+		}
+
+		if (v.get <bool> ()) {
+			m.pc = i.op1;
+		} else {
+			m.pc++;
+		}
+	}},
+
+	{_instruction::Type::eNcjmp, [](machine &m, const _instruction &i) {
+		// Check previous stack value,
+		//   then jump if false
+		_value v = pop(m);
+
+		if (v.type != _value::Type::eBool) {
+			std::cerr << "Conditional clauses must be of type bool" << std::endl;
+			std::cerr << "\tncjmp got: " << str(v) << " @" << m.pc << std::endl;
+			dump(m);
+			exit(1);
+		}
+
+		std::cout << "ncjmp: " << v.get <bool> () << std::endl;
+		if (!v.get <bool> ()) {
+			std::cout << "jumping to " << i.op1 << std::endl;
+			m.pc = i.op1;
+		} else {
+			std::cout << "not jumping" << std::endl;
+			m.pc++;
+		}
+	}},
+
+	{_instruction::Type::eJmp, [](machine &m, const _instruction &i) {
+		m.pc = i.op1;
+	}},
+
+	{_instruction::Type::eEnd, [](machine &m, const _instruction &i) {
+		m.pc++;
+	}}
 };
 
 inline void push(machine &m, const _instruction &i)
@@ -143,14 +227,23 @@ inline void push(machine &m, const _value &v)
 inline void dump(const machine &m)
 {
 	std::cout << "=== Machine Dump ===" << std::endl;
+
+	auto q = m.tmp;
+	std::cout << "Temporary Queue:" << std::endl;
+	while (!q.empty()) {
+		std::cout << "\t" << str(q.front()) << std::endl;
+		q.pop();
+	}
+
 	std::cout << "Stack size: " << m.stack.size() << std::endl;
 	for (int i = 0; i < m.stack.size(); i++)
 		std::cout << "[" << i << "]: " << str(m.stack[i]) << std::endl;
 
-	std::cout << "\nVariables: " << m.addresses.size() << std::endl;
-	for (auto &p : m.addresses) {
-		std::cout << p.first << " @ " << p.second
-			<< " = " << str(m.variables[p.second]) << std::endl;
+	std::cout << "\nVariables: " << m.variables.map.size() << std::endl;
+	for (auto &p : m.variables.map) {
+		std::cout << p.first << " (addr=" << p.second
+			<< ", type=" << str(m.variables.types[p.second]) << ")"
+			<< " = " << str(m.variables.mem[p.second]) << std::endl;
 	}
 
 	std::cout << "\nInstructions: " << m.instructions.size() << std::endl;
