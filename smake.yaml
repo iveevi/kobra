@@ -49,7 +49,8 @@ definitions:
     glslang,
     SPIRV,
     OSDependent,
-    OGLCompiler'
+    OGLCompiler,
+    ffi'
 
 builds:
   - optix_ptx_debug:
@@ -100,11 +101,19 @@ builds:
     - idirs: includes
     - libraries: libs
     - flags: '-std=c++17 -Wall -Werror'
+  - arbok_libs:
+    - sources: experimental/io.cpp
+    - idirs: includes
+    - flags: '-fPIC -std=c++17'
+    - options: 'dll, output_dir=./bin/lib, target_name=libio_arbok.so'
+    - compiler: 'clang++'
   - experimental_normal:
     - sources: experimental/main.cpp
     - idirs: includes
     - flags: '-std=c++17 -Xcompiler -fpermissive'
     - libraries: libs
+    - dependencies: arbok_libs
+    - compiler: 'clang++'
   - experimental_debug:
     - sources: experimental/main.cpp
     - idirs: includes

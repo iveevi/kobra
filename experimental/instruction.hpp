@@ -10,16 +10,171 @@
 #include <unordered_map>
 #include <vector>
 
+// DLL headers
+#include <ffi.h>
+#include <dlfcn.h>
+
 // Engine headers
 #include "value.hpp"
 
 // Abstraction of the machine state
 struct _instruction;
 
+// Function that was imported via dll/ffi
+struct _external_function {
+	// Signature
+	std::string name;
+	_value::Type return_type;
+	std::vector <_value::Type> argument_types;
+
+	// Handles
+	void *handle = nullptr;
+	ffi_cif cif;
+};
+
+inline _value::Type get_type(const std::string &str)
+{
+	bool variadic = false;
+
+	std::string type_str = str;
+	if (str.substr(str.size() - 3) == "...") {
+		type_str = str.substr(0, str.size() - 3);
+		variadic = true;
+	}
+
+	int type = -1;
+	for (int i = 0; i <= (int) _value::Type::eStruct; i++) {
+		if (type_str == _value::type_str[i])
+			type = i;
+	}
+
+	if (type == -1)
+		throw std::runtime_error("Invalid type: " + str);
+
+	return (_value::Type) (type + variadic * _value::Type::eVariadic);
+}
+
+inline ffi_type *get_ffi_type(_value::Type type)
+{
+	switch (type) {
+	case _value::Type::eVoid:
+		return &ffi_type_void;
+	case _value::Type::eGeneric:
+		return &ffi_type_pointer;
+	case _value::Type::eGeneric + _value::Type::eVariadic:
+		return &ffi_type_pointer;
+	case _value::Type::eInt:
+		return &ffi_type_sint32;
+	case _value::Type::eFloat:
+		return &ffi_type_float;
+	case _value::Type::eBool:
+		return &ffi_type_uint8;
+	case _value::Type::eString:
+		return &ffi_type_pointer;
+	default:
+		throw std::runtime_error("Invalid argument type: " + std::string(_value::type_str[(int) type]));
+	}
+
+	return nullptr;
+}
+
+inline _external_function compile_signature(const std::string &sig, void *lib)
+{
+	_external_function ftn;
+
+	// Parse signature
+	int space = sig.find(' ');
+	int lparen = sig.find('(');
+	int rparen = sig.find(')');
+	
+	std::string ret_type = sig.substr(0, space);
+	std::string func_name = sig.substr(space + 1, lparen - space - 1);
+	std::string arg_types = sig.substr(lparen + 1, rparen - lparen - 1) + ',';
+
+	std::cout << "ret_type = " << ret_type << std::endl;
+	std::cout << "func_name = " << func_name << std::endl;
+	std::cout << "arg_types = " << arg_types << std::endl;
+
+	ftn.name = func_name;
+	ftn.return_type = get_type(ret_type);
+	
+	std::string arg_type;
+	for (int i = 0; i < arg_types.size(); i++) {
+		char c = arg_types[i];
+		if (c == ',') {
+			_value::Type type = get_type(arg_type);
+			ftn.argument_types.push_back(type);
+			arg_type.clear();
+		} else {
+			arg_type += c;
+		}
+	}
+
+	// Load function pointer and ffi
+	ftn.handle = dlsym(lib, func_name.c_str());
+	if (!ftn.handle) {
+		fprintf(stderr, "dlsym error: %s\n", dlerror());
+		exit(1);
+	}
+
+	return ftn;
+}
+
+inline _value call(_external_function &ftn, std::vector <_value> &args)
+{
+	// Prepare ffi
+	// TODO: how to do this only once?
+	ffi_type *ffi_return_type = get_ffi_type(ftn.return_type);
+	ffi_return_type = &ffi_type_void;
+
+	std::vector <ffi_type *> ffi_argument_types;
+	for (int i = 0; i < ftn.argument_types.size(); i++) {
+		ffi_type *type = get_ffi_type(ftn.argument_types[i]);
+		ffi_argument_types.push_back(&ffi_type_pointer);
+	}
+
+	ffi_type *arr[] = { &ffi_type_pointer };
+	ffi_status status = ffi_prep_cif(&ftn.cif,
+		FFI_DEFAULT_ABI,
+		ftn.argument_types.size(),
+		ffi_return_type,
+		ffi_argument_types.data()
+	);
+
+	if (status != FFI_OK) {
+		fprintf(stderr, "ffi_prep_cif error: %d\n", status);
+		exit(1);
+	}
+
+	std::vector <const _value *> gen_ptrs;
+	std::vector <void *> ffi_args;
+	
+	for (int i = 0; i < args.size(); i++) {
+		_value::Type arg_type = ftn.argument_types[i];
+		if (arg_type == _value::Type::eGeneric) {
+			gen_ptrs.push_back(&args[i]);
+			ffi_args.push_back(&gen_ptrs.back());
+		} else {
+			ffi_args.push_back((void *) &args[i].data);
+		}
+	}
+
+	ffi_call(&ftn.cif, FFI_FN(ftn.handle), nullptr, ffi_args.data());
+
+	return _value {_value::Type::eVoid, 0};
+}
+
 struct machine {
 	// TODO: move to stack frame
 	std::vector <_value> stack;
 	std::vector <_value> tmp;
+
+	// Functions
+	struct {
+		std::unordered_map <std::string, int> map_ext;
+
+		std::vector <_external_function> externals;
+	} functions;
 
 	// Stack frame
 	struct Frame {
@@ -36,6 +191,7 @@ struct machine {
 		}
 	} variables;
 
+	// Instructions
 	std::vector <_instruction> instructions;
 
 	uint32_t pc = 0;
@@ -55,15 +211,15 @@ struct _instruction {
 	enum class Type {
 		ePushTmp, ePushVar, ePop, eStore,
 		eAdd, eSub, eMul, eDiv, eMod,
-		eCjmp, eNcjmp, eJmp, eCall, eRet,
-		eEnd
+		eCjmp, eNcjmp, eJmp, eCall, eCallExt,
+		eRet, eEnd
 	} type;
 
 	static constexpr const char *type_str[] = {
 		"push_tmp", "push_var", "pop", "store",
 		"add", "sub", "mul", "div", "mod",
-		"cjmp", "ncjmp", "jmp", "call", "ret",
-		"end"
+		"cjmp", "ncjmp", "jmp", "call", "call_ext",
+		"ret", "end"
 	};
 
 	// Operands
@@ -228,6 +384,30 @@ std::unordered_map <
 	{_instruction::Type::eJmp, [](machine &m, const _instruction &i) {
 		assert(std::holds_alternative <int> (i.op1));
 		m.pc = std::get <int> (i.op1);
+	}},
+
+	{_instruction::Type::eCallExt, [](machine &m, const _instruction &i) {
+		assert(std::holds_alternative <int> (i.op1));
+		assert(std::holds_alternative <int> (i.op2));
+
+		int addr = std::get <int> (i.op1);
+		int nargs = std::get <int> (i.op2);
+
+		// Get function
+		auto &f = m.functions.externals[addr];
+
+		// Get arguments
+		std::vector <_value> args;
+		for (int i = 0; i < nargs; i++)
+			args.push_back(pop(m));
+
+		// Call function
+		_value ret = call(f, args);
+
+		// Push return value
+		if (ret.type != _value::Type::eVoid)
+			m.stack.push_back(ret);
+		m.pc++;
 	}},
 
 	{_instruction::Type::eEnd, [](machine &m, const _instruction &i) {

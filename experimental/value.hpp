@@ -7,15 +7,17 @@
 #include <stdexcept>
 
 struct _value {
-	enum class Type {
-		eInt, eFloat, eBool, eString,
-		eList, eDictionary, eFuncion,
+	enum Type : int {
+		eGeneric, eVoid, eInt, eFloat,
+		eBool, eString, eList,
+		eDictionary, eFuncion,
 		eVec2, eVec3, eVec4, eStruct,
-		eNone
+		eVariadic
 	} type;
 
 	static constexpr const char *type_str[] = {
-		"int", "float", "bool", "string",
+		"__value__", "void", "int", "float",
+		"bool", "string",
 		"list", "dictionary", "function",
 		"vec2", "vec3", "vec4", "struct"
 	};

@@ -16,8 +16,8 @@ inline std::string to_string(const std::string &s) {
 
 inline std::string convert_string(_value::Type e)
 {
-	if (e == _value::Type::eNone)
-		return "none";
+	if (e > _value::Type::eStruct)
+		return "?";
 
 	return _value::type_str[(int) e];
 }
@@ -37,11 +37,11 @@ inline std::string strip_quotes(const std::string &s) {
 
 inline _value::Type to_type(const std::string &s)
 {
-	for (int i = 0; i < (int)_value::Type::eNone; i++)
+	for (int i = 0; i <= (int)_value::Type::eStruct; i++)
 		if (s == _value::type_str[i])
 			return (_value::Type) i;
 
-	return _value::Type::eNone;
+	return _value::Type::eVoid;
 }
 
 //////////////////

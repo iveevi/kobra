@@ -22,3 +22,6 @@
 [submodule "thirdparty/nabu"]
 	path = thirdparty/nabu
 	url = https://github.com/vedavamadathil/nabu.git
+[submodule "thirdparty/libffi"]
+	path = thirdparty/libffi
+	url = https://github.com/libffi/libffi.git

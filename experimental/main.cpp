@@ -1,6 +1,11 @@
 #include "grammar.hpp"
+#include "instruction.hpp"
+#include "library.hpp"
+
+#include <ffi.h>
 
 std::string source = R"(
+print('hello world')
 if (false)
 	int if_1 = 1
 else
@@ -129,9 +134,58 @@ define_action(branch)
 	}
 }
 
+using function_call = alias <identifier, lparen, expression, rparen>;
+
+define_action(function_call)
+{
+	vec v = get <vec> (lptr);
+	std::string name = get <std::string> (v[0]);
+	assert(v.size() >= 3);
+
+	int nargs = v.size() - 3;
+	if (m.functions.map_ext.count(name) > 0) {
+		// External function
+		int index = m.functions.map_ext[name];
+		push(m, {_instruction::Type::eCallExt, index, nargs});
+	} else {
+		std::cout << "Unknown function: " << name << std::endl;
+	}
+}
+
 int main()
 {
 	using namespace nabu;
+	
+	// Load libraries
+	// TODO: refactor to std
+	void *libhandle = dlopen("./bin/lib/libio_arbok.so", RTLD_LAZY);
+	if (!libhandle) {
+		fprintf(stderr, "dlopen error: %s\n", dlerror());
+		exit(1);
+	}
+
+	printf("dlopen success: handle %p\n", libhandle);
+
+	typedef void (*importer_t)(std::vector <std::string> &);
+	importer_t func = (importer_t) dlsym(libhandle, "import");
+	if (!func) {
+		fprintf(stderr, "dlsym error: %s\n", dlerror());
+		exit(1);
+	}
+
+	printf("dlsym success: func %p\n", func);
+
+	std::vector <std::string> args;
+	std::cout << "&args = " << &args << std::endl;
+	func(args);
+
+	for (auto sig : args) {
+		auto ext = compile_signature(sig, libhandle);
+		m.functions.map_ext.insert({ext.name, m.functions.externals.size()});
+		m.functions.externals.push_back(ext);
+		std::cout << "Successfully compiled signature: " << sig << std::endl;
+	}
+
 
 	parser::Queue q = parser::lexq <identifier> (source);
 
@@ -152,8 +206,9 @@ int main()
 
 #else
 
-	using g_input = grammar <branch>;
-	while (g_input::value(q));
+	using g_input = grammar <function_call>;
+	g_input::value(q);
+	// while (g_input::value(q));
 
 	// Add an end instruction for padding
 	push(m, _instruction::Type::eEnd);
