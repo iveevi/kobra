@@ -80,8 +80,8 @@ define_action(p_int)
 	v.type = _value::Type::eInt;
 	v.data = get <int> (lptr);
 
+	push(m, {_instruction::Type::ePushTmp, (int) m.tmp.size()});
 	push(m, v);
-	push(m, _instruction::Type::ePushTmp);
 }
 
 define_action(p_float)
@@ -90,8 +90,8 @@ define_action(p_float)
 	v.type = _value::Type::eFloat;
 	v.data = get <float> (lptr);
 
+	push(m, {_instruction::Type::ePushTmp, (int) m.tmp.size()});
 	push(m, v);
-	push(m, _instruction::Type::ePushTmp);
 }
 
 define_action(p_string)
@@ -100,8 +100,8 @@ define_action(p_string)
 	v.type = _value::Type::eString;
 	v.data = get <std::string> (lptr);
 
+	push(m, {_instruction::Type::ePushTmp, (int) m.tmp.size()});
 	push(m, v);
-	push(m, _instruction::Type::ePushTmp);
 }
 
 define_action(p_bool)
@@ -110,12 +110,13 @@ define_action(p_bool)
 	v.type = _value::Type::eBool;
 	v.data = get <bool> (lptr);
 
+	push(m, {_instruction::Type::ePushTmp, (int) m.tmp.size()});
 	push(m, v);
-	push(m, _instruction::Type::ePushTmp);
 }
 
 define_action(add_term)
 {
+	std::cout << "add: " << lptr->str() << std::endl;
 	push(m, _instruction::Type::eAdd);
 }
 

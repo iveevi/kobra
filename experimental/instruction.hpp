@@ -2,12 +2,13 @@
 #define INSTRUCTION_H_
 
 // Standard headers
+#include <cassert>
 #include <functional>
 #include <iostream>
 #include <map>
+#include <queue>
 #include <unordered_map>
 #include <vector>
-#include <queue>
 
 // Engine headers
 #include "value.hpp"
@@ -18,7 +19,7 @@ struct _instruction;
 struct machine {
 	// TODO: move to stack frame
 	std::vector <_value> stack;
-	std::queue <_value> tmp;
+	std::vector <_value> tmp;
 
 	// Stack frame
 	struct Frame {
@@ -65,10 +66,13 @@ struct _instruction {
 		"end"
 	};
 
-	// Index of operands in stack
-	int op1, op2;
+	// Operands
+	std::variant <int, _value> op1;
+	std::variant <int, _value> op2;
 
-	_instruction(Type t, int o1 = -1, int o2 = -1)
+	_instruction(Type t,
+			std::variant <int, _value> o1 = -1,
+			std::variant <int, _value> o2 = -1)
 			: type(t), op1(o1), op2(o2) {}
 };
 
@@ -76,10 +80,19 @@ inline std::string str(const _instruction &i)
 {
 	std::string out = "(type: ";
 	out += _instruction::type_str[(int)i.type];
+
 	out += ", op1: ";
-	out += std::to_string(i.op1);
+	if (std::holds_alternative <int> (i.op1))
+		out += std::to_string(std::get <int> (i.op1));
+	else
+		out += str(std::get <_value> (i.op1));
+
 	out += ", op2: ";
-	out += std::to_string(i.op2);
+	if (std::holds_alternative <int> (i.op2))
+		out += std::to_string(std::get <int> (i.op2));
+	else
+		out += str(std::get <_value> (i.op2));
+
 	out += ")";
 	return out;
 }
@@ -90,13 +103,16 @@ std::unordered_map <
 	std::function <void (machine &, const _instruction &)>
 > exec_table {
 	{_instruction::Type::ePushTmp, [](machine &m, const _instruction &i) {
-		m.stack.push_back(m.tmp.front());
-		m.tmp.pop();
+		assert(std::holds_alternative <int> (i.op1));
+		int addr = std::get <int> (i.op1);
+		m.stack.push_back(m.tmp[addr]);
 		m.pc++;
 	}},
 
 	{_instruction::Type::ePushVar, [](machine &m, const _instruction &i) {
-		m.stack.push_back(m.variables.mem[i.op1]);
+		assert(std::holds_alternative <int> (i.op1));
+		int addr = std::get <int> (i.op1);
+		m.stack.push_back(m.variables.mem[addr]);
 		m.pc++;
 	}},
 
@@ -106,18 +122,21 @@ std::unordered_map <
 	}},
 
 	{_instruction::Type::eStore, [](machine &m, const _instruction &i) {
+		assert(std::holds_alternative <int> (i.op1));
+		int addr = std::get <int> (i.op1);
+
 		_value v = m.stack.back();
 		m.stack.pop_back();
 
 		// Make sure types are matching
-		if (v.type != m.variables.types[i.op1]) {
+		if (v.type != m.variables.types[addr]) {
 			std::cerr << "Cannot assign value of type "
 				<< str(v.type) << " to type "
-				<< str(m.variables.types[i.op1]) << std::endl;
+				<< str(m.variables.types[addr]) << std::endl;
 			exit(1);
 		}
 
-		m.variables.mem[i.op1] = v;
+		m.variables.mem[addr] = v;
 		m.pc++;
 	}},
 
@@ -176,8 +195,10 @@ std::unordered_map <
 			exit(1);
 		}
 
+		assert(std::holds_alternative <int> (i.op1));
+		int addr = std::get <int> (i.op1);
 		if (v.get <bool> ()) {
-			m.pc = i.op1;
+			m.pc = addr;
 		} else {
 			m.pc++;
 		}
@@ -195,18 +216,18 @@ std::unordered_map <
 			exit(1);
 		}
 
-		std::cout << "ncjmp: " << v.get <bool> () << std::endl;
-		if (!v.get <bool> ()) {
-			std::cout << "jumping to " << i.op1 << std::endl;
-			m.pc = i.op1;
-		} else {
-			std::cout << "not jumping" << std::endl;
+		assert(std::holds_alternative <int> (i.op1));
+		int addr = std::get <int> (i.op1);
+		
+		if (!v.get <bool> ())
+			m.pc = addr;
+		else
 			m.pc++;
-		}
 	}},
 
 	{_instruction::Type::eJmp, [](machine &m, const _instruction &i) {
-		m.pc = i.op1;
+		assert(std::holds_alternative <int> (i.op1));
+		m.pc = std::get <int> (i.op1);
 	}},
 
 	{_instruction::Type::eEnd, [](machine &m, const _instruction &i) {
@@ -221,7 +242,7 @@ inline void push(machine &m, const _instruction &i)
 
 inline void push(machine &m, const _value &v)
 {
-	m.tmp.push(v);
+	m.tmp.push_back(v);
 }
 
 inline void dump(const machine &m)
@@ -229,13 +250,11 @@ inline void dump(const machine &m)
 	std::cout << "=== Machine Dump ===" << std::endl;
 
 	auto q = m.tmp;
-	std::cout << "Temporary Queue:" << std::endl;
-	while (!q.empty()) {
-		std::cout << "\t" << str(q.front()) << std::endl;
-		q.pop();
-	}
+	std::cout << "Temporaries:" << std::endl;
+	for (auto &v : q)
+		std::cout << "\t" << str(v) << std::endl;
 
-	std::cout << "Stack size: " << m.stack.size() << std::endl;
+	std::cout << "\nStack size: " << m.stack.size() << std::endl;
 	for (int i = 0; i < m.stack.size(); i++)
 		std::cout << "[" << i << "]: " << str(m.stack[i]) << std::endl;
 

@@ -1,15 +1,10 @@
 #include "grammar.hpp"
 
 std::string source = R"(
-if (false) {
+if (false)
 	int if_1 = 1
-} else if (true) {
-	int else_if_1 = 2
-} else if (true) {
-	int else_if_2 = 3
-} else {
+else
 	int else_1 = 4
-}
 
 float x = 200 * 16 + 10.0/2.5 - 1
 int y = 20
@@ -77,7 +72,7 @@ define_action(else_if_branch)
 	info.end = m.instructions.size();
 }
 
-using branch = alias <if_branch, repeat <else_if_branch>, option <else_branch>>;
+using branch = alias <if_branch, repeat <else_if_branch>, option <else_branch, void>>;
 
 define_action(branch)
 {
