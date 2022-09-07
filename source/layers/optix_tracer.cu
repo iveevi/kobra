@@ -12,6 +12,7 @@
 #include "../../include/camera.hpp"
 #include "../../include/texture_manager.hpp"
 #include "../../include/formats.hpp"
+#include "../../include/cuda/color.cuh"
 
 #include <stb_image_write.h>
 
@@ -167,7 +168,9 @@ inline float3 to_f3(const glm::vec3 &v)
 	return make_float3(v.x, v.y, v.z);
 }
 
-inline uint32_t to_ui32(uchar4 v)
+__forceinline__
+__host__ __device__
+uint32_t to_ui32(uchar4 v)
 {
 	// Reversed
 	return (v.w << 24) | (v.z << 16) | (v.y << 8) | v.x;
@@ -662,8 +665,41 @@ void OptixTracer::_initialize_optix()
 	_optix_sbt.hitgroupRecordStrideInBytes = sizeof(HitGroupSbtRecord);
 	_optix_sbt.hitgroupRecordCount         = 1;
 
-	// Create stream
+	// Optix denoiser
+	OptixDenoiserOptions denoiser_options = {};
+	OPTIX_CHECK(optixDenoiserCreate(_optix_ctx,
+		OPTIX_DENOISER_MODEL_KIND_LDR,
+		&denoiser_options,
+		&_optix_denoiser
+	));
+
+	// Optix denoiser size
+	OptixDenoiserSizes denoiser_sizes;
+	OPTIX_CHECK(optixDenoiserComputeMemoryResources(
+		_optix_denoiser,
+		width, height,
+		&denoiser_sizes
+	));
+
+	int scratch_size = std::max(
+		denoiser_sizes.withOverlapScratchSizeInBytes,
+		denoiser_sizes.withoutOverlapScratchSizeInBytes
+	);
+
+	_buffers.denoiser_state = std::move(cuda::BufferData(denoiser_sizes.stateSizeInBytes));
+	_buffers.denoiser_scratch = std::move(cuda::BufferData(scratch_size));
+
+	// Create stream for OptiX
 	CUDA_CHECK(cudaStreamCreate(&_optix_stream));
+
+	// Set up denoiser
+	OPTIX_CHECK(optixDenoiserSetup(_optix_denoiser, _optix_stream,
+		width, height,
+		_buffers.denoiser_state.dev(),
+		_buffers.denoiser_state.size(),
+		_buffers.denoiser_scratch.dev(),
+		_buffers.denoiser_scratch.size()
+	));
 
 	KOBRA_LOG_FUNC(Log::OK) << "Initialized OptiX and relevant structures" << std::endl;
 }
@@ -1208,6 +1244,23 @@ static void generate_pixel_offsets(int N, std::vector <float> &x, std::vector <f
 	}
 }
 
+__global__ void compute_pixel_values(float4 *pixels, uint32_t *target,
+		int width, int height)
+{
+	int x = blockIdx.x * blockDim.x + threadIdx.x;
+	int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if (x >= width || y >= height)
+		return;
+
+	int in_idx = y * width + x;
+	int out_idx = (height - y - 1) * width + x;
+
+	float4 pixel = pixels[in_idx];
+	uchar4 color = cuda::make_color(pixel);
+	target[out_idx] = to_ui32(color);
+}
+
 void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 {
 	// TODO: refresh every x samples
@@ -1223,12 +1276,14 @@ void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 
 	optix_rt::Params params;
 
-	params.pbuffer = (float3 *) _buffers.pbuffer;
+	params.pbuffer = (float4 *) _buffers.pbuffer;
+	params.nbuffer = (float4 *) _buffers.nbuffer;
+	params.abuffer = (float4 *) _buffers.abuffer;
 	
 	params.xoffset = (float *) _buffers.xoffset;
 	params.yoffset = (float *) _buffers.yoffset;
 
-	params.image        = _result_buffer.dev <uchar4> ();
+	// params.image        = _result_buffer.dev <uchar4> ();
 	params.image_width  = width;
 	params.image_height = height;
 
@@ -1265,17 +1320,91 @@ void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 
 	CUDA_CHECK( cudaFree( reinterpret_cast<void*>( d_param ) ) );
 
-	// Copy result to buffer
-	std::vector <uchar4> ptr = _result_buffer.download <uchar4> ();
-	// uchar4 *ptr = _output_buffer.getHostPointer();
+	CUdeviceptr d_result = 0;
 
-	_output.resize(width * height);
-	for (int x = 0; x < width; x++) {
+	if (denoiser_enabled) {
+		// Denoise
+		OptixImage2D color_input;
+		color_input.data = _buffers.pbuffer;
+		color_input.width = width;
+		color_input.height = height;
+		color_input.rowStrideInBytes = width * sizeof(float4);
+		color_input.pixelStrideInBytes = sizeof(float4);
+		color_input.format = OPTIX_PIXEL_FORMAT_FLOAT4;
+
+		OptixImage2D normal_input;
+		normal_input.data = _buffers.nbuffer;
+		normal_input.width = width;
+		normal_input.height = height;
+		normal_input.rowStrideInBytes = width * sizeof(float4);
+		normal_input.pixelStrideInBytes = sizeof(float4);
+		normal_input.format = OPTIX_PIXEL_FORMAT_FLOAT4;
+
+		OptixImage2D albedo_input;
+		albedo_input.data = _buffers.abuffer;
+		albedo_input.width = width;
+		albedo_input.height = height;
+		albedo_input.rowStrideInBytes = width * sizeof(float4);
+		albedo_input.pixelStrideInBytes = sizeof(float4);
+		albedo_input.format = OPTIX_PIXEL_FORMAT_FLOAT4;
+
+		OptixImage2D output;
+		output.data = _buffers.fbuffer;
+		output.width = width;
+		output.height = height;
+		output.rowStrideInBytes = width * sizeof(float4);
+		output.pixelStrideInBytes = sizeof(float4);
+		output.format = OPTIX_PIXEL_FORMAT_FLOAT4;
+
+		// Invoke the denoiser
+		OptixDenoiserParams denoiser_params = {};
+
+		OptixDenoiserGuideLayer guide_layer;
+		guide_layer.normal = normal_input;
+		guide_layer.albedo = albedo_input;
+
+		OptixDenoiserLayer layer;
+		layer.input = color_input;
+		layer.output = output;
+
+		OPTIX_CHECK(optixDenoiserInvoke(_optix_denoiser, _optix_stream,
+			&denoiser_params,
+			_buffers.denoiser_state.dev(),
+			_buffers.denoiser_state.size(),
+			&guide_layer,
+			&layer, 1,
+			0, 0,
+			_buffers.denoiser_scratch.dev(),
+			_buffers.denoiser_scratch.size()
+		));
+
+		d_result = _buffers.fbuffer;
+	} else {
+		d_result = _buffers.pbuffer;
+	}
+	
+	// std::vector <float4> data;
+	// cuda::copy(data, d_result, width * height);
+
+	// Conversion kernel
+	dim3 block(16, 16);
+	dim3 grid((width + block.x - 1)/block.x, (height + block.y - 1)/block.y);
+	compute_pixel_values <<<grid, block>>>
+		((float4 *) d_result, (uint32_t *) _buffers.truncated, width, height);
+
+	// TODO: multithread
+	if (_output.size() != width * height)
+		_output.resize(width * height);
+
+	cuda::copy(_output, _buffers.truncated, width * height);
+
+	/* for (int x = 0; x < width; x++) {
 		for (int y = 0; y < height; y++) {
 			int inv_y = height - y - 1;
-			_output[x + inv_y * width] = to_ui32(ptr[x + y * width]);
+			uchar4 color = cuda::make_color(data[x + y * width]);
+			_output[x + inv_y * width] = to_ui32(color);
 		}
-	}
+	} */
 }
 
 }

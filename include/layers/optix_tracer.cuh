@@ -35,6 +35,8 @@ class OptixTracer {
 	OptixModule			_optix_module = nullptr;
 	OptixPipeline			_optix_pipeline = nullptr;
 	OptixShaderBindingTable		_optix_sbt;
+	OptixDenoiser			_optix_denoiser = nullptr;
+
 	CUstream			_optix_stream;
 
 	// OptiX acceleration structures
@@ -60,16 +62,26 @@ class OptixTracer {
 		CUdeviceptr		quad_lights;
 		CUdeviceptr		tri_lights;
 
-		CUdeviceptr		pbuffer;
+		CUdeviceptr		pbuffer; // Color buffer
+		CUdeviceptr		nbuffer; // Normal buffer
+		CUdeviceptr		abuffer; // Albedo buffer
+
+		CUdeviceptr		fbuffer; // Final buffer
+
+		CUdeviceptr		truncated;
+
 		CUdeviceptr		xoffset;
 		CUdeviceptr		yoffset;
+
+		cuda::BufferData	denoiser_state;
+		cuda::BufferData	denoiser_scratch;
 
 		std::vector <float>	h_xoffsets;
 		std::vector <float>	h_yoffsets;
 	} _buffers;
 
 	// Output resources
-	cuda::BufferData		_result_buffer;
+	// cuda::BufferData		_result_buffer;
 	std::vector <uint32_t>		_output;
 
 	// Images
@@ -178,15 +190,22 @@ public:
 	Timer timer;
 	int _accumulated = 0;
 
+	bool denoiser_enabled = true;
+
 	// Constructor
 	OptixTracer(const Context &ctx, const vk::AttachmentLoadOp &load,
 			int width_ = 1000, int height_ = 1000)
 			: _ctx(ctx),
 			width(width_),
 			height(height_) {
-		// Initialize buffers
-		_result_buffer = std::move(cuda::BufferData(width * height * sizeof(uint32_t)));
-		_buffers.pbuffer = cuda::alloc(width * height * sizeof(float3));
+		// Per pixel buffers
+		_buffers.pbuffer = cuda::alloc(width * height * sizeof(float4));
+		_buffers.nbuffer = cuda::alloc(width * height * sizeof(float4));
+		_buffers.abuffer = cuda::alloc(width * height * sizeof(float4));
+		_buffers.fbuffer = cuda::alloc(width * height * sizeof(float4));
+		
+		_buffers.truncated = cuda::alloc(width * height * sizeof(uint32_t));
+
 		_buffers.xoffset = cuda::alloc(width * height * sizeof(float));
 		_buffers.yoffset = cuda::alloc(width * height * sizeof(float));
 		_buffers.h_xoffsets.resize(width * height);
@@ -244,7 +263,8 @@ public:
 	std::vector <uint8_t> capture() {
 		// Copy from result buffer
 		auto result = std::vector <uint8_t> (width * height * 4);
-		_result_buffer.download(result);
+		// TODO: method to retrieve data from buffer
+		// _result_buffer.download(result);
 		return result;
 	}
 };

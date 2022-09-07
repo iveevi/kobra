@@ -70,6 +70,8 @@ static __forceinline__ __device__ void make_ray
 
 // Ray packet data
 struct RayPacket {
+	float3 diffuse;
+	float3 normal;
 	float3 throughput;
 	float3 value;
 	float3 seed;
@@ -85,6 +87,8 @@ extern "C" __global__ void __raygen__rg()
 
 	// Pack payload
 	RayPacket ray_packet;
+	ray_packet.diffuse = make_float3(0.0f);
+	ray_packet.normal = make_float3(0.0f);
 	ray_packet.throughput = {1.0f, 1.0f, 1.0f};
 	ray_packet.value = {0.0f, 0.0f, 0.0f};
 	ray_packet.seed = {float(idx.x), float(idx.y), params.time};
@@ -111,16 +115,20 @@ extern "C" __global__ void __raygen__rg()
 	);
 
 	// Check value
-	float3 pixel = ray_packet.value;
+	float4 pixel = make_float4(ray_packet.value);
+	float4 normal = make_float4(ray_packet.normal);
+	float4 diffuse = make_float4(ray_packet.diffuse);
+
 	// assert(!isnan(pixel.x) && !isnan(pixel.y) && !isnan(pixel.z));
 	if (isnan(pixel.x) || isnan(pixel.y) || isnan(pixel.z))
-		pixel = {0.0f, 0.0f, 0.0f};
+		pixel = {0.0f, 0.0f, 0.0f, 0.0f};
 
 	// Record the results
 	int index = idx.x + params.image_width * idx.y;
-	// params.pbuffer[index] = ray_packet.value;
+
 	params.pbuffer[index] = (pixel + params.pbuffer[index] * params.accumulated)/(params.accumulated + 1);
-	params.image[index] = kobra::cuda::make_color(params.pbuffer[index]);
+	params.nbuffer[index] = (normal + params.nbuffer[index] * params.accumulated)/(params.accumulated + 1);
+	params.abuffer[index] = (diffuse + params.abuffer[index] * params.accumulated)/(params.accumulated + 1);
 }
 
 extern "C" __global__ void __miss__radiance()
@@ -276,7 +284,7 @@ float3 eval <FresnelSpecular>
 	float eta_i = entering ? 1 : mat.refraction;
 	float eta_t = entering ? mat.refraction : 1;
 
-	float F = kobra::cuda::FrDielectric(dot(n, wo), eta_i, eta_t);
+	float F = kobra::cuda::FrDielectric(dot(wo, n), eta_i, eta_t);
 
 	seed = random3(seed);
 	if (fract(seed.x) < F) {
@@ -573,6 +581,11 @@ extern "C" __global__ void __closesthit__radiance()
 	float3 wo = -optixGetWorldRayDirection();
 	float3 n = calculate_normal(hit_data, triangle, bary, entering);
 	float3 x = interpolate(hit_data->vertices, triangle, bary);
+
+	if (rp->depth == 0) {
+		rp->diffuse = material.diffuse;
+		rp->normal = n * 0.5f + 0.5f;
+	}
 
 	float3 direct = Ld(hit_data, x + 1e-3f * n, wo, n, material, entering, rp->seed);
 

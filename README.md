@@ -16,7 +16,7 @@ are notable features in this regard:
 - [x] Path tracing with NVIDIA OptiX
 	- [x] Multiple importance sampling with GGX microfacet BRDFs
 	- [x] Tranmission through dielectrics
-- [ ] AI denoising
+	- [x] OptiX AI denoising (AOV)
 
 Furthermore, Kobra provides the ability to perform classical rasterization and
 UI rendering.

@@ -8,7 +8,8 @@ namespace kobra {
 
 namespace cuda {
 
-__forceinline__ __device__ float3 to_srgb(const float3& c)
+__forceinline__
+__host__ __device__ float3 to_srgb(const float3& c)
 {
 	float inv_gamma = 1.0f/2.4f;
 	float3 powed = make_float3(
@@ -24,7 +25,8 @@ __forceinline__ __device__ float3 to_srgb(const float3& c)
 	);
 }
 
-__forceinline__ __device__ unsigned char quantize_unsigned_8_bits(float x)
+__forceinline__
+__host__ __device__ unsigned char quantize_unsigned_8_bits(float x)
 {
 	x = clamp(x, 0.0f, 1.0f);
 	enum {
@@ -35,7 +37,8 @@ __forceinline__ __device__ unsigned char quantize_unsigned_8_bits(float x)
 	return (unsigned char) min((unsigned int) (x * (float) Np1), (unsigned int) N);
 }
 
-__forceinline__ __device__ uchar4 make_color(const float3 &c)
+__forceinline__
+__host__ __device__ uchar4 make_color(const float3 &c)
 {
 	float3 srgb = to_srgb(clamp(c, 0.0f, 1.0f));
 	return make_uchar4(
@@ -46,7 +49,8 @@ __forceinline__ __device__ uchar4 make_color(const float3 &c)
 	);
 }
 
-__forceinline__ __device__ uchar4 make_color(const float4 &c)
+__forceinline__
+__host__ __device__ uchar4 make_color(const float4 &c)
 {
 	return make_color(make_float3(c.x, c.y, c.z));
 }

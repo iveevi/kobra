@@ -28,7 +28,7 @@ using namespace kobra;
 
 // Scene path
 // std::string scene_path = "~/models/sponza/scene.kobra";
-std::string scene_path = "/home/venki/models/fireplace_room.kobra";
+std::string scene_path = "/home/venki/models/cornell_box.kobra";
 // std::string scene_path = "scenes/ggx.kobra";
 
 // Test app
@@ -600,6 +600,10 @@ struct ECSApp : public BaseApp {
 		// If escape is pressed, deselect
 		if (event.key == GLFW_KEY_ESCAPE && event.action == GLFW_PRESS)
 			app.highlight(-1);
+
+		// If O, toggle denoiser
+		if (event.key == GLFW_KEY_O && event.action == GLFW_PRESS)
+			app.optix_tracer.denoiser_enabled = !app.optix_tracer.denoiser_enabled;
 	}
 };
 
