@@ -72,13 +72,44 @@ inline ffi_type *get_ffi_type(_value::Type type)
 	case _value::Type::eString:
 		return &ffi_type_pointer;
 	default:
-		throw std::runtime_error("Invalid argument type: " + std::string(_value::type_str[(int) type]));
+		throw std::runtime_error("get_ffi_type: Invalid argument type: " + std::string(_value::type_str[(int) type]));
 	}
 
 	return nullptr;
 }
 
-inline _external_function compile_signature(const std::string &sig, void *lib)
+inline void push_type(std::vector <ffi_type *> &types, _value::Type type)
+{
+	switch (type) {
+	case _value::Type::eGeneric:
+		types.push_back(&ffi_type_pointer);
+		break;
+	case _value::Type::eGeneric + _value::Type::eVariadic:
+		types.push_back(&ffi_type_pointer);
+		types.push_back(&ffi_type_sint);
+		break;
+	default:
+		throw std::runtime_error("push_type: Invalid argument type: " + std::string(_value::type_str[(int) type]));
+	}
+}
+
+inline std::string get_ffi_type_str(ffi_type *type)
+{
+	if (type == &ffi_type_void)
+		return "void";
+	if (type == &ffi_type_sint32)
+		return "int";
+	if (type == &ffi_type_float)
+		return "float";
+	if (type == &ffi_type_uint8)
+		return "bool";
+	if (type == &ffi_type_pointer)
+		return "pointer";
+
+	return "?";
+}
+
+inline _external_function compile_signature(const std::string &sig, const std::string &sym, void *lib)
 {
 	_external_function ftn;
 
@@ -111,7 +142,7 @@ inline _external_function compile_signature(const std::string &sig, void *lib)
 	}
 
 	// Load function pointer and ffi
-	ftn.handle = dlsym(lib, func_name.c_str());
+	ftn.handle = dlsym(lib, sym.c_str());
 	if (!ftn.handle) {
 		fprintf(stderr, "dlsym error: %s\n", dlerror());
 		exit(1);
@@ -120,24 +151,89 @@ inline _external_function compile_signature(const std::string &sig, void *lib)
 	return ftn;
 }
 
+inline void *alloc_ret(const _value::Type &type)
+{
+	switch (type) {
+	case _value::Type::eVoid:
+		return nullptr;
+	case _value::Type::eGeneric:
+		return new _value;
+	case _value::Type::eInt:
+		return new int;
+	case _value::Type::eFloat:
+		return new float;
+	case _value::Type::eBool:
+		return new bool;
+	case _value::Type::eString:
+		return new std::string;
+	default:
+		throw std::runtime_error("alloc_ret: Invalid return type: " + std::string(_value::type_str[(int) type]));
+	}
+
+	return nullptr;
+}
+
+inline _value decode_ret(const _value::Type &type, void *ptr)
+{
+	_value val;
+	val.type = type;
+
+	switch (type) {
+	case _value::Type::eGeneric:
+		val = *(_value *) ptr;
+		break;
+	case _value::Type::eInt:
+		val.data = *(int *) ptr;
+		break;
+	case _value::Type::eFloat:
+		val.data = *(float *) ptr;
+		break;
+	case _value::Type::eBool:
+		val.data = *(bool *) ptr;
+		break;
+	case _value::Type::eString:
+		val.data = *(std::string *) ptr;
+		break;
+	default:
+		throw std::runtime_error("decode_ret: Invalid return type: " + std::string(_value::type_str[(int) type]));
+	}
+
+	return val;
+}
+
 inline _value call(_external_function &ftn, std::vector <_value> &args)
 {
 	// Prepare ffi
 	// TODO: how to do this only once?
-	ffi_type *ffi_return_type = get_ffi_type(ftn.return_type);
-	ffi_return_type = &ffi_type_void;
 
+	// To be as flexible as possible, there are no
+	// explicit return types, only assigning to a pointer
+	// as the "return value" (first argument)
 	std::vector <ffi_type *> ffi_argument_types;
-	for (int i = 0; i < ftn.argument_types.size(); i++) {
-		ffi_type *type = get_ffi_type(ftn.argument_types[i]);
-		ffi_argument_types.push_back(&ffi_type_pointer);
+
+	ffi_argument_types.push_back(&ffi_type_pointer);
+	for (int i = 0; i < ftn.argument_types.size(); i++)
+		push_type(ffi_argument_types, ftn.argument_types[i]);
+
+	/* std::string signature = ftn.name + "(";
+	signature += get_ffi_type_str(get_ffi_type(ftn.return_type));
+	if (ftn.argument_types.size() > 0)
+		signature += ", ";
+
+	for (int i = 0; i < ffi_argument_types.size(); i++) {
+		signature += get_ffi_type_str(ffi_argument_types[i]);
+		if (i < ffi_argument_types.size() - 1)
+			signature += ", ";
 	}
 
-	ffi_type *arr[] = { &ffi_type_pointer };
+	signature += ")";
+
+	std::cout << "signature = " << signature << std::endl; */
+
 	ffi_status status = ffi_prep_cif(&ftn.cif,
 		FFI_DEFAULT_ABI,
-		ftn.argument_types.size(),
-		ffi_return_type,
+		ffi_argument_types.size(),
+		&ffi_type_void,
 		ffi_argument_types.data()
 	);
 
@@ -146,20 +242,51 @@ inline _value call(_external_function &ftn, std::vector <_value> &args)
 		exit(1);
 	}
 
-	std::vector <const _value *> gen_ptrs;
+	// TODO: type checking
+	// TODO: # of arguments checking
+
+	// Prepare arguments
 	std::vector <void *> ffi_args;
-	
+
+	// Return value
+	if (ftn.return_type != _value::Type::eVoid) {
+		void *ret = alloc_ret(ftn.return_type);
+		void **ret_ptr = new (void *)(ret);
+		ffi_args.push_back(ret_ptr);
+	}
+
+	// TODO: custom allocators (goes out of scope after this function)
 	for (int i = 0; i < args.size(); i++) {
 		_value::Type arg_type = ftn.argument_types[i];
 		if (arg_type == _value::Type::eGeneric) {
-			gen_ptrs.push_back(&args[i]);
-			ffi_args.push_back(&gen_ptrs.back());
+			_value **ptr = new (_value *)(&args[i]);
+			ffi_args.push_back(ptr);
+		} else if (arg_type == _value::Type::eGeneric + _value::Type::eVariadic) {
+			int *n = new int(args.size() - i);
+			_value *ptr = new _value[*n];
+			for (int j = i; j < args.size(); j++)
+				ptr[j - i] = args[j];
+
+			_value **ptr_ptr = new (_value *)(ptr);
+			ffi_args.push_back(ptr_ptr);
+			ffi_args.push_back(n);
+
+			// No more arguments
+			break;
 		} else {
 			ffi_args.push_back((void *) &args[i].data);
 		}
 	}
 
+	// Call function
 	ffi_call(&ftn.cif, FFI_FN(ftn.handle), nullptr, ffi_args.data());
+
+	// Decode return value
+	if (ftn.return_type != _value::Type::eVoid) {
+		void *ret_addr = *(void **) ffi_args[0];
+		_value ret = decode_ret(ftn.return_type, ret_addr);
+		return ret;
+	}
 
 	return _value {_value::Type::eVoid, 0};
 }
@@ -399,7 +526,7 @@ std::unordered_map <
 		// Get arguments
 		std::vector <_value> args;
 		for (int i = 0; i < nargs; i++)
-			args.push_back(pop(m));
+			args.insert(args.begin(), pop(m));
 
 		// Call function
 		_value ret = call(f, args);
@@ -432,11 +559,11 @@ inline void dump(const machine &m)
 	auto q = m.tmp;
 	std::cout << "Temporaries:" << std::endl;
 	for (auto &v : q)
-		std::cout << "\t" << str(v) << std::endl;
+		std::cout << "\t" << info(v) << std::endl;
 
 	std::cout << "\nStack size: " << m.stack.size() << std::endl;
 	for (int i = 0; i < m.stack.size(); i++)
-		std::cout << "[" << i << "]: " << str(m.stack[i]) << std::endl;
+		std::cout << "[" << i << "]: " << info(m.stack[i]) << std::endl;
 
 	std::cout << "\nVariables: " << m.variables.map.size() << std::endl;
 	for (auto &p : m.variables.map) {

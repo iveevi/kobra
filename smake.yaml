@@ -104,7 +104,7 @@ builds:
   - arbok_libs:
     - sources: experimental/io.cpp
     - idirs: includes
-    - flags: '-fPIC -std=c++17'
+    - flags: '-fPIC -Wall -g -std=c++17'
     - options: 'dll, output_dir=./bin/lib, target_name=libio_arbok.so'
     - compiler: 'clang++'
   - experimental_normal:
@@ -117,8 +117,10 @@ builds:
   - experimental_debug:
     - sources: experimental/main.cpp
     - idirs: includes
-    - flags: '-std=c++17 -g -Xcompiler -fpermissive'
+    - flags: '-std=c++17 -Wall -g -Xcompiler -fpermissive'
     - libraries: libs
+    - dependencies: arbok_libs
+    - compiler: 'clang++'
 
 targets:
   - kobra:

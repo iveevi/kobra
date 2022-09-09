@@ -70,26 +70,35 @@ inline const char *str(_value::Type t)
 inline std::string str(const _value &v)
 {
 	// TODO: print type only in debug mode
-	std::string out = "(type: ";
-	out += str(v.type);
-
 	switch (v.type) {
 	case _value::Type::eInt:
-		out += ", value: " + std::to_string(v.get <int> ());
+		return std::to_string(v.get <int> ());
 		break;
 	case _value::Type::eFloat:
-		out += ", value: " + std::to_string(v.get <float> ());
+		return std::to_string(v.get <float> ());
 		break;
 	case _value::Type::eBool:
-		out += ", value: " + std::string(v.get <bool> () ? "true" : "false");
+		return v.get <bool> () ? "true" : "false";
 		break;
 	case _value::Type::eString:
-		out += ", value: " + v.get <std::string> ();
+		return v.get <std::string> ();
 		break;
 	default:
 		break;
 	}
 
+	// Return address of value
+	char buf[1024];
+	snprintf(buf, 1024, "<%s@%p>", str(v.type), &v);
+	return buf;
+}
+
+inline std::string info(const _value &v)
+{
+	// TODO: print type only in debug mode
+	std::string out = "(type: ";
+	out += str(v.type);
+	out += ", value: " + str(v) + ")";
 	return out + ")";
 }
 

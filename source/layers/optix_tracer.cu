@@ -1383,9 +1383,6 @@ void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 		d_result = _buffers.pbuffer;
 	}
 	
-	// std::vector <float4> data;
-	// cuda::copy(data, d_result, width * height);
-
 	// Conversion kernel
 	dim3 block(16, 16);
 	dim3 grid((width + block.x - 1)/block.x, (height + block.y - 1)/block.y);
@@ -1397,14 +1394,6 @@ void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 		_output.resize(width * height);
 
 	cuda::copy(_output, _buffers.truncated, width * height);
-
-	/* for (int x = 0; x < width; x++) {
-		for (int y = 0; y < height; y++) {
-			int inv_y = height - y - 1;
-			uchar4 color = cuda::make_color(data[x + y * width]);
-			_output[x + inv_y * width] = to_ui32(color);
-		}
-	} */
 }
 
 }

@@ -5,13 +5,14 @@
 #include <ffi.h>
 
 std::string source = R"(
-print('hello world')
+str(12.5)
+print(13, 14, 'hello world', 12)
 if (false)
 	int if_1 = 1
 else
 	int else_1 = 4
 
-float x = 200 * 16 + 10.0/2.5 - 1
+float x = 200 * 16 + 10.0/2.5 - 3
 int y = 20
 string z = "Hello world!"
 bool w = false
@@ -134,15 +135,23 @@ define_action(branch)
 	}
 }
 
-using function_call = alias <identifier, lparen, expression, rparen>;
+using function_call = alias <
+	identifier, lparen, repeat <
+		option <alias <expression, comma>, expression>
+	>, rparen>;
 
 define_action(function_call)
 {
 	vec v = get <vec> (lptr);
 	std::string name = get <std::string> (v[0]);
-	assert(v.size() >= 3);
+	assert(v.size() == 4);
 
-	int nargs = v.size() - 3;
+	v = get <vec> (v[2]);
+	int nargs = v.size();
+	std::cout << "Nargs = " << nargs << std::endl;
+	std::cout << "Elements:" << std::endl;
+	for (auto &e : v)
+		std::cout << e->str() << std::endl;
 	if (m.functions.map_ext.count(name) > 0) {
 		// External function
 		int index = m.functions.map_ext[name];
@@ -158,7 +167,7 @@ int main()
 	
 	// Load libraries
 	// TODO: refactor to std
-	void *libhandle = dlopen("./bin/lib/libio_arbok.so", RTLD_LAZY);
+	void *libhandle = dlopen("/home/venki/kobra/bin/lib/libio_arbok.so", RTLD_LAZY);
 	if (!libhandle) {
 		fprintf(stderr, "dlopen error: %s\n", dlerror());
 		exit(1);
@@ -166,7 +175,7 @@ int main()
 
 	printf("dlopen success: handle %p\n", libhandle);
 
-	typedef void (*importer_t)(std::vector <std::string> &);
+	typedef void (*importer_t)(std::vector <std::pair <std::string, std::string>> &);
 	importer_t func = (importer_t) dlsym(libhandle, "import");
 	if (!func) {
 		fprintf(stderr, "dlsym error: %s\n", dlerror());
@@ -175,15 +184,14 @@ int main()
 
 	printf("dlsym success: func %p\n", func);
 
-	std::vector <std::string> args;
-	std::cout << "&args = " << &args << std::endl;
+	std::vector <std::pair <std::string, std::string>> args;
 	func(args);
 
-	for (auto sig : args) {
-		auto ext = compile_signature(sig, libhandle);
+	for (auto pr : args) {
+		auto ext = compile_signature(pr.first, pr.second, libhandle);
 		m.functions.map_ext.insert({ext.name, m.functions.externals.size()});
 		m.functions.externals.push_back(ext);
-		std::cout << "Successfully compiled signature: " << sig << std::endl;
+		std::cout << "Successfully compiled signature: " << pr.first << std::endl;
 	}
 
 
@@ -207,8 +215,23 @@ int main()
 #else
 
 	using g_input = grammar <function_call>;
-	g_input::value(q);
-	// while (g_input::value(q));
+
+	parser::rd::DualQueue dq(q);
+	g_input::value(dq);
+
+	std::cout << "Top of queue:\n";
+	int i = 6;
+	while (i--) {
+		parser::lexicon lptr = q.front();
+		q.pop_front();
+
+		if (lptr == nullptr) {
+			std::cout << "nullptr" << std::endl;
+			continue;
+		}
+
+		std::cout << "\tlexicon: " << lptr->name << " = " << lptr->str() << std::endl;
+	}
 
 	// Add an end instruction for padding
 	push(m, _instruction::Type::eEnd);

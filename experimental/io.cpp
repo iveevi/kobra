@@ -4,15 +4,23 @@
 
 extern "C" {
 
-void print(_value *v, int n)
+void std_print(_value *v, int n)
 {
-	std::cout << "print-value ptr = " << v << ", n = " << n << std::endl;
-	std::cout << "\tvalue: " << str(*v) << std::endl;
+	std::cout << "print-n = " << n << std::endl;
+	for (int i = 0; i < n; ++i)
+		std::cout << "\t" << str(v[i]) << std::endl;
 }
 
-void import(std::vector <std::string> &signatures)
+void std_str(std::string *ret, _value *v)
 {
-	signatures.push_back("void print(__value__...)");
+	*ret = str(*v);
+}
+
+void import(std::vector <std::pair <std::string, std::string>> &signatures)
+{
+	// TODO: some way to check that arguments are correct type
+	signatures.push_back({"void print(__value__...)", "std_print"});
+	signatures.push_back({"string str(__value__)", "std_str"});
 }
 
 }

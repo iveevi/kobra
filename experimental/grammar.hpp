@@ -63,15 +63,17 @@ register(assignment)
 
 // TODO: is_of_type for token and lexvalue interaction
 // Action for expression: push value to stack
+
+// TODO: can be function since there is no partial specialization
 #define define_action(...)							\
 	template <>								\
 	struct grammar_action <__VA_ARGS__> {					\
 		enable(true);							\
-		static void action(parser::lexicon, parser::Queue &);		\
+		static void action(parser::rd::DualQueue &, const lexicon &);	\
 	};									\
 										\
 	void grammar_action <__VA_ARGS__>					\
-		::action(parser::lexicon lptr, parser::Queue &q)
+		::action(parser::rd::DualQueue &dq, const lexicon &lptr)
 
 // Actions for expressions
 define_action(p_int)
