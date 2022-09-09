@@ -7,8 +7,7 @@
 #include <ffi.h>
 
 std::string source = R"(
-12.76 * 6.0/9 + 3.0/5 - (9.0/8 - 19 + 12)
-str(12.5)
+'21-' + str(12.76 * 6.0/9 + 3.0/5 - (9.0/8 - 19 + 12)) + '-12'
 print(13, 14, 'hello world', 12)
 if (false)
 	int if_1 = 1
@@ -142,34 +141,25 @@ define_action(branch)
 using function_call = alias <
 	identifier, lparen, repeat <
 		option <alias <expression, comma>, expression>
-	>, rparen>;
-
-define_action(function_call)
-{
-	vec v = get <vec> (lptr);
-	std::string name = get <std::string> (v[0]);
-	assert(v.size() == 4);
-
-	v = get <vec> (v[2]);
-	int nargs = v.size();
-	std::cout << "Nargs = " << nargs << std::endl;
-	std::cout << "Elements:" << std::endl;
-	for (auto &e : v)
-		std::cout << e->str() << std::endl;
-	if (m.functions.map_ext.count(name) > 0) {
-		// External function
-		int index = m.functions.map_ext[name];
-		push(m, {_instruction::Type::eCallExt, index, nargs});
-	} else {
-		std::cout << "Unknown function: " << name << std::endl;
-	}
-} */
+	>, rparen>; */
 
 struct expression;
 
+struct function_call {
+	using production_rule = alias <
+		identifier, lparen, repeat <
+			option <alias <expression, comma>, expression>
+		>, rparen>;
+};
+
 struct factor {
 	using _parenthesized = alias <lparen, expression, rparen>;
-	using production_rule = option <_parenthesized, primitive, variable>;
+	using production_rule = option <
+		function_call,
+		_parenthesized,
+		primitive,
+		variable
+	>;
 };
 
 struct term {
@@ -197,6 +187,8 @@ struct expression {
 
 	using production_rule = alias <term, option <_expression, epsilon>>;
 };
+
+register(function_call)
 
 register(factor);
 register(factor::_parenthesized);
@@ -233,6 +225,29 @@ define_action(expression::_sub)
 {
 	std::cout << "expression::_sub" << std::endl;
 	push(m, _instruction::Type::eSub);
+}
+
+define_action(function_call)
+{
+	std::cout << "function_call" << std::endl;
+	vec v = get <vec> (lptr);
+	std::string name = get <std::string> (v[0]);
+	assert(v.size() == 4);
+
+	v = get <vec> (v[2]);
+	int nargs = v.size();
+	std::cout << "Nargs = " << nargs << std::endl;
+	std::cout << "Elements:" << std::endl;
+	for (auto &e : v)
+		std::cout << e->str() << std::endl;
+	if (m.functions.map_ext.count(name) > 0) {
+		// External function
+		int index = m.functions.map_ext[name];
+		push(m, {_instruction::Type::eCallExt, index, nargs});
+		std::cout << "External function" << std::endl;
+	} else {
+		std::cout << "Unknown function: " << name << std::endl;
+	}
 }
 
 int main()

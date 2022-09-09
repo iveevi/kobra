@@ -430,7 +430,7 @@ std::unordered_map <
 		_value v2 = m.stack.back();
 		m.stack.pop_back();
 
-		m.stack.push_back(v1 + v2);
+		m.stack.push_back(v2 + v1);
 		m.pc++;
 	}},
 
@@ -452,7 +452,7 @@ std::unordered_map <
 		_value v2 = m.stack.back();
 		m.stack.pop_back();
 
-		m.stack.push_back(v1 * v2);
+		m.stack.push_back(v2 * v1);
 		m.pc++;
 	}},
 
