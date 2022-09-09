@@ -49,46 +49,48 @@ inline _value::Type to_type(const std::string &s)
 //////////////////
 
 // Reserved words
-struct type {};
+nabu_terminal(type);
 
-struct k_if {};
-struct k_else {};
-struct k_while {};
+nabu_terminal(k_if);
+nabu_terminal(k_else);
+nabu_terminal(k_while);
 
-struct k_true {};
-struct k_false {};
+nabu_terminal(k_true);
+nabu_terminal(k_false);
 
-struct identifier {};
-struct p_float {};
-struct p_int {};
-struct double_str {};
-struct single_str {};
+nabu_terminal(identifier);
+nabu_terminal(p_float);
 
-struct comma {};
-struct dot {};
-struct equals {};
+nabu_terminal(p_int);
 
-struct plus {};
-struct minus {};
-struct multiply {};
-struct divide {};
+nabu_terminal(double_str);
+nabu_terminal(single_str);
 
-struct lbracket {};
-struct rbracket {};
+nabu_terminal(comma);
+nabu_terminal(dot);
+nabu_terminal(equals);
 
-struct lbrace {};
-struct rbrace {};
+nabu_terminal(plus);
+nabu_terminal(minus);
+nabu_terminal(multiply);
+nabu_terminal(divide);
 
-struct lparen {};
-struct rparen {};
+nabu_terminal(lbracket);
+nabu_terminal(rbracket);
 
-struct langle {};
-struct rangle {};
+nabu_terminal(lbrace);
+nabu_terminal(rbrace);
 
-struct comment {};
-struct space {};
+nabu_terminal(lparen);
+nabu_terminal(rparen);
 
-struct lerror {};
+nabu_terminal(langle);
+nabu_terminal(rangle);
+
+nabu_terminal(comment);
+nabu_terminal(space);
+
+nabu_terminal(lerror);
 
 ignore(comment)
 ignore(space)

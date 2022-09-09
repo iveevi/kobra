@@ -554,7 +554,7 @@ inline void push(machine &m, const _value &v)
 
 inline void dump(const machine &m)
 {
-	std::cout << "=== Machine Dump ===" << std::endl;
+	std::cout << "\n=== Machine Dump ===" << std::endl;
 
 	auto q = m.tmp;
 	std::cout << "Temporaries:" << std::endl;

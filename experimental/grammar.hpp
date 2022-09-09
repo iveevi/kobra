@@ -26,7 +26,7 @@ using primitive = option <p_int, p_float, p_string, p_bool>;
 // Variable is distinct from identifier
 using variable = option <identifier>;
 
-// Factors
+/* Factors
 using factor = option <primitive, variable>;
 using mul_factor = alias <multiply, factor>;
 using div_factor = alias <divide, factor>;
@@ -48,16 +48,15 @@ using statement = option <assignment>;
 // TODO: +error checks
 
 // Wholistic grammar
-using input = alias <statement>;
+using input = alias <statement>; */
 
 register(p_string)
 register(primitive)
-register(factor)
+
+/* register(factor)
 register(term)
 register(expression)
-register(assignment)
-
-// register(input)
+register(assignment) */
 
 #define enable(b) static constexpr bool available = b
 
@@ -116,12 +115,14 @@ define_action(p_bool)
 	push(m, v);
 }
 
+/*
 define_action(add_term)
 {
 	std::cout << "add: " << lptr->str() << std::endl;
 	push(m, _instruction::Type::eAdd);
-}
+} */
 
+/*
 define_action(sub_term)
 {
 	push(m, _instruction::Type::eSub);
@@ -135,7 +136,7 @@ define_action(mul_factor)
 define_action(div_factor)
 {
 	push(m, _instruction::Type::eDiv);
-}
+} */
 
 // Actions for semantics
 define_action(variable)
@@ -152,6 +153,7 @@ define_action(variable)
 	push(m, {_instruction::Type::ePushVar, addr});
 }
 
+/*
 define_action(assignment)
 {
 	// Get identifier
@@ -183,7 +185,7 @@ define_action(assignment)
 
 	// Push a store instruction
 	push(m, {_instruction::Type::eStore, addr});
-}
+} */
 
 // Error checking trips
 // define_action() {}

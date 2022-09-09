@@ -98,7 +98,7 @@ inline std::string info(const _value &v)
 	// TODO: print type only in debug mode
 	std::string out = "(type: ";
 	out += str(v.type);
-	out += ", value: " + str(v) + ")";
+	out += ", value: " + str(v);
 	return out + ")";
 }
 

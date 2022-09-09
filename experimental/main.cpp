@@ -1,10 +1,13 @@
 #include "grammar.hpp"
 #include "instruction.hpp"
+#include "lexer.hpp"
 #include "library.hpp"
+#include "nabu/nabu.hpp"
 
 #include <ffi.h>
 
 std::string source = R"(
+12.76 * 6.0/9 + 3.0/5 - (9.0/8 - 19 + 12)
 str(12.5)
 print(13, 14, 'hello world', 12)
 if (false)
@@ -23,8 +26,9 @@ float t = x * y
 machine m;
 
 using nabu::parser::rd::grammar;
-using nabu::parser::_lexvalue;
+using nabu::parser::rd::epsilon;
 
+/*
 using clause = alias <lparen, expression, rparen>;
 using body = alias <lbrace, repeat <statement>, rbrace>;
 using conditional_body = option <statement, body>;
@@ -159,6 +163,76 @@ define_action(function_call)
 	} else {
 		std::cout << "Unknown function: " << name << std::endl;
 	}
+} */
+
+struct expression;
+
+struct factor {
+	using _parenthesized = alias <lparen, expression, rparen>;
+	using production_rule = option <_parenthesized, primitive, variable>;
+};
+
+struct term {
+	struct _term;
+	using _mul = alias <multiply, factor>;
+	using _div = alias <divide, factor>;
+
+	struct _term : public alias <
+		option <_mul, _div>,
+		option <_term, epsilon>
+	> {};
+
+	using production_rule = alias <factor, option <_term, epsilon>>;
+};
+
+struct expression {
+	struct _expression;
+	using _add = alias <plus, term>;
+	using _sub = alias <minus, term>;
+
+	struct _expression : public alias <
+		option <_add, _sub>,
+		option <_expression, epsilon>
+	> {};
+
+	using production_rule = alias <term, option <_expression, epsilon>>;
+};
+
+register(factor);
+register(factor::_parenthesized);
+
+register(term);
+register(term::_term);
+register(term::_mul);
+register(term::_div);
+
+register(expression);
+register(expression::_expression);
+register(expression::_add);
+register(expression::_sub);
+
+define_action(term::_mul)
+{
+	std::cout << "term::_mul" << std::endl;
+	push(m, _instruction::Type::eMul);
+}
+
+define_action(term::_div)
+{
+	std::cout << "term::_div" << std::endl;
+	push(m, _instruction::Type::eDiv);
+}
+
+define_action(expression::_add)
+{
+	std::cout << "expression::_add" << std::endl;
+	push(m, _instruction::Type::eAdd);
+}
+
+define_action(expression::_sub)
+{
+	std::cout << "expression::_sub" << std::endl;
+	push(m, _instruction::Type::eSub);
 }
 
 int main()
@@ -214,7 +288,7 @@ int main()
 
 #else
 
-	using g_input = grammar <function_call>;
+	using g_input = grammar <expression>;
 
 	parser::rd::DualQueue dq(q);
 	g_input::value(dq);
