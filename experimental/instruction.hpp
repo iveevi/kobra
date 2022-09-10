@@ -15,7 +15,9 @@
 #include <dlfcn.h>
 
 // Engine headers
-#include "value.hpp"
+#include "../../include/arbok/value.hpp"
+
+using namespace kobra::arbok;
 
 // Abstraction of the machine state
 struct _instruction;
@@ -30,8 +32,21 @@ struct _external_function {
 	std::vector <_value::Type> argument_types;
 
 	// Handles
+	bool initialized = false;
 	void *handle = nullptr;
 	ffi_cif cif;
+	std::vector <ffi_type *> ffi_arg_types;
+
+	// Default constructor
+	_external_function() = default;
+
+	// No copy
+	_external_function(const _external_function &) = delete;
+	_external_function &operator=(const _external_function &) = delete;
+
+	// Move only
+	_external_function(_external_function &&) = default;
+	_external_function &operator=(_external_function &&) = default;
 };
 
 inline _value::Type get_type(const std::string &str)
@@ -174,6 +189,51 @@ inline _external_function compile_signature(const std::string &sig, const std::s
 		fprintf(stderr, "dlsym error: %s\n", dlerror());
 		exit(1);
 	}
+	
+	// Initializing arguments and preparing ffi
+	std::cout << "Initializing ffi" << std::endl;
+
+	// To be as flexible as possible, there are no
+	// explicit return types, only assigning to a pointer
+	// as the "return value" (first argument)
+	// std::vector <ffi_type *> *ffi_argument_types = new std::vector <ffi_type *>;
+
+	ftn.ffi_arg_types.clear();
+	if (ftn.return_type != _value::Type::eVoid)
+		ftn.ffi_arg_types.push_back(&ffi_type_pointer);
+
+	for (int i = 0; i < ftn.argument_types.size(); i++)
+		push_type(ftn.ffi_arg_types, ftn.argument_types[i]);
+
+	/* std::string signature = ftn.name + "(";
+	signature += get_ffi_type_str(get_ffi_type(ftn.return_type));
+	if (ftn.argument_types.size() > 0)
+		signature += ", ";
+
+	for (int i = 0; i < ffi_argument_types.size(); i++) {
+		signature += get_ffi_type_str(ffi_argument_types[i]);
+		if (i < ffi_argument_types.size() - 1)
+			signature += ", ";
+	}
+
+	signature += ")";
+
+	std::cout << "signature = " << signature << std::endl; */
+
+	ffi_status status = ffi_prep_cif(&ftn.cif,
+		FFI_DEFAULT_ABI,
+		ftn.ffi_arg_types.size(),
+		&ffi_type_void,
+		ftn.ffi_arg_types.data()
+	);
+
+	if (status != FFI_OK) {
+		fprintf(stderr, "ffi_prep_cif error: %d\n", status);
+		exit(1);
+	}
+
+	ftn.initialized = true;
+	std::cout << "->Initialized ffi" << std::endl;
 
 	return ftn;
 }
@@ -294,42 +354,51 @@ inline _value call(_external_function &ftn, std::vector <_value> &args)
 	
 	// Prepare ffi
 	// TODO: how to do this only once?
+	/* if (!ftn.initialized) {
+		std::cout << "Initializing ffi" << std::endl;
 
-	// To be as flexible as possible, there are no
-	// explicit return types, only assigning to a pointer
-	// as the "return value" (first argument)
-	std::vector <ffi_type *> ffi_argument_types;
+		// To be as flexible as possible, there are no
+		// explicit return types, only assigning to a pointer
+		// as the "return value" (first argument)
+		// std::vector <ffi_type *> *ffi_argument_types = new std::vector <ffi_type *>;
 
-	ffi_argument_types.push_back(&ffi_type_pointer);
-	for (int i = 0; i < ftn.argument_types.size(); i++)
-		push_type(ffi_argument_types, ftn.argument_types[i]);
+		ftn.ffi_arg_types.clear();
+		if (ftn.return_type != _value::Type::eVoid)
+			ftn.ffi_arg_types.push_back(&ffi_type_pointer);
 
-	/* std::string signature = ftn.name + "(";
-	signature += get_ffi_type_str(get_ffi_type(ftn.return_type));
-	if (ftn.argument_types.size() > 0)
-		signature += ", ";
+		for (int i = 0; i < ftn.argument_types.size(); i++)
+			push_type(ftn.ffi_arg_types, ftn.argument_types[i]);
 
-	for (int i = 0; i < ffi_argument_types.size(); i++) {
-		signature += get_ffi_type_str(ffi_argument_types[i]);
-		if (i < ffi_argument_types.size() - 1)
+		/* std::string signature = ftn.name + "(";
+		signature += get_ffi_type_str(get_ffi_type(ftn.return_type));
+		if (ftn.argument_types.size() > 0)
 			signature += ", ";
-	}
 
-	signature += ")";
+		for (int i = 0; i < ffi_argument_types.size(); i++) {
+			signature += get_ffi_type_str(ffi_argument_types[i]);
+			if (i < ffi_argument_types.size() - 1)
+				signature += ", ";
+		}
 
-	std::cout << "signature = " << signature << std::endl; */
+		signature += ")";
 
-	ffi_status status = ffi_prep_cif(&ftn.cif,
-		FFI_DEFAULT_ABI,
-		ffi_argument_types.size(),
-		&ffi_type_void,
-		ffi_argument_types.data()
-	);
+		std::cout << "signature = " << signature << std::endl;
 
-	if (status != FFI_OK) {
-		fprintf(stderr, "ffi_prep_cif error: %d\n", status);
-		exit(1);
-	}
+		ffi_status status = ffi_prep_cif(&ftn.cif,
+			FFI_DEFAULT_ABI,
+			ftn.ffi_arg_types.size(),
+			&ffi_type_void,
+			ftn.ffi_arg_types.data()
+		);
+
+		if (status != FFI_OK) {
+			fprintf(stderr, "ffi_prep_cif error: %d\n", status);
+			exit(1);
+		}
+
+		ftn.initialized = true;
+		std::cout << "->Initialized ffi" << std::endl;
+	} */
 
 	// Prepare arguments
 	std::vector <void *> ffi_args;

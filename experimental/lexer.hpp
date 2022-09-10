@@ -7,7 +7,7 @@
 #include "nabu/nabu.hpp"
 
 // Engine headers
-#include "value.hpp"
+#include "instruction.hpp"
 
 // TODO: turn into nabu language
 inline std::string to_string(const std::string &s) {

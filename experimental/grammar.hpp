@@ -6,7 +6,6 @@
 
 // Engine headers
 #include "lexer.hpp"
-#include "value.hpp"
 #include "instruction.hpp"
 
 // TODO: some way to use multiple machines?
@@ -14,9 +13,10 @@ extern machine m;
 
 // Using statements
 using nabu::parser::rd::alias;
+using nabu::parser::rd::epsilon;
+using nabu::parser::rd::grammar_action;
 using nabu::parser::rd::option;
 using nabu::parser::rd::repeat;
-using nabu::parser::rd::grammar_action;
 
 // Primitive types
 using p_string = option <double_str, single_str>;
@@ -26,56 +26,77 @@ using primitive = option <p_int, p_float, p_string, p_bool>;
 // Variable is distinct from identifier
 using variable = option <identifier>;
 
-/* Factors
-using factor = option <primitive, variable>;
-using mul_factor = alias <multiply, factor>;
-using div_factor = alias <divide, factor>;
+// Wholistic expression forward declaration
+struct expression;
 
-// Terms
-using term = alias <factor, repeat <option <mul_factor, div_factor>>>;
-using add_term = alias <plus, term>;
-using sub_term = alias <minus, term>;
+// Function calls
+struct function_call {
+	using production_rule = alias <
+		identifier, lparen, repeat <
+			option <alias <expression, comma>, expression>
+		>, rparen>;
+};
+
+// Factors (can be multiplied, divided, etc.)
+struct factor {
+	using _parenthesized = alias <lparen, expression, rparen>;
+	using production_rule = option <
+		function_call,
+		_parenthesized,
+		primitive,
+		variable
+	>;
+};
+
+// Terms (can be added, subtracted, etc.)
+struct term {
+	struct _term;
+	using _mul = alias <multiply, factor>;
+	using _div = alias <divide, factor>;
+
+	struct _term : public alias <
+		option <_mul, _div>,
+		option <_term, epsilon>
+	> {};
+
+	using production_rule = alias <factor, option <_term, epsilon>>;
+};
 
 // Expression wholistic
-using expression = alias <term, repeat <option <add_term, sub_term>>>;
+struct expression {
+	struct _expression;
+	using _add = alias <plus, term>;
+	using _sub = alias <minus, term>;
 
-// Types of statements
-using assignment = alias <type, identifier, equals, expression>;
+	struct _expression : public alias <
+		option <_add, _sub>,
+		option <_expression, epsilon>
+	> {};
 
-// Statement wholistic
-using statement = option <assignment>;
+	using production_rule = alias <term, option <_expression, epsilon>>;
+};
 
-// TODO: +error checks
-
-// Wholistic grammar
-using input = alias <statement>; */
-
+// Register grammars for debugging
 register(p_string)
 register(primitive)
 
-/* register(factor)
-register(term)
-register(expression)
-register(assignment) */
+register(function_call)
 
-#define enable(b) static constexpr bool available = b
+register(factor);
+register(factor::_parenthesized);
 
-// TODO: is_of_type for token and lexvalue interaction
-// Action for expression: push value to stack
+register(term);
+register(term::_term);
+register(term::_mul);
+register(term::_div);
 
-// TODO: can be function since there is no partial specialization
-#define define_action(...)							\
-	template <>								\
-	struct grammar_action <__VA_ARGS__> {					\
-		enable(true);							\
-		static void action(parser::rd::DualQueue &, const lexicon &);	\
-	};									\
-										\
-	void grammar_action <__VA_ARGS__>					\
-		::action(parser::rd::DualQueue &dq, const lexicon &lptr)
+register(expression);
+register(expression::_expression);
+register(expression::_add);
+register(expression::_sub);
 
-// Actions for expressions
-define_action(p_int)
+// Actions for primitive types 
+nabu_define_action(p_int)
 {
 	_value v;
 	v.type = _value::Type::eInt;
@@ -85,7 +106,7 @@ define_action(p_int)
 	push(m, v);
 }
 
-define_action(p_float)
+nabu_define_action(p_float)
 {
 	_value v;
 	v.type = _value::Type::eFloat;
@@ -95,7 +116,7 @@ define_action(p_float)
 	push(m, v);
 }
 
-define_action(p_string)
+nabu_define_action(p_string)
 {
 	_value v;
 	v.type = _value::Type::eString;
@@ -105,7 +126,7 @@ define_action(p_string)
 	push(m, v);
 }
 
-define_action(p_bool)
+nabu_define_action(p_bool)
 {
 	_value v;
 	v.type = _value::Type::eBool;
@@ -115,31 +136,33 @@ define_action(p_bool)
 	push(m, v);
 }
 
-/*
-define_action(add_term)
+// Actions for operations
+nabu_define_action(term::_mul)
 {
-	std::cout << "add: " << lptr->str() << std::endl;
-	push(m, _instruction::Type::eAdd);
-} */
-
-/*
-define_action(sub_term)
-{
-	push(m, _instruction::Type::eSub);
-}
-
-define_action(mul_factor)
-{
+	std::cout << "term::_mul" << std::endl;
 	push(m, _instruction::Type::eMul);
 }
 
-define_action(div_factor)
+nabu_define_action(term::_div)
 {
+	std::cout << "term::_div" << std::endl;
 	push(m, _instruction::Type::eDiv);
-} */
+}
+
+nabu_define_action(expression::_add)
+{
+	std::cout << "expression::_add" << std::endl;
+	push(m, _instruction::Type::eAdd);
+}
+
+nabu_define_action(expression::_sub)
+{
+	std::cout << "expression::_sub" << std::endl;
+	push(m, _instruction::Type::eSub);
+}
 
 // Actions for semantics
-define_action(variable)
+nabu_define_action(variable)
 {
 	// Get identifier
 	std::string id = get <std::string> (lptr);
@@ -153,8 +176,28 @@ define_action(variable)
 	push(m, {_instruction::Type::ePushVar, addr});
 }
 
+nabu_define_action(function_call)
+{
+	vec v = get <vec> (lptr);
+	std::string name = get <std::string> (v[0]);
+	assert(v.size() == 4);
+
+	v = get <vec> (v[2]);
+	int nargs = v.size();
+	for (auto &e : v)
+		std::cout << e->str() << std::endl;
+	if (m.functions.map_ext.count(name) > 0) {
+		// External function
+		int index = m.functions.map_ext[name];
+		push(m, {_instruction::Type::eCallExt, index, nargs});
+	} else {
+		std::cout << "Unknown function: " << name << std::endl;
+		throw std::runtime_error("Unknown function");
+	}
+}
+
 /*
-define_action(assignment)
+nabu_define_action(assignment)
 {
 	// Get identifier
 	vec v = get <vec> (lptr);
@@ -187,7 +230,6 @@ define_action(assignment)
 	push(m, {_instruction::Type::eStore, addr});
 } */
 
-// Error checking trips
-// define_action() {}
+// TODO: error checking trips
 
 #endif

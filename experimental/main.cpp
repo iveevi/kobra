@@ -25,7 +25,6 @@ float t = x * y
 machine m;
 
 using nabu::parser::rd::grammar;
-using nabu::parser::rd::epsilon;
 
 /*
 using clause = alias <lparen, expression, rparen>;
@@ -55,7 +54,7 @@ std::map <_lexvalue *, _addr_info> branch_addresses;
 // Clauses are for braching and loops:
 // 	evaluate the expression in the clause and
 // 	only then possibly jump
-define_action(clause)
+nabu_define_action(clause)
 {
 	push(m, {_instruction::Type::eNcjmp, -1});
 	branch_addresses[lptr.get()] = {
@@ -63,7 +62,7 @@ define_action(clause)
 	};
 }
 
-define_action(if_branch)
+nabu_define_action(if_branch)
 {
 	push(m, {_instruction::Type::eJmp, -1});
 
@@ -72,7 +71,7 @@ define_action(if_branch)
 	info.end = m.instructions.size();
 }
 
-define_action(else_if_branch)
+nabu_define_action(else_if_branch)
 {
 	push(m, {_instruction::Type::eJmp, -1});
 
@@ -83,7 +82,7 @@ define_action(else_if_branch)
 
 using branch = alias <if_branch, repeat <else_if_branch>, option <else_branch, void>>;
 
-define_action(branch)
+nabu_define_action(branch)
 {
 	// Resolve jump addresses
 	std::cout << "lptr = " << lptr->str() << std::endl;
@@ -136,127 +135,12 @@ define_action(branch)
 		assert(instruction.type == _instruction::Type::eJmp);
 		instruction.op1 = end;
 	}
-}
+} */
 
-using function_call = alias <
-	identifier, lparen, repeat <
-		option <alias <expression, comma>, expression>
-	>, rparen>; */
-
-struct expression;
-
-struct function_call {
-	using production_rule = alias <
-		identifier, lparen, repeat <
-			option <alias <expression, comma>, expression>
-		>, rparen>;
-};
-
-struct factor {
-	using _parenthesized = alias <lparen, expression, rparen>;
-	using production_rule = option <
-		function_call,
-		_parenthesized,
-		primitive,
-		variable
-	>;
-};
-
-struct term {
-	struct _term;
-	using _mul = alias <multiply, factor>;
-	using _div = alias <divide, factor>;
-
-	struct _term : public alias <
-		option <_mul, _div>,
-		option <_term, epsilon>
-	> {};
-
-	using production_rule = alias <factor, option <_term, epsilon>>;
-};
-
-struct expression {
-	struct _expression;
-	using _add = alias <plus, term>;
-	using _sub = alias <minus, term>;
-
-	struct _expression : public alias <
-		option <_add, _sub>,
-		option <_expression, epsilon>
-	> {};
-
-	using production_rule = alias <term, option <_expression, epsilon>>;
-};
-
-register(function_call)
-
-register(factor);
-register(factor::_parenthesized);
-
-register(term);
-register(term::_term);
-register(term::_mul);
-register(term::_div);
-
-register(expression);
-register(expression::_expression);
-register(expression::_add);
-register(expression::_sub);
-
-define_action(term::_mul)
+void import(const std::string &path, machine &m)
 {
-	std::cout << "term::_mul" << std::endl;
-	push(m, _instruction::Type::eMul);
-}
-
-define_action(term::_div)
-{
-	std::cout << "term::_div" << std::endl;
-	push(m, _instruction::Type::eDiv);
-}
-
-define_action(expression::_add)
-{
-	std::cout << "expression::_add" << std::endl;
-	push(m, _instruction::Type::eAdd);
-}
-
-define_action(expression::_sub)
-{
-	std::cout << "expression::_sub" << std::endl;
-	push(m, _instruction::Type::eSub);
-}
-
-define_action(function_call)
-{
-	std::cout << "function_call" << std::endl;
-	vec v = get <vec> (lptr);
-	std::string name = get <std::string> (v[0]);
-	assert(v.size() == 4);
-
-	v = get <vec> (v[2]);
-	int nargs = v.size();
-	std::cout << "Nargs = " << nargs << std::endl;
-	std::cout << "Elements:" << std::endl;
-	for (auto &e : v)
-		std::cout << e->str() << std::endl;
-	if (m.functions.map_ext.count(name) > 0) {
-		// External function
-		int index = m.functions.map_ext[name];
-		push(m, {_instruction::Type::eCallExt, index, nargs});
-		std::cout << "External function" << std::endl;
-	} else {
-		std::cout << "Unknown function: " << name << std::endl;
-	}
-}
-
-int main()
-{
-	using namespace nabu;
-	
 	// Load libraries
-	// TODO: refactor to std
-	void *libhandle = dlopen("/home/venki/kobra/bin/lib/libio_arbok.so", RTLD_LAZY);
+	void *libhandle = dlopen(path.c_str(), RTLD_LAZY);
 	if (!libhandle) {
 		fprintf(stderr, "dlopen error: %s\n", dlerror());
 		exit(1);
@@ -279,11 +163,20 @@ int main()
 	for (auto pr : args) {
 		auto ext = compile_signature(pr.first, pr.second, libhandle);
 		m.functions.map_ext.insert({ext.name, m.functions.externals.size()});
-		m.functions.externals.push_back(ext);
+		m.functions.externals.emplace_back(std::move(ext));
 		std::cout << "Successfully compiled signature: " << pr.first << std::endl;
 	}
 
+}
 
+int main()
+{
+	using namespace nabu;
+
+	// Import standard library
+	import("/home/venki/kobra/bin/lib/libarbok.so", m);
+
+	// Read lexicons
 	parser::Queue q = parser::lexq <identifier> (source);
 
 #if 0
@@ -308,7 +201,7 @@ int main()
 	parser::rd::DualQueue dq(q);
 	while(g_input::value(dq));
 
-	std::cout << "Top of queue:\n";
+	/* std::cout << "Top of queue:\n";
 	int i = 6;
 	while (i--) {
 		parser::lexicon lptr = q.front();
@@ -320,7 +213,7 @@ int main()
 		}
 
 		std::cout << "\tlexicon: " << lptr->str() << std::endl;
-	}
+	} */
 
 	// Add an end instruction for padding
 	push(m, _instruction::Type::eEnd);

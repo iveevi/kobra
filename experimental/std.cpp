@@ -1,17 +1,18 @@
+#include <iostream>
 #include <vector>
 
-#include "value.hpp"
+#include "../../include/arbok/value.hpp"
 
 extern "C" {
 
-void std_print(_value *v, int n)
+void std_print(kobra::arbok::_value *v, int n)
 {
 	std::cout << "print-n = " << n << std::endl;
 	for (int i = 0; i < n; ++i)
 		std::cout << "\t" << str(v[i]) << std::endl;
 }
 
-void std_str(std::string *ret, _value *v)
+void std_str(std::string *ret, kobra::arbok::_value *v)
 {
 	*ret = str(*v);
 }

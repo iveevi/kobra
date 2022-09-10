@@ -102,13 +102,13 @@ builds:
     - libraries: libs
     - flags: '-std=c++17 -Wall -Werror'
   - arbok_libs:
-    - sources: experimental/io.cpp
+    - sources: experimental/std.cpp, source/arbok/value.cpp
     - idirs: includes
     - flags: '-fPIC -Wall -g -std=c++17'
-    - options: 'dll, output_dir=./bin/lib, target_name=libio_arbok.so'
+    - options: 'dll, output_dir=./bin/lib, target_name=libarbok.so'
     - compiler: 'clang++'
   - experimental_normal:
-    - sources: experimental/main.cpp
+    - sources: experimental/main.cpp, source/arbok/value.cpp
     - idirs: includes
     - flags: '-std=c++17 -Xcompiler -fpermissive'
     - libraries: libs
