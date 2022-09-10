@@ -1,7 +1,7 @@
 #ifndef LEXER_H_
 #define LEXER_H_
 
-#define NABU_DEBUG_PARSER
+// #define NABU_DEBUG_PARSER
 // #define NABU_VERBOSE_OUTPUT
 
 #include "nabu/nabu.hpp"

@@ -23,8 +23,10 @@ struct _instruction;
 // Function that was imported via dll/ffi
 struct _external_function {
 	// Signature
-	std::string name;
+	bool variadic;
+	int non_variadic_args;
 	_value::Type return_type;
+	std::string name;
 	std::vector <_value::Type> argument_types;
 
 	// Handles
@@ -130,16 +132,41 @@ inline _external_function compile_signature(const std::string &sig, const std::s
 	ftn.return_type = get_type(ret_type);
 	
 	std::string arg_type;
+
+	int nvariadic = 0;
 	for (int i = 0; i < arg_types.size(); i++) {
 		char c = arg_types[i];
 		if (c == ',') {
+			std::cout << "Checking arg_type = " << arg_type << std::endl;
 			_value::Type type = get_type(arg_type);
+			if (type >= _value::Type::eVariadic)
+				nvariadic++;
+
 			ftn.argument_types.push_back(type);
 			arg_type.clear();
-		} else {
+		} else if (!isspace(c)) {
 			arg_type += c;
 		}
 	}
+
+	if (nvariadic > 1) {
+		throw std::runtime_error("compile_signature: Can only"
+			" have one variadic argument, in \"" + sig + "\""
+		);
+	}
+
+	ftn.variadic = (nvariadic == 1);
+	ftn.non_variadic_args = ftn.argument_types.size() - nvariadic;
+
+	std::string reconstructed_sig = str(ftn.return_type) + " " + func_name + "(";
+	for (int i = 0; i < ftn.argument_types.size(); i++) {
+		reconstructed_sig += str(ftn.argument_types[i]);
+		if (i < ftn.argument_types.size() - 1)
+			reconstructed_sig += ", ";
+	}
+	reconstructed_sig += ")";
+
+	std::cout << "reconstructed_sig = " << reconstructed_sig << std::endl;
 
 	// Load function pointer and ffi
 	ftn.handle = dlsym(lib, sym.c_str());
@@ -201,8 +228,70 @@ inline _value decode_ret(const _value::Type &type, void *ptr)
 	return val;
 }
 
+inline bool type_ok(const _value::Type &type, const _value &val)
+{
+	switch (type) {
+	case _value::Type::eGeneric:
+		return true;
+	case _value::Type::eInt:
+		return val.type == _value::Type::eInt;
+	case _value::Type::eFloat:
+		return val.type == _value::Type::eFloat;
+	case _value::Type::eBool:
+		return val.type == _value::Type::eBool;
+	case _value::Type::eString:
+		return val.type == _value::Type::eString;
+	default:
+		throw std::runtime_error("type_ok: Invalid argument type: " + std::string(_value::type_str[(int) type]));
+	}
+
+	return false;
+}
+
 inline _value call(_external_function &ftn, std::vector <_value> &args)
 {
+	// TODO: # of arguments checking
+	std::cout << "# of args passed = " << args.size() << std::endl;
+	std::cout << "\t# of non-variadic args = " << ftn.non_variadic_args << std::endl;
+
+	if (ftn.variadic) {
+		if (args.size() < ftn.non_variadic_args) {
+			throw std::runtime_error("call: Too few arguments passed"
+				"to variadic function");
+		}
+	} else {
+		if (args.size() != ftn.non_variadic_args) {
+			throw std::runtime_error("call: Incorrect number of"
+				"arguments passed to non-variadic function");
+		}
+	}
+
+	// TODO: type checking
+	
+	// First check all non-variadic arguments
+	for (int i = 0; i < ftn.non_variadic_args; i++) {
+		if (!type_ok(ftn.argument_types[i], args[i])) {
+			throw std::runtime_error("call: Argument " + std::to_string(i)
+				+ " has incorrect type");
+		}
+	}
+
+	// Then check all variadic arguments
+	if (ftn.variadic) {
+		_value::Type variadic_type = _value::Type(
+			ftn.argument_types[ftn.non_variadic_args]
+				- _value::Type::eVariadic
+		);
+
+		for (int i = ftn.non_variadic_args; i < args.size(); i++) {
+			if (!type_ok(variadic_type, args[i])) {
+				throw std::runtime_error("call: Variadic argument "
+					+ std::to_string(i - ftn.non_variadic_args)
+					+ " has incorrect type");
+			}
+		}
+	}
+	
 	// Prepare ffi
 	// TODO: how to do this only once?
 
@@ -241,9 +330,6 @@ inline _value call(_external_function &ftn, std::vector <_value> &args)
 		fprintf(stderr, "ffi_prep_cif error: %d\n", status);
 		exit(1);
 	}
-
-	// TODO: type checking
-	// TODO: # of arguments checking
 
 	// Prepare arguments
 	std::vector <void *> ffi_args;

@@ -62,8 +62,16 @@ struct _value {
 	}
 };
 
-inline const char *str(_value::Type t)
+inline std::string str(_value::Type t)
 {
+	if (t >= _value::Type::eVariadic) {
+		if (t >= 2 * _value::Type::eVariadic)
+			throw std::runtime_error("Invalid type (exceeded 2 * eVariadic)");
+
+		int i = (int) t - (int) _value::Type::eVariadic;
+		return _value::type_str[i] + std::string("...");
+	}
+
 	return _value::type_str[static_cast <int> (t)];
 }
 
@@ -89,7 +97,7 @@ inline std::string str(const _value &v)
 
 	// Return address of value
 	char buf[1024];
-	snprintf(buf, 1024, "<%s@%p>", str(v.type), &v);
+	snprintf(buf, 1024, "<%s@%p>", str(v.type).c_str(), &v);
 	return buf;
 }
 

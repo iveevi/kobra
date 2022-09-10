@@ -306,7 +306,7 @@ int main()
 	using g_input = grammar <expression>;
 
 	parser::rd::DualQueue dq(q);
-	g_input::value(dq);
+	while(g_input::value(dq));
 
 	std::cout << "Top of queue:\n";
 	int i = 6;
@@ -319,7 +319,7 @@ int main()
 			continue;
 		}
 
-		std::cout << "\tlexicon: " << lptr->name << " = " << lptr->str() << std::endl;
+		std::cout << "\tlexicon: " << lptr->str() << std::endl;
 	}
 
 	// Add an end instruction for padding
