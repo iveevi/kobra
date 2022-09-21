@@ -18,14 +18,10 @@ using nabu::parser::rd::grammar_action;
 using nabu::parser::rd::option;
 using nabu::parser::rd::repeat;
 
-// Primitive types
-using p_string = option <double_str, single_str>;
-using p_bool = option <k_true, k_false>;
-using primitive = option <p_int, p_float, p_string, p_bool>;
+// Forward declaring grammars
+struct expression;
 
-// Variables and types are distinct from identifier
-using variable = option <identifier>;
-
+// Type wrapper grammar
 struct type {
 	using production_rule = type;
 };
@@ -55,8 +51,32 @@ struct nabu::parser::rd::grammar <type> {
 	}
 };
 
-// Wholistic expression forward declaration
-struct expression;
+
+// Primitive types
+using p_string = option <double_str, single_str>;
+using p_bool = option <k_true, k_false>;
+
+// Struct construction
+// 	All members should be initialized,
+// 	unless a default value has been specified
+// 	in the definition of the struct.
+struct p_struct {
+	using member_init = alias <identifier, colon, expression>;
+	using member_init_list = alias <
+		member_init,
+		repeat <alias <comma, member_init>>
+	>;
+
+	using production_rule = alias <
+		type,
+		lbrace, member_init_list, rbrace
+	>;
+};
+
+using primitive = option <p_struct, p_int, p_float, p_string, p_bool>;
+
+// Variables and types are distinct from identifier
+using variable = option <identifier>;
 
 // Function calls
 struct function_call {
@@ -68,14 +88,33 @@ struct function_call {
 
 // Factors (can be multiplied, divided, etc.)
 struct factor {
-	using _parenthesized = alias <lparen, expression, rparen>;
-	using production_rule = option <
+	using parenthesized = alias <lparen, expression, rparen>;
+	using member_access = alias <dot, identifier>;
+
+	using factorlet = option <
 		function_call,
-		_parenthesized,
+		parenthesized,
 		primitive,
 		variable
 	>;
+
+	using production_rule = alias <
+		factorlet,
+		repeat <member_access>
+	>;
 };
+
+nabu_define_action(factor::member_access)
+{
+	std::cout << "factor::member_access" << std::endl;
+	std::cout << "\t" << lptr->str() << std::endl;
+
+	vec v = get <vec> (lptr);
+	std::string member_name = get <std::string> (v[1]);
+	std::cout << "\t" << member_name << std::endl;
+
+	push(m, {_instruction::Type::eGetMember, member_name});
+}
 
 // Terms (can be added, subtracted, etc.)
 struct term {
@@ -146,7 +185,7 @@ register(primitive)
 register(function_call)
 
 register(factor);
-register(factor::_parenthesized);
+register(factor::parenthesized);
 
 register(term);
 register(term::_term);

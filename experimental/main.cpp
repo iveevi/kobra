@@ -12,8 +12,8 @@ struct Point {
     y: int
 }
 
-Point { x: 165, y: 243 - 40 + 3 }
 Point pt = Point { x: 1, y: 2 }
+int x = pt.x
 
 if (len('hi') == 2)
 	int if_1 = 1
@@ -225,23 +225,6 @@ nabu_define_action(s_struct)
 	m.type_table.add_struct(s);
 }
 
-// Struct construction
-// 	All members should be initialized,
-// 	unless a default value has been specified
-// 	in the definition of the struct.
-struct p_struct {
-	using member_init = alias <identifier, colon, expression>;
-	using member_init_list = alias <
-		member_init,
-		repeat <alias <comma, member_init>>
-	>;
-
-	using production_rule = alias <
-		type,
-		lbrace, member_init_list, rbrace
-	>;
-};
-
 nabu_define_action(p_struct::member_init)
 {
 	std::cout << "p_struct::member_init" << std::endl;
@@ -255,14 +238,10 @@ nabu_define_action(p_struct::member_init)
 
 nabu_define_action(p_struct)
 {
-	std::cout << "p_struct" << std::endl;
-	std::cout << lptr->str() << std::endl;
-
 	// Get type
 	vec v = get <vec> (lptr);
 
 	Type type = get <Type> (v[0]);
-	std::cout << "Type: " << (int) type << std::endl;
 
 	// Get all the members that were explicitly initialized
 	vec member_inits = get <vec> (v[2]);
@@ -276,16 +255,10 @@ nabu_define_action(p_struct)
 	// The rest are optional, iterate over them...
 	vec rest = get <vec> (member_inits[1]);
 	for (auto &r : rest) {
-		std::cout << "rest = " << r->str() << std::endl;
 		vec v = get <vec> (r);
-		std::cout << "\tv[1] = " << v[1]->str() << std::endl;
 		vec m = get <vec> (v[1]);
 		explicit_members.push_back(get <std::string> (m[0]));
 	}
-
-	std::cout << "Explicit members: " << std::endl;
-	for (auto &m : explicit_members)
-		std::cout << "\t" << m << std::endl;
 
 	std::string concatted_members;
 	for (auto &m : explicit_members)
@@ -294,8 +267,6 @@ nabu_define_action(p_struct)
 	// Get corresponding struct
 	assert(m.type_table.structs.count(type));
 	_struct s = m.type_table.structs[type];
-
-	std::cout << "struct: " << str(s, true) << std::endl;
 
 	push(m, {_instruction::Type::eConstruct, (int) type, concatted_members});
 }
@@ -334,7 +305,8 @@ int main()
 	parser::rd::DualQueue dq(q);
 
 	grammar <s_struct> ::value(dq);
-	grammar <p_struct> ::value(dq);
+	grammar <statement> ::value(dq);
+	grammar <statement> ::value(dq);
 
 	// while(g_input::value(dq));
 

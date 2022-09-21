@@ -11,7 +11,7 @@ namespace arbok {
 std::string str(Type t, const _value &v)
 {
 	if (t > Type::eStruct)
-		return "eStruct";
+		return "struct";
 
 	return type_str[static_cast <int> (t)];
 }

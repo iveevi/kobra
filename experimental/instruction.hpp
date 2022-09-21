@@ -527,7 +527,11 @@ struct machine {
 		int add(const std::string &name, Type type) {
 			int addr = mem.size();
 			map[name] = addr;
+
+			_value v;
+			v.type = type;
 			mem.push_back(_value());
+
 			types.push_back(type);
 			return addr;
 		}
@@ -552,14 +556,16 @@ inline _value pop(machine &m)
 struct _instruction {
 	enum class Type {
 		// Stack operations
-		ePushTmp, ePushVar, ePushMember,
+		ePushTmp, ePushVar,
+		ePushMember, eGetMember,
 		ePop, eStore, eConstruct,
 
 		// Arithmetic
 		eAdd, eSub, eMul, eDiv, eMod,
 
 		// Comparison
-		eCmpEq, eCmpNeq, eCmpLt, eCmpGt, eCmpLte, eCmpGte,
+		eCmpEq, eCmpNeq, eCmpLt,
+		eCmpGt, eCmpLte, eCmpGte,
 
 		// Program flow operations
 		eCjmp, eNcjmp, eJmp,
@@ -569,13 +575,16 @@ struct _instruction {
 
 	static constexpr const char *type_str[] = {
 		// Stack operations
-		"push_tmp", "push_var", "push_member",
+		"push_tmp", "push_var",
+		"push_member", "get_member",
 		"pop", "store", "construct",
 
 		// Arithmetic
 		"add", "sub", "mul", "div", "mod",
 		// Comparison
-		"cmp_eq", "cmp_neq", "cmp_lt", "cmp_gt", "cmp_lte", "cmp_gte",
+		"cmp_eq", "cmp_neq", "cmp_lt",
+		"cmp_gt", "cmp_lte", "cmp_gte",
+
 		// Program flow operations
 		"cjmp", "ncjmp", "jmp",
 		"call", "call_ext",
@@ -647,6 +656,21 @@ std::unordered_map <
 		m.pc++;
 	}},
 
+	{_instruction::Type::eGetMember, [](machine &m, const _instruction &i) {
+		assert(std::holds_alternative <std::string> (i.op1));
+		std::string name = std::get <std::string> (i.op1);
+
+		_value v = pop(m);
+		assert(v.type > Type::eStruct);
+		_struct &s = std::get <_struct> (v.data);
+		assert(s.addresses.count(name));
+		int saddr = s.addresses[name];
+		_value mv = s.members[saddr];
+
+		m.stack.push_back(mv);
+		m.pc++;
+	}},
+
 	{_instruction::Type::ePop, [](machine &m, const _instruction &i) {
 		m.stack.pop_back();
 		m.pc++;
@@ -673,10 +697,6 @@ std::unordered_map <
 	}},
 
 	{_instruction::Type::eConstruct, [](machine &m, const _instruction &i) {
-		std::cout << "Constructing" << std::endl;
-		std::cout << "\ttype = " << std::get <int> (i.op1) << std::endl;
-		std::cout << "\tSpecified: " << std::get <std::string> (i.op2) << std::endl;
-
 		// Get the corresponding structs
 		Type type = (Type) std::get <int> (i.op1);
 		_struct s = m.type_table.structs[type];
@@ -689,14 +709,10 @@ std::unordered_map <
 		std::string concatted_members = std::get <std::string> (i.op2);
 		for (auto &c : concatted_members) {
 			if (c == ';') {
-				std::cout << "\tMember: " << member << std::endl;
-
 				int saddr = s.addresses[member];
 
 				_value v = m.member_stacks[member].top();
 				m.member_stacks[member].pop();
-
-				std::cout << "\t\tValue: " << str(v) << std::endl;
 
 				// Make sure types are matching
 				if (s.member_types[saddr] != v.type) {
@@ -714,11 +730,9 @@ std::unordered_map <
 			}
 		}
 
-		std::cout << "Result = " << str(s, true) << std::endl;
 		_value v = {type, s};
-		std::cout << "\tvalue = " << str(v) << std::endl;
-
 		m.stack.push_back(v);
+
 		m.pc++;
 	}},
 
