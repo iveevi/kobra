@@ -115,7 +115,7 @@ builds:
     - dependencies: arbok_libs
     - compiler: 'clang++'
   - experimental_debug:
-    - sources: experimental/main.cpp
+    - sources: experimental/main.cpp, source/arbok/value.cpp
     - idirs: includes
     - flags: '-std=c++17 -Wall -g -Xcompiler -fpermissive'
     - libraries: libs

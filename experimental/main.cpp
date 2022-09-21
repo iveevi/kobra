@@ -7,9 +7,15 @@
 #include <ffi.h>
 
 std::string source = R"(
-'21-' + str(12.76 * 6.0/9 + 3.0/5 - (9.0/8 - 19 + 12)) + '-12'
-print(13, 14, 'hello world', 12)
-if (false)
+struct Point {
+    x: int,
+    y: int
+}
+
+Point { x: 165, y: 243 - 40 + 3 }
+Point pt = Point { x: 1, y: 2 }
+
+if (len('hi') == 2)
 	int if_1 = 1
 else
 	int else_1 = 4
@@ -18,15 +24,15 @@ float x = 200 * 16 + 10.0/2.5 - 3
 int y = 20
 string z = "Hello world!"
 bool w = false
-
 float t = x * y
+print('t =' , t, 'z = \'', z, '\'')
 )";
 
 machine m;
 
 using nabu::parser::rd::grammar;
+using nabu::parser::_lexvalue;
 
-/*
 using clause = alias <lparen, expression, rparen>;
 using body = alias <lbrace, repeat <statement>, rbrace>;
 using conditional_body = option <statement, body>;
@@ -80,7 +86,7 @@ nabu_define_action(else_if_branch)
 	info.end = m.instructions.size();
 }
 
-using branch = alias <if_branch, repeat <else_if_branch>, option <else_branch, void>>;
+using branch = alias <if_branch, repeat <else_if_branch>, option <else_branch, epsilon>>;
 
 nabu_define_action(branch)
 {
@@ -135,7 +141,7 @@ nabu_define_action(branch)
 		assert(instruction.type == _instruction::Type::eJmp);
 		instruction.op1 = end;
 	}
-} */
+}
 
 void import(const std::string &path, machine &m)
 {
@@ -169,6 +175,133 @@ void import(const std::string &path, machine &m)
 
 }
 
+struct s_struct {
+	// TODO: type should be an identifier, just aliased... (like
+	// variable, then check if type is valid)
+	using member = alias <identifier, colon, type>;
+	using member_list = alias <member, repeat <alias <comma, member>>>;
+
+	using production_rule = alias <
+		k_struct, identifier,
+		lbrace, member_list, rbrace
+	>;
+};
+
+nabu_define_action(s_struct)
+{
+	// TODO: make sure member names are unique
+	vec v = get <vec> (lptr);
+	assert(v.size() == 5);
+
+	// Get the struct name
+	std::string name = get <std::string> (v[1]);
+	std::cout << "Struct name: " << name << std::endl;
+
+	// Get the member list
+	vec members = get <vec> (v[3]);
+
+	vec member_list;
+	member_list.push_back(members[0]);
+
+	vec rest = get <vec> (members[1]);
+	for (auto &r : rest) {
+		vec v = get <vec> (r);
+		member_list.push_back(v[1]);
+	}
+
+	std::vector <std::string> member_names;
+	std::vector <Type> member_types;
+	for (auto &m : member_list) {
+		std::cout << "\tm = " << m->str() << std::endl;
+		vec v = get <vec> (m);
+		std::string member_name = get <std::string> (v[0]);
+		Type member_type = get <Type> (v[2]);
+
+		member_names.push_back(member_name);
+		member_types.push_back(member_type);
+	}
+
+	_struct s = make_struct(name, member_names, member_types);
+	m.type_table.add_struct(s);
+}
+
+// Struct construction
+// 	All members should be initialized,
+// 	unless a default value has been specified
+// 	in the definition of the struct.
+struct p_struct {
+	using member_init = alias <identifier, colon, expression>;
+	using member_init_list = alias <
+		member_init,
+		repeat <alias <comma, member_init>>
+	>;
+
+	using production_rule = alias <
+		type,
+		lbrace, member_init_list, rbrace
+	>;
+};
+
+nabu_define_action(p_struct::member_init)
+{
+	std::cout << "p_struct::member_init" << std::endl;
+	std::cout << lptr->str() << std::endl;
+
+	vec v = get <vec> (lptr);
+	std::string member = get <std::string> (v[0]);
+
+	push(m, {_instruction::Type::ePushMember, member});
+}
+
+nabu_define_action(p_struct)
+{
+	std::cout << "p_struct" << std::endl;
+	std::cout << lptr->str() << std::endl;
+
+	// Get type
+	vec v = get <vec> (lptr);
+
+	Type type = get <Type> (v[0]);
+	std::cout << "Type: " << (int) type << std::endl;
+
+	// Get all the members that were explicitly initialized
+	vec member_inits = get <vec> (v[2]);
+
+	std::vector <std::string> explicit_members;
+	
+	// First element is guaranteed to be a member_init
+	vec m1 = get <vec> (member_inits[0]);
+	explicit_members.push_back(get <std::string> (m1[0]));
+
+	// The rest are optional, iterate over them...
+	vec rest = get <vec> (member_inits[1]);
+	for (auto &r : rest) {
+		std::cout << "rest = " << r->str() << std::endl;
+		vec v = get <vec> (r);
+		std::cout << "\tv[1] = " << v[1]->str() << std::endl;
+		vec m = get <vec> (v[1]);
+		explicit_members.push_back(get <std::string> (m[0]));
+	}
+
+	std::cout << "Explicit members: " << std::endl;
+	for (auto &m : explicit_members)
+		std::cout << "\t" << m << std::endl;
+
+	std::string concatted_members;
+	for (auto &m : explicit_members)
+		concatted_members += m + ";";
+
+	// Get corresponding struct
+	assert(m.type_table.structs.count(type));
+	_struct s = m.type_table.structs[type];
+
+	std::cout << "struct: " << str(s, true) << std::endl;
+
+	push(m, {_instruction::Type::eConstruct, (int) type, concatted_members});
+}
+
+struct statement : public option <s_struct, assignment> {};
+
 int main()
 {
 	using namespace nabu;
@@ -196,10 +329,14 @@ int main()
 
 #else
 
-	using g_input = grammar <expression>;
+	using g_input = grammar <s_struct>;
 
 	parser::rd::DualQueue dq(q);
-	while(g_input::value(dq));
+
+	grammar <s_struct> ::value(dq);
+	grammar <p_struct> ::value(dq);
+
+	// while(g_input::value(dq));
 
 	/* std::cout << "Top of queue:\n";
 	int i = 6;

@@ -7,6 +7,7 @@
 #include <iostream>
 #include <map>
 #include <queue>
+#include <stack>
 #include <unordered_map>
 #include <vector>
 
@@ -25,11 +26,12 @@ struct _instruction;
 // Function that was imported via dll/ffi
 struct _external_function {
 	// Signature
-	bool variadic;
+	bool variadic = false;
+	int ivariadic = -1;
 	int non_variadic_args;
-	_value::Type return_type;
+	Type return_type;
 	std::string name;
-	std::vector <_value::Type> argument_types;
+	std::vector <Type> argument_types;
 
 	// Handles
 	bool initialized = false;
@@ -49,64 +51,67 @@ struct _external_function {
 	_external_function &operator=(_external_function &&) = default;
 };
 
-inline _value::Type get_type(const std::string &str)
+inline Type get_type(const std::string &str, bool &variadic)
 {
-	bool variadic = false;
+	variadic = false;
 
-	std::string type_str = str;
+	std::string ltype_str = str;
 	if (str.substr(str.size() - 3) == "...") {
-		type_str = str.substr(0, str.size() - 3);
+		ltype_str = str.substr(0, str.size() - 3);
 		variadic = true;
 	}
 
 	int type = -1;
-	for (int i = 0; i <= (int) _value::Type::eStruct; i++) {
-		if (type_str == _value::type_str[i])
+	for (int i = 0; i <= (int) Type::eStruct; i++) {
+		if (ltype_str == type_str[i])
 			type = i;
 	}
 
 	if (type == -1)
 		throw std::runtime_error("Invalid type: " + str);
 
-	return (_value::Type) (type + variadic * _value::Type::eVariadic);
+	return (Type) (type);
 }
 
-inline ffi_type *get_ffi_type(_value::Type type)
+inline ffi_type *get_ffi_type(Type type, bool variadic)
 {
 	switch (type) {
-	case _value::Type::eVoid:
+	case Type::eVoid:
 		return &ffi_type_void;
-	case _value::Type::eGeneric:
+	case Type::eGeneric:
 		return &ffi_type_pointer;
-	case _value::Type::eGeneric + _value::Type::eVariadic:
-		return &ffi_type_pointer;
-	case _value::Type::eInt:
+	case Type::eInt:
 		return &ffi_type_sint32;
-	case _value::Type::eFloat:
+	case Type::eFloat:
 		return &ffi_type_float;
-	case _value::Type::eBool:
+	case Type::eBool:
 		return &ffi_type_uint8;
-	case _value::Type::eString:
+	case Type::eString:
 		return &ffi_type_pointer;
 	default:
-		throw std::runtime_error("get_ffi_type: Invalid argument type: " + std::string(_value::type_str[(int) type]));
+		throw std::runtime_error("get_ffi_type: Invalid argument type: " + std::string(type_str[(int) type]));
 	}
 
 	return nullptr;
 }
 
-inline void push_type(std::vector <ffi_type *> &types, _value::Type type)
+inline void push_type(std::vector <ffi_type *> &types, Type type, bool variadic)
 {
 	switch (type) {
-	case _value::Type::eGeneric:
-		types.push_back(&ffi_type_pointer);
+	case Type::eGeneric:
+		if (variadic) {
+			types.push_back(&ffi_type_pointer);
+			types.push_back(&ffi_type_sint);
+		} else {
+			types.push_back(&ffi_type_pointer);
+		}
+
 		break;
-	case _value::Type::eGeneric + _value::Type::eVariadic:
+	case Type::eString:
 		types.push_back(&ffi_type_pointer);
-		types.push_back(&ffi_type_sint);
 		break;
 	default:
-		throw std::runtime_error("push_type: Invalid argument type: " + std::string(_value::type_str[(int) type]));
+		throw std::runtime_error("push_type: Invalid argument type: " + std::string(type_str[(int) type]));
 	}
 }
 
@@ -144,7 +149,10 @@ inline _external_function compile_signature(const std::string &sig, const std::s
 	std::cout << "arg_types = " << arg_types << std::endl;
 
 	ftn.name = func_name;
-	ftn.return_type = get_type(ret_type);
+
+	bool variadic = false;
+	ftn.return_type = get_type(ret_type, variadic);
+	assert(!variadic);
 	
 	std::string arg_type;
 
@@ -153,9 +161,11 @@ inline _external_function compile_signature(const std::string &sig, const std::s
 		char c = arg_types[i];
 		if (c == ',') {
 			std::cout << "Checking arg_type = " << arg_type << std::endl;
-			_value::Type type = get_type(arg_type);
-			if (type >= _value::Type::eVariadic)
+			Type type = get_type(arg_type, variadic);
+			if (variadic) {
 				nvariadic++;
+				ftn.ivariadic = ftn.argument_types.size();
+			}
 
 			ftn.argument_types.push_back(type);
 			arg_type.clear();
@@ -173,9 +183,9 @@ inline _external_function compile_signature(const std::string &sig, const std::s
 	ftn.variadic = (nvariadic == 1);
 	ftn.non_variadic_args = ftn.argument_types.size() - nvariadic;
 
-	std::string reconstructed_sig = str(ftn.return_type) + " " + func_name + "(";
+	std::string reconstructed_sig = str(ftn.return_type, _value()) + " " + func_name + "(";
 	for (int i = 0; i < ftn.argument_types.size(); i++) {
-		reconstructed_sig += str(ftn.argument_types[i]);
+		reconstructed_sig += str(ftn.argument_types[i], _value());
 		if (i < ftn.argument_types.size() - 1)
 			reconstructed_sig += ", ";
 	}
@@ -199,11 +209,15 @@ inline _external_function compile_signature(const std::string &sig, const std::s
 	// std::vector <ffi_type *> *ffi_argument_types = new std::vector <ffi_type *>;
 
 	ftn.ffi_arg_types.clear();
-	if (ftn.return_type != _value::Type::eVoid)
+	if (ftn.return_type != Type::eVoid)
 		ftn.ffi_arg_types.push_back(&ffi_type_pointer);
 
-	for (int i = 0; i < ftn.argument_types.size(); i++)
-		push_type(ftn.ffi_arg_types, ftn.argument_types[i]);
+	for (int i = 0; i < ftn.argument_types.size(); i++) {
+		push_type(ftn.ffi_arg_types,
+			ftn.argument_types[i],
+			i == ftn.ivariadic
+		);
+	}
 
 	/* std::string signature = ftn.name + "(";
 	signature += get_ffi_type_str(get_ffi_type(ftn.return_type));
@@ -238,71 +252,71 @@ inline _external_function compile_signature(const std::string &sig, const std::s
 	return ftn;
 }
 
-inline void *alloc_ret(const _value::Type &type)
+inline void *alloc_ret(const Type &type)
 {
 	switch (type) {
-	case _value::Type::eVoid:
+	case Type::eVoid:
 		return nullptr;
-	case _value::Type::eGeneric:
+	case Type::eGeneric:
 		return new _value;
-	case _value::Type::eInt:
+	case Type::eInt:
 		return new int;
-	case _value::Type::eFloat:
+	case Type::eFloat:
 		return new float;
-	case _value::Type::eBool:
+	case Type::eBool:
 		return new bool;
-	case _value::Type::eString:
+	case Type::eString:
 		return new std::string;
 	default:
-		throw std::runtime_error("alloc_ret: Invalid return type: " + std::string(_value::type_str[(int) type]));
+		throw std::runtime_error("alloc_ret: Invalid return type: " + std::string(type_str[(int) type]));
 	}
 
 	return nullptr;
 }
 
-inline _value decode_ret(const _value::Type &type, void *ptr)
+inline _value decode_ret(const Type &type, void *ptr)
 {
 	_value val;
 	val.type = type;
 
 	switch (type) {
-	case _value::Type::eGeneric:
+	case Type::eGeneric:
 		val = *(_value *) ptr;
 		break;
-	case _value::Type::eInt:
+	case Type::eInt:
 		val.data = *(int *) ptr;
 		break;
-	case _value::Type::eFloat:
+	case Type::eFloat:
 		val.data = *(float *) ptr;
 		break;
-	case _value::Type::eBool:
+	case Type::eBool:
 		val.data = *(bool *) ptr;
 		break;
-	case _value::Type::eString:
+	case Type::eString:
 		val.data = *(std::string *) ptr;
 		break;
 	default:
-		throw std::runtime_error("decode_ret: Invalid return type: " + std::string(_value::type_str[(int) type]));
+		throw std::runtime_error("decode_ret: Invalid return type: " + std::string(type_str[(int) type]));
 	}
 
 	return val;
 }
 
-inline bool type_ok(const _value::Type &type, const _value &val)
+inline bool type_ok(const Type &type, const _value &val)
 {
 	switch (type) {
-	case _value::Type::eGeneric:
+	case Type::eGeneric:
 		return true;
-	case _value::Type::eInt:
-		return val.type == _value::Type::eInt;
-	case _value::Type::eFloat:
-		return val.type == _value::Type::eFloat;
-	case _value::Type::eBool:
-		return val.type == _value::Type::eBool;
-	case _value::Type::eString:
-		return val.type == _value::Type::eString;
+	case Type::eInt:
+		return val.type == Type::eInt;
+	case Type::eFloat:
+		return val.type == Type::eFloat;
+	case Type::eBool:
+		return val.type == Type::eBool;
+	case Type::eString:
+		return val.type == Type::eString;
 	default:
-		throw std::runtime_error("type_ok: Invalid argument type: " + std::string(_value::type_str[(int) type]));
+		throw std::runtime_error("type_ok: Invalid argument type: " + std::string(type_str[(int) type]));
 	}
 
 	return false;
@@ -338,10 +352,8 @@ inline _value call(_external_function &ftn, std::vector <_value> &args)
 
 	// Then check all variadic arguments
 	if (ftn.variadic) {
-		_value::Type variadic_type = _value::Type(
-			ftn.argument_types[ftn.non_variadic_args]
-				- _value::Type::eVariadic
-		);
+		Type variadic_type = ftn.argument_types
+			[ftn.non_variadic_args];
 
 		for (int i = ftn.non_variadic_args; i < args.size(); i++) {
 			if (!type_ok(variadic_type, args[i])) {
@@ -363,7 +375,7 @@ inline _value call(_external_function &ftn, std::vector <_value> &args)
 		// std::vector <ffi_type *> *ffi_argument_types = new std::vector <ffi_type *>;
 
 		ftn.ffi_arg_types.clear();
-		if (ftn.return_type != _value::Type::eVoid)
+		if (ftn.return_type != Type::eVoid)
 			ftn.ffi_arg_types.push_back(&ffi_type_pointer);
 
 		for (int i = 0; i < ftn.argument_types.size(); i++)
@@ -404,7 +416,7 @@ inline _value call(_external_function &ftn, std::vector <_value> &args)
 	std::vector <void *> ffi_args;
 
 	// Return value
-	if (ftn.return_type != _value::Type::eVoid) {
+	if (ftn.return_type != Type::eVoid) {
 		void *ret = alloc_ret(ftn.return_type);
 		void **ret_ptr = new (void *)(ret);
 		ffi_args.push_back(ret_ptr);
@@ -412,24 +424,32 @@ inline _value call(_external_function &ftn, std::vector <_value> &args)
 
 	// TODO: custom allocators (goes out of scope after this function)
 	for (int i = 0; i < args.size(); i++) {
-		_value::Type arg_type = ftn.argument_types[i];
-		if (arg_type == _value::Type::eGeneric) {
-			_value **ptr = new (_value *)(&args[i]);
-			ffi_args.push_back(ptr);
-		} else if (arg_type == _value::Type::eGeneric + _value::Type::eVariadic) {
-			int *n = new int(args.size() - i);
-			_value *ptr = new _value[*n];
-			for (int j = i; j < args.size(); j++)
-				ptr[j - i] = args[j];
+		Type arg_type = ftn.argument_types[i];
+		if (i == ftn.ivariadic) {
+			// Take care of variadics from here...
+			if (arg_type == Type::eGeneric) {
+				int *n = new int(args.size() - i);
+				_value *ptr = new _value[*n];
+				for (int j = i; j < args.size(); j++)
+					ptr[j - i] = args[j];
 
-			_value **ptr_ptr = new (_value *)(ptr);
-			ffi_args.push_back(ptr_ptr);
-			ffi_args.push_back(n);
+				_value **ptr_ptr = new (_value *)(ptr);
+				ffi_args.push_back(ptr_ptr);
+				ffi_args.push_back(n);
 
-			// No more arguments
-			break;
+				// No more arguments
+				break;
+			} else {
+				throw std::runtime_error("call: Variadic branch not implemented");
+			}
 		} else {
-			ffi_args.push_back((void *) &args[i].data);
+			if (arg_type == Type::eGeneric) {
+				_value **ptr = new (_value *)(&args[i]);
+				ffi_args.push_back(ptr);
+			} else {
+				void **ptr = new (void *)(&args[i].data);
+				ffi_args.push_back(ptr);
+			}
 		}
 	}
 
@@ -437,19 +457,59 @@ inline _value call(_external_function &ftn, std::vector <_value> &args)
 	ffi_call(&ftn.cif, FFI_FN(ftn.handle), nullptr, ffi_args.data());
 
 	// Decode return value
-	if (ftn.return_type != _value::Type::eVoid) {
+	if (ftn.return_type != Type::eVoid) {
 		void *ret_addr = *(void **) ffi_args[0];
 		_value ret = decode_ret(ftn.return_type, ret_addr);
 		return ret;
 	}
 
-	return _value {_value::Type::eVoid, 0};
+	return _value {Type::eVoid, 0};
 }
+
+struct _type_table {
+	std::map <std::string, Type> types;
+	std::map <Type, _struct> structs;
+
+	// Type id of the next struct
+	int struct_id = Type::eStructId;
+
+	// Default constructor initializes type table
+	_type_table() {
+		types["void"] = Type::eVoid;
+		types["bool"] = Type::eBool;
+		types["int"] = Type::eInt;
+		types["float"] = Type::eFloat;
+		types["string"] = Type::eString;
+		types["__value__"] = Type::eGeneric;
+	}
+
+	// Add a struct to the type table
+	void add_struct(const _struct &s) {
+		std::cout << "Adding struct " << s.name << std::endl;
+
+		// Add struct to type table
+		types[s.name] = (enum Type) struct_id;
+		structs[(enum Type) struct_id] = s;
+
+		// Increment struct id
+		struct_id++;
+	}
+};
 
 struct machine {
 	// TODO: move to stack frame
 	std::vector <_value> stack;
 	std::vector <_value> tmp;
+
+	// Mapped stacks for struct construction
+	//	using aggregate initialization
+	std::map <std::string, std::stack <_value>>
+			member_stacks;
+
+	// Type table
+	_type_table type_table;
+
+	// Multiple overloads?
 
 	// Functions
 	struct {
@@ -461,10 +521,10 @@ struct machine {
 	// Stack frame
 	struct Frame {
 		std::vector <_value> mem;
-		std::vector <_value::Type> types;
+		std::vector <Type> types;
 		std::map <std::string, int> map;
 
-		int add(const std::string &name, _value::Type type) {
+		int add(const std::string &name, Type type) {
 			int addr = mem.size();
 			map[name] = addr;
 			mem.push_back(_value());
@@ -491,26 +551,46 @@ inline _value pop(machine &m)
 // At most two operands
 struct _instruction {
 	enum class Type {
-		ePushTmp, ePushVar, ePop, eStore,
+		// Stack operations
+		ePushTmp, ePushVar, ePushMember,
+		ePop, eStore, eConstruct,
+
+		// Arithmetic
 		eAdd, eSub, eMul, eDiv, eMod,
-		eCjmp, eNcjmp, eJmp, eCall, eCallExt,
+
+		// Comparison
+		eCmpEq, eCmpNeq, eCmpLt, eCmpGt, eCmpLte, eCmpGte,
+
+		// Program flow operations
+		eCjmp, eNcjmp, eJmp,
+		eCall, eCallExt,
 		eRet, eEnd
 	} type;
 
 	static constexpr const char *type_str[] = {
-		"push_tmp", "push_var", "pop", "store",
+		// Stack operations
+		"push_tmp", "push_var", "push_member",
+		"pop", "store", "construct",
+
+		// Arithmetic
 		"add", "sub", "mul", "div", "mod",
-		"cjmp", "ncjmp", "jmp", "call", "call_ext",
+		// Comparison
+		"cmp_eq", "cmp_neq", "cmp_lt", "cmp_gt", "cmp_lte", "cmp_gte",
+		// Program flow operations
+		"cjmp", "ncjmp", "jmp",
+		"call", "call_ext",
 		"ret", "end"
 	};
 
 	// Operands
-	std::variant <int, _value> op1;
-	std::variant <int, _value> op2;
+	using operand_t = std::variant <int, std::string>;
+
+	operand_t op1;
+	operand_t op2;
 
 	_instruction(Type t,
-			std::variant <int, _value> o1 = -1,
-			std::variant <int, _value> o2 = -1)
+			const operand_t &o1 = -1,
+			const operand_t &o2 = -1)
 			: type(t), op1(o1), op2(o2) {}
 };
 
@@ -522,14 +602,18 @@ inline std::string str(const _instruction &i)
 	out += ", op1: ";
 	if (std::holds_alternative <int> (i.op1))
 		out += std::to_string(std::get <int> (i.op1));
+	else if (std::holds_alternative <std::string> (i.op1))
+		out += std::get <std::string> (i.op1);
 	else
-		out += str(std::get <_value> (i.op1));
+		throw std::runtime_error("str: Invalid operand type");
 
 	out += ", op2: ";
 	if (std::holds_alternative <int> (i.op2))
 		out += std::to_string(std::get <int> (i.op2));
+	else if (std::holds_alternative <std::string> (i.op2))
+		out += std::get <std::string> (i.op2);
 	else
-		out += str(std::get <_value> (i.op2));
+		throw std::runtime_error("str: Invalid operand type");
 
 	out += ")";
 	return out;
@@ -554,6 +638,15 @@ std::unordered_map <
 		m.pc++;
 	}},
 
+	{_instruction::Type::ePushMember, [](machine &m, const _instruction &i) {
+		assert(std::holds_alternative <std::string> (i.op1));
+		std::string name = std::get <std::string> (i.op1);
+
+		_value v = pop(m);
+		m.member_stacks[name].push(v);
+		m.pc++;
+	}},
+
 	{_instruction::Type::ePop, [](machine &m, const _instruction &i) {
 		m.stack.pop_back();
 		m.pc++;
@@ -568,13 +661,64 @@ std::unordered_map <
 
 		// Make sure types are matching
 		if (v.type != m.variables.types[addr]) {
+			auto mv = m.variables.mem[addr];
 			std::cerr << "Cannot assign value of type "
-				<< str(v.type) << " to type "
-				<< str(m.variables.types[addr]) << std::endl;
+				<< str(v.type, v) << " to type "
+				<< str(m.variables.types[addr], mv) << std::endl;
 			exit(1);
 		}
 
 		m.variables.mem[addr] = v;
+		m.pc++;
+	}},
+
+	{_instruction::Type::eConstruct, [](machine &m, const _instruction &i) {
+		std::cout << "Constructing" << std::endl;
+		std::cout << "\ttype = " << std::get <int> (i.op1) << std::endl;
+		std::cout << "\tSpecified: " << std::get <std::string> (i.op2) << std::endl;
+
+		// Get the corresponding structs
+		Type type = (Type) std::get <int> (i.op1);
+		_struct s = m.type_table.structs[type];
+
+		// TODO: make sure everything that is not default is specified
+
+		// Construct the object
+		std::string member;
+
+		std::string concatted_members = std::get <std::string> (i.op2);
+		for (auto &c : concatted_members) {
+			if (c == ';') {
+				std::cout << "\tMember: " << member << std::endl;
+
+				int saddr = s.addresses[member];
+
+				_value v = m.member_stacks[member].top();
+				m.member_stacks[member].pop();
+
+				std::cout << "\t\tValue: " << str(v) << std::endl;
+
+				// Make sure types are matching
+				if (s.member_types[saddr] != v.type) {
+					std::cerr << "(struct) Cannot assign value of type "
+						<< str(v.type, v) << " to type "
+						<< str(s.member_types[saddr], m.variables.mem[saddr]) << std::endl;
+					exit(1);
+				}
+
+				s.members[saddr] = v;
+
+				member.clear();
+			} else {
+				member += c;
+			}
+		}
+
+		std::cout << "Result = " << str(s, true) << std::endl;
+		_value v = {type, s};
+		std::cout << "\tvalue = " << str(v) << std::endl;
+
+		m.stack.push_back(v);
 		m.pc++;
 	}},
 
@@ -622,12 +766,45 @@ std::unordered_map <
 		m.pc++;
 	}},
 
+	{_instruction::Type::eMod, [](machine &m, const _instruction &i) {
+		_value v1 = m.stack.back();
+		m.stack.pop_back();
+
+		_value v2 = m.stack.back();
+		m.stack.pop_back();
+
+		m.stack.push_back(v2 % v1);
+		m.pc++;
+	}},
+
+	{_instruction::Type::eCmpEq, [](machine &m, const _instruction &i) {
+		_value v1 = m.stack.back();
+		m.stack.pop_back();
+
+		_value v2 = m.stack.back();
+		m.stack.pop_back();
+
+		m.stack.push_back(v2 == v1);
+		m.pc++;
+	}},
+
+	{_instruction::Type::eCmpNeq, [](machine &m, const _instruction &i) {
+		_value v1 = m.stack.back();
+		m.stack.pop_back();
+
+		_value v2 = m.stack.back();
+		m.stack.pop_back();
+
+		m.stack.push_back(v2 != v1);
+		m.pc++;
+	}},
+
 	{_instruction::Type::eCjmp, [](machine &m, const _instruction &i) {
 		// Check previous stack value,
 		//   then jump if true
 		_value v = pop(m);
 
-		if (v.type != _value::Type::eBool) {
+		if (v.type != Type::eBool) {
 			std::cerr << "Conditional clauses must be of type bool" << std::endl;
 			std::cerr << "\tgot: " << str(v) << std::endl;
 			exit(1);
@@ -646,11 +823,9 @@ std::unordered_map <
 		// Check previous stack value,
 		//   then jump if false
 		_value v = pop(m);
-
-		if (v.type != _value::Type::eBool) {
+		if (v.type != Type::eBool) {
 			std::cerr << "Conditional clauses must be of type bool" << std::endl;
-			std::cerr << "\tncjmp got: " << str(v) << " @" << m.pc << std::endl;
-			dump(m);
+			std::cerr << "\tncjmp got: " << info(v) << " @(pc = " << m.pc << ")" << std::endl;
 			exit(1);
 		}
 
@@ -687,7 +862,7 @@ std::unordered_map <
 		_value ret = call(f, args);
 
 		// Push return value
-		if (ret.type != _value::Type::eVoid)
+		if (ret.type != Type::eVoid)
 			m.stack.push_back(ret);
 		m.pc++;
 	}},
@@ -722,8 +897,9 @@ inline void dump(const machine &m)
 
 	std::cout << "\nVariables: " << m.variables.map.size() << std::endl;
 	for (auto &p : m.variables.map) {
+		auto mv = m.variables.mem[p.second];
 		std::cout << p.first << " (addr=" << p.second
-			<< ", type=" << str(m.variables.types[p.second]) << ")"
+			<< ", type=" << str(m.variables.types[p.second], mv) << ")"
 			<< " = " << str(m.variables.mem[p.second]) << std::endl;
 	}
 
