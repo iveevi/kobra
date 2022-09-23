@@ -180,6 +180,8 @@ public:
 	int width;
 	int height;
 
+	int samples_per_pixel = 1;
+
 	// Resulting vulkan image
 	ImageData _result = nullptr;
 	vk::raii::Sampler _sampler = nullptr;

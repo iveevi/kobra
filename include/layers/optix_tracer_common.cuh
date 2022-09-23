@@ -14,6 +14,8 @@ namespace optix_rt {
 
 struct Params
 {
+	int			spp;
+
 	float4			*pbuffer;
 	float4			*nbuffer;
 	float4			*abuffer;

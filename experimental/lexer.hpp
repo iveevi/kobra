@@ -89,12 +89,15 @@ inline Type to_type(const std::string &s)
 //////////////////
 
 // Reserved words
-// nabu_terminal(type);
-
 nabu_terminal(k_struct);
 nabu_terminal(k_if);
 nabu_terminal(k_else);
 nabu_terminal(k_while);
+nabu_terminal(k_for);
+nabu_terminal(k_break);
+nabu_terminal(k_continue);
+nabu_terminal(k_return);
+nabu_terminal(k_func);
 
 nabu_terminal(k_true);
 nabu_terminal(k_false);
@@ -106,6 +109,8 @@ nabu_terminal(p_int);
 
 nabu_terminal(double_str);
 nabu_terminal(single_str);
+
+nabu_terminal(sym_return);
 
 nabu_terminal(cmp_eq);
 nabu_terminal(cmp_neq);
@@ -149,7 +154,7 @@ ignore(space)
 /////////////////////////////////////
 
 // All reserved words
-#define RESERVED_WORDS "struct|if|else|while|true|false"
+#define RESERVED_WORDS "struct|if|else|while|for|break|continue|return|func|true|false"
 
 auto_mk_overloaded_token(identifier, "\\b(?!(?:" RESERVED_WORDS ")\\b)[a-zA-Z_][a-zA-Z0-9_]*\\b", std::string, to_string)
 
@@ -160,6 +165,11 @@ auto_mk_token(k_struct, "struct")
 auto_mk_token(k_if, "if")
 auto_mk_token(k_else, "else")
 auto_mk_token(k_while, "while")
+auto_mk_token(k_for, "for")
+auto_mk_token(k_break, "break")
+auto_mk_token(k_continue, "continue")
+auto_mk_token(k_return, "return")
+auto_mk_token(k_func, "func")
 
 auto_mk_overloaded_token(k_true, "true", bool, [](const std::string &s) { return true; })
 auto_mk_overloaded_token(k_false, "false", bool, [](const std::string &s) { return false; })
@@ -168,6 +178,8 @@ auto_mk_overloaded_token(p_float, "[+-]?[0-9]*\\.[0-9]+", float, std::stof)
 auto_mk_overloaded_token(p_int, "[+-]?[0-9]+", int, std::stoi)
 auto_mk_overloaded_token(double_str, "\"(?:[^\"\\\\]|\\\\.)*\"", std::string, process_string)
 auto_mk_overloaded_token(single_str, "'(?:[^'\\\\]|\\\\.)*'", std::string, process_string)
+
+auto_mk_token(sym_return, "->")
 
 auto_mk_token(cmp_eq, "==")
 auto_mk_token(cmp_neq, "!=")
@@ -212,7 +224,12 @@ lexlist_next(identifier, k_struct)
 lexlist_next(k_struct, k_if)
 lexlist_next(k_if, k_else)
 lexlist_next(k_else, k_while)
-lexlist_next(k_while, k_true)
+lexlist_next(k_while, k_for)
+lexlist_next(k_for, k_break)
+lexlist_next(k_break, k_continue)
+lexlist_next(k_continue, k_return)
+lexlist_next(k_return, k_func)
+lexlist_next(k_func, k_true)
 
 lexlist_next(k_true, k_false)
 // lexlist_next(k_false, identifier)
@@ -223,7 +240,9 @@ lexlist_next(p_float, p_int)
 lexlist_next(p_int, double_str)
 
 lexlist_next(double_str, single_str)
-lexlist_next(single_str, cmp_eq)
+lexlist_next(single_str, sym_return)
+
+lexlist_next(sym_return, cmp_eq)
 
 lexlist_next(cmp_eq, cmp_neq)
 lexlist_next(cmp_neq, cmp_gt)

@@ -45,19 +45,24 @@ static __forceinline__ __device__ void pack_pointer(T * ptr, uint32_t &i0, uint3
 }
 
 static __forceinline__ __device__ void make_ray
-		(uint3 idx, uint3 dim,
-		 float3 &origin, float3 &direction,
-		 float3 &seed)
+		(uint3 idx, uint3 dim, int index,
+		 float3 &origin,
+		 float3 &direction,
+		 float3 &seed,
+		 float &radius)
 {
 	const float3 U = params.cam_u;
 	const float3 V = params.cam_v;
 	const float3 W = params.cam_w;
+	
+	// Jittered halton
+	int xoff = rand(params.image_width, seed);
+	int yoff = rand(params.image_height, seed);
 
-	int index = idx.x + params.image_width * idx.y;
-
-	// TODO: jittered halton sequence
-	float xoffset = fract(random3(seed).x) - 0.5f;
-	float yoffset = fract(random3(seed).y) - 0.5f;
+	// Compute ray origin and direction
+	float xoffset = params.xoffset[xoff];
+	float yoffset = params.yoffset[yoff];
+	radius = sqrt(xoffset * xoffset + yoffset * yoffset)/sqrt(0.5f);
 
 	float2 d = 2.0f * make_float2(
 		float(idx.x + xoffset)/dim.x,
@@ -79,56 +84,122 @@ struct RayPacket {
 	int depth;
 };
 
+namespace filters {
+
+__forceinline__ __device__
+float box(float r)
+{
+	return 1.0f;
+}
+
+__forceinline__ __device__
+float triangle(float r)
+{
+	return max(0.0f, min(1.0f - r, 1.0f));
+}
+
+__forceinline__ __device__
+float gaussian(float r, float alpha = 2.0f)
+{
+	return exp(-alpha * r * r) - exp(-alpha);
+}
+
+__forceinline__ __device__
+float mitchell(float r, float B = 1.0f/3.0f, float C = 1.0f/3.0f)
+{
+	r = fabs(2.0f * r);
+	if (r > 1.0f) {
+		return ((-B - 6.0f * C) * r * r * r + (6.0f * B + 30.0f * C) * r * r +
+			(-12.0f * B - 48.0f * C) * r + (8.0f * B + 24.0f * C)) * (1.0f / 6.0f);
+	}
+
+	return ((12.0f - 9.0f * B - 6.0f * C) * r * r * r +
+		(-18.0f + 12.0f * B + 6.0f * C) * r * r +
+		(6.0f - 2.0f * B)) * (1.0f / 6.0f);
+}
+
+}
+
 extern "C" __global__ void __raygen__rg()
 {
 	// Lookup our location within the launch grid
 	const uint3 idx = optixGetLaunchIndex();
 	const uint3 dim = optixGetLaunchDimensions();
-
-	// Pack payload
-	RayPacket ray_packet;
-	ray_packet.diffuse = make_float3(0.0f);
-	ray_packet.normal = make_float3(0.0f);
-	ray_packet.throughput = {1.0f, 1.0f, 1.0f};
-	ray_packet.value = {0.0f, 0.0f, 0.0f};
-	ray_packet.seed = {float(idx.x), float(idx.y), params.time};
-	ray_packet.ior = 1.0f;
-	ray_packet.depth = 0;
-
-	// Generate ray
-	float3 ray_origin;
-	float3 ray_direction;
-
-	make_ray(idx, dim, ray_origin, ray_direction, ray_packet.seed);
-
-	unsigned int i0, i1;
-	pack_pointer(&ray_packet, i0, i1);
 	
-	// Launch
-	optixTrace(params.handle,
-		ray_origin, ray_direction,
-		0.0f, 1e16f, 0.0f,
-		OptixVisibilityMask(255),
-		OPTIX_RAY_FLAG_DISABLE_ANYHIT,
-		0, 0, 0,
-		i0, i1
-	);
-
-	// Check value
-	float4 pixel = make_float4(ray_packet.value);
-	float4 normal = make_float4(ray_packet.normal);
-	float4 diffuse = make_float4(ray_packet.diffuse);
-
-	// assert(!isnan(pixel.x) && !isnan(pixel.y) && !isnan(pixel.z));
-	if (isnan(pixel.x) || isnan(pixel.y) || isnan(pixel.z))
-		pixel = {0.0f, 0.0f, 0.0f, 0.0f};
-
-	// Record the results
+	// Index to store
 	int index = idx.x + params.image_width * idx.y;
 
-	params.pbuffer[index] = (pixel + params.pbuffer[index] * params.accumulated)/(params.accumulated + 1);
-	params.nbuffer[index] = (normal + params.nbuffer[index] * params.accumulated)/(params.accumulated + 1);
-	params.abuffer[index] = (diffuse + params.abuffer[index] * params.accumulated)/(params.accumulated + 1);
+	// Iterate over samples per pixel
+	int n = params.spp;
+
+	// Averages
+	float4 avg_pixel = make_float4(0.0f);
+	float4 avg_normal = make_float4(0.0f);
+	float4 avg_diffuse = make_float4(0.0f);
+
+	while (n--) {
+		// Pack payload
+		RayPacket ray_packet;
+		ray_packet.diffuse = make_float3(0.0f);
+		ray_packet.normal = make_float3(0.0f);
+		ray_packet.throughput = {1.0f, 1.0f, 1.0f};
+		ray_packet.value = {0.0f, 0.0f, 0.0f};
+		ray_packet.seed = {float(idx.x), float(idx.y), params.time};
+		ray_packet.ior = 1.0f;
+		ray_packet.depth = 0;
+
+		// Generate ray
+		float3 ray_origin;
+		float3 ray_direction;
+		float radius;
+
+		make_ray(idx, dim, index,
+			ray_origin,
+			ray_direction,
+			ray_packet.seed,
+			radius
+		);
+
+		unsigned int i0, i1;
+		pack_pointer(&ray_packet, i0, i1);
+		
+		// Launch
+		optixTrace(params.handle,
+			ray_origin, ray_direction,
+			0.0f, 1e16f, 0.0f,
+			OptixVisibilityMask(255),
+			OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+			0, 0, 0,
+			i0, i1
+		);
+
+		// Check value
+		float4 pixel = make_float4(ray_packet.value);
+		float4 normal = make_float4(ray_packet.normal);
+		float4 diffuse = make_float4(ray_packet.diffuse);
+
+		// assert(!isnan(pixel.x) && !isnan(pixel.y) && !isnan(pixel.z));
+		if (isnan(pixel.x) || isnan(pixel.y) || isnan(pixel.z))
+			pixel = {0.0f, 0.0f, 0.0f, 0.0f};
+
+		// Averaged factor
+		float factor = filters::box(radius);
+
+		// Accumulate
+		avg_pixel += pixel * factor;
+		avg_normal += normal * factor;
+		avg_diffuse += diffuse * factor;
+	}
+
+	// Average
+	avg_pixel /= float(params.spp);
+	avg_normal /= float(params.spp);
+	avg_diffuse /= float(params.spp);
+
+	// Record the results
+	params.pbuffer[index] = (avg_pixel + params.pbuffer[index] * params.accumulated)/(params.accumulated + 1);
+	params.nbuffer[index] = (avg_normal + params.nbuffer[index] * params.accumulated)/(params.accumulated + 1);
+	params.abuffer[index] = (avg_diffuse + params.abuffer[index] * params.accumulated)/(params.accumulated + 1);
 }
 
 extern "C" __global__ void __miss__radiance()

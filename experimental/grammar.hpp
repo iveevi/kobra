@@ -113,7 +113,7 @@ nabu_define_action(factor::member_access)
 	std::string member_name = get <std::string> (v[1]);
 	std::cout << "\t" << member_name << std::endl;
 
-	push(m, {_instruction::Type::eGetMember, member_name});
+	push_instr(m, {_instruction::Type::eGetMember, member_name});
 }
 
 // Terms (can be added, subtracted, etc.)
@@ -214,8 +214,8 @@ nabu_define_action(p_int)
 	v.type = Type::eInt;
 	v.data = get <int> (lptr);
 
-	push(m, {_instruction::Type::ePushTmp, (int) m.tmp.size()});
-	push(m, v);
+	push_instr(m, {_instruction::Type::ePushTmp, (int) m.tmp.size()});
+	push_stack(m, v);
 }
 
 nabu_define_action(p_float)
@@ -224,8 +224,8 @@ nabu_define_action(p_float)
 	v.type = Type::eFloat;
 	v.data = get <float> (lptr);
 
-	push(m, {_instruction::Type::ePushTmp, (int) m.tmp.size()});
-	push(m, v);
+	push_instr(m, {_instruction::Type::ePushTmp, (int) m.tmp.size()});
+	push_stack(m, v);
 }
 
 nabu_define_action(p_string)
@@ -234,8 +234,8 @@ nabu_define_action(p_string)
 	v.type = Type::eString;
 	v.data = get <std::string> (lptr);
 
-	push(m, {_instruction::Type::ePushTmp, (int) m.tmp.size()});
-	push(m, v);
+	push_instr(m, {_instruction::Type::ePushTmp, (int) m.tmp.size()});
+	push_stack(m, v);
 }
 
 nabu_define_action(p_bool)
@@ -244,69 +244,69 @@ nabu_define_action(p_bool)
 	v.type = Type::eBool;
 	v.data = get <bool> (lptr);
 
-	push(m, {_instruction::Type::ePushTmp, (int) m.tmp.size()});
-	push(m, v);
+	push_instr(m, {_instruction::Type::ePushTmp, (int) m.tmp.size()});
+	push_stack(m, v);
 }
 
 // Actions for operations
 nabu_define_action(term::_mul)
 {
 	std::cout << "term::_mul" << std::endl;
-	push(m, _instruction::Type::eMul);
+	push_instr(m, _instruction::Type::eMul);
 }
 
 nabu_define_action(term::_div)
 {
 	std::cout << "term::_div" << std::endl;
-	push(m, _instruction::Type::eDiv);
+	push_instr(m, _instruction::Type::eDiv);
 }
 
 nabu_define_action(additive_expression::_add)
 {
 	std::cout << "expression::_add" << std::endl;
-	push(m, _instruction::Type::eAdd);
+	push_instr(m, _instruction::Type::eAdd);
 }
 
 nabu_define_action(additive_expression::_sub)
 {
 	std::cout << "expression::_sub" << std::endl;
-	push(m, _instruction::Type::eSub);
+	push_instr(m, _instruction::Type::eSub);
 }
 
 nabu_define_action(comparative_expression::_eq)
 {
 	std::cout << "expression::_cmp_eq" << std::endl;
-	push(m, _instruction::Type::eCmpEq);
+	push_instr(m, _instruction::Type::eCmpEq);
 }
 
 nabu_define_action(comparative_expression::_neq)
 {
 	std::cout << "expression::_cmp_neq" << std::endl;
-	push(m, _instruction::Type::eCmpNeq);
+	push_instr(m, _instruction::Type::eCmpNeq);
 }
 
 nabu_define_action(comparative_expression::_gt)
 {
 	std::cout << "expression::_cmp_gt" << std::endl;
-	push(m, _instruction::Type::eCmpGt);
+	push_instr(m, _instruction::Type::eCmpGt);
 }
 
 nabu_define_action(comparative_expression::_lt)
 {
 	std::cout << "expression::_cmp_lt" << std::endl;
-	push(m, _instruction::Type::eCmpLt);
+	push_instr(m, _instruction::Type::eCmpLt);
 }
 
 nabu_define_action(comparative_expression::_gte)
 {
 	std::cout << "expression::_cmp_gte" << std::endl;
-	push(m, _instruction::Type::eCmpGte);
+	push_instr(m, _instruction::Type::eCmpGte);
 }
 
 nabu_define_action(comparative_expression::_lte)
 {
 	std::cout << "expression::_cmp_lte" << std::endl;
-	push(m, _instruction::Type::eCmpLte);
+	push_instr(m, _instruction::Type::eCmpLte);
 }
 
 // Actions for semantics
@@ -314,14 +314,15 @@ nabu_define_action(variable)
 {
 	// Get identifier
 	std::string id = get <std::string> (lptr);
-	if (m.variables.map.count(id) == 0) {
+
+	auto pr = m.topmost(id);
+	if (pr.first == -1 && pr.second == -1) {
 		std::cout << "Error: variable '" << id << "' not found" << std::endl;
 		return;
 	}
 
 	// Push variable to stack
-	int addr = m.variables.map[id];
-	push(m, {_instruction::Type::ePushVar, addr});
+	push_instr(m, {_instruction::Type::ePushVar, pr.first, pr.second});
 }
 
 nabu_define_action(function_call)
@@ -337,7 +338,7 @@ nabu_define_action(function_call)
 	if (m.functions.map_ext.count(name) > 0) {
 		// External function
 		int index = m.functions.map_ext[name];
-		push(m, {_instruction::Type::eCallExt, index, nargs});
+		push_instr(m, {_instruction::Type::eCallExt, index, nargs});
 	} else {
 		std::cout << "Unknown function: " << name << std::endl;
 		throw std::runtime_error("Unknown function");
@@ -355,10 +356,10 @@ nabu_define_action(assignment)
 	std::string id = get <std::string> (v[1]);
 
 	// Check if the symbol is being redefined with a different type
-	machine::Frame &f = m.variables;
-	if (f.map.count(id) > 0) {
-		int addr = f.map[id];
-		Type old_type = f.types[addr];
+	auto pr = m.topmost(id);
+
+	if (pr.first != -1 || pr.second != -1) {
+		Type old_type = m.get_type(pr.first, pr.second);
 		
 		if (old_type != type) {
 			// TODO: and then show line number, etc
@@ -371,10 +372,11 @@ nabu_define_action(assignment)
 	std::cout << "Storing into " << id << std::endl;
 
 	// Make space in the machine
-	int addr = m.variables.add(id, type);
+	int addr = m.frames.back().add(id, type);
+	int level = m.frames.size() - 1;
 
 	// Push a store instruction
-	push(m, {_instruction::Type::eStore, addr});
+	push_instr(m, {_instruction::Type::eStore, addr, level});
 }
 
 // TODO: error checking trips

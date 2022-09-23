@@ -325,9 +325,6 @@ inline bool type_ok(const Type &type, const _value &val)
 inline _value call(_external_function &ftn, std::vector <_value> &args)
 {
 	// TODO: # of arguments checking
-	std::cout << "# of args passed = " << args.size() << std::endl;
-	std::cout << "\t# of non-variadic args = " << ftn.non_variadic_args << std::endl;
-
 	if (ftn.variadic) {
 		if (args.size() < ftn.non_variadic_args) {
 			throw std::runtime_error("call: Too few arguments passed"
@@ -498,7 +495,6 @@ struct _type_table {
 
 struct machine {
 	// TODO: move to stack frame
-	std::vector <_value> stack;
 	std::vector <_value> tmp;
 
 	// Mapped stacks for struct construction
@@ -520,6 +516,7 @@ struct machine {
 
 	// Stack frame
 	struct Frame {
+		std::vector <_value> stack;
 		std::vector <_value> mem;
 		std::vector <Type> types;
 		std::map <std::string, int> map;
@@ -535,21 +532,56 @@ struct machine {
 			types.push_back(type);
 			return addr;
 		}
-	} variables;
+	};
+
+	// Stack of stack frames
+	std::vector <Frame> frames = { Frame() };
+
+	// Get value at address and level
+	_value &get(int addr, int level) {
+		assert(level >= 0 && level < frames.size());
+		return frames[frames.size() - 1 - level].mem[addr];
+	}
+
+	void set(int addr, int level, const _value &v) {
+		assert(level >= 0 && level < frames.size());
+		frames[frames.size() - 1 - level].mem[addr] = v;
+	}
+
+	Type get_type(int addr, int level) {
+		assert(level >= 0 && level < frames.size());
+		return frames[frames.size() - 1 - level].types[addr];
+	}
+
+	// Get top most variable
+	std::pair <int, int> topmost(const std::string &name) {
+		for (int i = frames.size() - 1; i >= 0; i--) {
+			auto it = frames[i].map.find(name);
+			if (it != frames[i].map.end())
+				return {it->second, frames.size() - 1 - i};
+		}
+
+		return {-1, -1};
+	}
 
 	// Instructions
 	std::vector <_instruction> instructions;
 
-	uint32_t pc = 0;
+	int32_t pc = 0;
 };
 
 void dump(const machine &);
 
-inline _value pop(machine &m)
+inline _value pop_stack(machine &m)
 {
-	_value v = m.stack.back();
-	m.stack.pop_back();
+	_value v = m.frames.back().stack.back();
+	m.frames.back().stack.pop_back();
 	return v;
+}
+
+inline void push_stack(machine &m, const _value &v)
+{
+	m.frames.back().stack.push_back(v);
 }
 
 // At most two operands
@@ -558,6 +590,7 @@ struct _instruction {
 		// Stack operations
 		ePushTmp, ePushVar,
 		ePushMember, eGetMember,
+		ePushFrame, ePopFrame,
 		ePop, eStore, eConstruct,
 
 		// Arithmetic
@@ -577,6 +610,7 @@ struct _instruction {
 		// Stack operations
 		"push_tmp", "push_var",
 		"push_member", "get_member",
+		"push_frame", "pop_frame",
 		"pop", "store", "construct",
 
 		// Arithmetic
@@ -636,14 +670,19 @@ std::unordered_map <
 	{_instruction::Type::ePushTmp, [](machine &m, const _instruction &i) {
 		assert(std::holds_alternative <int> (i.op1));
 		int addr = std::get <int> (i.op1);
-		m.stack.push_back(m.tmp[addr]);
+		push_stack(m, m.tmp[addr]);
 		m.pc++;
 	}},
 
 	{_instruction::Type::ePushVar, [](machine &m, const _instruction &i) {
 		assert(std::holds_alternative <int> (i.op1));
 		int addr = std::get <int> (i.op1);
-		m.stack.push_back(m.variables.mem[addr]);
+		int level = std::get <int> (i.op2);
+
+		std::cout << "Pushing var at addr " << addr
+				<< " and level " << level << std::endl;
+
+		push_stack(m, m.get(addr, level));
 		m.pc++;
 	}},
 
@@ -651,7 +690,7 @@ std::unordered_map <
 		assert(std::holds_alternative <std::string> (i.op1));
 		std::string name = std::get <std::string> (i.op1);
 
-		_value v = pop(m);
+		_value v = pop_stack(m);
 		m.member_stacks[name].push(v);
 		m.pc++;
 	}},
@@ -660,39 +699,40 @@ std::unordered_map <
 		assert(std::holds_alternative <std::string> (i.op1));
 		std::string name = std::get <std::string> (i.op1);
 
-		_value v = pop(m);
+		_value v = pop_stack(m);
 		assert(v.type > Type::eStruct);
 		_struct &s = std::get <_struct> (v.data);
 		assert(s.addresses.count(name));
 		int saddr = s.addresses[name];
 		_value mv = s.members[saddr];
 
-		m.stack.push_back(mv);
+		push_stack(m, mv);
 		m.pc++;
 	}},
 
+	// TODO: is this even used?
 	{_instruction::Type::ePop, [](machine &m, const _instruction &i) {
-		m.stack.pop_back();
+		pop_stack(m);
 		m.pc++;
 	}},
 
 	{_instruction::Type::eStore, [](machine &m, const _instruction &i) {
 		assert(std::holds_alternative <int> (i.op1));
 		int addr = std::get <int> (i.op1);
+		int level = std::get <int> (i.op2);
 
-		_value v = m.stack.back();
-		m.stack.pop_back();
+		_value v = pop_stack(m);
 
 		// Make sure types are matching
-		if (v.type != m.variables.types[addr]) {
-			auto mv = m.variables.mem[addr];
+		if (v.type != m.get_type(addr, level)) {
+			auto mv = m.get(addr, level);
 			std::cerr << "Cannot assign value of type "
 				<< str(v.type, v) << " to type "
-				<< str(m.variables.types[addr], mv) << std::endl;
+				<< str(m.get_type(addr, level), mv) << std::endl;
 			exit(1);
 		}
 
-		m.variables.mem[addr] = v;
+		m.set(addr, level, v);
 		m.pc++;
 	}},
 
@@ -718,7 +758,7 @@ std::unordered_map <
 				if (s.member_types[saddr] != v.type) {
 					std::cerr << "(struct) Cannot assign value of type "
 						<< str(v.type, v) << " to type "
-						<< str(s.member_types[saddr], m.variables.mem[saddr]) << std::endl;
+						<< str(s.member_types[saddr], s.members[saddr]) << std::endl;
 					exit(1);
 				}
 
@@ -731,92 +771,64 @@ std::unordered_map <
 		}
 
 		_value v = {type, s};
-		m.stack.push_back(v);
+		push_stack(m, v);
 
 		m.pc++;
 	}},
 
 	{_instruction::Type::eAdd, [](machine &m, const _instruction &i) {
-		_value v1 = m.stack.back();
-		m.stack.pop_back();
-
-		_value v2 = m.stack.back();
-		m.stack.pop_back();
-
-		m.stack.push_back(v2 + v1);
+		_value v1 = pop_stack(m);
+		_value v2 = pop_stack(m);
+		push_stack(m, v1 + v2);
 		m.pc++;
 	}},
 
 	{_instruction::Type::eSub, [](machine &m, const _instruction &i) {
-		_value v1 = m.stack.back();
-		m.stack.pop_back();
-
-		_value v2 = m.stack.back();
-		m.stack.pop_back();
-
-		m.stack.push_back(v2 - v1);
+		_value v1 = pop_stack(m);
+		_value v2 = pop_stack(m);
+		push_stack(m, v1 - v2);
 		m.pc++;
 	}},
 
 	{_instruction::Type::eMul, [](machine &m, const _instruction &i) {
-		_value v1 = m.stack.back();
-		m.stack.pop_back();
-
-		_value v2 = m.stack.back();
-		m.stack.pop_back();
-
-		m.stack.push_back(v2 * v1);
+		_value v1 = pop_stack(m);
+		_value v2 = pop_stack(m);
+		push_stack(m, v1 * v2);
 		m.pc++;
 	}},
 
 	{_instruction::Type::eDiv, [](machine &m, const _instruction &i) {
-		_value v1 = m.stack.back();
-		m.stack.pop_back();
-
-		_value v2 = m.stack.back();
-		m.stack.pop_back();
-
-		m.stack.push_back(v2/v1);
+		_value v1 = pop_stack(m);
+		_value v2 = pop_stack(m);
+		push_stack(m, v1 / v2);
 		m.pc++;
 	}},
 
 	{_instruction::Type::eMod, [](machine &m, const _instruction &i) {
-		_value v1 = m.stack.back();
-		m.stack.pop_back();
-
-		_value v2 = m.stack.back();
-		m.stack.pop_back();
-
-		m.stack.push_back(v2 % v1);
+		_value v1 = pop_stack(m);
+		_value v2 = pop_stack(m);
+		push_stack(m, v1 % v2);
 		m.pc++;
 	}},
 
 	{_instruction::Type::eCmpEq, [](machine &m, const _instruction &i) {
-		_value v1 = m.stack.back();
-		m.stack.pop_back();
-
-		_value v2 = m.stack.back();
-		m.stack.pop_back();
-
-		m.stack.push_back(v2 == v1);
+		_value v1 = pop_stack(m);
+		_value v2 = pop_stack(m);
+		push_stack(m, v1 == v2);
 		m.pc++;
 	}},
 
 	{_instruction::Type::eCmpNeq, [](machine &m, const _instruction &i) {
-		_value v1 = m.stack.back();
-		m.stack.pop_back();
-
-		_value v2 = m.stack.back();
-		m.stack.pop_back();
-
-		m.stack.push_back(v2 != v1);
+		_value v1 = pop_stack(m);
+		_value v2 = pop_stack(m);
+		push_stack(m, v1 != v2);
 		m.pc++;
 	}},
 
 	{_instruction::Type::eCjmp, [](machine &m, const _instruction &i) {
 		// Check previous stack value,
 		//   then jump if true
-		_value v = pop(m);
+		_value v = pop_stack(m);
 
 		if (v.type != Type::eBool) {
 			std::cerr << "Conditional clauses must be of type bool" << std::endl;
@@ -836,7 +848,7 @@ std::unordered_map <
 	{_instruction::Type::eNcjmp, [](machine &m, const _instruction &i) {
 		// Check previous stack value,
 		//   then jump if false
-		_value v = pop(m);
+		_value v = pop_stack(m);
 		if (v.type != Type::eBool) {
 			std::cerr << "Conditional clauses must be of type bool" << std::endl;
 			std::cerr << "\tncjmp got: " << info(v) << " @(pc = " << m.pc << ")" << std::endl;
@@ -870,14 +882,14 @@ std::unordered_map <
 		// Get arguments
 		std::vector <_value> args;
 		for (int i = 0; i < nargs; i++)
-			args.insert(args.begin(), pop(m));
+			args.insert(args.begin(), pop_stack(m));
 
 		// Call function
 		_value ret = call(f, args);
 
 		// Push return value
-		if (ret.type != Type::eVoid)
-			m.stack.push_back(ret);
+		// if (ret.type != Type::eVoid)
+		push_stack(m, ret);
 		m.pc++;
 	}},
 
@@ -886,12 +898,12 @@ std::unordered_map <
 	}}
 };
 
-inline void push(machine &m, const _instruction &i)
+inline void push_instr(machine &m, const _instruction &i)
 {
 	m.instructions.push_back(i);
 }
 
-inline void push(machine &m, const _value &v)
+inline void push_tmp(machine &m, const _value &v)
 {
 	m.tmp.push_back(v);
 }
@@ -905,16 +917,12 @@ inline void dump(const machine &m)
 	for (auto &v : q)
 		std::cout << "\t" << info(v) << std::endl;
 
-	std::cout << "\nStack size: " << m.stack.size() << std::endl;
-	for (int i = 0; i < m.stack.size(); i++)
-		std::cout << "[" << i << "]: " << info(m.stack[i]) << std::endl;
-
-	std::cout << "\nVariables: " << m.variables.map.size() << std::endl;
-	for (auto &p : m.variables.map) {
-		auto mv = m.variables.mem[p.second];
-		std::cout << p.first << " (addr=" << p.second
-			<< ", type=" << str(m.variables.types[p.second], mv) << ")"
-			<< " = " << str(m.variables.mem[p.second]) << std::endl;
+	std::cout << "\nStack frames: " << m.frames.size() << std::endl;
+	for (int i = 0; i < m.frames.size(); i++) {
+		const machine::Frame &f = m.frames[i];
+		std::cout << "\tLevel " << i << ":" << std::endl;
+		std::cout << "\t\t# variables = " << f.mem.size() << std::endl;
+		std::cout << "\t\t# stack values = " << f.stack.size() << std::endl;
 	}
 
 	std::cout << "\nInstructions: " << m.instructions.size() << std::endl;

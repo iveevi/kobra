@@ -15,13 +15,13 @@ __device__ uint3 pcg3d(uint3 v)
 	return v;
 }
 
-__device__ unsigned int rand(unsigned int lim)
+__device__ unsigned int rand(unsigned int lim, float3 &seed)
 {
-	const uint3 v = pcg3d(make_uint3(
-		lim, blockIdx.x, threadIdx.x
-	));
-
-	return (v.x + v.y - v.z) % lim;
+	uint3 v = *reinterpret_cast <uint3*> (&seed);
+	v = pcg3d(v);
+	unsigned int r = (v.x + v.y - v.z) % lim;
+	*reinterpret_cast <uint3*> (&seed) = v;
+	return r;
 }
 
 __device__ float3 random3(float3 &seed)

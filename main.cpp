@@ -28,7 +28,7 @@ using namespace kobra;
 
 // Scene path
 // std::string scene_path = "~/models/sponza/scene.kobra";
-std::string scene_path = "/home/venki/models/sponza.kobra";
+std::string scene_path = "/home/venki/models/fireplace_room.kobra";
 // std::string scene_path = "scenes/ggx.kobra";
 
 // Test app
@@ -400,6 +400,9 @@ struct ECSApp : public BaseApp {
 			),
 		};
 
+		if (mode == 2)
+			texts[0].text += common::sprintf(" (%d spp)", optix_tracer.samples_per_pixel);
+
 		for (auto &t : scene_graph.texts())
 			texts.push_back(t);
 
@@ -604,6 +607,13 @@ struct ECSApp : public BaseApp {
 		// If O, toggle denoiser
 		if (event.key == GLFW_KEY_O && event.action == GLFW_PRESS)
 			app.optix_tracer.denoiser_enabled = !app.optix_tracer.denoiser_enabled;
+
+		// Plus and minus to modify spp
+		if (event.key == GLFW_KEY_MINUS && event.action == GLFW_PRESS)
+			app.optix_tracer.samples_per_pixel = std::max(1, app.optix_tracer.samples_per_pixel - 1);
+
+		if (event.key == GLFW_KEY_EQUAL && event.action == GLFW_PRESS)
+			app.optix_tracer.samples_per_pixel = std::min(1000, app.optix_tracer.samples_per_pixel + 1);
 	}
 };
 

@@ -12,19 +12,31 @@ struct Point {
     y: int
 }
 
-Point pt = Point { x: 1, y: 2 }
-int x = pt.x
+int x = 1
 
-if (len('hi') == 2)
+func myfunc(a: int, b: int) -> int {
+    # return a + b
+}
+
+func myprint(a: int) {
+    print(a)
+}
+)";
+
+// Point pt = Point { x: 1, y: 2 }
+// int x = pt.x
+
+std::string source2 = R"(
+if (len('hi') == 3)
 	int if_1 = 1
 else
 	int else_1 = 4
 
-float x = 200 * 16 + 10.0/2.5 - 3
+int x = 12
 int y = 20
 string z = "Hello world!"
 bool w = false
-float t = x * y
+float t = 2.5 * x * y
 print('t =' , t, 'z = \'', z, '\'')
 )";
 
@@ -62,7 +74,7 @@ std::map <_lexvalue *, _addr_info> branch_addresses;
 // 	only then possibly jump
 nabu_define_action(clause)
 {
-	push(m, {_instruction::Type::eNcjmp, -1});
+	push_instr(m, {_instruction::Type::eNcjmp, -1});
 	branch_addresses[lptr.get()] = {
 		(int) m.instructions.size() - 1, -1
 	};
@@ -70,7 +82,7 @@ nabu_define_action(clause)
 
 nabu_define_action(if_branch)
 {
-	push(m, {_instruction::Type::eJmp, -1});
+	push_instr(m, {_instruction::Type::eJmp, -1});
 
 	_lexvalue *clause = get <vec> (lptr)[1].get();
 	_addr_info &info = branch_addresses[clause];
@@ -79,7 +91,7 @@ nabu_define_action(if_branch)
 
 nabu_define_action(else_if_branch)
 {
-	push(m, {_instruction::Type::eJmp, -1});
+	push_instr(m, {_instruction::Type::eJmp, -1});
 
 	_lexvalue *clause = get <vec> (lptr)[1].get();
 	_addr_info &info = branch_addresses[clause];
@@ -233,7 +245,7 @@ nabu_define_action(p_struct::member_init)
 	vec v = get <vec> (lptr);
 	std::string member = get <std::string> (v[0]);
 
-	push(m, {_instruction::Type::ePushMember, member});
+	push_instr(m, {_instruction::Type::ePushMember, member});
 }
 
 nabu_define_action(p_struct)
@@ -268,10 +280,90 @@ nabu_define_action(p_struct)
 	assert(m.type_table.structs.count(type));
 	_struct s = m.type_table.structs[type];
 
-	push(m, {_instruction::Type::eConstruct, (int) type, concatted_members});
+	push_instr(m, {_instruction::Type::eConstruct, (int) type, concatted_members});
 }
 
-struct statement : public option <s_struct, assignment> {};
+struct statement : public option <
+	s_struct,
+	assignment,
+	branch,
+	expression
+> {};
+
+struct s_function {
+	using parameter = alias <identifier, colon, type>;
+	using parameter_list = alias <parameter, repeat <alias <comma, parameter>>>;
+	using signature = alias <
+		k_func, identifier,
+		lparen, option <parameter_list, epsilon>, rparen
+	>;
+
+	using return_type = alias <sym_return, type>;
+	using function_end = alias <rbrace>;
+	
+	using production_rule = alias <
+		signature,
+		option <return_type, epsilon>,
+		lbrace, repeat <statement>, function_end
+	>;
+};
+
+nabu_define_action(s_function::signature)
+{
+	std::cout << "s_function::signature" << std::endl;
+	std::cout << lptr->str() << std::endl;
+
+	// Gather all the arguments
+	vec v = get <vec> (lptr);
+	vec args = get <vec> (v[3]);
+
+	std::vector <std::pair <std::string, Type>> arg_list;
+
+	vec a1 = get <vec> (args[0]);
+	arg_list.push_back({get <std::string> (a1[0]), get <Type> (a1[2])});
+
+	args = get <vec> (args[1]);
+	for (auto &a : args) {
+		vec v = get <vec> (a);
+		vec a2 = get <vec> (v[1]);
+		arg_list.push_back({get <std::string> (a2[0]), get <Type> (a2[2])});
+	}
+
+	std::cout << "Args: " << std::endl;
+	for (auto &a : arg_list)
+		std::cout << "\t" << a.first << " : " << a.second << std::endl;
+
+	// Push jump to end of function,
+	//	so that we dont execute
+	//	the function body accidentally
+	// push(m, {_instruction::Type::eJmp, -1});
+
+	// Then push a frame
+	m.frames.push_back(machine::Frame {});
+
+	// # of args is passed to allocate the space in the frame
+	push_instr(m, {_instruction::Type::ePushFrame, (int) arg_list.size()});
+
+	// Push variables onto frame
+	for (auto &a : arg_list)
+		m.frames.back().add(a.first, a.second);
+
+	// Then store top stack elements:
+	// 	should always be the first n elements,
+	// 	where n is the number of arguments
+	int level = m.frames.size() - 1;
+	for (int i = 0; i < arg_list.size(); i++)
+		push_instr(m, {_instruction::Type::eStore, level, i});
+}
+
+nabu_define_action(s_function::function_end)
+{
+	std::cout << "s_function::function_end" << std::endl;
+
+	// Pop the frame
+	m.frames.pop_back();
+	push_instr(m, {_instruction::Type::ePopFrame});
+}
 
 int main()
 {
@@ -281,7 +373,7 @@ int main()
 	import("/home/venki/kobra/bin/lib/libarbok.so", m);
 
 	// Read lexicons
-	parser::Queue q = parser::lexq <identifier> (source);
+	parser::Queue q = parser::lexq <identifier> (source2);
 
 #if 0
 
@@ -300,15 +392,12 @@ int main()
 
 #else
 
-	using g_input = grammar <s_struct>;
+	using g_input = grammar <statement>;
 
 	parser::rd::DualQueue dq(q);
 
-	grammar <s_struct> ::value(dq);
-	grammar <statement> ::value(dq);
-	grammar <statement> ::value(dq);
-
-	// while(g_input::value(dq));
+	while(g_input::value(dq));
+	grammar <s_function>::value(dq);
 
 	/* std::cout << "Top of queue:\n";
 	int i = 6;
@@ -325,7 +414,7 @@ int main()
 	} */
 
 	// Add an end instruction for padding
-	push(m, _instruction::Type::eEnd);
+	push_instr(m, _instruction::Type::eEnd);
 
 	dump(m);
 

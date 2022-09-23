@@ -667,8 +667,11 @@ void OptixTracer::_initialize_optix()
 
 	// Optix denoiser
 	OptixDenoiserOptions denoiser_options = {};
+	denoiser_options.guideAlbedo = 1;
+	denoiser_options.guideNormal = 1;
+
 	OPTIX_CHECK(optixDenoiserCreate(_optix_ctx,
-		OPTIX_DENOISER_MODEL_KIND_LDR,
+		OPTIX_DENOISER_MODEL_KIND_AOV,
 		&denoiser_options,
 		&_optix_denoiser
 	));
@@ -1275,6 +1278,8 @@ void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 	}
 
 	optix_rt::Params params;
+
+	params.spp = samples_per_pixel;
 
 	params.pbuffer = (float4 *) _buffers.pbuffer;
 	params.nbuffer = (float4 *) _buffers.nbuffer;
