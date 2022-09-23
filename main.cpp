@@ -28,7 +28,7 @@ using namespace kobra;
 
 // Scene path
 // std::string scene_path = "~/models/sponza/scene.kobra";
-std::string scene_path = "/home/venki/models/fireplace_room.kobra";
+std::string scene_path = "/home/venki/models/cornell_box.kobra";
 // std::string scene_path = "scenes/ggx.kobra";
 
 // Test app
@@ -614,6 +614,10 @@ struct ECSApp : public BaseApp {
 
 		if (event.key == GLFW_KEY_EQUAL && event.action == GLFW_PRESS)
 			app.optix_tracer.samples_per_pixel = std::min(1000, app.optix_tracer.samples_per_pixel + 1);
+
+		// T for switching between tonemaps
+		if (event.key == GLFW_KEY_T && event.action == GLFW_PRESS)
+			app.optix_tracer.tonemapping = (app.optix_tracer.tonemapping + 1) % 2;
 	}
 };
 

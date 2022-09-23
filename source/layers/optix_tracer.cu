@@ -1247,8 +1247,11 @@ static void generate_pixel_offsets(int N, std::vector <float> &x, std::vector <f
 	}
 }
 
+// Tone maps:
+//	0 for sRGB
+//	1 for ACES
 __global__ void compute_pixel_values(float4 *pixels, uint32_t *target,
-		int width, int height)
+		int width, int height, int tonemapping = 0)
 {
 	int x = blockIdx.x * blockDim.x + threadIdx.x;
 	int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -1260,7 +1263,7 @@ __global__ void compute_pixel_values(float4 *pixels, uint32_t *target,
 	int out_idx = (height - y - 1) * width + x;
 
 	float4 pixel = pixels[in_idx];
-	uchar4 color = cuda::make_color(pixel);
+	uchar4 color = cuda::make_color(pixel, tonemapping);
 	target[out_idx] = to_ui32(color);
 }
 
@@ -1392,7 +1395,8 @@ void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 	dim3 block(16, 16);
 	dim3 grid((width + block.x - 1)/block.x, (height + block.y - 1)/block.y);
 	compute_pixel_values <<<grid, block>>>
-		((float4 *) d_result, (uint32_t *) _buffers.truncated, width, height);
+		((float4 *) d_result, (uint32_t *) _buffers.truncated,
+		 width, height, tonemapping);
 
 	// TODO: multithread
 	if (_output.size() != width * height)
