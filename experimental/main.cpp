@@ -15,11 +15,14 @@ struct Point {
 int x = 1
 
 func myfunc(a: int, b: int) -> int {
-    # return a + b
+	print('a + b =', a + b)
+	return a + b
 }
 
+print('myfunc = ', myfunc(1, 2))
+
 func myprint(a: int) {
-    print(a)
+	print(a)
 }
 )";
 
@@ -283,8 +286,14 @@ nabu_define_action(p_struct)
 	push_instr(m, {_instruction::Type::eConstruct, (int) type, concatted_members});
 }
 
+struct s_return : public alias <
+		k_return,
+		option <expression, epsilon>
+	> {};
+
 struct statement : public option <
 	s_struct,
+	s_return,
 	assignment,
 	branch,
 	expression
@@ -299,14 +308,15 @@ struct s_function {
 	>;
 
 	using return_type = alias <sym_return, type>;
-	using function_end = alias <rbrace>;
 	
 	using production_rule = alias <
 		signature,
 		option <return_type, epsilon>,
-		lbrace, repeat <statement>, function_end
+		lbrace, repeat <statement>, rbrace
 	>;
 };
+
+// std::map <std::string, int> function_jmp_map;
 
 nabu_define_action(s_function::signature)
 {
@@ -315,6 +325,8 @@ nabu_define_action(s_function::signature)
 
 	// Gather all the arguments
 	vec v = get <vec> (lptr);
+
+	std::string name = get <std::string> (v[1]);
 	vec args = get <vec> (v[3]);
 
 	std::vector <std::pair <std::string, Type>> arg_list;
@@ -336,33 +348,54 @@ nabu_define_action(s_function::signature)
 	// Push jump to end of function,
 	//	so that we dont execute
 	//	the function body accidentally
-	// push(m, {_instruction::Type::eJmp, -1});
+	push_instr(m, {_instruction::Type::eJmp, -1});
+	m.functions.map_jmps[name] = m.instructions.size() - 1;
 
 	// Then push a frame
 	m.frames.push_back(machine::Frame {});
 
 	// # of args is passed to allocate the space in the frame
-	push_instr(m, {_instruction::Type::ePushFrame, (int) arg_list.size()});
+	push_instr(m, {_instruction::Type::ePushFrame, (int) arg_list.size(), 0});
 
 	// Push variables onto frame
 	for (auto &a : arg_list)
 		m.frames.back().add(a.first, a.second);
 
-	// Then store top stack elements:
+	/* Then store top stack elements:
 	// 	should always be the first n elements,
 	// 	where n is the number of arguments
 	int level = m.frames.size() - 1;
 	for (int i = 0; i < arg_list.size(); i++)
-		push_instr(m, {_instruction::Type::eStore, level, i});
+		push_instr(m, {_instruction::Type::eStore, level, i}); */
 }
 
-nabu_define_action(s_function::function_end)
+nabu_define_action(s_function)
 {
-	std::cout << "s_function::function_end" << std::endl;
+	std::cout << "s_function" << std::endl;
 
 	// Pop the frame
 	m.frames.pop_back();
-	push_instr(m, {_instruction::Type::ePopFrame});
+	push_instr(m, {_instruction::Type::ePopFrame, 0});
+
+	// Get function name
+	std::cout << "lptr = " << lptr->str() << std::endl;
+	vec v = get <vec> (lptr);
+	v = get <vec> (v[0]);
+	std::string name = get <std::string> (v[1]);
+
+	int jmp = m.functions.map_jmps[name];
+	std::cout << "Jmp addr for " << name << " is " << jmp << std::endl;
+
+	int current = m.instructions.size();
+	std::cout << "Current addr is " << current << std::endl;
+
+	m.instructions[jmp].op1 = current;
+}
+
+nabu_define_action(s_return)
+{
+	// Pop with returns enabled
+	push_instr(m, {_instruction::Type::ePopFrame, 1});
 }
 
 int main()
@@ -373,7 +406,7 @@ int main()
 	import("/home/venki/kobra/bin/lib/libarbok.so", m);
 
 	// Read lexicons
-	parser::Queue q = parser::lexq <identifier> (source2);
+	parser::Queue q = parser::lexq <identifier> (source);
 
 #if 0
 
@@ -397,7 +430,8 @@ int main()
 	parser::rd::DualQueue dq(q);
 
 	while(g_input::value(dq));
-	grammar <s_function>::value(dq);
+	grammar <s_function> ::value(dq);
+	grammar <statement> ::value(dq);
 
 	/* std::cout << "Top of queue:\n";
 	int i = 6;

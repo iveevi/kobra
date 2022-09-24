@@ -510,6 +510,7 @@ struct machine {
 	// Functions
 	struct {
 		std::unordered_map <std::string, int> map_ext;
+		std::unordered_map <std::string, int> map_jmps;
 
 		std::vector <_external_function> externals;
 	} functions;
@@ -520,6 +521,7 @@ struct machine {
 		std::vector <_value> mem;
 		std::vector <Type> types;
 		std::map <std::string, int> map;
+		int return_address;
 
 		int add(const std::string &name, Type type) {
 			int addr = mem.size();
@@ -568,12 +570,15 @@ struct machine {
 	std::vector <_instruction> instructions;
 
 	int32_t pc = 0;
+	int32_t pc_prev = 0;
 };
 
 void dump(const machine &);
 
 inline _value pop_stack(machine &m)
 {
+	assert(!m.frames.empty());
+	assert(!m.frames.back().stack.empty());
 	_value v = m.frames.back().stack.back();
 	m.frames.back().stack.pop_back();
 	return v;
@@ -581,6 +586,7 @@ inline _value pop_stack(machine &m)
 
 inline void push_stack(machine &m, const _value &v)
 {
+	assert(!m.frames.empty());
 	m.frames.back().stack.push_back(v);
 }
 
@@ -670,6 +676,7 @@ std::unordered_map <
 	{_instruction::Type::ePushTmp, [](machine &m, const _instruction &i) {
 		assert(std::holds_alternative <int> (i.op1));
 		int addr = std::get <int> (i.op1);
+		assert(addr >= 0 && addr < m.tmp.size());
 		push_stack(m, m.tmp[addr]);
 		m.pc++;
 	}},
@@ -708,6 +715,57 @@ std::unordered_map <
 
 		push_stack(m, mv);
 		m.pc++;
+	}},
+
+	// Push new frame
+	{_instruction::Type::ePushFrame, [](machine &m, const _instruction &i) {
+		// First argument is the number of variables to allocate
+		assert(std::holds_alternative <int> (i.op1));
+		int size = std::get <int> (i.op1);
+
+		// Second argument is the return address symbol
+		// 	0 to jump to return address
+		//	-1 to continue
+		assert(std::holds_alternative <int> (i.op2));
+		int ret_addr = std::get <int> (i.op2);
+
+		// Allocate space for variables and assign from stack
+		machine::Frame f;
+
+		f.mem.resize(size);
+		for (int i = 0; i < size; i++)
+			f.mem[i] = pop_stack(m);
+
+		std::cout << "pc = " << m.pc << ", pc prev = " << m.pc_prev << std::endl;
+		f.return_address = (ret_addr < 0) ? -1 : m.pc_prev + 1;
+
+		m.frames.push_back(f);
+		m.pc++;
+
+		std::cout << "Current state; return address: "
+				<< m.frames.back().return_address << std::endl;
+	}},
+
+	// Pop current frame
+	{_instruction::Type::ePopFrame, [](machine &m, const _instruction &i) {
+		assert(!m.frames.empty());
+
+		// First argument is 1 is there is a return value
+		assert(std::holds_alternative <int> (i.op1));
+		int has_ret = std::get <int> (i.op1);
+
+		_value ret;
+		if (has_ret)
+			ret = pop_stack(m);
+
+		// Get return address and pop
+		int ret_addr = m.frames.back().return_address;
+		
+		m.frames.pop_back();
+		if (has_ret)
+			push_stack(m, ret);
+
+		m.pc = ret_addr;
 	}},
 
 	// TODO: is this even used?
@@ -932,9 +990,15 @@ inline void dump(const machine &m)
 
 inline void exec(machine &m)
 {
-	while (m.pc < m.instructions.size()) {
+	int pc_prev = -1;
+	while (m.pc < (int) m.instructions.size()) {
+		m.pc_prev = pc_prev;
+		pc_prev = m.pc;
 		const auto &i = m.instructions[m.pc];
 		exec_table[i.type](m, i);
+		std::cout << "PC prev = " << m.pc_prev << ", PC = " << m.pc << std::endl;
+		if (m.pc < 0)
+			break;
 	}
 }
 

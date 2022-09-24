@@ -215,7 +215,7 @@ nabu_define_action(p_int)
 	v.data = get <int> (lptr);
 
 	push_instr(m, {_instruction::Type::ePushTmp, (int) m.tmp.size()});
-	push_stack(m, v);
+	push_tmp(m, v);
 }
 
 nabu_define_action(p_float)
@@ -225,7 +225,7 @@ nabu_define_action(p_float)
 	v.data = get <float> (lptr);
 
 	push_instr(m, {_instruction::Type::ePushTmp, (int) m.tmp.size()});
-	push_stack(m, v);
+	push_tmp(m, v);
 }
 
 nabu_define_action(p_string)
@@ -235,7 +235,7 @@ nabu_define_action(p_string)
 	v.data = get <std::string> (lptr);
 
 	push_instr(m, {_instruction::Type::ePushTmp, (int) m.tmp.size()});
-	push_stack(m, v);
+	push_tmp(m, v);
 }
 
 nabu_define_action(p_bool)
@@ -245,7 +245,7 @@ nabu_define_action(p_bool)
 	v.data = get <bool> (lptr);
 
 	push_instr(m, {_instruction::Type::ePushTmp, (int) m.tmp.size()});
-	push_stack(m, v);
+	push_tmp(m, v);
 }
 
 // Actions for operations
@@ -333,9 +333,16 @@ nabu_define_action(function_call)
 
 	v = get <vec> (v[2]);
 	int nargs = v.size();
+
+	std::cout << "function_call: " << name << " " << nargs << std::endl;
 	for (auto &e : v)
 		std::cout << e->str() << std::endl;
-	if (m.functions.map_ext.count(name) > 0) {
+
+	if (m.functions.map_jmps.count(name) > 0) {
+		// Prioritize user defined functions over external functions
+		int jmp_addr = m.functions.map_jmps[name];
+		push_instr(m, {_instruction::Type::eJmp, jmp_addr + 1});
+	} else if (m.functions.map_ext.count(name) > 0) {
 		// External function
 		int index = m.functions.map_ext[name];
 		push_instr(m, {_instruction::Type::eCallExt, index, nargs});
