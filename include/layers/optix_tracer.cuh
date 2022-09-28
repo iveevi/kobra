@@ -39,11 +39,8 @@ class OptixTracer {
 
 	CUstream			_optix_stream;
 
-	// OptiX acceleration structures
-	struct {
-		OptixTraversableHandle	pure_objects;
-		OptixTraversableHandle	all_objects;
-	} _traversables;
+	// OptiX acceleration structure
+	OptixTraversableHandle		_optix_traversable = 0;
 
 	// OptiX program groups
 	struct {

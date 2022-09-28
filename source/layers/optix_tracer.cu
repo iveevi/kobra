@@ -890,7 +890,6 @@ void OptixTracer::_optix_build()
 
 	// Build instances and top level acceleration structure
 	std::vector <OptixInstance> instances;
-	std::vector <OptixInstance> instances_no_lights;
 
 	for (int i = 0; i < _cached.submeshes.size(); i++) {
 		glm::mat4 mat = _cached.submesh_transforms[i]->matrix();
@@ -906,11 +905,10 @@ void OptixTracer::_optix_build()
 
 		// Set the instance handle
 		instance.traversableHandle = instance_gas[i];
-		instance.visibilityMask = 0xFF;
+		instance.visibilityMask = 0b1;
 		instance.sbtOffset = i;
 
 		instances.push_back(instance);
-		instances_no_lights.push_back(instance);
 	}
 
 	for (int i = 0; i < _cached.lights.size(); i++) {
@@ -928,17 +926,14 @@ void OptixTracer::_optix_build()
 
 		// Set the instance handle
 		instance.traversableHandle = light_gas[i];
-		instance.visibilityMask = 0xFF;
+		instance.visibilityMask = 0b10;
 		instance.sbtOffset = i + _cached.submeshes.size();
 
 		instances.push_back(instance);
 	}
 
-	// Create two top level acceleration structures
-	//	one for pure objects
-	//	one for objects and lights
+	// Create top level acceleration structure
 	CUdeviceptr d_instances = cuda::make_buffer_ptr(instances);
-	CUdeviceptr d_instances_no_lights = cuda::make_buffer_ptr(instances_no_lights);
 
 	// TLAS for objects and lights
 	{
@@ -972,49 +967,11 @@ void OptixTracer::_optix_build()
 			&ias_build_input, 1,
 			d_ias_tmp, ias_buffer_sizes.tempSizeInBytes,
 			d_ias_output, ias_buffer_sizes.outputSizeInBytes,
-			&_traversables.all_objects, nullptr, 0
+			&_optix_traversable, nullptr, 0
 		));
 
 		cuda::free(d_ias_tmp);
-	}
-
-	// TLAS for pure objects
-	{
-		// TODO: helper function
-		OptixBuildInput ias_build_input {};
-		ias_build_input.type = OPTIX_BUILD_INPUT_TYPE_INSTANCES;
-		ias_build_input.instanceArray.instances = d_instances_no_lights;
-		ias_build_input.instanceArray.numInstances = instances_no_lights.size();
-
-		// IAS options
-		OptixAccelBuildOptions ias_accel_options {};
-		ias_accel_options.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
-		ias_accel_options.operation = OPTIX_BUILD_OPERATION_BUILD;
-
-		// IAS buffer sizes
-		OptixAccelBufferSizes ias_buffer_sizes;
-		OPTIX_CHECK(optixAccelComputeMemoryUsage(
-			_optix_ctx, &ias_accel_options,
-			&ias_build_input, 1,
-			&ias_buffer_sizes
-		));
-
-		KOBRA_LOG_FUNC(Log::INFO) << "IAS buffer sizes: " << ias_buffer_sizes.tempSizeInBytes << " " << ias_buffer_sizes.outputSizeInBytes << std::endl;
-
-		// Allocate the IAS
-		CUdeviceptr d_ias_output = cuda::alloc(ias_buffer_sizes.outputSizeInBytes);
-		CUdeviceptr d_ias_tmp = cuda::alloc(ias_buffer_sizes.tempSizeInBytes);
-
-		// Build the IAS
-		OPTIX_CHECK(optixAccelBuild(_optix_ctx,
-			0, &ias_accel_options,
-			&ias_build_input, 1,
-			d_ias_tmp, ias_buffer_sizes.tempSizeInBytes,
-			d_ias_output, ias_buffer_sizes.outputSizeInBytes,
-			&_traversables.pure_objects, nullptr, 0
-		));
-
-		cuda::free(d_ias_tmp);
+		cuda::free(d_instances);
 	}
 }
 
@@ -1280,10 +1237,13 @@ void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 		cuda::copy(_buffers.yoffset, _buffers.h_yoffsets);
 	}
 
+	// TODO: keep a persistent param object (and only update what's needed)
+
+	// Settings parameters
 	optix_rt::Params params;
 
 	params.spp = samples_per_pixel;
-
+	
 	params.pbuffer = (float4 *) _buffers.pbuffer;
 	params.nbuffer = (float4 *) _buffers.nbuffer;
 	params.abuffer = (float4 *) _buffers.abuffer;
@@ -1291,27 +1251,27 @@ void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 	params.xoffset = (float *) _buffers.xoffset;
 	params.yoffset = (float *) _buffers.yoffset;
 
-	// params.image        = _result_buffer.dev <uchar4> ();
 	params.image_width  = width;
 	params.image_height = height;
 
 	params.accumulated = _accumulated++;
-	// params.instances = _c_raytracers.size() + _cached.lights.size();
 	params.instances = _cached.submeshes.size() + _cached.lights.size();
 
-	params.handle       = _traversables.all_objects;
-	params.handle_shadow = _traversables.pure_objects;
+	params.handle = _optix_traversable;
+
+	auto uvw = kobra::uvw_frame(camera, transform);
 
 	params.cam_eye      = to_f3(transform.position);
 
-	auto uvw = kobra::uvw_frame(camera, transform);
 	params.cam_u = to_f3(uvw.u);
 	params.cam_v = to_f3(uvw.v);
 	params.cam_w = to_f3(uvw.w);
 
 	float ms = timer.elapsed_start();
+
 	params.time = sin(ms * 12.3243f) * cos(1 - ms * 0.123f);
 
+	/// Allocate on the GPU
 	CUdeviceptr d_param;
 	CUDA_CHECK( cudaMalloc( reinterpret_cast<void**> (&d_param),
 				sizeof(optix_rt::Params)));

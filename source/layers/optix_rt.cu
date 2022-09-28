@@ -167,7 +167,7 @@ extern "C" __global__ void __raygen__rg()
 		optixTrace(params.handle,
 			ray_origin, ray_direction,
 			0.0f, 1e16f, 0.0f,
-			OptixVisibilityMask(255),
+			OptixVisibilityMask(0b11),
 			OPTIX_RAY_FLAG_DISABLE_ANYHIT,
 			0, 0, 0,
 			i0, i1
@@ -253,8 +253,6 @@ __device__ __forceinline__ float3 operator*(mat3 m, float3 v)
 		m.m[2] * v.x + m.m[5] * v.y + m.m[8] * v.z
 	);
 }
-
-#define MAX_DEPTH 5
 
 // Evaluate BRDF of material
 __device__ float3 brdf(const Material &mat, float3 n, float3 wi,
@@ -425,10 +423,10 @@ __device__ bool shadow_visibility(float3 origin, float3 dir, float R)
 	pack_pointer <bool> (&vis, j0, j1);
 
 	// TODO: max time show be distance to light
-	optixTrace(params.handle_shadow,
+	optixTrace(params.handle,
 		origin, dir,
 		0, R - 0.01f, 0,
-		OptixVisibilityMask(255),
+		OptixVisibilityMask(0b1),
 		OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT
 			| OPTIX_RAY_FLAG_DISABLE_ANYHIT
 			| OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT,
@@ -619,6 +617,8 @@ __device__ void calculate_material
 	}
 }
 
+#define MAX_DEPTH 2
+
 extern "C" __global__ void __closesthit__radiance()
 {
 	// Get payload
@@ -696,7 +696,8 @@ extern "C" __global__ void __closesthit__radiance()
 	optixTrace(params.handle,
 		x + offset, wi,
 		0.0f, 1e16f, 0.0f,
-		OptixVisibilityMask(255), OPTIX_RAY_FLAG_NONE,
+		OptixVisibilityMask(0b11),
+		OPTIX_RAY_FLAG_DISABLE_ANYHIT,
 		0, 0, 0,
 		i0, i1
 	);

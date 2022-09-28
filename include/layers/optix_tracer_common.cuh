@@ -39,7 +39,6 @@ struct Params
 	int			instances;
 
 	OptixTraversableHandle	handle;
-	OptixTraversableHandle	handle_shadow;
 };
 
 __forceinline__ __device__ float intersects_triangle
