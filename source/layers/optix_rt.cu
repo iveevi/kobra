@@ -126,6 +126,17 @@ float mitchell(float r, float B = 1.0f/3.0f, float C = 1.0f/3.0f)
 
 }
 
+__forceinline__ __device__
+float4 nan_fix(float4 v)
+{
+	return make_float4(
+		isnan(v.x) ? 0.0f : v.x,
+		isnan(v.y) ? 0.0f : v.y,
+		isnan(v.z) ? 0.0f : v.z,
+		isnan(v.w) ? 0.0f : v.w
+	);
+}
+
 extern "C" __global__ void __raygen__rg()
 {
 	// Lookup our location within the launch grid
@@ -195,6 +206,10 @@ extern "C" __global__ void __raygen__rg()
 		// assert(!isnan(pixel.x) && !isnan(pixel.y) && !isnan(pixel.z));
 		if (isnan(pixel.x) || isnan(pixel.y) || isnan(pixel.z))
 			pixel = {0.0f, 0.0f, 0.0f, 0.0f};
+
+		// nan_fix(pixel);
+		nan_fix(normal);
+		nan_fix(diffuse);
 
 		// Averaged factor
 		float factor = filters::box(radius);
@@ -699,6 +714,11 @@ extern "C" __global__ void __closesthit__radiance()
 	// Transfer to payload
 	bool primary = (rp->depth == 0);
 
+	if (primary) {
+		rp->normal = n;
+		rp->diffuse = material.diffuse;
+	}
+
 	float3 cT = rp->throughput;
 	if (!(primary && params.options.use_reservoir))
 		rp->value += cT * direct;
@@ -757,7 +777,11 @@ extern "C" __global__ void __closesthit__radiance()
 	if (primary && params.options.use_reservoir) {
 		// Get this pixel's reservoir
 		Reservoir &r = params.reservoirs[rp->imgidx];
-	
+
+		// Reset every 10 samples
+		if (r.count >= 10)
+			r.reset();
+
 		// Temporal resampling
 		float weight = max(rp->value)/pdf;
 		PathSample ps = {rp->value, rp->normal, rp->position};
@@ -814,11 +838,12 @@ extern "C" __global__ void __closesthit__radiance()
 		// Store this pixel's reservoir
 		// params.spatial_reservoir_curr[rp->imgidx] = r;
 
-		rp->value = cT * direct + r.sample.value;
+		float W = r.weight/(r.count * max(r.sample.value));
+		rp->value = cT * direct + r.sample.value * W;
 	}
 	
 	rp->diffuse = material.diffuse;
-	rp->normal = n;
+	rp->normal = n * 0.5 + 0.5;
 	rp->position = x;
 }
 

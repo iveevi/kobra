@@ -27,6 +27,7 @@ struct Reservoir {
 	// Reset
 	__forceinline__ __device__
 	void reset() {
+		sample = Sample();
 		weight = 0.0f;
 		count = 0;
 	}
