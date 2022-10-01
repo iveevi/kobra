@@ -441,13 +441,17 @@ void OptixTracer::_initialize_optix()
 		module_compile_options.optLevel   = OPTIX_COMPILE_OPTIMIZATION_LEVEL_0;
 		module_compile_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
 
+#else
+
+		module_compile_options.optLevel   = OPTIX_COMPILE_OPTIMIZATION_LEVEL_3;
+
 #endif
 
 		pipeline_compile_options.usesMotionBlur        = false;
 		pipeline_compile_options.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_GAS;
 		pipeline_compile_options.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING;
-		pipeline_compile_options.numPayloadValues      = 3;
-		pipeline_compile_options.numAttributeValues    = 3;
+		pipeline_compile_options.numPayloadValues      = 2;
+		pipeline_compile_options.numAttributeValues    = 0;
 
 #ifdef KOPTIX_DEBUG
 
@@ -705,6 +709,16 @@ void OptixTracer::_initialize_optix()
 	));
 
 	KOBRA_LOG_FUNC(Log::OK) << "Initialized OptiX and relevant structures" << std::endl;
+}
+
+// Allocate CUDA resources
+void OptixTracer::_allocate_cuda_resources()
+{
+	std::vector <optix_rt::Reservoir> reservoirs(width * height);
+
+	_buffers.reservoirs = cuda::make_buffer_ptr(reservoirs);
+	_buffers.spatial_reservoir_prev = cuda::make_buffer_ptr(reservoirs);
+	_buffers.spatial_reservoir_curr = cuda::make_buffer_ptr(reservoirs);
 }
 
 // TODO: also add an optix_update method
@@ -1251,6 +1265,14 @@ void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 	params.xoffset = (float *) _buffers.xoffset;
 	params.yoffset = (float *) _buffers.yoffset;
 
+	// Assign reservoirs, and double buffer the spatial ones
+	params.reservoirs = (optix_rt::Reservoir *) _buffers.reservoirs;
+	params.spatial_reservoir_prev = (optix_rt::Reservoir *)
+		_buffers.spatial_reservoir_curr;
+	params.spatial_reservoir_curr = (optix_rt::Reservoir *)
+		_buffers.spatial_reservoir_prev;
+	std::swap(_buffers.spatial_reservoir_prev, _buffers.spatial_reservoir_curr);
+
 	params.image_width  = width;
 	params.image_height = height;
 
@@ -1270,6 +1292,8 @@ void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 	float ms = timer.elapsed_start();
 
 	params.time = sin(ms * 12.3243f) * cos(1 - ms * 0.123f);
+	
+	params.options.use_reservoir = enable_restir;
 
 	/// Allocate on the GPU
 	CUdeviceptr d_param;

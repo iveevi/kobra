@@ -12,6 +12,10 @@
 
 using kobra::optix_rt::HitGroupData;
 using kobra::optix_rt::MissData;
+
+using kobra::optix_rt::PathSample;
+using kobra::optix_rt::Reservoir;
+
 using kobra::optix_rt::QuadLight;
 using kobra::optix_rt::TriangleLight;
 
@@ -75,13 +79,15 @@ static __forceinline__ __device__ void make_ray
 
 // Ray packet data
 struct RayPacket {
-	float3 diffuse;
-	float3 normal;
-	float3 throughput;
-	float3 value;
-	float3 seed;
-	float ior;
-	int depth;
+	float3	diffuse;
+	float3	position;
+	float3	normal;
+	float3	throughput;
+	float3	value;
+	float3	seed;
+	float	ior;
+	int	depth;
+	int	imgidx;
 };
 
 namespace filters {
@@ -137,6 +143,13 @@ extern "C" __global__ void __raygen__rg()
 	float4 avg_normal = make_float4(0.0f);
 	float4 avg_diffuse = make_float4(0.0f);
 
+	// Reset the reservoir if needed
+	if (params.accumulated == 0) {
+		params.reservoirs[index].reset();
+		params.spatial_reservoir_curr[index].reset();
+		params.spatial_reservoir_prev[index].reset();
+	}
+
 	while (n--) {
 		// Pack payload
 		RayPacket ray_packet;
@@ -147,6 +160,7 @@ extern "C" __global__ void __raygen__rg()
 		ray_packet.seed = {float(idx.x), float(idx.y), params.time};
 		ray_packet.ior = 1.0f;
 		ray_packet.depth = 0;
+		ray_packet.imgidx = index;
 
 		// Generate ray
 		float3 ray_origin;
@@ -513,6 +527,30 @@ __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 	// TODO: multiply result by # of total lights
 
 	// Random area light for NEE
+// #define LIGHT_SAMPLES 5
+
+#ifdef LIGHT_SAMPLES
+
+	float3 contr {0.0f};
+
+	for (int k = 0; k < LIGHT_SAMPLES; k++) {
+		random3(seed);
+		unsigned int i = seed.x * (hit_data->n_quad_lights + hit_data->n_tri_lights);
+		i = min(i, hit_data->n_quad_lights + hit_data->n_tri_lights - 1);
+
+		if (i < hit_data->n_quad_lights) {
+			QuadLight light = hit_data->quad_lights[i];
+			contr += Ld_light(light, hit_data, x, wo, n, mat, entering, seed);
+		} else {
+			TriangleLight light = hit_data->tri_lights[i - hit_data->n_quad_lights];
+			contr += Ld_light(light, hit_data, x, wo, n, mat, entering, seed);
+		}
+	}
+
+	return contr/LIGHT_SAMPLES;
+
+#else 
+
 	random3(seed);
 	unsigned int i = seed.x * (hit_data->n_quad_lights + hit_data->n_tri_lights);
 	i = min(i, hit_data->n_quad_lights + hit_data->n_tri_lights - 1);
@@ -524,6 +562,9 @@ __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 
 	TriangleLight light = hit_data->tri_lights[i - hit_data->n_quad_lights];
 	return Ld_light(light, hit_data, x, wo, n, mat, entering, seed);
+
+#endif
+
 }
 
 // Interpolate triangle values
@@ -617,7 +658,7 @@ __device__ void calculate_material
 	}
 }
 
-#define MAX_DEPTH 2
+#define MAX_DEPTH 3
 
 extern "C" __global__ void __closesthit__radiance()
 {
@@ -653,15 +694,14 @@ extern "C" __global__ void __closesthit__radiance()
 	float3 n = calculate_normal(hit_data, triangle, bary, entering);
 	float3 x = interpolate(hit_data->vertices, triangle, bary);
 
-	if (rp->depth == 0) {
-		rp->diffuse = material.diffuse;
-		rp->normal = n * 0.5f + 0.5f;
-	}
-
 	float3 direct = Ld(hit_data, x + 1e-3f * n, wo, n, material, entering, rp->seed);
 
 	// Transfer to payload
-	rp->value += rp->throughput * direct;
+	bool primary = (rp->depth == 0);
+
+	float3 cT = rp->throughput;
+	if (!(primary && params.options.use_reservoir))
+		rp->value += cT * direct;
 
 	// Generate new ray
 	Shading out;
@@ -671,6 +711,17 @@ extern "C" __global__ void __closesthit__radiance()
 	float3 f = eval(material, n, wo, entering, wi, pdf, out, rp->seed);
 	if (length(f) < 1e-6f)
 		return;
+
+	/* Resampling
+	if (rp->depth == 0) {
+		Reservoir r = params.reservoirs[rp->imgidx];
+		float weight = pdf;
+		kobra::optix_rt::DirectionSample ds = {wi, rp->seed};
+		r.update(ds, weight);
+		ds = r.sample;
+		wi = ds.dir;
+		rp->seed = ds.seed;
+	} */
 	
 	float3 T = f * abs(dot(wi, n))/pdf;
 
@@ -701,6 +752,74 @@ extern "C" __global__ void __closesthit__radiance()
 		0, 0, 0,
 		i0, i1
 	);
+
+	// Resampling
+	if (primary && params.options.use_reservoir) {
+		// Get this pixel's reservoir
+		Reservoir &r = params.reservoirs[rp->imgidx];
+	
+		// Temporal resampling
+		float weight = max(rp->value)/pdf;
+		PathSample ps = {rp->value, rp->normal, rp->position};
+
+		r.update(ps, weight);
+
+		/* Check neighbours
+		int x = rp->imgidx % params.image_width;
+		int y = rp->imgidx / params.image_width;
+
+		const int dx[8] = {0, 1, 1, 1, 0, -1, -1, -1};
+		const int dy[8] = {1, 1, 0, -1, -1, -1, 0, 1};
+
+		for (int i = 0; i < 8; i++) {
+			int nx = x + dx[i];
+			int ny = y + dy[i];
+
+			if (nx < 0 || nx >= params.image_width
+				|| ny < 0 || ny >= params.image_height)
+				continue;
+
+			int idx = nx + ny * params.image_width;
+
+			// Skip if corresponding reservoir is empty
+			Reservoir s = params.reservoirs[idx];
+			if (s.count == 0) {
+				rp->value = {1, 0, 1};
+				return;
+
+				continue;
+			}
+
+			// Check geometric similarity
+			float3 sn = s.sample.normal;
+			float3 sx = s.sample.position;
+
+			float angle = acos(dot(sn, n))/M_PI;
+			float dist = length(sx - x);
+
+			if (angle > 30 || dist > 0.1f) {
+				rp->value = {0, 1, 1};
+				return;
+
+				continue;
+			}
+
+			rp->value = {0, 1, 0};
+			return;
+
+			// Merge reservoirs
+			r.merge(s);
+		} */
+
+		// Store this pixel's reservoir
+		// params.spatial_reservoir_curr[rp->imgidx] = r;
+
+		rp->value = cT * direct + r.sample.value;
+	}
+	
+	rp->diffuse = material.diffuse;
+	rp->normal = n;
+	rp->position = x;
 }
 
 extern "C" __global__ void __closesthit__shadow() {}

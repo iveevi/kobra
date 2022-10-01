@@ -70,6 +70,10 @@ class OptixTracer {
 		CUdeviceptr		xoffset;
 		CUdeviceptr		yoffset;
 
+		CUdeviceptr		reservoirs;
+		CUdeviceptr		spatial_reservoir_curr;
+		CUdeviceptr		spatial_reservoir_prev;
+
 		cuda::BufferData	denoiser_state;
 		cuda::BufferData	denoiser_scratch;
 
@@ -106,6 +110,9 @@ class OptixTracer {
 
 	// Initialize Optix globally
 	void _initialize_optix();
+
+	// Allocate necessary CUDA resources
+	void _allocate_cuda_resources();
 
 	struct Viewport {
 		uint width;
@@ -190,7 +197,10 @@ public:
 	Timer timer;
 	int _accumulated = 0;
 
+	// Options
+	// TODO: struct
 	bool denoiser_enabled = true;
+	bool enable_restir = false;
 
 	// Constructor
 	OptixTracer(const Context &ctx, const vk::AttachmentLoadOp &load,
@@ -213,6 +223,7 @@ public:
 
 		_initialize_optix();
 		_initialize_vulkan_structures(load);
+		_allocate_cuda_resources();
 
 		timer.start();
 

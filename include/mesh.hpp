@@ -192,6 +192,9 @@ public:
 	// TODO: clean up and put into source file
 	static Mesh box(const glm::vec3 &, const glm::vec3 &);
 	static Mesh sphere(const glm::vec3 &, float, int = 16, int = 16);
+
+	// TODO: cache loaded meshes in the current directory
+	// (as binary)
 	static std::optional <Mesh> load(const std::string &);
 };
 

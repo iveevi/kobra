@@ -2659,4 +2659,10 @@ float3 rotate(float3 s, float3 n)
 	return u * s.x + v * s.y + w * s.z;
 }
 
+__forceinline__ __device__
+float max(float3 v)
+{
+	return fmaxf(v.x, fmaxf(v.y, v.z));
+}
+
 #endif

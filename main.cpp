@@ -28,7 +28,7 @@ using namespace kobra;
 
 // Scene path
 // std::string scene_path = "~/models/sponza/scene.kobra";
-std::string scene_path = "/home/venki/models/sponza.kobra";
+std::string scene_path = "/home/venki/models/cornell_box.kobra";
 // std::string scene_path = "scenes/ggx.kobra";
 
 // Test app
@@ -400,8 +400,10 @@ struct ECSApp : public BaseApp {
 			),
 		};
 
-		if (mode == 2)
+		if (mode == 2) {
 			texts[0].text += common::sprintf(" (%d spp)", optix_tracer.samples_per_pixel);
+			texts[0].text += " (ReSTIR " + std::string(optix_tracer.enable_restir ? "on" : "off") + ")";
+		}
 
 		for (auto &t : scene_graph.texts())
 			texts.push_back(t);
@@ -618,6 +620,10 @@ struct ECSApp : public BaseApp {
 		// T for switching between tonemaps
 		if (event.key == GLFW_KEY_T && event.action == GLFW_PRESS)
 			app.optix_tracer.tonemapping = (app.optix_tracer.tonemapping + 1) % 2;
+
+		// R for toggling ReSTIR
+		if (event.key == GLFW_KEY_R && event.action == GLFW_PRESS)
+			app.optix_tracer.enable_restir = !app.optix_tracer.enable_restir;
 	}
 };
 

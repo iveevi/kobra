@@ -7,10 +7,19 @@
 // Engine headers
 #include "../cuda/math.cuh"
 #include "../cuda/material.cuh"
+#include "../optix/reservoir.cuh"
 
 namespace kobra {
 
 namespace optix_rt {
+
+struct PathSample {
+	float3 value;
+	float3 normal;
+	float3 position;
+};
+
+using Reservoir = optix::Reservoir <PathSample> ;
 
 struct Params
 {
@@ -24,6 +33,10 @@ struct Params
 
 	float			*xoffset;
 	float			*yoffset;
+
+	Reservoir		*reservoirs;
+	Reservoir		*spatial_reservoir_curr;
+	Reservoir		*spatial_reservoir_prev;
 
 	unsigned int		image_width;
 	unsigned int		image_height;
@@ -39,6 +52,11 @@ struct Params
 	int			instances;
 
 	OptixTraversableHandle	handle;
+
+	// Options for rendering
+	struct Options {
+		bool		use_reservoir;
+	} options;
 };
 
 __forceinline__ __device__ float intersects_triangle
