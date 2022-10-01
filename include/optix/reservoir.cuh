@@ -16,13 +16,14 @@ struct Reservoir {
 	Sample sample = Sample();
 
 	// Cumulative weight
-	float weight;
-	float3 random;
-	int count;
+	float	W;
+	float	weight;
+	float3	random;
+	int	count;
 
 	// Constructor
 	__forceinline__ __host__ __device__
-	Reservoir() : weight(0.0f), count(0) {}
+	Reservoir() : W(0.0f), weight(0.0f), count(0) {}
 
 	// Reset
 	__forceinline__ __device__
@@ -35,22 +36,27 @@ struct Reservoir {
 	// Update the reservoir
 	__forceinline__ __device__
 	void update(const Sample &sample, const float weight) {
+		static const float eps = 1e-4f;
+
 		// Update the cumulative weight
 		this->weight += weight;
 		this->count++;
 
 		// Randomly select the sample
-		if (fract(random3(random).x) < weight / (this->weight + 1e-6f)) {
+		float r = fract(random3(random).x);
+		float w = weight/(this->weight);
+	
+		bool selected = (r < w + eps);
+		if (selected || this->count == 1)
 			this->sample = sample;
-			// this->weight = weight;
-		}
 	}
 
 	// Merge two reservoirs
 	__forceinline__ __device__
-	void merge(const Reservoir &reservoir) {
-		float weight = reservoir.weight * reservoir.count;
-		update(reservoir.sample, weight);
+	void merge(const Reservoir &reservoir, float target) {
+		int current = count;
+		update(reservoir.sample, target * reservoir.weight * reservoir.count);
+		count = current + reservoir.count;
 	}
 };
 

@@ -208,8 +208,8 @@ extern "C" __global__ void __raygen__rg()
 			pixel = {0.0f, 0.0f, 0.0f, 0.0f};
 
 		// nan_fix(pixel);
-		nan_fix(normal);
-		nan_fix(diffuse);
+		// nan_fix(normal);
+		// nan_fix(diffuse);
 
 		// Averaged factor
 		float factor = filters::box(radius);
@@ -752,7 +752,9 @@ extern "C" __global__ void __closesthit__radiance()
 	if (fract(rp->seed.x) < q)
 		return;
 
-	rp->throughput *= T/(1 - q);
+	if (!(primary && params.options.use_reservoir))
+		rp->throughput *= T/(1 - q);
+
 	rp->depth++;
 
 	// Recursive raytrace
@@ -775,29 +777,57 @@ extern "C" __global__ void __closesthit__radiance()
 
 	// Resampling
 	if (primary && params.options.use_reservoir) {
-		// Get this pixel's reservoir
-		Reservoir &r = params.reservoirs[rp->imgidx];
+		// Get the this pixel's reservoirs
+		Reservoir &temporal = params.reservoirs[rp->imgidx];
+		Reservoir spatial = params.spatial_reservoir_prev[rp->imgidx];
 
-		// Reset every 10 samples
-		if (r.count >= 10)
-			r.reset();
+		// Reset temporal reservoir every 10 samples
+		//	to avoid stagnation of samples
+		if (temporal.count >= 10)
+			temporal.reset();
 
-		// Temporal resampling
+		// Also reset spatial reservoir every 50 samples
+		if (spatial.count >= 50)
+			spatial.reset();
+
+		// Populate temporal reservoir
 		float weight = max(rp->value)/pdf;
-		PathSample ps = {rp->value, rp->normal, rp->position};
+		
+		PathSample ps = {
+			.value = rp->value,
+			.dir = wi,
 
-		r.update(ps, weight);
+			.v_normal = n,
+			.v_position = x,
+			
+			.s_normal = rp->normal,
+			.s_position = rp->position,
+			
+			.pdf = pdf
+		};
 
-		/* Check neighbours
-		int x = rp->imgidx % params.image_width;
-		int y = rp->imgidx / params.image_width;
+		temporal.update(ps, weight);
+		temporal.W = temporal.weight
+			/(temporal.count * max(temporal.sample.value) + 1e-6f);
 
-		const int dx[8] = {0, 1, 1, 1, 0, -1, -1, -1};
-		const int dy[8] = {1, 1, 0, -1, -1, -1, 0, 1};
+		/* Spatial reservoir resampling
+		int Z = 0;
 
-		for (int i = 0; i < 8; i++) {
-			int nx = x + dx[i];
-			int ny = y + dy[i];
+		// spatial.merge(temporal);
+		// Z += temporal.count;
+
+		int idx = rp->imgidx % params.image_width;
+		int idy = rp->imgidx / params.image_width;
+
+		const int SPATIAL_SAMPLES = 10;
+
+		for (int i = 0; i < SPATIAL_SAMPLES; i++) {
+			float3 random = fract(random3(rp->seed));
+			float radius = random.x * 2.0f;
+			float theta = random.y * 2.0f * M_PI;
+
+			int nx = idx + radius * cos(theta);
+			int ny = idy + radius * sin(theta);
 
 			if (nx < 0 || nx >= params.image_width
 				|| ny < 0 || ny >= params.image_height)
@@ -807,39 +837,73 @@ extern "C" __global__ void __closesthit__radiance()
 
 			// Skip if corresponding reservoir is empty
 			Reservoir s = params.reservoirs[idx];
-			if (s.count == 0) {
-				rp->value = {1, 0, 1};
-				return;
-
+			if (s.count == 0)
 				continue;
-			}
 
 			// Check geometric similarity
-			float3 sn = s.sample.normal;
-			float3 sx = s.sample.position;
+			float3 sn = s.sample.v_normal;
+			float3 sx = s.sample.v_position;
 
-			float angle = acos(dot(sn, n))/M_PI;
+			float angle = 180 * acos(dot(sn, n))/M_PI;
 			float dist = length(sx - x);
 
-			if (angle > 30 || dist > 0.1f) {
-				rp->value = {0, 1, 1};
-				return;
-
+			if (angle > 25 || dist > 0.1f)
 				continue;
+
+			// Merge reservoirs if the sample point can be connected
+			float R = length(s.sample.s_position - x);
+			float3 dir = normalize(s.sample.s_position - x);
+			bool vis = shadow_visibility(x + dir * 1e-3f, dir, R);
+
+#define HIGHLIGHT_SPATIAL
+
+			if (vis) {
+#ifdef HIGHLIGHT_SPATIAL
+				rp->value = {0, 1, 0};
+				return;
+#endif
+
+				float3 to_s = s.sample.s_position - sx;
+				float3 to_r = rp->position - x;
+
+				float Rs = length(to_s);
+				float Rr = length(to_r);
+
+				to_s = normalize(to_s);
+				to_r = normalize(to_r);
+
+				float3 sample_n = s.sample.s_normal;
+				float phi_s = acos(dot(sample_n, to_s));
+				float phi_r = acos(dot(n, to_r));
+
+				float J = abs(phi_r/phi_s) * (Rs * Rs)/(Rr * Rr);
+
+				spatial.merge(s, max(s.sample.value)/J);
+				Z += s.count;
 			}
+		}
 
-			rp->value = {0, 1, 0};
+#ifdef HIGHLIGHT_SPATIAL
+		if (Z <= temporal.count) {
+			rp->value = {0, 0, 1};
 			return;
+		}
+#endif
 
-			// Merge reservoirs
-			r.merge(s);
-		} */
+		spatial.W = spatial.weight/(Z * max(spatial.sample.value) + 1e-6f);
 
-		// Store this pixel's reservoir
-		// params.spatial_reservoir_curr[rp->imgidx] = r;
+		float3 bounce = f * spatial.sample.value * spatial.W;
+		if (Z == 0) */
+	
+		float3 wi = normalize(temporal.sample.s_position - x);
+		float3 bounce = temporal.sample.value
+			* abs(dot(wi, n))
+			* temporal.W;
 
-		float W = r.weight/(r.count * max(r.sample.value));
-		rp->value = cT * direct + r.sample.value * W;
+		rp->value = cT * direct + f * bounce/(pdf * (1 - q));
+
+		// Save this pixel's reservoir
+		params.spatial_reservoir_curr[rp->imgidx] = spatial;
 	}
 	
 	rp->diffuse = material.diffuse;

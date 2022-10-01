@@ -199,8 +199,8 @@ public:
 
 	// Options
 	// TODO: struct
-	bool denoiser_enabled = true;
-	bool enable_restir = false;
+	bool denoiser_enabled = false;
+	bool enable_restir = true;
 
 	// Constructor
 	OptixTracer(const Context &ctx, const vk::AttachmentLoadOp &load,

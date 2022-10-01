@@ -15,8 +15,15 @@ namespace optix_rt {
 
 struct PathSample {
 	float3 value;
-	float3 normal;
-	float3 position;
+	float3 dir;
+
+	float3 v_normal;
+	float3 v_position;
+
+	float3 s_normal;
+	float3 s_position;
+
+	float pdf;
 };
 
 using Reservoir = optix::Reservoir <PathSample> ;
