@@ -43,8 +43,8 @@ struct Params
 	float			*yoffset;
 
 	Reservoir		*reservoirs;
-	Reservoir		*spatial_reservoir_curr;
-	Reservoir		*spatial_reservoir_prev;
+	Reservoir		*prev_reservoirs;
+	Reservoir		*spatial_reservoirs;
 
 	unsigned int		image_width;
 	unsigned int		image_height;

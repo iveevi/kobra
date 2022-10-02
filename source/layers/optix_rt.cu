@@ -157,8 +157,8 @@ extern "C" __global__ void __raygen__rg()
 	// Reset the reservoir if needed
 	if (params.accumulated == 0) {
 		params.reservoirs[index].reset();
-		params.spatial_reservoir_curr[index].reset();
-		params.spatial_reservoir_prev[index].reset();
+		params.prev_reservoirs[index].reset();
+		params.spatial_reservoirs[index].reset();
 	}
 
 	while (n--) {
@@ -787,16 +787,18 @@ extern "C" __global__ void __closesthit__radiance()
 	if (restir_mode) {
 		// Get the this pixel's reservoirs
 		Reservoir &temporal = params.reservoirs[rp->imgidx];
-		Reservoir spatial = params.spatial_reservoir_prev[rp->imgidx];
+		Reservoir &spatial = params.spatial_reservoirs[rp->imgidx];
+
+		// TODO: double buffer spatial reservoirs if theyre count is low
 
 		// Reset temporal reservoir every 10 samples
 		//	to avoid stagnation of samples
-		if (temporal.count >= 10)
+		/* if (temporal.count >= 10)
 			temporal.reset();
 
-		// Also reset spatial reservoir every 50 samples
+		// Also reset spatial reservoir
 		if (spatial.count >= 50)
-			spatial.reset();
+			spatial.reset(); */
 
 		// Populate temporal reservoir
 		float weight = max(rp->value)/pdf;
@@ -819,20 +821,20 @@ extern "C" __global__ void __closesthit__radiance()
 		temporal.W = temporal.weight
 			/(temporal.count * max(temporal.sample.value) + 1e-6f);
 
-		/* Spatial reservoir resampling
+		// Spatial reservoir resampling
 		int Z = 0;
-
-		// spatial.merge(temporal);
-		// Z += temporal.count;
 
 		int idx = rp->imgidx % params.image_width;
 		int idy = rp->imgidx / params.image_width;
 
-		const int SPATIAL_SAMPLES = 10;
+		const int SPATIAL_SAMPLES = 16;
 
+		int empty_res = 0;
 		for (int i = 0; i < SPATIAL_SAMPLES; i++) {
+			random3(rp->seed);
 			float3 random = fract(random3(rp->seed));
-			float radius = random.x * 2.0f;
+
+			float radius = random.x * 3.0f;
 			float theta = random.y * 2.0f * M_PI;
 
 			int nx = idx + radius * cos(theta);
@@ -845,9 +847,11 @@ extern "C" __global__ void __closesthit__radiance()
 			int idx = nx + ny * params.image_width;
 
 			// Skip if corresponding reservoir is empty
-			Reservoir s = params.reservoirs[idx];
-			if (s.count == 0)
+			Reservoir s = params.prev_reservoirs[idx];
+			if (s.count == 0) {
+				empty_res++;
 				continue;
+			}
 
 			// Check geometric similarity
 			float3 sn = s.sample.v_normal;
@@ -856,7 +860,7 @@ extern "C" __global__ void __closesthit__radiance()
 			float angle = 180 * acos(dot(sn, n))/M_PI;
 			float dist = length(sx - x);
 
-			if (angle > 25 || dist > 0.1f)
+			if (angle > 25 || dist > 0.01f)
 				continue;
 
 			// Merge reservoirs if the sample point can be connected
@@ -864,7 +868,7 @@ extern "C" __global__ void __closesthit__radiance()
 			float3 dir = normalize(s.sample.s_position - x);
 			bool vis = shadow_visibility(x + dir * 1e-3f, dir, R);
 
-#define HIGHLIGHT_SPATIAL
+// #define HIGHLIGHT_SPATIAL
 
 			if (vis) {
 #ifdef HIGHLIGHT_SPATIAL
@@ -883,7 +887,7 @@ extern "C" __global__ void __closesthit__radiance()
 
 				float3 sample_n = s.sample.s_normal;
 				float phi_s = acos(dot(sample_n, to_s));
-				float phi_r = acos(dot(n, to_r));
+				float phi_r = acos(dot(sample_n, to_r));
 
 				float J = abs(phi_r/phi_s) * (Rs * Rs)/(Rr * Rr);
 
@@ -893,22 +897,31 @@ extern "C" __global__ void __closesthit__radiance()
 		}
 
 #ifdef HIGHLIGHT_SPATIAL
-		if (Z <= temporal.count) {
+		if (empty_res == SPATIAL_SAMPLES) {
+			rp->value = {1, 0, 0};
+			return;
+		}
+
+		if (Z == 0) {
 			rp->value = {0, 0, 1};
 			return;
 		}
 #endif
 
-		spatial.W = spatial.weight/(Z * max(spatial.sample.value) + 1e-6f);
+		spatial.W = spatial.weight
+			/(Z * max(spatial.sample.value) + 1e-6f);
 
-		float3 bounce = f * spatial.sample.value * spatial.W;
-		if (Z == 0) */
-	
-		rp->value = direct + temporal.sample.brdf
-			* temporal.sample.value;
+		// Compute value
+		if (Z == 0) {
+			rp->value = direct + temporal.sample.brdf
+				* temporal.sample.value;
+		} else {
+			rp->value = direct + spatial.sample.brdf
+				* spatial.sample.value;
+		}
 
-		// Save this pixel's reservoir
-		params.spatial_reservoir_curr[rp->imgidx] = spatial;
+		// Double buffering
+		params.prev_reservoirs[rp->imgidx] = temporal;
 	}
 	
 	rp->diffuse = material.diffuse;

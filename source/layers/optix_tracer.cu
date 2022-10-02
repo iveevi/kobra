@@ -717,8 +717,8 @@ void OptixTracer::_allocate_cuda_resources()
 	std::vector <optix_rt::Reservoir> reservoirs(width * height);
 
 	_buffers.reservoirs = cuda::make_buffer_ptr(reservoirs);
-	_buffers.spatial_reservoir_prev = cuda::make_buffer_ptr(reservoirs);
-	_buffers.spatial_reservoir_curr = cuda::make_buffer_ptr(reservoirs);
+	_buffers.prev_reservoirs = cuda::make_buffer_ptr(reservoirs);
+	_buffers.spatial_reservoirs = cuda::make_buffer_ptr(reservoirs);
 }
 
 // TODO: also add an optix_update method
@@ -1267,11 +1267,13 @@ void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 
 	// Assign reservoirs, and double buffer the spatial ones
 	params.reservoirs = (optix_rt::Reservoir *) _buffers.reservoirs;
-	params.spatial_reservoir_prev = (optix_rt::Reservoir *)
-		_buffers.spatial_reservoir_curr;
-	params.spatial_reservoir_curr = (optix_rt::Reservoir *)
-		_buffers.spatial_reservoir_prev;
-	std::swap(_buffers.spatial_reservoir_prev, _buffers.spatial_reservoir_curr);
+	params.prev_reservoirs = (optix_rt::Reservoir *)
+		_buffers.prev_reservoirs;
+	params.spatial_reservoirs = (optix_rt::Reservoir *)
+		_buffers.spatial_reservoirs;
+
+	std::swap(_buffers.reservoirs, _buffers.prev_reservoirs);
+	// std::swap(_buffers.spatial_reservoir_prev, _buffers.spatial_reservoir_curr);
 
 	params.image_width  = width;
 	params.image_height = height;
