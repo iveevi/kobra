@@ -689,19 +689,25 @@ extern "C" __global__ void __closesthit__radiance()
 	// Get data from the SBT
 	HitGroupData *hit_data = reinterpret_cast <HitGroupData *> (optixGetSbtDataPointer());
 
-	// TODO: check for light, not just emissive material
-	if (hit_data->material.type == Shading::eEmissive) {
-		rp->value += rp->throughput * hit_data->material.emission;
-		rp->throughput = {0, 0, 0};
-		return;
-	}
-
 	// Calculate relevant data for the hit
 	float2 bary = optixGetTriangleBarycentrics();
 	int primitive_index = optixGetPrimitiveIndex();
 	uint3 triangle = hit_data->triangles[primitive_index];
 
 	Material material = hit_data->material;
+
+	// TODO: check for light, not just emissive material
+	if (hit_data->material.type == Shading::eEmissive) {
+		rp->value += rp->throughput * material.emission;
+		rp->throughput = {0, 0, 0};
+
+		rp->position = optixGetWorldRayOrigin();
+		rp->normal = {0, 0, 0};
+		rp->diffuse = material.emission;
+
+		return;
+	}
+	
 	calculate_material(hit_data, material, triangle, bary);
 
 	bool entering;
@@ -803,9 +809,17 @@ extern "C" __global__ void __closesthit__radiance()
 		// Populate temporal reservoir
 		float weight = max(rp->value)/pdf;
 		
+		float depth = length(optixGetWorldRayOrigin() - x);
+
+		// TODO: The ray misses if its depth is 1
+		//	but not if it hits a light (check value)
+		//	this fixes lights being black with ReSTIR
+		bool missed = (rp->depth == 1);
+
 		PathSample ps = {
 			.value = rp->value,
 			.dir = wi,
+			.miss = missed,
 
 			.v_normal = n,
 			.v_position = x,
@@ -814,7 +828,8 @@ extern "C" __global__ void __closesthit__radiance()
 			.s_position = rp->position,
 			
 			.brdf = f * abs(dot(wi, n))/pdf,
-			.pdf = pdf
+			.pdf = pdf,
+			.depth = depth,
 		};
 
 		temporal.update(ps, weight);
@@ -827,14 +842,14 @@ extern "C" __global__ void __closesthit__radiance()
 		int idx = rp->imgidx % params.image_width;
 		int idy = rp->imgidx / params.image_width;
 
-		const int SPATIAL_SAMPLES = 16;
+		const int SPATIAL_SAMPLES = 4;
 
 		int empty_res = 0;
 		for (int i = 0; i < SPATIAL_SAMPLES; i++) {
 			random3(rp->seed);
 			float3 random = fract(random3(rp->seed));
 
-			float radius = random.x * 3.0f;
+			float radius = random.x * 100.0f;
 			float theta = random.y * 2.0f * M_PI;
 
 			int nx = idx + radius * cos(theta);
@@ -847,8 +862,14 @@ extern "C" __global__ void __closesthit__radiance()
 			int idx = nx + ny * params.image_width;
 
 			// Skip if corresponding reservoir is empty
-			Reservoir s = params.prev_reservoirs[idx];
-			if (s.count == 0) {
+			Reservoir s;
+
+			if (params.prev_spatial_reservoirs[idx].count > 50)
+				s = params.prev_spatial_reservoirs[idx];
+			else
+				s = params.reservoirs[idx];
+
+			if (s.count == 0 || params.accumulated == 0) {
 				empty_res++;
 				continue;
 			}
@@ -858,17 +879,30 @@ extern "C" __global__ void __closesthit__radiance()
 			float3 sx = s.sample.v_position;
 
 			float angle = 180 * acos(dot(sn, n))/M_PI;
-			float dist = length(sx - x);
+			float ndepth = abs(s.sample.depth - depth)/depth;
 
-			if (angle > 25 || dist > 0.01f)
+// #define HIGHLIGHT_SPATIAL
+
+			if (angle > 10 || ndepth > 0.1f) {
+#ifdef HIGHLIGHT_SPATIAL
+				rp->value = {1, 0, 1};
+				return;
+#endif
+
 				continue;
+			}
 
 			// Merge reservoirs if the sample point can be connected
 			float R = length(s.sample.s_position - x);
 			float3 dir = normalize(s.sample.s_position - x);
-			bool vis = shadow_visibility(x + dir * 1e-3f, dir, R);
 
-// #define HIGHLIGHT_SPATIAL
+			bool vis = false;
+			if (s.sample.miss) {
+				dir = s.sample.dir;
+				vis = shadow_visibility(x + dir * 1e-3f, dir, 1e6);
+			} else {
+				vis = shadow_visibility(x + dir * 1e-3f, dir, R);
+			}
 
 			if (vis) {
 #ifdef HIGHLIGHT_SPATIAL
@@ -876,20 +910,24 @@ extern "C" __global__ void __closesthit__radiance()
 				return;
 #endif
 
-				float3 to_s = s.sample.s_position - sx;
-				float3 to_r = rp->position - x;
+				float3 x1q = s.sample.v_position;
+				float3 x1r = rp->position;
+				float3 x2q = s.sample.s_position;
 
-				float Rs = length(to_s);
-				float Rr = length(to_r);
+				float3 v1q2r = x1q - x2q;
+				float3 v1r2q = x1r - x2q;
 
-				to_s = normalize(to_s);
-				to_r = normalize(to_r);
+				float d1q2q = length(v1q2r);
+				float d1r2q = length(v1r2q);
+
+				v1r2q /= d1r2q;
+				v1q2r /= d1q2q;
 
 				float3 sample_n = s.sample.s_normal;
-				float phi_s = acos(dot(sample_n, to_s));
-				float phi_r = acos(dot(sample_n, to_r));
+				float phi_s = acos(dot(sample_n, v1r2q));
+				float phi_r = acos(dot(sample_n, v1q2r));
 
-				float J = abs(phi_r/phi_s) * (Rs * Rs)/(Rr * Rr);
+				float J = abs(phi_r/phi_s) * (d1q2q * d1q2q)/(d1r2q * d1r2q);
 
 				spatial.merge(s, max(s.sample.value)/J);
 				Z += s.count;
@@ -908,20 +946,21 @@ extern "C" __global__ void __closesthit__radiance()
 		}
 #endif
 
-		spatial.W = spatial.weight
-			/(Z * max(spatial.sample.value) + 1e-6f);
+		Z += temporal.count;
+		spatial.W = spatial.weight/(Z * max(spatial.sample.value) + 1e-6f);
 
 		// Compute value
-		if (Z == 0) {
-			rp->value = direct + temporal.sample.brdf
-				* temporal.sample.value;
-		} else {
-			rp->value = direct + spatial.sample.brdf
-				* spatial.sample.value;
-		}
+		// float3 tvalue = direct + temporal.sample.brdf
+		//	* temporal.sample.value;
+
+		float3 svalue = direct + T
+			* spatial.sample.value;
+
+		rp->value = svalue;
 
 		// Double buffering
 		params.prev_reservoirs[rp->imgidx] = temporal;
+		params.prev_spatial_reservoirs[rp->imgidx] = spatial;
 	}
 	
 	rp->diffuse = material.diffuse;

@@ -16,6 +16,7 @@ namespace optix_rt {
 struct PathSample {
 	float3 value;
 	float3 dir;
+	bool miss;
 
 	float3 v_normal;
 	float3 v_position;
@@ -25,6 +26,7 @@ struct PathSample {
 
 	float3 brdf;
 	float pdf;
+	float depth;
 };
 
 using Reservoir = optix::Reservoir <PathSample> ;
@@ -45,6 +47,7 @@ struct Params
 	Reservoir		*reservoirs;
 	Reservoir		*prev_reservoirs;
 	Reservoir		*spatial_reservoirs;
+	Reservoir		*prev_spatial_reservoirs;
 
 	unsigned int		image_width;
 	unsigned int		image_height;

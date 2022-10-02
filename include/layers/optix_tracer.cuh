@@ -73,6 +73,7 @@ class OptixTracer {
 		CUdeviceptr		reservoirs;
 		CUdeviceptr		prev_reservoirs;
 		CUdeviceptr		spatial_reservoirs;
+		CUdeviceptr		prev_spatial_reservoirs;
 
 		cuda::BufferData	denoiser_state;
 		cuda::BufferData	denoiser_scratch;
