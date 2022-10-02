@@ -289,7 +289,7 @@ __device__ float3 brdf(const Material &mat, float3 n, float3 wi,
 {
 	// TODO: diffuse should be in conjunction with the material
 	if (out & Shading::eTransmission)
-		return SpecularTransmission::brdf(mat, n, wi, wo, entering, out);
+		return FresnelSpecular::brdf(mat, n, wi, wo, entering, out);
 	
 	return mat.diffuse/M_PI + GGX::brdf(mat, n, wi, wo, entering, out);
 }
@@ -299,7 +299,7 @@ __device__ float pdf(const Material &mat, float3 n, float3 wi,
 		float3 wo, bool entering, Shading out)
 {
 	if (out & Shading::eTransmission)
-		return SpecularTransmission::pdf(mat, n, wi, wo, entering, out);
+		return FresnelSpecular::pdf(mat, n, wi, wo, entering, out);
 	
 	return GGX::pdf(mat, n, wi, wo, entering, out);
 }
@@ -309,7 +309,7 @@ __device__ float3 sample(const Material &mat, float3 n, float3 wo,
 		bool entering, float3 &seed, Shading &out)
 {
 	if (mat.type & Shading::eTransmission)
-		return SpecularTransmission::sample(mat, n, wo, entering, seed, out);
+		return FresnelSpecular::sample(mat, n, wo, entering, seed, out);
 
 	return GGX::sample(mat, n, wo, entering, seed, out);
 }
@@ -720,7 +720,14 @@ extern "C" __global__ void __closesthit__radiance()
 	}
 
 	float3 cT = rp->throughput;
-	if (!(primary && params.options.use_reservoir))
+
+	bool restir_mode = (
+		primary
+		&& params.options.use_reservoir
+		// && material.type != Shading::eTransmission
+	);
+
+	if (!restir_mode)
 		rp->value += cT * direct;
 
 	// Generate new ray
@@ -749,11 +756,12 @@ extern "C" __global__ void __closesthit__radiance()
 	float p = max(rp->throughput.x, max(rp->throughput.y, rp->throughput.z));
 	float q = 1 - min(1.0f, p);
 
-	if (fract(rp->seed.x) < q)
-		return;
+	// if (fract(rp->seed.x) < q)
+	//	return;
 
 	if (!(primary && params.options.use_reservoir))
-		rp->throughput *= T/(1 - q);
+		rp->throughput *= T;
+		// rp->throughput *= T/(1 - q);
 
 	rp->depth++;
 
@@ -776,7 +784,7 @@ extern "C" __global__ void __closesthit__radiance()
 	);
 
 	// Resampling
-	if (primary && params.options.use_reservoir) {
+	if (restir_mode) {
 		// Get the this pixel's reservoirs
 		Reservoir &temporal = params.reservoirs[rp->imgidx];
 		Reservoir spatial = params.spatial_reservoir_prev[rp->imgidx];
@@ -803,6 +811,7 @@ extern "C" __global__ void __closesthit__radiance()
 			.s_normal = rp->normal,
 			.s_position = rp->position,
 			
+			.brdf = f * abs(dot(wi, n))/pdf,
 			.pdf = pdf
 		};
 
@@ -895,19 +904,15 @@ extern "C" __global__ void __closesthit__radiance()
 		float3 bounce = f * spatial.sample.value * spatial.W;
 		if (Z == 0) */
 	
-		float3 wi = normalize(temporal.sample.s_position - x);
-		float3 bounce = temporal.sample.value
-			* abs(dot(wi, n))
-			* temporal.W;
-
-		rp->value = cT * direct + f * bounce/(pdf * (1 - q));
+		rp->value = direct + temporal.sample.brdf
+			* temporal.sample.value;
 
 		// Save this pixel's reservoir
 		params.spatial_reservoir_curr[rp->imgidx] = spatial;
 	}
 	
 	rp->diffuse = material.diffuse;
-	rp->normal = n * 0.5 + 0.5;
+	rp->normal = n;
 	rp->position = x;
 }
 

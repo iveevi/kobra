@@ -23,6 +23,7 @@ struct PathSample {
 	float3 s_normal;
 	float3 s_position;
 
+	float3 brdf;
 	float pdf;
 };
 
