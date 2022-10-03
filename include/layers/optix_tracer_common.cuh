@@ -48,6 +48,7 @@ struct Params
 	Reservoir		*prev_reservoirs;
 	Reservoir		*spatial_reservoirs;
 	Reservoir		*prev_spatial_reservoirs;
+	float			*sampling_radius;
 
 	unsigned int		image_width;
 	unsigned int		image_height;

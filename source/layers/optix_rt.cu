@@ -159,6 +159,11 @@ extern "C" __global__ void __raygen__rg()
 		params.reservoirs[index].reset();
 		params.prev_reservoirs[index].reset();
 		params.spatial_reservoirs[index].reset();
+		params.prev_spatial_reservoirs[index].reset();
+		params.sampling_radius[index] = min(
+			params.image_width,
+			params.image_height
+		)/10.0f;
 	}
 
 	while (n--) {
@@ -225,10 +230,18 @@ extern "C" __global__ void __raygen__rg()
 	avg_normal /= float(params.spp);
 	avg_diffuse /= float(params.spp);
 
-	// Record the results
+#define PROGRESSIVE
+
+#ifdef PROGRESSIVE
 	params.pbuffer[index] = (avg_pixel + params.pbuffer[index] * params.accumulated)/(params.accumulated + 1);
 	params.nbuffer[index] = (avg_normal + params.nbuffer[index] * params.accumulated)/(params.accumulated + 1);
 	params.abuffer[index] = (avg_diffuse + params.abuffer[index] * params.accumulated)/(params.accumulated + 1);
+#else
+	// Store
+	params.pbuffer[index] = avg_pixel;
+	params.nbuffer[index] = avg_normal;
+	params.abuffer[index] = avg_diffuse;
+#endif
 }
 
 extern "C" __global__ void __miss__radiance()
@@ -791,6 +804,10 @@ extern "C" __global__ void __closesthit__radiance()
 
 	// Resampling
 	if (restir_mode) {
+		const float max_radius = min(params.image_width, params.image_height);
+
+		float &sampling_radius = params.sampling_radius[rp->imgidx];
+
 		// Get the this pixel's reservoirs
 		Reservoir &temporal = params.reservoirs[rp->imgidx];
 		Reservoir &spatial = params.spatial_reservoirs[rp->imgidx];
@@ -799,11 +816,11 @@ extern "C" __global__ void __closesthit__radiance()
 
 		// Reset temporal reservoir every 10 samples
 		//	to avoid stagnation of samples
-		/* if (temporal.count >= 10)
+		/* if (temporal.count >= 30)
 			temporal.reset();
 
 		// Also reset spatial reservoir
-		if (spatial.count >= 50)
+		if (spatial.count >= 500)
 			spatial.reset(); */
 
 		// Populate temporal reservoir
@@ -842,14 +859,16 @@ extern "C" __global__ void __closesthit__radiance()
 		int idx = rp->imgidx % params.image_width;
 		int idy = rp->imgidx / params.image_width;
 
-		const int SPATIAL_SAMPLES = 4;
+		const int SPATIAL_SAMPLES = (spatial.count < 250) ? 9 : 3;
 
 		int empty_res = 0;
+
+		int success = 0;
 		for (int i = 0; i < SPATIAL_SAMPLES; i++) {
 			random3(rp->seed);
 			float3 random = fract(random3(rp->seed));
 
-			float radius = random.x * 100.0f;
+			float radius = random.x * sampling_radius;
 			float theta = random.y * 2.0f * M_PI;
 
 			int nx = idx + radius * cos(theta);
@@ -862,30 +881,30 @@ extern "C" __global__ void __closesthit__radiance()
 			int idx = nx + ny * params.image_width;
 
 			// Skip if corresponding reservoir is empty
-			Reservoir s;
+			Reservoir *s;
 
 			if (params.prev_spatial_reservoirs[idx].count > 50)
-				s = params.prev_spatial_reservoirs[idx];
+				s = &params.prev_spatial_reservoirs[idx];
 			else
-				s = params.reservoirs[idx];
+				s = &params.reservoirs[idx];
 
-			if (s.count == 0 || params.accumulated == 0) {
+			if (s->count == 0 || params.accumulated == 0) {
 				empty_res++;
 				continue;
 			}
 
 			// Check geometric similarity
-			float3 sn = s.sample.v_normal;
-			float3 sx = s.sample.v_position;
+			float3 sn = s->sample.v_normal;
+			float3 sx = s->sample.v_position;
 
 			float angle = 180 * acos(dot(sn, n))/M_PI;
-			float ndepth = abs(s.sample.depth - depth)/depth;
+			float ndepth = abs(s->sample.depth - depth)/depth;
 
 // #define HIGHLIGHT_SPATIAL
 
 			if (angle > 10 || ndepth > 0.1f) {
 #ifdef HIGHLIGHT_SPATIAL
-				rp->value = {1, 0, 1};
+				rp->value = {1, 1, 0};
 				return;
 #endif
 
@@ -893,12 +912,12 @@ extern "C" __global__ void __closesthit__radiance()
 			}
 
 			// Merge reservoirs if the sample point can be connected
-			float R = length(s.sample.s_position - x);
-			float3 dir = normalize(s.sample.s_position - x);
+			float R = length(s->sample.s_position - x);
+			float3 dir = normalize(s->sample.s_position - x);
 
 			bool vis = false;
-			if (s.sample.miss) {
-				dir = s.sample.dir;
+			if (s->sample.miss) {
+				dir = s->sample.dir;
 				vis = shadow_visibility(x + dir * 1e-3f, dir, 1e6);
 			} else {
 				vis = shadow_visibility(x + dir * 1e-3f, dir, R);
@@ -910,9 +929,9 @@ extern "C" __global__ void __closesthit__radiance()
 				return;
 #endif
 
-				float3 x1q = s.sample.v_position;
+				float3 x1q = s->sample.v_position;
 				float3 x1r = rp->position;
-				float3 x2q = s.sample.s_position;
+				float3 x2q = s->sample.s_position;
 
 				float3 v1q2r = x1q - x2q;
 				float3 v1r2q = x1r - x2q;
@@ -923,14 +942,21 @@ extern "C" __global__ void __closesthit__radiance()
 				v1r2q /= d1r2q;
 				v1q2r /= d1q2q;
 
-				float3 sample_n = s.sample.s_normal;
+				float3 sample_n = s->sample.s_normal;
 				float phi_s = acos(dot(sample_n, v1r2q));
 				float phi_r = acos(dot(sample_n, v1q2r));
 
 				float J = abs(phi_r/phi_s) * (d1q2q * d1q2q)/(d1r2q * d1r2q);
 
-				spatial.merge(s, max(s.sample.value)/J);
-				Z += s.count;
+				spatial.merge(*s, max(s->sample.value)/J);
+				Z += s->count;
+
+				success++;
+			} else {
+#ifdef HIGHLIGHT_SPATIAL
+				rp->value = {1, 0, 1};
+				return;
+#endif
 			}
 		}
 
@@ -946,17 +972,26 @@ extern "C" __global__ void __closesthit__radiance()
 		}
 #endif
 
+		if (success == 0 && params.accumulated > 0)
+			sampling_radius = max(sampling_radius * 0.5f, 3.0f);
+
 		Z += temporal.count;
 		spatial.W = spatial.weight/(Z * max(spatial.sample.value) + 1e-6f);
 
 		// Compute value
-		// float3 tvalue = direct + temporal.sample.brdf
-		//	* temporal.sample.value;
+		float3 tvalue = direct + temporal.sample.brdf
+			* temporal.sample.value;
 
 		float3 svalue = direct + T
 			* spatial.sample.value;
 
-		rp->value = svalue;
+		bool specural = (material.type == Shading::eTransmission)
+			|| (material.roughness < 0.05f);
+
+		if (specural)
+			rp->value = tvalue;
+		else
+			rp->value = svalue;
 
 		// Double buffering
 		params.prev_reservoirs[rp->imgidx] = temporal;

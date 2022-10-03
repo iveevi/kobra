@@ -20,10 +20,12 @@ struct Reservoir {
 	float	weight;
 	float3	random;
 	int	count;
+	int	max_count;
 
 	// Constructor
 	__forceinline__ __host__ __device__
-	Reservoir() : W(0.0f), weight(0.0f), count(0) {}
+	Reservoir(int max) : W(0.0f), weight(0.0f),
+			count(0), max_count(max) {}
 
 	// Reset
 	__forceinline__ __device__
@@ -40,7 +42,7 @@ struct Reservoir {
 
 		// Update the cumulative weight
 		this->weight += weight;
-		this->count++;
+		this->count = min(this->count + 1, max_count);
 
 		// Randomly select the sample
 		float r = fract(random3(random).x);
@@ -56,7 +58,7 @@ struct Reservoir {
 	void merge(const Reservoir &reservoir, float target) {
 		int current = count;
 		update(reservoir.sample, target * reservoir.weight * reservoir.count);
-		count = current + reservoir.count;
+		count = min(current + reservoir.count, max_count);
 	}
 };
 
