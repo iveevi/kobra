@@ -28,8 +28,7 @@
 using namespace kobra;
 
 // Scene path
-// std::string scene_path = "~/models/sponza/scene.kobra";
-std::string scene_path = "/home/venki/models/san_miguel.kobra";
+std::string scene_path = "/home/venki/models/san_miguel_lowpoly.kobra";
 // std::string scene_path = "scenes/ggx.kobra";
 
 // Test app
@@ -336,6 +335,7 @@ struct ECSApp : public BaseApp {
 
 	bool tab_pressed = false;
 
+	float time = 0;
 	void active_input() {
 		float speed = 20.0f * frame_time;
 
@@ -343,7 +343,7 @@ struct ECSApp : public BaseApp {
 		// TODO: remove transform component from camera?
 		auto &transform = camera.get <Transform> ();
 
-		glm::vec3 forward = transform.forward();
+		/* glm::vec3 forward = transform.forward();
 		glm::vec3 right = transform.right();
 		glm::vec3 up = transform.up();
 
@@ -360,7 +360,20 @@ struct ECSApp : public BaseApp {
 		if (io.input.is_key_down(GLFW_KEY_E))
 			transform.move(up * speed);
 		else if (io.input.is_key_down(GLFW_KEY_Q))
-			transform.move(-up * speed);
+			transform.move(-up * speed); */
+
+		transform.position = glm::vec3 {
+			100.0f * glm::sin(time),
+			100.0f,
+			100.0f * glm::cos(time)
+		};
+
+		// Look at the origin always
+		glm::vec3 origin {0.0f};
+		glm::vec3 eye = transform.position;
+		glm::vec3 dir = glm::normalize(origin - eye);
+		
+		transform.look(dir);
 
 		// Switch mode on tab
 		if (io.input.is_key_down(GLFW_KEY_TAB)) {
@@ -382,7 +395,6 @@ struct ECSApp : public BaseApp {
 	}
 
 	float fps = 0;
-	float time = 0;
 
 	void record(const vk::raii::CommandBuffer &cmd,
 			const vk::raii::Framebuffer &framebuffer) override {
@@ -448,8 +460,11 @@ struct ECSApp : public BaseApp {
 			rasterizer.render(cmd, framebuffer, scene.ecs, {render_min, render_max});
 		else if (mode == 1)
 			raytracer.render(cmd, framebuffer, scene.ecs, {render_min, render_max});
-		else if (mode == 2)
-			optix_tracer.render(cmd, framebuffer, scene.ecs, {render_min, render_max});
+		else if (mode == 2) {
+			for (int i = 0; i < 4; i++)
+				optix_tracer.compute(scene.ecs);
+			optix_tracer.render(cmd, framebuffer, {render_min, render_max});
+		}
 
 		// Gizmo
 		if (selected_entity != -1) {

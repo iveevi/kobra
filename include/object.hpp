@@ -66,13 +66,13 @@ public:
 		return _transform;
 	}
 	
-	void save_object(std::ofstream &file) const {
+	/* void save_object(std::ofstream &file) const {
 		// Save name, transform, then rest of the object
 		file << "[OBJECT]" << std::endl;
 		file << "name=" << _name << std::endl;
 		_transform.save(file);
 		save(file);
-	}
+	} */
 
 	// Virtual methods
 	virtual float intersect(const Ray &) const = 0;

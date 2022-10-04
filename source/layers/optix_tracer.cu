@@ -245,13 +245,11 @@ void OptixTracer::environment_map(const std::string &path)
 	cuda::copy(_optix_miss_sbt, &miss_record, 1);
 }
 
-////////////
-// Render //
-////////////
+////////////////////////////////////////
+// Run the OptiX ray tracing pipeline //
+////////////////////////////////////////
 
-void OptixTracer::render(const vk::raii::CommandBuffer &cmd,
-		const vk::raii::Framebuffer &framebuffer,
-		const ECS &ecs, const RenderArea &ra)
+void OptixTracer::compute(const ECS &ecs)
 {
 	// Get camera and camera transform
 	Camera camera;
@@ -334,6 +332,16 @@ void OptixTracer::render(const vk::raii::CommandBuffer &cmd,
 	_optix_update_materials();
 	_optix_trace(camera, camera_transform);
 
+}
+
+////////////
+// Render //
+////////////
+
+void OptixTracer::render(const vk::raii::CommandBuffer &cmd,
+		const vk::raii::Framebuffer &framebuffer,
+		const RenderArea &ra)
+{
 	// Apply render area
 	ra.apply(cmd, _ctx.extent);
 

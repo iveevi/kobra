@@ -269,10 +269,13 @@ public:
 	// Set environment map
 	void environment_map(const std::string &);
 
+	// Perform an interation of path tracing
+	void compute(const ECS &);
+
 	// Render
 	void render(const vk::raii::CommandBuffer &,
 			const vk::raii::Framebuffer &,
-			const ECS &, const RenderArea & = {{-1, -1}, {-1, -1}});
+			const RenderArea & = {{-1, -1}, {-1, -1}});
 
 	// Capture to buffer
 	std::vector <uint8_t> capture() {

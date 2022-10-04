@@ -60,6 +60,11 @@ struct Transform {
 		position += delta;
 	}
 
+	// Look in a direction
+	void look(const glm::vec3 &direction) {
+		rotation = glm::eulerAngles(glm::quatLookAt(direction, glm::vec3(0.0f, 1.0f, 0.0f)));
+	}
+
 	// Get forward, right, up vectors
 	glm::vec3 forward() const {
 		glm::quat q = glm::quat(rotation);
@@ -92,7 +97,7 @@ struct Transform {
 		return !(*this == t);
 	}
 
-	// Save to file
+	/* Save to file
 	void save(std::ofstream &file) const {
 		file << "[TRANSFORM]" << std::endl;
 		file << "position=" << position.x << " " << position.y
@@ -127,7 +132,7 @@ struct Transform {
 
 		// Construct and return transform
 		return Transform(position, rotation, scale);
-	}
+	} */
 };
 
 inline std::ostream &operator<<(std::ostream &os, const Transform &t)
