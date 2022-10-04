@@ -192,8 +192,7 @@ public:
 	kobra::Profiler::ScopedFrame CONCAT(sf_, CONCAT(__LINE__, __COUNTER__)) \
 		= kobra::Profiler::one().scoped_frame(#name);
 
-#define KOBRA_PROFILE_FUNCTION() \
-	KOBRA_PROFILE_TASK(__PRETTY_FUNCTION__)
+#define KOBRA_PROFILE_FUNCTION() KOBRA_PROFILE_TASK(__FUNCTION__)
 
 #define KOBRA_PROFILE_AUTO() \
 	kobra::Profiler::ScopedFrame CONCAT(sf_, CONCAT(__LINE__, __COUNTER__)) \

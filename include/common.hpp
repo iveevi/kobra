@@ -90,6 +90,24 @@ inline std::string get_directory(const std::string &file)
 #endif
 }
 
+// Get file name
+inline std::string get_filename(const std::string &file)
+{
+	// Unix
+#ifdef __unix__
+
+	return file.substr(file.find_last_of('/') + 1);
+
+#endif
+
+	// Windows	
+#ifdef _WIN32
+
+	return file.substr(file.find_last_of('\\') + 1);
+
+#endif
+}
+
 // Relative or absolute path
 inline std::string get_path(const std::string &file, const std::string &dir)
 {

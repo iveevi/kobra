@@ -811,7 +811,7 @@ namespace tinyobjloader {
 
 std::optional <Mesh> load_mesh(const std::string &path)
 {
-	KOBRA_PROFILE_FUNCTION();
+	KOBRA_PROFILE_TASK(Loading mesh);
 
 	// Loader configuration
 	tinyobj::ObjReaderConfig reader_config;
@@ -820,20 +820,25 @@ std::optional <Mesh> load_mesh(const std::string &path)
 	// Loader
 	tinyobj::ObjReader reader;
 	
-	// Load the mesh
-	if (!reader.ParseFromFile(path, reader_config)) {
-		// TODO: use macro, not function
-		Logger::error("[Mesh] Could not load mesh: " + path);
+	{
+		KOBRA_PROFILE_TASK(Loading mesh: reading file);
 
-		if (!reader.Error().empty())
-			Logger::error(reader.Error());
-		return {};
+		// Load the mesh
+		if (!reader.ParseFromFile(path, reader_config)) {
+			// TODO: use macro, not function
+			Logger::error("[Mesh] Could not load mesh: " + path);
+
+			if (!reader.Error().empty())
+				Logger::error(reader.Error());
+			return {};
+		}
+
+		// Warnings
+		// TODO: cusotm logger headers (like optix)
+		if (!reader.Warning().empty())
+			KOBRA_LOG_FUNC(Log::WARN) << reader.Warning() << std::endl;
+
 	}
-
-	// Warnings
-	// TODO: cusotm logger headers (like optix)
-	if (!reader.Warning().empty())
-		KOBRA_LOG_FUNC(Log::WARN) << reader.Warning() << std::endl;
 
 	// Get the mesh properties
 	auto &attrib = reader.GetAttrib();
@@ -843,172 +848,177 @@ std::optional <Mesh> load_mesh(const std::string &path)
 	// Load submeshes
 	std::vector <Submesh> submeshes;
 
-	// TODO: multithreaded task system (using a threadpool, etc) in core/
-	for (int i = 0; i < shapes.size(); i++) {
-		KOBRA_PROFILE_TASK(Load submesh);
+	{
+		KOBRA_PROFILE_TASK(Loading mesh: Loading submeshes);
 
-		// Get the mesh
-		auto &mesh = shapes[i].mesh;
+		// TODO: multithreaded task system (using a threadpool, etc) in core/
+		for (int i = 0; i < shapes.size(); i++) {
+			KOBRA_PROFILE_TASK(Loading submesh);
 
-		std::vector <Vertex> vertices;
-		std::vector <uint32_t> indices;
+			// Get the mesh
+			auto &mesh = shapes[i].mesh;
 
-		std::unordered_map <Vertex, uint32_t> unique_vertices;
-		std::unordered_map <tinyobj::index_t, uint32_t> index_map;
+			std::vector <Vertex> vertices;
+			std::vector <uint32_t> indices;
 
-		int offset = 0;
-		for (int f = 0; f < mesh.num_face_vertices.size(); f++) {
-			// Get the number of vertices in the face
-			int fv = mesh.num_face_vertices[f];
+			std::unordered_map <Vertex, uint32_t> unique_vertices;
+			std::unordered_map <tinyobj::index_t, uint32_t> index_map;
 
-			// Loop over vertices in the face
-			for (int v = 0; v < fv; v++) {
-				// Get the vertex index
-				tinyobj::index_t index = mesh.indices[offset + v];
+			int offset = 0;
+			for (int f = 0; f < mesh.num_face_vertices.size(); f++) {
+				// Get the number of vertices in the face
+				int fv = mesh.num_face_vertices[f];
 
-				if (index_map.count(index) > 0) {
-				    	indices.push_back(index_map[index]);
-					continue;
+				// Loop over vertices in the face
+				for (int v = 0; v < fv; v++) {
+					// Get the vertex index
+					tinyobj::index_t index = mesh.indices[offset + v];
+
+					if (index_map.count(index) > 0) {
+						indices.push_back(index_map[index]);
+						continue;
+					}
+
+					Vertex vertex;
+
+					vertex.position = {
+						attrib.vertices[3 * index.vertex_index + 0],
+						attrib.vertices[3 * index.vertex_index + 1],
+						attrib.vertices[3 * index.vertex_index + 2]
+					};
+
+					if (index.normal_index >= 0) {
+						vertex.normal = {
+							attrib.normals[3 * index.normal_index + 0],
+							attrib.normals[3 * index.normal_index + 1],
+							attrib.normals[3 * index.normal_index + 2]
+						};
+					} else {
+						// Compute geometric normal with
+						// respect to this face
+
+						// TODO: method
+						int pindex = (v - 1 + fv) % fv;
+						int nindex = (v + 1) % fv;
+
+						tinyobj::index_t p = mesh.indices[offset + pindex];
+						tinyobj::index_t n = mesh.indices[offset + nindex];
+
+						glm::vec3 vn = {
+							attrib.vertices[3 * p.vertex_index + 0],
+							attrib.vertices[3 * p.vertex_index + 1],
+							attrib.vertices[3 * p.vertex_index + 2]
+						};
+
+						glm::vec3 vp = {
+							attrib.vertices[3 * n.vertex_index + 0],
+							attrib.vertices[3 * n.vertex_index + 1],
+							attrib.vertices[3 * n.vertex_index + 2]
+						};
+
+						glm::vec3 e1 = vp - vertex.position;
+						glm::vec3 e2 = vn - vertex.position;
+
+						vertex.normal = glm::normalize(glm::cross(e1, e2));
+					}
+
+					if (index.texcoord_index >= 0) {
+						vertex.tex_coords = {
+							attrib.texcoords[2 * index.texcoord_index + 0],
+							1 - attrib.texcoords[2 * index.texcoord_index + 1]
+						};
+					} else {
+						vertex.tex_coords = {0.0f, 0.0f};
+					}
+
+					// Add the vertex to the list
+					// vertices.push_back(vertex);
+					// indices.push_back(vertices.size() - 1);
+
+					// Add the vertex
+					uint32_t id;
+					if (unique_vertices.count(vertex) > 0) {
+						id = unique_vertices[vertex];
+					} else {
+						id = vertices.size();
+						unique_vertices[vertex] = id;
+						vertices.push_back(vertex);
+					}
+
+					index_map[index] = id;
+					indices.push_back(id);
 				}
 
-				Vertex vertex;
+				// Update the offset
+				offset += fv;
 
-				vertex.position = {
-					attrib.vertices[3 * index.vertex_index + 0],
-					attrib.vertices[3 * index.vertex_index + 1],
-					attrib.vertices[3 * index.vertex_index + 2]
-				};
-
-				if (index.normal_index >= 0) {
-					vertex.normal = {
-						attrib.normals[3 * index.normal_index + 0],
-						attrib.normals[3 * index.normal_index + 1],
-						attrib.normals[3 * index.normal_index + 2]
-					};
-				} else {
-					// Compute geometric normal with
-					// respect to this face
+				// If last face, or material changes
+				// push back the submesh
+				if (f == mesh.num_face_vertices.size() - 1 ||
+						mesh.material_ids[f] != mesh.material_ids[f + 1]) {
+					// Material
+					Material mat;
 
 					// TODO: method
-					int pindex = (v - 1 + fv) % fv;
-					int nindex = (v + 1) % fv;
+					if (mesh.material_ids[f] < materials.size()) {
+						tinyobj::material_t m = materials[mesh.material_ids[f]];
+						mat.diffuse = {m.diffuse[0], m.diffuse[1], m.diffuse[2]};
+						mat.specular = {m.specular[0], m.specular[1], m.specular[2]};
+						mat.ambient = {m.ambient[0], m.ambient[1], m.ambient[2]};
+						mat.emission = {m.emission[0], m.emission[1], m.emission[2]};
 
-					tinyobj::index_t p = mesh.indices[offset + pindex];
-					tinyobj::index_t n = mesh.indices[offset + nindex];
+						// Check emission
+						if (length(mat.emission) > 0.0f) {
+							std::cout << "Emission: " << mat.emission.x << ", " << mat.emission.y << ", " << mat.emission.z << std::endl;
+							mat.type = eEmissive;
+						}
 
-					glm::vec3 vn = {
-						attrib.vertices[3 * p.vertex_index + 0],
-						attrib.vertices[3 * p.vertex_index + 1],
-						attrib.vertices[3 * p.vertex_index + 2]
-					};
+						// Surface properties
+						mat.shininess = m.shininess;
+						// mat.roughness = sqrt(2.0f / (mat.shininess + 2.0f));
+						mat.roughness = glm::clamp(1.0f - mat.shininess/1000.0f, 1e-3f, 0.999f);
+						mat.refraction = m.ior;
 
-					glm::vec3 vp = {
-						attrib.vertices[3 * n.vertex_index + 0],
-						attrib.vertices[3 * n.vertex_index + 1],
-						attrib.vertices[3 * n.vertex_index + 2]
-					};
+						// TODO: handle types of rays/materials
+						// in the shader
+						switch (m.illum) {
+						/* case 4:
+							mat.type = Shading::eTransmission;
+							break; */
+						case 7:
+							mat.type = eTransmission;
+							break;
+						}
 
-					glm::vec3 e1 = vp - vertex.position;
-					glm::vec3 e2 = vn - vertex.position;
+						// Albedo texture
+						if (!m.diffuse_texname.empty()) {
+							mat.albedo_texture = m.diffuse_texname;
+							mat.albedo_texture = common::resolve_path(
+								m.diffuse_texname, {reader_config.mtl_search_path}
+							);
+						}
 
-					vertex.normal = glm::normalize(glm::cross(e1, e2));
-				}
-
-				if (index.texcoord_index >= 0) {
-					vertex.tex_coords = {
-						attrib.texcoords[2 * index.texcoord_index + 0],
-						1 - attrib.texcoords[2 * index.texcoord_index + 1]
-					};
-				} else {
-					vertex.tex_coords = {0.0f, 0.0f};
-				}
-
-				// Add the vertex to the list
-				// vertices.push_back(vertex);
-				// indices.push_back(vertices.size() - 1);
-
-				// Add the vertex
-				uint32_t id;
-				if (unique_vertices.count(vertex) > 0) {
-					id = unique_vertices[vertex];
-				} else {
-					id = vertices.size();
-					unique_vertices[vertex] = id;
-					vertices.push_back(vertex);
-				}
-
-				index_map[index] = id;
-				indices.push_back(id);
-			}
-
-			// Update the offset
-			offset += fv;
-
-			// If last face, or material changes
-			// push back the submesh
-			if (f == mesh.num_face_vertices.size() - 1 ||
-					mesh.material_ids[f] != mesh.material_ids[f + 1]) {
-				// Material
-				Material mat;
-
-				// TODO: method
-				if (mesh.material_ids[f] < materials.size()) {
-					tinyobj::material_t m = materials[mesh.material_ids[f]];
-					mat.diffuse = {m.diffuse[0], m.diffuse[1], m.diffuse[2]};
-					mat.specular = {m.specular[0], m.specular[1], m.specular[2]};
-					mat.ambient = {m.ambient[0], m.ambient[1], m.ambient[2]};
-					mat.emission = {m.emission[0], m.emission[1], m.emission[2]};
-
-					// Check emission
-					if (length(mat.emission) > 0.0f) {
-						std::cout << "Emission: " << mat.emission.x << ", " << mat.emission.y << ", " << mat.emission.z << std::endl;
-						mat.type = eEmissive;
+						// Normal texture
+						if (!m.normal_texname.empty()) {
+							mat.normal_texture = m.normal_texname;
+							mat.normal_texture = common::resolve_path(
+								m.normal_texname, {reader_config.mtl_search_path}
+							);
+						}
 					}
 
-					// Surface properties
-					mat.shininess = m.shininess;
-					// mat.roughness = sqrt(2.0f / (mat.shininess + 2.0f));
-					mat.roughness = glm::clamp(1.0f - mat.shininess/1000.0f, 1e-3f, 0.999f);
-					mat.refraction = m.ior;
+					// Add submesh
+					submeshes.push_back(Submesh {vertices, indices, mat});
 
-					// TODO: handle types of rays/materials
-					// in the shader
-					switch (m.illum) {
-					/* case 4:
-						mat.type = Shading::eTransmission;
-						break; */
-					case 7:
-						mat.type = eTransmission;
-						break;
-					}
-
-					// Albedo texture
-					if (!m.diffuse_texname.empty()) {
-						mat.albedo_texture = m.diffuse_texname;
-						mat.albedo_texture = common::resolve_path(
-							m.diffuse_texname, {reader_config.mtl_search_path}
-						);
-					}
-
-					// Normal texture
-					if (!m.normal_texname.empty()) {
-						mat.normal_texture = m.normal_texname;
-						mat.normal_texture = common::resolve_path(
-							m.normal_texname, {reader_config.mtl_search_path}
-						);
-					}
+					// Clear the vertices and indices
+					unique_vertices.clear();
+					index_map.clear();
+					vertices.clear();
+					indices.clear();
 				}
-
-				// Add submesh
-				submeshes.push_back(Submesh {vertices, indices, mat});
-
-				// Clear the vertices and indices
-				unique_vertices.clear();
-				index_map.clear();
-				vertices.clear();
-				indices.clear();
 			}
 		}
+
 	}
 
 	return Mesh {submeshes};
@@ -1016,6 +1026,7 @@ std::optional <Mesh> load_mesh(const std::string &path)
 
 }
 
+// Load mesh from file
 std::optional <Mesh> Mesh::load(const std::string &path)
 {
 	// Special cases
@@ -1028,6 +1039,11 @@ std::optional <Mesh> Mesh::load(const std::string &path)
 		Logger::error("[Mesh] Could not open file: " + path);
 		return {};
 	}
+	
+	// Check if cached
+	std::string filename = common::get_filename(path) + ".cache";
+	if (common::file_exists(filename))
+		return Mesh::cache_load(filename);
 
 	// Load the mesh
 	std::string ext = common::file_extension(path);
@@ -1051,7 +1067,241 @@ std::optional <Mesh> Mesh::load(const std::string &path)
 		<< " submeshes (#verts = " << m.vertices() << ", #triangles = "
 		<< m.triangles() << "), from " << path << std::endl;
 
+	// Cache the mesh
+	Mesh::cache_save(m, filename);
+
 	return m;
+}
+
+// Cache mesh data to file
+void Mesh::cache_save(const Mesh &mesh, const std::string &path)
+{
+	std::ofstream file(path, std::ios::binary);
+
+	// Write the number of submeshes
+	uint32_t num_submeshes = mesh.submeshes.size();
+	file.write((char *) &num_submeshes, sizeof(uint32_t));
+
+	// Write data offsets
+	uint32_t offset = file.tellp();
+	offset += sizeof(uint32_t) * num_submeshes;
+	
+	for (const Submesh &submesh : mesh.submeshes) {
+		file.write((char *) &offset, sizeof(uint32_t));
+
+		offset += sizeof(uint32_t) + submesh.vertices.size() * sizeof(Vertex);
+		offset += sizeof(uint32_t) + submesh.indices.size() * sizeof(uint32_t);
+
+		offset += sizeof(glm::vec3) * 4;
+		offset += sizeof(float) * 3;
+		offset += sizeof(int) + submesh.material.albedo_texture.size();
+		offset += sizeof(int) + submesh.material.normal_texture.size();
+		offset += sizeof(int) + submesh.material.roughness_texture.size();
+
+		offset += sizeof(Shading);
+	}
+
+	for (const Submesh &s : mesh.submeshes) {
+		// Write the number of vertices
+		uint32_t num_vertices = s.vertices.size();
+		file.write((char *) &num_vertices, sizeof(uint32_t));
+
+		// Write the vertices
+		file.write((char *) s.vertices.data(), sizeof(Vertex) * num_vertices);
+
+		// Write the number of indices
+		uint32_t num_indices = s.indices.size();
+		file.write((char *) &num_indices, sizeof(uint32_t));
+
+		// Write the indices
+		file.write((char *) s.indices.data(), sizeof(uint32_t) * num_indices);
+
+		// Write the material
+		file.write((char *) &s.material.diffuse, sizeof(glm::vec3));
+		file.write((char *) &s.material.specular, sizeof(glm::vec3));
+		file.write((char *) &s.material.emission, sizeof(glm::vec3));
+		file.write((char *) &s.material.ambient, sizeof(glm::vec3));
+
+		file.write((char *) &s.material.shininess, sizeof(float));
+		file.write((char *) &s.material.roughness, sizeof(float));
+		file.write((char *) &s.material.refraction, sizeof(float));
+
+		int tex_albedo_length = s.material.albedo_texture.length();
+		file.write((char *) &tex_albedo_length, sizeof(int));
+		file.write(s.material.albedo_texture.c_str(), tex_albedo_length);
+
+		int tex_normal_length = s.material.normal_texture.length();
+		file.write((char *) &tex_normal_length, sizeof(int));
+		file.write(s.material.normal_texture.c_str(), tex_normal_length);
+
+		int tex_roughness_length = s.material.roughness_texture.length();
+		file.write((char *) &tex_roughness_length, sizeof(int));
+		file.write(s.material.roughness_texture.c_str(), tex_roughness_length);
+
+		file.write((char *) &s.material.type, sizeof(Shading));
+	}
+
+	file.close();
+}
+
+// Load mesh from cache file
+std::optional <Mesh> Mesh::cache_load(const std::string &path)
+{
+	KOBRA_PROFILE_FUNCTION();
+
+	std::vector <char> data;
+
+	{
+		KOBRA_PROFILE_TASK(Reading file binary data);
+
+		std::ifstream file(path, std::ios::binary);
+		if (!file.is_open()) {
+			Logger::error("[Mesh] Could not open cache file: " + path);
+			return {};
+		}
+
+		// Read all the data at once
+		data = std::vector <char> (
+			(std::istreambuf_iterator <char> (file)),
+			std::istreambuf_iterator <char> ()
+		);
+
+		file.close();
+	}
+
+	// Read the number of submeshes
+	uint32_t num_submeshes = *(uint32_t *) data.data();
+	std::cout << "Reading " << num_submeshes << " submeshes from cache file @" << path << std::endl;
+
+	// Read offsets
+	std::vector <uint32_t> offsets(num_submeshes);
+	std::memcpy(offsets.data(), data.data() + sizeof(uint32_t), sizeof(uint32_t) * num_submeshes);
+
+	std::vector <Submesh> submeshes;
+	submeshes.reserve(num_submeshes);
+
+	// Extracting tasks
+	std::queue <std::function <void()>> tasks;
+
+	std::mutex submeshes_mutex;
+	for (int i = 0; i < num_submeshes; i++) {
+		auto task = [i, &offsets, &data, &submeshes, &submeshes_mutex]() {
+			// Read the number of vertices
+			uint32_t offset = offsets[i];
+			uint32_t num_vertices = *(uint32_t *) &data[offset];
+			offset += sizeof(uint32_t);
+
+			// Read the vertices
+			std::vector <Vertex> vertices;
+			vertices.resize(num_vertices);
+			std::memcpy(vertices.data(), &data[offset], sizeof(Vertex) * num_vertices);
+			// vertices.insert(vertices.begin(), (Vertex *) &data[offset], (Vertex *) &data[offset + sizeof(Vertex) * num_vertices]);
+			offset += sizeof(Vertex) * num_vertices;
+
+			// Read the number of indices
+			uint32_t num_indices = *(uint32_t *) &data[offset];
+			offset += sizeof(uint32_t);
+
+			// Read the indices
+			std::vector <uint32_t> indices;
+			indices.resize(num_indices);
+			std::memcpy(indices.data(), &data[offset], sizeof(uint32_t) * num_indices);
+			// indices.insert(indices.begin(), (uint32_t *) &data[offset], (uint32_t *) &data[offset + sizeof(uint32_t) * num_indices]);
+			offset += sizeof(uint32_t) * num_indices;
+
+			// Read the material
+			Material material;
+
+			material.diffuse = *(glm::vec3 *) &data[offset];
+			offset += sizeof(glm::vec3);
+
+			material.specular = *(glm::vec3 *) &data[offset];
+			offset += sizeof(glm::vec3);
+
+			material.emission = *(glm::vec3 *) &data[offset];
+			offset += sizeof(glm::vec3);
+
+			material.ambient = *(glm::vec3 *) &data[offset];
+			offset += sizeof(glm::vec3);
+
+			material.shininess = *(float *) &data[offset];
+			offset += sizeof(float);
+
+			material.roughness = *(float *) &data[offset];
+			offset += sizeof(float);
+
+			material.refraction = *(float *) &data[offset];
+			offset += sizeof(float);
+
+			int tex_albedo_length = *(int *) &data[offset];
+			offset += sizeof(int);
+			material.albedo_texture = std::string(&data[offset], tex_albedo_length);
+			offset += tex_albedo_length;
+
+			int tex_normal_length = *(int *) &data[offset];
+			offset += sizeof(int);
+			material.normal_texture = std::string(&data[offset], tex_normal_length);
+			offset += tex_normal_length;
+
+			int tex_roughness_length = *(int *) &data[offset];
+			offset += sizeof(int);
+			material.roughness_texture = std::string(&data[offset], tex_roughness_length);
+			offset += tex_roughness_length;
+
+			material.type = *(Shading *) &data[offset];
+			offset += sizeof(Shading);
+
+			// Create the submesh
+			submeshes_mutex.lock();
+			
+			submeshes.push_back(
+				Submesh {
+					vertices, indices,
+					material, false
+				}
+			);
+
+			submeshes_mutex.unlock();
+		};
+
+		tasks.push(task);
+	}
+
+	{
+		KOBRA_PROFILE_TASK(Extracting submesh data);
+
+		// Thread pool
+		const int POOL_SIZE = 8;
+
+		std::vector <std::thread> threads;
+		threads.reserve(POOL_SIZE);
+
+		std::mutex tasks_mutex;
+		for (int i = 0; i < POOL_SIZE; i++) {
+			threads.push_back(std::thread([&tasks, &tasks_mutex]() {
+				while (true) {
+					tasks_mutex.lock();
+					if (tasks.empty()) {
+						tasks_mutex.unlock();
+						break;
+					}
+
+					auto task = tasks.front();
+					tasks.pop();
+
+					tasks_mutex.unlock();
+
+					task();
+				}
+			}));
+		}
+
+		// Wait for all threads to finish
+		for (auto &thread : threads)
+			thread.join();
+	}
+
+	return Mesh {submeshes};
 }
 
 }

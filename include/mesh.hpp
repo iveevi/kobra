@@ -193,9 +193,11 @@ public:
 	static Mesh box(const glm::vec3 &, const glm::vec3 &);
 	static Mesh sphere(const glm::vec3 &, float, int = 16, int = 16);
 
-	// TODO: cache loaded meshes in the current directory
-	// (as binary)
 	static std::optional <Mesh> load(const std::string &);
+	
+	// Caching
+	static void cache_save(const Mesh &, const std::string &);
+	static std::optional <Mesh> cache_load(const std::string &);
 };
 
 using MeshPtr = std::shared_ptr <Mesh>;

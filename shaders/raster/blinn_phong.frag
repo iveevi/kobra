@@ -67,26 +67,21 @@ void main()
 	for (int i = 0; i < n_area_lights; i++) {
 		AreaLight light = area_lights[i];
 
-		int N = 4;
-		for (int i = 0; i < N; i++) {
-			vec3 lpos = sample_area_light(light, seed);
-			vec3 wi = normalize(lpos - position);
-			float R = length(lpos - position);
+		vec3 lpos = light.a + (light.ab + light.ac)/2.0;
+		vec3 wi = normalize(lpos - position);
+		float R = length(lpos - position);
 
-			// BRDF value
-			vec3 f = brdf(m, n, wi, wo) * max(dot(wi, n), 0.0);
+		// BRDF value
+		vec3 f = brdf(m, n, wi, wo) * max(dot(wi, n), 0.0);
 
-			// Area light normal
-			vec3 Lc = cross(light.ab, light.ac);
-			vec3 Ln = normalize(Lc);
-			float area = length(Lc);
-			float ldot = abs(dot(wi, Ln));
+		// Area light normal
+		vec3 Lc = cross(light.ab, light.ac);
+		vec3 Ln = normalize(Lc);
+		float area = length(Lc);
+		float ldot = abs(dot(wi, Ln));
 
-			// Contribution
-			color += light.intensity * f * ldot * area/(R * R);
-		}
-
-		color /= float(N);
+		// Contribution
+		color += light.intensity * f * ldot * area/(R * R);
 	}
 
 	// Gamma correction
