@@ -11,6 +11,7 @@
 #include "../cuda/alloc.cuh"
 #include "../ecs.hpp"
 #include "../timer.hpp"
+#include "../optix/options.cuh"
 
 namespace kobra {
 
@@ -202,7 +203,8 @@ public:
 	// Options
 	// TODO: struct
 	bool denoiser_enabled = false;
-	bool enable_restir = true;
+	optix::SamplingStrategies sampling_strategy =
+		optix::SamplingStrategies::eDefault;
 
 	// Constructor
 	OptixTracer(const Context &ctx, const vk::AttachmentLoadOp &load,

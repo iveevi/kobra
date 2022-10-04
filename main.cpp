@@ -5,12 +5,14 @@
 #include "include/enums.hpp"
 #include "include/io/event.hpp"
 #include "include/layers/font_renderer.hpp"
+#include "include/layers/gizmo.hpp"
 #include "include/layers/objectifier.hpp"
 #include "include/layers/optix_tracer.cuh"
 #include "include/layers/raster.hpp"
 #include "include/layers/raytracer.hpp"
 #include "include/layers/shape_renderer.hpp"
 #include "include/logger.hpp"
+#include "include/optix/options.cuh"
 #include "include/profiler.hpp"
 #include "include/renderer.hpp"
 #include "include/scene.hpp"
@@ -20,7 +22,6 @@
 #include "include/ui/color_picker.hpp"
 #include "include/ui/slider.hpp"
 #include "tinyfiledialogs.h"
-#include "include/layers/gizmo.hpp"
 
 #include <stb/stb_image_write.h>
 
@@ -28,7 +29,7 @@ using namespace kobra;
 
 // Scene path
 // std::string scene_path = "~/models/sponza/scene.kobra";
-std::string scene_path = "/home/venki/models/fireplace_room.kobra";
+std::string scene_path = "/home/venki/models/san_miguel.kobra";
 // std::string scene_path = "scenes/ggx.kobra";
 
 // Test app
@@ -402,7 +403,21 @@ struct ECSApp : public BaseApp {
 
 		if (mode == 2) {
 			texts[0].text += common::sprintf(" (%d spp)", optix_tracer.samples_per_pixel);
-			texts[0].text += " (ReSTIR " + std::string(optix_tracer.enable_restir ? "on" : "off") + ")";
+			texts[0].text += " (Sampling: ";
+
+			switch (optix_tracer.sampling_strategy) {
+			case optix::eDefault:
+				texts[0].text += "default";
+				break;
+			case optix::eTemporal:
+				texts[0].text += "RIS temporal";
+				break;
+			case optix::eSpatioTemporal:
+				texts[0].text += "ReSTIR";
+				break;
+			}
+
+			texts[0].text += ")";
 		}
 
 		for (auto &t : scene_graph.texts())
@@ -622,8 +637,10 @@ struct ECSApp : public BaseApp {
 			app.optix_tracer.tonemapping = (app.optix_tracer.tonemapping + 1) % 2;
 
 		// R for toggling ReSTIR
-		if (event.key == GLFW_KEY_R && event.action == GLFW_PRESS)
-			app.optix_tracer.enable_restir = !app.optix_tracer.enable_restir;
+		if (event.key == GLFW_KEY_R && event.action == GLFW_PRESS) {
+			optix::SamplingStrategies &s = app.optix_tracer.sampling_strategy;
+			s = optix::SamplingStrategies((s + 1) % optix::eMax);
+		}
 	}
 };
 

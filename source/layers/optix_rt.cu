@@ -9,6 +9,9 @@
 #include "../../include/cuda/random.cuh"
 #include "../../include/cuda/brdf.cuh"
 #include "../../include/layers/optix_tracer_common.cuh"
+#include "../../include/optix/options.cuh"
+
+using kobra::optix::SamplingStrategies;
 
 using kobra::optix_rt::HitGroupData;
 using kobra::optix_rt::MissData;
@@ -742,7 +745,8 @@ extern "C" __global__ void __closesthit__radiance()
 
 	bool restir_mode = (
 		primary
-		&& params.options.use_reservoir
+		&& (params.options.sampling_strategy == SamplingStrategies::eTemporal
+			|| params.options.sampling_strategy == SamplingStrategies::eSpatioTemporal)
 		// && material.type != Shading::eTransmission
 	);
 
@@ -778,7 +782,7 @@ extern "C" __global__ void __closesthit__radiance()
 	// if (fract(rp->seed.x) < q)
 	//	return;
 
-	if (!(primary && params.options.use_reservoir))
+	if (!restir_mode)
 		rp->throughput *= T;
 		// rp->throughput *= T/(1 - q);
 
@@ -804,24 +808,11 @@ extern "C" __global__ void __closesthit__radiance()
 
 	// Resampling
 	if (restir_mode) {
-		const float max_radius = min(params.image_width, params.image_height);
-
 		float &sampling_radius = params.sampling_radius[rp->imgidx];
 
 		// Get the this pixel's reservoirs
 		Reservoir &temporal = params.reservoirs[rp->imgidx];
 		Reservoir &spatial = params.spatial_reservoirs[rp->imgidx];
-
-		// TODO: double buffer spatial reservoirs if theyre count is low
-
-		// Reset temporal reservoir every 10 samples
-		//	to avoid stagnation of samples
-		/* if (temporal.count >= 30)
-			temporal.reset();
-
-		// Also reset spatial reservoir
-		if (spatial.count >= 500)
-			spatial.reset(); */
 
 		// Populate temporal reservoir
 		float weight = max(rp->value)/pdf;
@@ -854,144 +845,149 @@ extern "C" __global__ void __closesthit__radiance()
 			/(temporal.count * max(temporal.sample.value) + 1e-6f);
 
 		// Spatial reservoir resampling
-		int Z = 0;
+		if (params.options.sampling_strategy == SamplingStrategies::eSpatioTemporal) {
+			int Z = 0;
 
-		int idx = rp->imgidx % params.image_width;
-		int idy = rp->imgidx / params.image_width;
+			int idx = rp->imgidx % params.image_width;
+			int idy = rp->imgidx / params.image_width;
 
-		const int SPATIAL_SAMPLES = (spatial.count < 250) ? 9 : 3;
+			const int SPATIAL_SAMPLES = (spatial.count < 250) ? 9 : 3;
 
-		int empty_res = 0;
+			int empty_res = 0;
 
-		int success = 0;
-		for (int i = 0; i < SPATIAL_SAMPLES; i++) {
-			random3(rp->seed);
-			float3 random = fract(random3(rp->seed));
+			int success = 0;
+			for (int i = 0; i < SPATIAL_SAMPLES; i++) {
+				random3(rp->seed);
+				float3 random = fract(random3(rp->seed));
 
-			float radius = random.x * sampling_radius;
-			float theta = random.y * 2.0f * M_PI;
+				float radius = random.x * sampling_radius;
+				float theta = random.y * 2.0f * M_PI;
 
-			int nx = idx + radius * cos(theta);
-			int ny = idy + radius * sin(theta);
+				int nx = idx + radius * cos(theta);
+				int ny = idy + radius * sin(theta);
 
-			if (nx < 0 || nx >= params.image_width
-				|| ny < 0 || ny >= params.image_height)
-				continue;
+				if (nx < 0 || nx >= params.image_width
+					|| ny < 0 || ny >= params.image_height)
+					continue;
 
-			int idx = nx + ny * params.image_width;
+				int idx = nx + ny * params.image_width;
 
-			// Skip if corresponding reservoir is empty
-			Reservoir *s;
+				// Skip if corresponding reservoir is empty
+				Reservoir *s;
 
-			if (params.prev_spatial_reservoirs[idx].count > 50)
-				s = &params.prev_spatial_reservoirs[idx];
+				if (params.prev_spatial_reservoirs[idx].count > 50)
+					s = &params.prev_spatial_reservoirs[idx];
+				else
+					s = &params.reservoirs[idx];
+
+				if (s->count == 0 || params.accumulated == 0) {
+					empty_res++;
+					continue;
+				}
+
+				// Check geometric similarity
+				float3 sn = s->sample.v_normal;
+				float3 sx = s->sample.v_position;
+
+				float angle = 180 * acos(dot(sn, n))/M_PI;
+				float ndepth = abs(s->sample.depth - depth)/depth;
+
+	// #define HIGHLIGHT_SPATIAL
+
+				if (angle > 10 || ndepth > 0.1f) {
+#ifdef HIGHLIGHT_SPATIAL
+					rp->value = {1, 1, 0};
+					return;
+#endif
+
+					continue;
+				}
+
+				// Merge reservoirs if the sample point can be connected
+				float R = length(s->sample.s_position - x);
+				float3 dir = normalize(s->sample.s_position - x);
+
+				bool vis = false;
+				if (s->sample.miss) {
+					dir = s->sample.dir;
+					vis = shadow_visibility(x + dir * 1e-3f, dir, 1e6);
+				} else {
+					vis = shadow_visibility(x + dir * 1e-3f, dir, R);
+				}
+
+				if (vis) {
+#ifdef HIGHLIGHT_SPATIAL
+					rp->value = {0, 1, 0};
+					return;
+#endif
+
+					float3 x1q = s->sample.v_position;
+					float3 x1r = rp->position;
+					float3 x2q = s->sample.s_position;
+
+					float3 v1q2r = x1q - x2q;
+					float3 v1r2q = x1r - x2q;
+
+					float d1q2q = length(v1q2r);
+					float d1r2q = length(v1r2q);
+
+					v1r2q /= d1r2q;
+					v1q2r /= d1q2q;
+
+					float3 sample_n = s->sample.s_normal;
+					float phi_s = acos(dot(sample_n, v1r2q));
+					float phi_r = acos(dot(sample_n, v1q2r));
+
+					float J = abs(phi_r/phi_s) * (d1q2q * d1q2q)/(d1r2q * d1r2q);
+
+					spatial.merge(*s, max(s->sample.value)/J);
+					Z += s->count;
+
+					success++;
+				} else {
+#ifdef HIGHLIGHT_SPATIAL
+					rp->value = {1, 0, 1};
+					return;
+#endif
+				}
+			}
+
+#ifdef HIGHLIGHT_SPATIAL
+			if (empty_res == SPATIAL_SAMPLES) {
+				rp->value = {1, 0, 0};
+				return;
+			}
+
+			if (Z == 0) {
+				rp->value = {0, 0, 1};
+				return;
+			}
+#endif
+
+			if (success == 0 && params.accumulated > 0)
+				sampling_radius = max(sampling_radius * 0.5f, 3.0f);
+
+			Z += temporal.count;
+			spatial.W = spatial.weight/(Z * max(spatial.sample.value) + 1e-6f);
+
+			// Compute value
+			float3 tvalue = direct + temporal.sample.brdf
+				* temporal.sample.value;
+
+			float3 svalue = direct + T
+				* spatial.sample.value;
+
+			bool specural = (material.type == Shading::eTransmission)
+				|| (material.roughness < 0.05f);
+
+			if (specural)
+				rp->value = tvalue;
 			else
-				s = &params.reservoirs[idx];
-
-			if (s->count == 0 || params.accumulated == 0) {
-				empty_res++;
-				continue;
-			}
-
-			// Check geometric similarity
-			float3 sn = s->sample.v_normal;
-			float3 sx = s->sample.v_position;
-
-			float angle = 180 * acos(dot(sn, n))/M_PI;
-			float ndepth = abs(s->sample.depth - depth)/depth;
-
-// #define HIGHLIGHT_SPATIAL
-
-			if (angle > 10 || ndepth > 0.1f) {
-#ifdef HIGHLIGHT_SPATIAL
-				rp->value = {1, 1, 0};
-				return;
-#endif
-
-				continue;
-			}
-
-			// Merge reservoirs if the sample point can be connected
-			float R = length(s->sample.s_position - x);
-			float3 dir = normalize(s->sample.s_position - x);
-
-			bool vis = false;
-			if (s->sample.miss) {
-				dir = s->sample.dir;
-				vis = shadow_visibility(x + dir * 1e-3f, dir, 1e6);
-			} else {
-				vis = shadow_visibility(x + dir * 1e-3f, dir, R);
-			}
-
-			if (vis) {
-#ifdef HIGHLIGHT_SPATIAL
-				rp->value = {0, 1, 0};
-				return;
-#endif
-
-				float3 x1q = s->sample.v_position;
-				float3 x1r = rp->position;
-				float3 x2q = s->sample.s_position;
-
-				float3 v1q2r = x1q - x2q;
-				float3 v1r2q = x1r - x2q;
-
-				float d1q2q = length(v1q2r);
-				float d1r2q = length(v1r2q);
-
-				v1r2q /= d1r2q;
-				v1q2r /= d1q2q;
-
-				float3 sample_n = s->sample.s_normal;
-				float phi_s = acos(dot(sample_n, v1r2q));
-				float phi_r = acos(dot(sample_n, v1q2r));
-
-				float J = abs(phi_r/phi_s) * (d1q2q * d1q2q)/(d1r2q * d1r2q);
-
-				spatial.merge(*s, max(s->sample.value)/J);
-				Z += s->count;
-
-				success++;
-			} else {
-#ifdef HIGHLIGHT_SPATIAL
-				rp->value = {1, 0, 1};
-				return;
-#endif
-			}
+				rp->value = svalue;
+		} else {
+			rp->value = direct + temporal.sample.brdf
+				* temporal.sample.value;
 		}
-
-#ifdef HIGHLIGHT_SPATIAL
-		if (empty_res == SPATIAL_SAMPLES) {
-			rp->value = {1, 0, 0};
-			return;
-		}
-
-		if (Z == 0) {
-			rp->value = {0, 0, 1};
-			return;
-		}
-#endif
-
-		if (success == 0 && params.accumulated > 0)
-			sampling_radius = max(sampling_radius * 0.5f, 3.0f);
-
-		Z += temporal.count;
-		spatial.W = spatial.weight/(Z * max(spatial.sample.value) + 1e-6f);
-
-		// Compute value
-		float3 tvalue = direct + temporal.sample.brdf
-			* temporal.sample.value;
-
-		float3 svalue = direct + T
-			* spatial.sample.value;
-
-		bool specural = (material.type == Shading::eTransmission)
-			|| (material.roughness < 0.05f);
-
-		if (specural)
-			rp->value = tvalue;
-		else
-			rp->value = svalue;
 
 		// Double buffering
 		params.prev_reservoirs[rp->imgidx] = temporal;

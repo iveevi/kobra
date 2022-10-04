@@ -1311,7 +1311,7 @@ void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 
 	params.time = sin(ms * 12.3243f) * cos(1 - ms * 0.123f);
 	
-	params.options.use_reservoir = enable_restir;
+	params.options.sampling_strategy = sampling_strategy;
 
 	/// Allocate on the GPU
 	CUdeviceptr d_param;

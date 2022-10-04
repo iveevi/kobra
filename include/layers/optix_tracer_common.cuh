@@ -8,6 +8,7 @@
 #include "../cuda/math.cuh"
 #include "../cuda/material.cuh"
 #include "../optix/reservoir.cuh"
+#include "../optix/options.cuh"
 
 namespace kobra {
 
@@ -67,7 +68,7 @@ struct Params
 
 	// Options for rendering
 	struct Options {
-		bool		use_reservoir;
+		optix::SamplingStrategies sampling_strategy;
 	} options;
 };
 
