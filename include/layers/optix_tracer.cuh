@@ -282,7 +282,14 @@ public:
 		// Copy from result buffer
 		auto result = std::vector <uint8_t> (width * height * 4);
 		// TODO: method to retrieve data from buffer
-		// _result_buffer.download(result);
+		// _buffers.fbuffer.download(result);
+
+		cuda::copy(result, _buffers.truncated, width * height * 4);
+		/* std::cout << "Copied" << std::endl;
+		std::cout << "\tfirst couple... " << std::endl;
+		for (int i = 0; i < 10; i++) {
+			std::cout << "\t\t" << (int) result[i] << std::endl;
+		} */
 		return result;
 	}
 };

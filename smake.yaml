@@ -37,7 +37,8 @@ definitions:
     thirdparty/tinyfiledialogs,
     thirdparty/optix,
     thirdparty/tinyexr,
-    thirdparty/stb'
+    thirdparty/stb,
+    /usr/include/opencv4'
   - libs: 'glfw,
     vulkan,
     assimp,
@@ -50,7 +51,10 @@ definitions:
     SPIRV,
     OSDependent,
     OGLCompiler,
-    ffi'
+    ffi,
+    opencv_core,
+    opencv_videoio,
+    opencv_imgproc'
 
 builds:
   - optix_ptx_debug:

@@ -24,15 +24,12 @@
 #include <GLFW/glfw3.h>
 
 #define KOBRA_VALIDATION_LAYERS
-// #define KOBRA_THROW_ERROR
+#define KOBRA_THROW_ERROR
 
 // Engine headers
 #include "common.hpp"
 #include "core.hpp"
 #include "logger.hpp"
-
-const uint32_t WIDTH = 800;
-const uint32_t HEIGHT = 600;
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 

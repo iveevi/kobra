@@ -21,6 +21,7 @@
 #include "include/ui/button.hpp"
 #include "include/ui/color_picker.hpp"
 #include "include/ui/slider.hpp"
+#include "motion_capture.cuh"
 #include "tinyfiledialogs.h"
 
 #include <stb/stb_image_write.h>
@@ -28,7 +29,7 @@
 using namespace kobra;
 
 // Scene path
-std::string scene_path = "/home/venki/models/san_miguel_lowpoly.kobra";
+std::string scene_path = "/home/venki/models/fireplace_room.kobra";
 // std::string scene_path = "scenes/ggx.kobra";
 
 // Test app
@@ -343,7 +344,7 @@ struct ECSApp : public BaseApp {
 		// TODO: remove transform component from camera?
 		auto &transform = camera.get <Transform> ();
 
-		/* glm::vec3 forward = transform.forward();
+		glm::vec3 forward = transform.forward();
 		glm::vec3 right = transform.right();
 		glm::vec3 up = transform.up();
 
@@ -360,9 +361,9 @@ struct ECSApp : public BaseApp {
 		if (io.input.is_key_down(GLFW_KEY_E))
 			transform.move(up * speed);
 		else if (io.input.is_key_down(GLFW_KEY_Q))
-			transform.move(-up * speed); */
+			transform.move(-up * speed);
 
-		transform.position = glm::vec3 {
+		/* transform.position = glm::vec3 {
 			100.0f * glm::sin(time),
 			100.0f,
 			100.0f * glm::cos(time)
@@ -373,7 +374,7 @@ struct ECSApp : public BaseApp {
 		glm::vec3 eye = transform.position;
 		glm::vec3 dir = glm::normalize(origin - eye);
 		
-		transform.look(dir);
+		transform.look(dir); */
 
 		// Switch mode on tab
 		if (io.input.is_key_down(GLFW_KEY_TAB)) {
@@ -461,8 +462,7 @@ struct ECSApp : public BaseApp {
 		else if (mode == 1)
 			raytracer.render(cmd, framebuffer, scene.ecs, {render_min, render_max});
 		else if (mode == 2) {
-			for (int i = 0; i < 4; i++)
-				optix_tracer.compute(scene.ecs);
+			optix_tracer.compute(scene.ecs);
 			optix_tracer.render(cmd, framebuffer, {render_min, render_max});
 		}
 
@@ -680,7 +680,7 @@ int main()
 	for (auto str : extensions)
 		std::cout << "\t" << str << std::endl;
 
-	// Create the app and run it
+	/* Create the app and run it
 	ECSApp app(phdev, {
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 		VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
@@ -688,5 +688,13 @@ int main()
 	});
 
 	// Run the app
+	app.run(); */
+
+	MotionCapture app(phdev, {
+		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+		VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
+		VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
+	}, scene_path);
+
 	app.run();
 }
