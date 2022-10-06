@@ -657,6 +657,15 @@ struct ECSApp : public BaseApp {
 			optix::SamplingStrategies &s = app.optix_tracer.sampling_strategy;
 			s = optix::SamplingStrategies((s + 1) % optix::eMax);
 		}
+
+		// C to output camera position and orientation
+		if (event.key == GLFW_KEY_C && event.action == GLFW_PRESS) {
+			// TODO: space equally
+			printf("{%.2f, %.2f, %.2f}, {%.2f, %.2f, %.2f}\n",
+				transform.position.x, transform.position.y, transform.position.z,
+				transform.rotation.x, transform.rotation.y, transform.rotation.z
+			);
+		}
 	}
 };
 

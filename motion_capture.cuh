@@ -12,6 +12,7 @@
 // Engine headers
 #include "include/app.hpp"
 #include "include/capture.hpp"
+#include "include/core/interpolation.hpp"
 #include "include/layers/hybrid_tracer.cuh"
 #include "include/layers/optix_tracer.cuh"
 #include "include/optix/options.cuh"
@@ -30,6 +31,36 @@ struct MotionCapture : public kobra::BaseApp {
 	// Capture
 	cv::VideoWriter capture;
 	std::vector <byte> frame;
+
+	const std::vector <glm::vec3> camera_pos {
+		{0.00, 27.36, 31.03},
+		{62.62, 25.96, 9.59},
+		{58.98, 23.88, -41.79},
+		{17.60, 23.88, -60.29},
+		{-25.29, 34.61, -30.43}
+	};
+
+	const std::vector <glm::vec3> camera_rot {
+		{-0.30, -0.09, 0.00},
+		{-0.28, 0.74, 0.00},
+		{-0.31, 2.20, 0.00},
+		{-0.18, 3.01, 0.00},
+		{-0.67, 4.47, 0.00}
+	};
+
+	const std::vector <float> times {
+		0.0f, 1.0f, 2.0f, 3.0f, 4.0f
+	};
+
+	kobra::core::Sequence <glm::vec3> camera_pos_seq {
+		.values = camera_pos,
+		.times = times
+	};
+
+	kobra::core::Sequence <glm::vec3> camera_rot_seq {
+		.values = camera_rot,
+		.times = times
+	};
 	
 	MotionCapture(const vk::raii::PhysicalDevice &phdev,
 			const std::vector <const char *> &extensions,
@@ -48,7 +79,7 @@ struct MotionCapture : public kobra::BaseApp {
 
 		// Setup tracer
 		tracer.environment_map("resources/skies/background_1.jpg");
-		tracer.sampling_strategy = kobra::optix::eDefault;
+		tracer.sampling_strategy = kobra::optix::eSpatioTemporal;
 		tracer.denoiser_enabled = false;
 
 		// Setup hybrid tracer
@@ -87,14 +118,24 @@ struct MotionCapture : public kobra::BaseApp {
 		
 		transform.look(dir);
 
+		// Interpolation sequence
+		if (time > 4.0f) time = 0.0f;
+
+		// Interpolate camera position
+		glm::vec3 pos = kobra::core::piecewise_linear(camera_pos_seq, time);
+		glm::vec3 rot = kobra::core::piecewise_linear(camera_rot_seq, time);
+
+		transform.position = pos;
+		transform.rotation = rot;
+
 		// Now trace and render
 		cmd.begin({});
-			for (int i = 0; i < 1; i++)
+			for (int i = 0; i < 4; i++)
 				tracer.compute(scene.ecs);
 			tracer.render(cmd, framebuffer);
 
-			kobra::layers::render(hybrid_tracer,
-				cmd, scene.ecs,
+			kobra::layers::compute(hybrid_tracer,
+				scene.ecs,
 				camera.get <kobra::Camera> (),
 				camera.get <kobra::Transform> ()
 			);

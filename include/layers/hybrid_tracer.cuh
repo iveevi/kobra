@@ -8,6 +8,7 @@
 // TODO: remove
 #include "../../shaders/raster/bindings.h"
 #include "../camera.hpp"
+#include "../cuda/interop.cuh"
 #include "../ecs.hpp"
 #include "../texture_manager.hpp"
 #include "../transform.hpp"
@@ -30,6 +31,9 @@ struct HybridTracer {
 	vk::raii::PhysicalDevice *phdev = nullptr;
 	vk::raii::DescriptorPool *descriptor_pool = nullptr;
 
+	CommandBuffer cmd = nullptr;
+	vk::raii::Queue queue = nullptr;
+
 	// Geometry buffers
 	ImageData positions = nullptr;
 	ImageData normals = nullptr;
@@ -38,6 +42,15 @@ struct HybridTracer {
 	ImageData albedo = nullptr;
 	ImageData specular = nullptr;
 	ImageData extra = nullptr;
+
+	// Buffers as CUDA textures
+	struct {
+		cudaTextureObject_t positions = 0;
+		cudaTextureObject_t normals = 0;
+		cudaTextureObject_t albedo = 0;
+		cudaTextureObject_t specular = 0;
+		cudaTextureObject_t extra = 0;
+	} cuda_tex;
 
 	// Depth buffer
 	DepthBuffer depth = nullptr;
@@ -155,6 +168,14 @@ HybridTracer HybridTracer::make(const Context &context)
 	layer.phdev = context.phdev;
 	layer.descriptor_pool = context.descriptor_pool;
 
+	layer.cmd = make_command_buffer(*context.device, *context.command_pool);
+
+	// TODO: queue allocation system
+	layer.queue = vk::raii::Queue {
+		*context.device,
+		0, 1
+	};
+
 	// Create the framebuffers
 	layer.extent = context.extent;
 
@@ -164,6 +185,13 @@ HybridTracer HybridTracer::make(const Context &context)
 		*context.phdev, *context.device,
 		vk::Format::eD32Sfloat, context.extent
 	};
+
+	// Export to CUDA
+	layer.cuda_tex.positions = cuda::import_vulkan_texture(*layer.device, layer.positions);
+	layer.cuda_tex.normals = cuda::import_vulkan_texture(*layer.device, layer.normals);
+	layer.cuda_tex.albedo = cuda::import_vulkan_texture(*layer.device, layer.albedo);
+	layer.cuda_tex.specular = cuda::import_vulkan_texture(*layer.device, layer.specular);
+	layer.cuda_tex.extra = cuda::import_vulkan_texture(*layer.device, layer.extra);
 
 	// Create the render pass
 	auto eClear = vk::AttachmentLoadOp::eClear;
@@ -311,7 +339,7 @@ void configure_dset(HybridTracer &layer,
 
 // TODO: perform this in a separate command buffer than the main one used to
 // present, etc (and separate queue)
-void render(HybridTracer &layer,
+void generate_gbuffers(HybridTracer &layer,
 		const CommandBuffer &cmd,
 		const ECS &ecs,
 		const Camera &camera,
@@ -420,6 +448,32 @@ void render(HybridTracer &layer,
 
 	// End render pass
 	cmd.endRenderPass();
+}
+
+// Path tracing computation
+void compute(HybridTracer &layer,
+		const ECS &ecs,
+		const Camera &camera,
+		const Transform &transform)
+{
+	// Generate the G-buffer
+	layer.cmd.begin({});
+		generate_gbuffers(layer, layer.cmd, ecs, camera, transform);
+	layer.cmd.end();
+
+	// Submit the command buffer
+	layer.queue.submit(
+		vk::SubmitInfo {
+			0, nullptr,
+			nullptr,
+			1, &*layer.cmd,
+			0, nullptr
+		},
+		nullptr
+	);
+
+	// Wait for the queue to finish
+	layer.queue.waitIdle();
 }
 
 }
