@@ -40,7 +40,7 @@ struct Renderer {
 // Rasterizer component
 // 	the entity must have a Mesh component
 // 	TODO: reinherit from Renderer
-class Rasterizer {
+struct Rasterizer {
 	// Push constants
 	struct PushConstants {
 		float		time;
@@ -78,6 +78,7 @@ class Rasterizer {
 	std::vector <BufferData>	index_buffer;
 	std::vector <BufferData>	ubo; // TODO: one single buffer, using
 					     // offsets...
+	
 	std::vector <uint32_t>		index_count;
 
 	// TODO: highlight should not be here
@@ -85,7 +86,6 @@ class Rasterizer {
 
 	mutable std::vector <vk::raii::DescriptorSet>
 					_dsets = {};
-public:
 	std::vector <Material>		materials;
 
 	// Raster mode

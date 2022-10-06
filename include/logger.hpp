@@ -315,12 +315,12 @@ std::ostream &logger(const std::string &, Log level, const std::string & = "", b
 }
 
 // #define KOBRA_LOG_FUNC(type) Logger::type##_from(function_name(__PRETTY_FUNCTION__).c_str())
-#define KOBRA_LOG_FUNC(level) logger(__PRETTY_FUNCTION__, level)
+#define KOBRA_LOG_FUNC(level) kobra::logger(__PRETTY_FUNCTION__, level)
 
 #define LINE_TO_STRING(line) #line
 #define LINE_TO_STRING2(line) LINE_TO_STRING(line)
 
-#define KOBRA_LOG_FILE(level) logger(__FILE__ ": " LINE_TO_STRING2(__LINE__), level, "", true)
+#define KOBRA_LOG_FILE(level) kobra::logger(__FILE__ ": " LINE_TO_STRING2(__LINE__), level, "", true)
 
 #define KOBRA_ASSERT(cond, msg)					\
 	if (!(cond)) {						\

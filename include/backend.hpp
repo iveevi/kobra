@@ -972,6 +972,7 @@ inline vk::raii::RenderPass make_render_pass(const vk::raii::Device &device,
 {
 	// List of attachments
 	std::vector <vk::AttachmentDescription> attachments;
+	std::vector <vk::AttachmentReference> attachment_refs;
 
 	// Make sure there are enough load ops
 	KOBRA_ASSERT(
@@ -1010,6 +1011,13 @@ inline vk::raii::RenderPass make_render_pass(const vk::raii::Device &device,
 
 		// Add color attachment to list
 		attachments.push_back(color_attachment);
+
+		// Add color attachment reference
+		attachment_refs.push_back(
+			vk::AttachmentReference {
+				uint32_t(i), vk::ImageLayout::eColorAttachmentOptimal
+			}
+		);
 	}
 
 	// Create depth attachment
@@ -1035,27 +1043,26 @@ inline vk::raii::RenderPass make_render_pass(const vk::raii::Device &device,
 		attachments.push_back(depth_attachment);
 	}
 
-	// Reference to attachments
+	/* Reference to attachments
 	vk::AttachmentReference color_attachment_ref {
 		0, vk::ImageLayout::eColorAttachmentOptimal
-	};
+	}; */
 
 	vk::AttachmentReference depth_attachment_ref {
-		1, vk::ImageLayout::eDepthStencilAttachmentOptimal
+		uint32_t(attachments.size() - 1),
+		vk::ImageLayout::eDepthStencilAttachmentOptimal
 	};
 
 	// Subpasses
 	vk::SubpassDescription subpass {
 		{}, vk::PipelineBindPoint::eGraphics,
-		{}, color_attachment_ref,
-		{},
+		{}, attachment_refs, {},
 		(depth_format == vk::Format::eUndefined) ? nullptr : &depth_attachment_ref
 	};
 
 	// Creation info
 	vk::RenderPassCreateInfo render_pass_info {
-		{}, attachments,
-		subpass
+		{}, attachments, subpass
 	};
 
 	// Create render pass
@@ -1270,6 +1277,8 @@ struct GraphicsPipelineInfo {
 	bool depth_test = true;
 	bool depth_write = true;
 	bool no_bindings = false;
+
+	uint32_t color_blend_attachments = 1;
 
 	// Constructor
 	GraphicsPipelineInfo(const vk::raii::Device &device,

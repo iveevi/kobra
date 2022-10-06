@@ -171,6 +171,8 @@ class OptixTracer {
 		};
 
 		grp_info.no_bindings = true;
+		grp_info.depth_test = false;
+		grp_info.depth_write = false;
 
 		_pipeline = make_graphics_pipeline(grp_info);
 	}

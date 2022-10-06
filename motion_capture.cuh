@@ -11,10 +11,11 @@
 
 // Engine headers
 #include "include/app.hpp"
+#include "include/capture.hpp"
+#include "include/layers/hybrid_tracer.cuh"
 #include "include/layers/optix_tracer.cuh"
 #include "include/optix/options.cuh"
 #include "include/scene.hpp"
-#include "include/capture.hpp"
 
 // TODO: do base app without inheritance (simple struct..., app and baseapp not
 // related)
@@ -22,7 +23,9 @@ struct MotionCapture : public kobra::BaseApp {
 	// TODO: let the scene run on any virtual device?
 	kobra::Entity camera;
 	kobra::Scene scene;
+
 	kobra::layers::OptixTracer tracer;
+	kobra::layers::HybridTracer hybrid_tracer;
 
 	// Capture
 	cv::VideoWriter capture;
@@ -45,8 +48,12 @@ struct MotionCapture : public kobra::BaseApp {
 
 		// Setup tracer
 		tracer.environment_map("resources/skies/background_1.jpg");
-		tracer.sampling_strategy = kobra::optix::eSpatioTemporal;
+		tracer.sampling_strategy = kobra::optix::eDefault;
 		tracer.denoiser_enabled = false;
+
+		// Setup hybrid tracer
+		KOBRA_LOG_FILE(kobra::Log::INFO) << "Hybrid tracer setup\n";
+		hybrid_tracer = kobra::layers::HybridTracer::make(get_context());
 
 		// Setup capture
 		capture.open(
@@ -82,9 +89,15 @@ struct MotionCapture : public kobra::BaseApp {
 
 		// Now trace and render
 		cmd.begin({});
-			for (int i = 0; i < 4; i++)
+			for (int i = 0; i < 1; i++)
 				tracer.compute(scene.ecs);
 			tracer.render(cmd, framebuffer);
+
+			kobra::layers::render(hybrid_tracer,
+				cmd, scene.ecs,
+				camera.get <kobra::Camera> (),
+				camera.get <kobra::Transform> ()
+			);
 		cmd.end();
 
 		// Write the frame to the video
@@ -92,12 +105,12 @@ struct MotionCapture : public kobra::BaseApp {
 
 		cv::Mat mat(1000, 1000, CV_8UC4, frame.data());
 		cv::cvtColor(mat, mat, cv::COLOR_BGRA2RGB);
-		capture.write(mat);
+		/* capture.write(mat);
 
 		if (time > 5) {
 			capture.release();
 			terminate_now();
-		}
+		} */
 
 		// Update time (fixed)
 		time += 1/60.0f;

@@ -1090,23 +1090,32 @@ vk::raii::Pipeline make_graphics_pipeline(const GraphicsPipelineInfo &info)
 	};
 
 	// Color blend state
-	vk::PipelineColorBlendAttachmentState color_blend_attachment;
+	std::vector <vk::PipelineColorBlendAttachmentState> color_blend_attachments;
 
-	color_blend_attachment.colorWriteMask = vk::ColorComponentFlagBits::eR
-			| vk::ColorComponentFlagBits::eG
-			| vk::ColorComponentFlagBits::eB
-			| vk::ColorComponentFlagBits::eA;
+	for (int i = 0; i < info.color_blend_attachments; i++) {
+		vk::PipelineColorBlendAttachmentState color_blend_attachment;
 
-	color_blend_attachment.blendEnable = info.blend_enabled;
-	color_blend_attachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
-	color_blend_attachment.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
-	color_blend_attachment.colorBlendOp = vk::BlendOp::eAdd;
-	color_blend_attachment.srcAlphaBlendFactor = vk::BlendFactor::eSrcAlpha;
-	color_blend_attachment.dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
-	color_blend_attachment.alphaBlendOp = vk::BlendOp::eSubtract;
+		color_blend_attachment.colorWriteMask = vk::ColorComponentFlagBits::eR
+				| vk::ColorComponentFlagBits::eG
+				| vk::ColorComponentFlagBits::eB
+				| vk::ColorComponentFlagBits::eA;
+
+		color_blend_attachment.blendEnable = info.blend_enabled;
+		color_blend_attachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+		color_blend_attachment.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+		color_blend_attachment.colorBlendOp = vk::BlendOp::eAdd;
+		color_blend_attachment.srcAlphaBlendFactor = vk::BlendFactor::eSrcAlpha;
+		color_blend_attachment.dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+		color_blend_attachment.alphaBlendOp = vk::BlendOp::eSubtract;
+
+		color_blend_attachments.push_back(color_blend_attachment);
+	}
 
 	vk::PipelineColorBlendStateCreateInfo color_blend_info {
-		{}, VK_FALSE, vk::LogicOp::eCopy, 1, &color_blend_attachment,
+		{}, VK_FALSE,
+		vk::LogicOp::eCopy,
+		info.color_blend_attachments,
+		color_blend_attachments.data(),
 		{ 0.0f, 0.0f, 0.0f, 0.0f }
 	};
 

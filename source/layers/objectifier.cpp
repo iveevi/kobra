@@ -113,7 +113,7 @@ Objectifier make_layer(const Context &context)
 
 // Render entities and download the image
 void render(Objectifier &layer,
-		const vk::raii::CommandBuffer &cmd,
+		const CommandBuffer &cmd,
 		const ECS &ecs,
 		const Camera &camera,
 		const Transform &transform)
