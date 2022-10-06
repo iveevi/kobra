@@ -710,7 +710,7 @@ void Raytracer::_initialize_vuklan_structures(const vk::AttachmentLoadOp &load)
 {
 	// Create render pass
 	_render_pass = make_render_pass(*_ctx.device,
-		_ctx.swapchain_format,
+		{_ctx.swapchain_format}, {load},
 		_ctx.depth_format, load
 	);
 

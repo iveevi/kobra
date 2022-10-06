@@ -53,7 +53,8 @@ Objectifier make_layer(const Context &context)
 
 	// Create the render pass
 	layer.render_pass = make_render_pass(*context.device,
-		format,
+		{format},
+		{vk::AttachmentLoadOp::eClear},
 		layer.depth_buffer.format,
 		vk::AttachmentLoadOp::eClear
 	);

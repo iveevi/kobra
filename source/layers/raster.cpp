@@ -147,7 +147,7 @@ Raster::Raster(const Context &ctx, const vk::AttachmentLoadOp &load)
 
 	// Create render pass
 	_render_pass = make_render_pass(*ctx.device,
-		ctx.swapchain_format,
+		{ctx.swapchain_format}, {load},
 		ctx.depth_format, load
 	);
 

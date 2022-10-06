@@ -5,16 +5,18 @@
 #include <optix_function_table_definition.h>
 
 // Engine headers
-#include "../../include/cuda/error.cuh"
+#include "../../include/camera.hpp"
+#include "../../include/formats.hpp"
+#include "../../include/texture_manager.hpp"
+
 #include "../../include/cuda/alloc.cuh"
+#include "../../include/cuda/cast.cuh"
+#include "../../include/cuda/color.cuh"
+#include "../../include/cuda/error.cuh"
+#include "../../include/cuda/interop.cuh"
+
 #include "../../include/layers/optix_tracer.cuh"
 #include "../../include/layers/optix_tracer_common.cuh"
-#include "../../include/camera.hpp"
-#include "../../include/texture_manager.hpp"
-#include "../../include/formats.hpp"
-#include "../../include/cuda/color.cuh"
-
-#include <stb_image_write.h>
 
 namespace kobra {
 
@@ -163,19 +165,6 @@ typedef Record <optix_rt::RayGenData>     RayGenSbtRecord;
 typedef Record <optix_rt::MissData>       MissSbtRecord;
 typedef Record <optix_rt::HitGroupData>   HitGroupSbtRecord;
 
-inline float3 to_f3(const glm::vec3 &v)
-{
-	return make_float3(v.x, v.y, v.z);
-}
-
-__forceinline__
-__host__ __device__
-uint32_t to_ui32(uchar4 v)
-{
-	// Reversed
-	return (v.w << 24) | (v.z << 16) | (v.y << 8) | v.x;
-}
-
 static void context_log_cb( unsigned int level, const char* tag, const char* message, void* /*cbdata */)
 {
 	std::stringstream ss;
@@ -183,47 +172,63 @@ static void context_log_cb( unsigned int level, const char* tag, const char* mes
 	logger(ss.str(), Log::AUTO, "OPTIX") << message << std::endl;
 }
 
-static cudaTextureObject_t import_vulkan_texture(const vk::raii::Device &device, const ImageData &img)
+// Construtor
+OptixTracer::OptixTracer(const Context &ctx, const vk::AttachmentLoadOp &load,
+		int width_, int height_)
+		: _ctx(ctx), width(width_), height(height_)
 {
-	// Create a CUDA texture out of the Vulkan image
-	cudaExternalMemoryHandleDesc ext_mem_desc {};
-	ext_mem_desc.type = cudaExternalMemoryHandleTypeOpaqueFd;
-	ext_mem_desc.handle.fd = img.get_memory_handle(device);
-	ext_mem_desc.size = img.get_size();
+	// Per pixel buffers
+	_buffers.pbuffer = cuda::alloc(width * height * sizeof(float4));
+	_buffers.nbuffer = cuda::alloc(width * height * sizeof(float4));
+	_buffers.abuffer = cuda::alloc(width * height * sizeof(float4));
+	_buffers.fbuffer = cuda::alloc(width * height * sizeof(float4));
+	
+	_buffers.truncated = cuda::alloc(width * height * sizeof(uint32_t));
 
-	// Import the external memory
-	cudaExternalMemory_t tex_mem;
-	CUDA_CHECK(cudaSetDevice(0));
-	CUDA_CHECK(cudaImportExternalMemory(&tex_mem, &ext_mem_desc));
+	_buffers.xoffset = cuda::alloc(width * height * sizeof(float));
+	_buffers.yoffset = cuda::alloc(width * height * sizeof(float));
+	_buffers.h_xoffsets.resize(width * height);
+	_buffers.h_yoffsets.resize(width * height);
 
-	// Create a mipmapped array for the texture
-	cudaExternalMemoryMipmappedArrayDesc mip_desc {};
-	mip_desc.flags = 0;
-	mip_desc.formatDesc = cudaCreateChannelDesc(8, 8, 8, 8, cudaChannelFormatKindUnsigned);
-	mip_desc.numLevels = 1;
-	mip_desc.offset = 0;
-	mip_desc.extent = make_cudaExtent(
-		img.extent.width,
-		img.extent.height, 0
+	_initialize_optix();
+	_initialize_vulkan_structures(load);
+	_allocate_cuda_resources();
+
+	timer.start();
+
+	// Allocate image and sampler
+	_result = ImageData(
+		*_ctx.phdev, *_ctx.device,
+		vk::Format::eR8G8B8A8Unorm, {width, height},
+		vk::ImageTiling::eOptimal,
+		vk::ImageUsageFlagBits::eSampled
+			| vk::ImageUsageFlagBits::eTransferDst,
+		vk::ImageLayout::eUndefined,
+		vk::MemoryPropertyFlagBits::eDeviceLocal,
+		vk::ImageAspectFlagBits::eColor
 	);
 
-	cudaMipmappedArray_t mip_array;
-	CUDA_CHECK(cudaExternalMemoryGetMappedMipmappedArray(&mip_array, tex_mem, &mip_desc));
+	_sampler = make_sampler(*_ctx.device, _result);
 
-	// Create the final texture object
-	cudaResourceDesc res_desc {};
-	res_desc.resType = cudaResourceTypeMipmappedArray;
-	res_desc.res.mipmap.mipmap = mip_array;
+	// Allocate staging buffer
+	vk::DeviceSize stage_size = width * height * sizeof(uint32_t);
 
-	cudaTextureDesc tex_desc {};
-	tex_desc.readMode = cudaReadModeNormalizedFloat;
-	tex_desc.normalizedCoords = true;
-	tex_desc.filterMode = cudaFilterModeLinear;
+	auto usage = vk::BufferUsageFlagBits::eStorageBuffer;
+	auto mem_props = vk::MemoryPropertyFlagBits::eDeviceLocal
+		| vk::MemoryPropertyFlagBits::eHostCoherent
+		| vk::MemoryPropertyFlagBits::eHostVisible;
 
-	cudaTextureObject_t tex_obj;
-	CUDA_CHECK(cudaCreateTextureObject(&tex_obj, &res_desc, &tex_desc, nullptr));
+	_staging = BufferData(
+		*_ctx.phdev, *_ctx.device, stage_size,
+		usage | vk::BufferUsageFlagBits::eTransferSrc, mem_props
+	);
 
-	return tex_obj;
+	// Bind sampler
+	bind_ds(*_ctx.device,
+		_ds_render,
+		_sampler,
+		_result, 0
+	);
 }
 
 // Set environment map
@@ -239,7 +244,7 @@ void OptixTracer::environment_map(const std::string &path)
 	// Update miss group record
 	MissSbtRecord miss_record;
 	miss_record.data.bg_color = float3 {0.0f, 0.0f, 0.0f};
-	miss_record.data.bg_tex = import_vulkan_texture(*_ctx.device, *_v_environment_map);
+	miss_record.data.bg_tex = cuda::import_vulkan_texture(*_ctx.device, *_v_environment_map);
 
 	OPTIX_CHECK(optixSbtRecordPackHeader(_programs.miss_radiance, &miss_record));
 	cuda::copy(_optix_miss_sbt, &miss_record, 1);
@@ -407,6 +412,16 @@ void OptixTracer::render(const vk::raii::CommandBuffer &cmd,
 	cmd.endRenderPass();
 }
 
+///////////////////////////////
+// Capture the current frame //
+///////////////////////////////
+
+void OptixTracer::capture(std::vector <uint8_t> &ret)
+{
+	// Copy from result buffer
+	cuda::copy(ret, _buffers.truncated, width * height * 4);
+}
+
 /////////////////////
 // Private methods //
 /////////////////////
@@ -437,6 +452,8 @@ void OptixTracer::_initialize_optix()
 	OPTIX_CHECK(optixDeviceContextCreate( cuCtx, &options, &_optix_ctx));
 
 	// Create the OptiX module
+
+	// TODO: load multiple modules... (function in optix/)
 	OptixPipelineCompileOptions pipeline_compile_options = {};
 
 	{
@@ -778,7 +795,7 @@ void OptixTracer::_optix_build()
 
 		for (int j = 0; j < s->vertices.size(); j++) {
 			auto p = s->vertices[j].position;
-			vertices.push_back(to_f3(p));
+			vertices.push_back(cuda::to_f3(p));
 		}
 
 		// Create the build input
@@ -858,7 +875,7 @@ void OptixTracer::_optix_build()
 
 		for (int j = 0; j < s.vertices.size(); j++) {
 			auto p = s.vertices[j].position;
-			vertices.push_back(to_f3(p));
+			vertices.push_back(cuda::to_f3(p));
 		}
 	}
 
@@ -1033,11 +1050,11 @@ void OptixTracer::_optix_update_materials()
 			b = transform->apply(b);
 			c = transform->apply(c);
 
-			quad_lights[i].a = to_f3(a);
-			quad_lights[i].ab = to_f3(b - a);
-			quad_lights[i].ac = to_f3(c - a);
+			quad_lights[i].a = cuda::to_f3(a);
+			quad_lights[i].ab = cuda::to_f3(b - a);
+			quad_lights[i].ac = cuda::to_f3(c - a);
 			quad_lights[i].intensity
-				= to_f3(light->power * light->color);
+				= cuda::to_f3(light->power * light->color);
 		}
 
 		KOBRA_LOG_FUNC(Log::INFO) << "Number of area lights: " << quad_lights.size() << std::endl;
@@ -1075,10 +1092,10 @@ void OptixTracer::_optix_update_materials()
 					glm::vec3 c = transform->apply(s->vertices[i2].position);
 
 					optix_rt::TriangleLight light;
-					light.a = to_f3(a);
-					light.ab = to_f3(b - a);
-					light.ac = to_f3(c - a);
-					light.intensity = to_f3(s->material.emission);
+					light.a = cuda::to_f3(a);
+					light.ab = cuda::to_f3(b - a);
+					light.ac = cuda::to_f3(c - a);
+					light.intensity = cuda::to_f3(s->material.emission);
 
 					triangle_lights.push_back(light);
 				}
@@ -1101,10 +1118,10 @@ void OptixTracer::_optix_update_materials()
 
 			// Material
 			cuda::Material material;
-			material.diffuse = to_f3(mat.diffuse);
-			material.specular = to_f3(mat.specular);
-			material.emission = to_f3(mat.emission);
-			material.ambient = to_f3(mat.ambient);
+			material.diffuse = cuda::to_f3(mat.diffuse);
+			material.specular = cuda::to_f3(mat.specular);
+			material.emission = cuda::to_f3(mat.emission);
+			material.ambient = cuda::to_f3(mat.ambient);
 			material.shininess = mat.shininess;
 			material.roughness = mat.roughness;
 			material.refraction = mat.refraction;
@@ -1123,7 +1140,7 @@ void OptixTracer::_optix_update_materials()
 					_ctx.dev(), mat.albedo_texture
 				);
 
-				hg_sbt.data.textures.diffuse = import_vulkan_texture(*_ctx.device, diffuse);
+				hg_sbt.data.textures.diffuse = cuda::import_vulkan_texture(*_ctx.device, diffuse);
 				hg_sbt.data.textures.has_diffuse = true;
 			}
 
@@ -1132,7 +1149,7 @@ void OptixTracer::_optix_update_materials()
 					_ctx.dev(), mat.normal_texture
 				);
 
-				hg_sbt.data.textures.normal = import_vulkan_texture(*_ctx.device, normal);
+				hg_sbt.data.textures.normal = cuda::import_vulkan_texture(*_ctx.device, normal);
 				hg_sbt.data.textures.has_normal = true;
 			}
 
@@ -1141,7 +1158,7 @@ void OptixTracer::_optix_update_materials()
 					_ctx.dev(), mat.roughness_texture
 				);
 
-				hg_sbt.data.textures.roughness = import_vulkan_texture(*_ctx.device, roughness);
+				hg_sbt.data.textures.roughness = cuda::import_vulkan_texture(*_ctx.device, roughness);
 				hg_sbt.data.textures.has_roughness = true;
 			}
 
@@ -1165,7 +1182,7 @@ void OptixTracer::_optix_update_materials()
 			hg_sbt.data.tri_lights = (optix_rt::TriangleLight *) _buffers.tri_lights;
 			hg_sbt.data.n_tri_lights = 1;
 
-			hg_sbt.data.material.emission = to_f3(_cached.lights[i]->color);
+			hg_sbt.data.material.emission = cuda::to_f3(_cached.lights[i]->color);
 			hg_sbt.data.material.type = Shading::eEmissive;
 
 			OPTIX_CHECK(optixSbtRecordPackHeader(_programs.hit_radiance, &hg_sbt));
@@ -1254,7 +1271,7 @@ __global__ void compute_pixel_values(float4 *pixels, uint32_t *target,
 
 	float4 pixel = pixels[in_idx];
 	uchar4 color = cuda::make_color(pixel, tonemapping);
-	target[out_idx] = to_ui32(color);
+	target[out_idx] = cuda::to_ui32(color);
 }
 
 void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
@@ -1309,11 +1326,11 @@ void OptixTracer::_optix_trace(const Camera &camera, const Transform &transform)
 
 	auto uvw = kobra::uvw_frame(camera, transform);
 
-	params.cam_eye      = to_f3(transform.position);
+	params.cam_eye      = cuda::to_f3(transform.position);
 
-	params.cam_u = to_f3(uvw.u);
-	params.cam_v = to_f3(uvw.v);
-	params.cam_w = to_f3(uvw.w);
+	params.cam_u = cuda::to_f3(uvw.u);
+	params.cam_v = cuda::to_f3(uvw.v);
+	params.cam_w = cuda::to_f3(uvw.w);
 
 	float ms = timer.elapsed_start();
 

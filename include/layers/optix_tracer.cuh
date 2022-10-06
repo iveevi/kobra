@@ -85,7 +85,6 @@ class OptixTracer {
 	} _buffers;
 
 	// Output resources
-	// cuda::BufferData		_result_buffer;
 	std::vector <uint32_t>		_output;
 
 	// Images
@@ -126,7 +125,7 @@ class OptixTracer {
 	void _initialize_vulkan_structures(const vk::AttachmentLoadOp &load) {
 		// Render pass
 		_render_pass = make_render_pass(*_ctx.device,
-			_ctx.swapchain_format,
+			{_ctx.swapchain_format}, {load},
 			_ctx.depth_format, load
 		);
 
@@ -207,64 +206,8 @@ public:
 		optix::SamplingStrategies::eDefault;
 
 	// Constructor
-	OptixTracer(const Context &ctx, const vk::AttachmentLoadOp &load,
-			int width_ = 1000, int height_ = 1000)
-			: _ctx(ctx),
-			width(width_),
-			height(height_) {
-		// Per pixel buffers
-		_buffers.pbuffer = cuda::alloc(width * height * sizeof(float4));
-		_buffers.nbuffer = cuda::alloc(width * height * sizeof(float4));
-		_buffers.abuffer = cuda::alloc(width * height * sizeof(float4));
-		_buffers.fbuffer = cuda::alloc(width * height * sizeof(float4));
-		
-		_buffers.truncated = cuda::alloc(width * height * sizeof(uint32_t));
-
-		_buffers.xoffset = cuda::alloc(width * height * sizeof(float));
-		_buffers.yoffset = cuda::alloc(width * height * sizeof(float));
-		_buffers.h_xoffsets.resize(width * height);
-		_buffers.h_yoffsets.resize(width * height);
-
-		_initialize_optix();
-		_initialize_vulkan_structures(load);
-		_allocate_cuda_resources();
-
-		timer.start();
-
-		// Allocate image and sampler
-		_result = ImageData(
-			*_ctx.phdev, *_ctx.device,
-			vk::Format::eR8G8B8A8Unorm, {width, height},
-			vk::ImageTiling::eOptimal,
-			vk::ImageUsageFlagBits::eSampled
-				| vk::ImageUsageFlagBits::eTransferDst,
-			vk::ImageLayout::eUndefined,
-			vk::MemoryPropertyFlagBits::eDeviceLocal,
-			vk::ImageAspectFlagBits::eColor
-		);
-
-		_sampler = make_sampler(*_ctx.device, _result);
-
-		// Allocate staging buffer
-		vk::DeviceSize stage_size = width * height * sizeof(uint32_t);
-
-		auto usage = vk::BufferUsageFlagBits::eStorageBuffer;
-		auto mem_props = vk::MemoryPropertyFlagBits::eDeviceLocal
-			| vk::MemoryPropertyFlagBits::eHostCoherent
-			| vk::MemoryPropertyFlagBits::eHostVisible;
-
-		_staging = BufferData(
-			*_ctx.phdev, *_ctx.device, stage_size,
-			usage | vk::BufferUsageFlagBits::eTransferSrc, mem_props
-		);
-	
-		// Bind sampler
-		bind_ds(*_ctx.device,
-			_ds_render,
-			_sampler,
-			_result, 0
-		);
-	}
+	OptixTracer(const Context &, const vk::AttachmentLoadOp &,
+		int = 1000, int = 1000);
 
 	// Set environment map
 	void environment_map(const std::string &);
@@ -278,20 +221,7 @@ public:
 			const RenderArea & = {{-1, -1}, {-1, -1}});
 
 	// Capture to buffer
-	std::vector <uint8_t> capture() {
-		// Copy from result buffer
-		auto result = std::vector <uint8_t> (width * height * 4);
-		// TODO: method to retrieve data from buffer
-		// _buffers.fbuffer.download(result);
-
-		cuda::copy(result, _buffers.truncated, width * height * 4);
-		/* std::cout << "Copied" << std::endl;
-		std::cout << "\tfirst couple... " << std::endl;
-		for (int i = 0; i < 10; i++) {
-			std::cout << "\t\t" << (int) result[i] << std::endl;
-		} */
-		return result;
-	}
+	void capture(std::vector <uint8_t> &);
 };
 
 }

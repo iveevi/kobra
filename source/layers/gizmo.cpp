@@ -124,10 +124,10 @@ Gizmo Gizmo::make(const Context &context)
 	layer.extent = context.extent;
 
 	// First create a render pass
+	auto eLoad = vk::AttachmentLoadOp::eLoad;
 	layer.render_pass = make_render_pass(*context.device,
-		context.swapchain_format,
-		context.depth_format,
-		vk::AttachmentLoadOp::eLoad
+		{context.swapchain_format}, {eLoad},
+		context.depth_format, {eLoad}
 	);
 
 	// Pipeline layout

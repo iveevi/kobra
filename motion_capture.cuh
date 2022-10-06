@@ -16,6 +16,8 @@
 #include "include/scene.hpp"
 #include "include/capture.hpp"
 
+// TODO: do base app without inheritance (simple struct..., app and baseapp not
+// related)
 struct MotionCapture : public kobra::BaseApp {
 	// TODO: let the scene run on any virtual device?
 	kobra::Entity camera;
@@ -24,6 +26,7 @@ struct MotionCapture : public kobra::BaseApp {
 
 	// Capture
 	cv::VideoWriter capture;
+	std::vector <byte> frame;
 	
 	MotionCapture(const vk::raii::PhysicalDevice &phdev,
 			const std::vector <const char *> &extensions,
@@ -42,7 +45,7 @@ struct MotionCapture : public kobra::BaseApp {
 
 		// Setup tracer
 		tracer.environment_map("resources/skies/background_1.jpg");
-		tracer.sampling_strategy = kobra::optix::eTemporal;
+		tracer.sampling_strategy = kobra::optix::eSpatioTemporal;
 		tracer.denoiser_enabled = false;
 
 		// Setup capture
@@ -85,7 +88,7 @@ struct MotionCapture : public kobra::BaseApp {
 		cmd.end();
 
 		// Write the frame to the video
-		std::vector <byte> frame = tracer.capture();
+		tracer.capture(frame);
 
 		cv::Mat mat(1000, 1000, CV_8UC4, frame.data());
 		cv::cvtColor(mat, mat, cv::COLOR_BGRA2RGB);

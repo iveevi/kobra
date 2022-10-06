@@ -284,7 +284,8 @@ struct ECSApp : public BaseApp {
 				static const std::string path = "capture.png";
 				auto *app = (ECSApp *) user;
 				std::cout << "Capture button pressed" << std::endl;
-				std::vector <uint8_t> pixels = app->optix_tracer.capture();
+				std::vector <uint8_t> pixels;
+				app->optix_tracer.capture(pixels);
 
 				stbi_flip_vertically_on_write(true);
 

@@ -34,14 +34,10 @@ const std::vector <const char *> &get_required_extensions()
 		extensions.insert(extensions.end(), glfw_extensions, glfw_extensions + glfw_extension_count);
 
 		// Additional extensions
-		// TODO: debugging extension if debuggin enabled
 		extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
-		// extensions.push_back("VK_KHR_get_physical_device_properties2");
 		extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 		extensions.push_back(VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME);
 		extensions.push_back(VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME);
-		// extensions.push_back(VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME);
-		// extensions.push_back(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
 
 #ifdef KOBRA_VALIDATION_LAYERS
 

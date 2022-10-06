@@ -115,9 +115,8 @@ BaseApp::BaseApp(const vk::raii::PhysicalDevice &phdev_,
 	// TODO: we dont need to create a base render pass (whos gonna
 	// use it?)
 	render_pass = make_render_pass(device,
-		swapchain.format,
-		depth_buffer.format,
-		load
+		{swapchain.format}, {load},
+		depth_buffer.format, load
 	);
 
 	// Create the framebuffers

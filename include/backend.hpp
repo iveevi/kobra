@@ -39,6 +39,7 @@ namespace kobra {
 // Aliases and structures //
 ////////////////////////////
 
+// Vulkan structures
 struct Device {
 	vk::raii::PhysicalDevice	*phdev = nullptr;
 	vk::raii::Device		*device = nullptr;
@@ -57,6 +58,13 @@ struct Context {
 		return Device {phdev, device};
 	}
 };
+
+// Simpler Vulkan aliases
+using CommandBuffer = vk::raii::CommandBuffer;
+using Framebuffer = vk::raii::Framebuffer;
+using Pipeline = vk::raii::Pipeline;
+using PipelineLayout = vk::raii::PipelineLayout;
+using RenderPass = vk::raii::RenderPass;
 
 using SyncTask = std::pair <std::string, std::function <void ()>>;
 
@@ -957,45 +965,57 @@ struct DepthBuffer : public ImageData {
 
 // Create a render pass
 inline vk::raii::RenderPass make_render_pass(const vk::raii::Device &device,
-		const vk::Format &format,
+		const std::vector <vk::Format> &attachment_formats,
+		const std::vector <vk::AttachmentLoadOp> &attachment_load_ops,
 		const vk::Format &depth_format,
-		const vk::AttachmentLoadOp &load_op = vk::AttachmentLoadOp::eClear,
-		const vk::ImageLayout &initial_layout = vk::ImageLayout::ePresentSrcKHR)
+		const vk::AttachmentLoadOp &depth_load_op)
 {
 	// List of attachments
 	std::vector <vk::AttachmentDescription> attachments;
 
-	// Make sure at least a valid color attachment is present
+	// Make sure there are enough load ops
 	KOBRA_ASSERT(
-		format != vk::Format::eUndefined,
-		"Color attachment format is undefined"
+		attachment_formats.size() == attachment_load_ops.size(),
+		"Attachment format and load op count mismatch"
 	);
 
-	// Create color attachment
-	vk::ImageLayout color_layout;
-	if (load_op == vk::AttachmentLoadOp::eLoad)
-		color_layout = vk::ImageLayout::ePresentSrcKHR;
-	else
-		color_layout = vk::ImageLayout::eUndefined;
+	// Add render pass attachments
+	for (int i = 0; i < attachment_formats.size(); i++) {
+		auto format = attachment_formats[i];
+		auto load_op = attachment_load_ops[i];
 
-	vk::AttachmentDescription color_attachment {
-		{}, format,
-		vk::SampleCountFlagBits::e1,
-		load_op,
-		vk::AttachmentStoreOp::eStore,
-		vk::AttachmentLoadOp::eDontCare,
-		vk::AttachmentStoreOp::eDontCare,
-		color_layout,
-		vk::ImageLayout::ePresentSrcKHR
-	};
+		// Make sure at least a valid color attachment is present
+		KOBRA_ASSERT(
+			format != vk::Format::eUndefined,
+			"Color attachment format is undefined"
+		);
 
-	// Add color attachment to list
-	attachments.push_back(color_attachment);
+		// Create color attachment
+		vk::ImageLayout color_layout;
+		if (load_op == vk::AttachmentLoadOp::eLoad)
+			color_layout = vk::ImageLayout::ePresentSrcKHR;
+		else
+			color_layout = vk::ImageLayout::eUndefined;
+
+		vk::AttachmentDescription color_attachment {
+			{}, format,
+			vk::SampleCountFlagBits::e1,
+			load_op,
+			vk::AttachmentStoreOp::eStore,
+			vk::AttachmentLoadOp::eDontCare,
+			vk::AttachmentStoreOp::eDontCare,
+			color_layout,
+			vk::ImageLayout::ePresentSrcKHR
+		};
+
+		// Add color attachment to list
+		attachments.push_back(color_attachment);
+	}
 
 	// Create depth attachment
 	if (depth_format != vk::Format::eUndefined) {
 		vk::ImageLayout depth_layout;
-		if (load_op == vk::AttachmentLoadOp::eLoad)
+		if (depth_load_op == vk::AttachmentLoadOp::eLoad)
 			depth_layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
 		else
 			depth_layout = vk::ImageLayout::eUndefined;
@@ -1003,7 +1023,7 @@ inline vk::raii::RenderPass make_render_pass(const vk::raii::Device &device,
 		vk::AttachmentDescription depth_attachment {
 			{}, depth_format,
 			vk::SampleCountFlagBits::e1,
-			load_op,
+			depth_load_op,
 			vk::AttachmentStoreOp::eDontCare,
 			vk::AttachmentLoadOp::eDontCare,
 			vk::AttachmentStoreOp::eDontCare,
