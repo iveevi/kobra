@@ -462,8 +462,8 @@ HybridTracer HybridTracer::make(const Context &context)
 
 	// Create the present pipeline
 	shaders = make_shader_modules(*context.device, {
-		"shaders/bin/generic/postproc_vert.spv",
-		"shaders/bin/generic/postproc_frag.spv"
+		"bin/spv/spit_vert.spv",
+		"bin/spv/spit_frag.spv"
 	});
 	
 	GraphicsPipelineInfo present_grp_info {

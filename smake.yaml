@@ -79,7 +79,8 @@ builds:
     - compiler: glslc
     - options: 'nolink, output_dir=./bin/spv'
   - glsl_vertex:
-    - sources: 'shaders/raster/skybox.vert,
+    - sources: 'shaders/postproc/spit.vert,
+      shaders/raster/skybox.vert,
       shaders/raster/objectifier.vert,
       shaders/raster/gizmo.vert,
       shaders/raster/hybrid/hybrid_deferred.vert'
@@ -87,7 +88,8 @@ builds:
     - compiler: glslc
     - options: 'nolink, output_dir=./bin/spv, output_format={filename}_vert.spv'
   - glsl_frag:
-    - sources: 'shaders/raster/skybox.frag,
+    - sources: 'shaders/postproc/spit.frag,
+      shaders/raster/skybox.frag,
       shaders/raster/objectifier.frag,
       shaders/raster/gizmo.frag,
       shaders/raster/hybrid/hybrid_deferred.frag'
