@@ -661,10 +661,10 @@ struct ECSApp : public BaseApp {
 		// C to output camera position and orientation
 		if (event.key == GLFW_KEY_C && event.action == GLFW_PRESS) {
 			// TODO: space equally
-			printf("{%.2f, %.2f, %.2f}, {%.2f, %.2f, %.2f}\n",
-				transform.position.x, transform.position.y, transform.position.z,
-				transform.rotation.x, transform.rotation.y, transform.rotation.z
-			);
+			auto pos = common::sprintf("{%.2f, %.2f, %.2f}", transform.position.x, transform.position.y, transform.position.z);
+			auto rot = common::sprintf("{%.2f, %.2f, %.2f}", transform.rotation.x, transform.rotation.y, transform.rotation.z);
+
+			printf("%30s %30s\n", pos.c_str(), rot.c_str());
 		}
 	}
 };
@@ -690,7 +690,9 @@ int main()
 	for (auto str : extensions)
 		std::cout << "\t" << str << std::endl;
 
-	/* Create the app and run it
+#if 0
+
+	// Create the app and run it
 	ECSApp app(phdev, {
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 		VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
@@ -698,7 +700,9 @@ int main()
 	});
 
 	// Run the app
-	app.run(); */
+	app.run();
+
+#else
 
 	MotionCapture app(phdev, {
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
@@ -707,4 +711,7 @@ int main()
 	}, scene_path);
 
 	app.run();
+
+#endif
+
 }

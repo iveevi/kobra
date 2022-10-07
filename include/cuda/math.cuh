@@ -2593,12 +2593,12 @@ KCUDA_INLINE KCUDA_HOST_DEVICE float4 make_float4(const float3& v0, const float 
 KCUDA_INLINE KCUDA_HOST_DEVICE float4 make_float4(const float2& v0, const float2& v1) { return make_float4( v0.x, v0.y, v1.x, v1.y ); }
 /** @} */
 
-__device__ float fract(float x)
+KCUDA_INLINE KCUDA_HOST_DEVICE float fract(float x)
 {
 	return x - floor(x);
 }
 
-__device__ float3 fract(float3 x)
+KCUDA_INLINE KCUDA_HOST_DEVICE float3 fract(float3 x)
 {
 	return make_float3(
 		fract(x.x),
@@ -2607,17 +2607,17 @@ __device__ float3 fract(float3 x)
 	);
 }
 
-__device__ uint3 operator+(uint3 a, unsigned int b)
+KCUDA_INLINE KCUDA_HOST_DEVICE uint3 operator+(uint3 a, unsigned int b)
 {
 	return make_uint3(a.x + b, a.y + b, a.z + b);
 }
 
-__device__ uint3 operator>>(uint3 a, unsigned int b)
+KCUDA_INLINE KCUDA_HOST_DEVICE uint3 operator>>(uint3 a, unsigned int b)
 {
 	return make_uint3(a.x >> b, a.y >> b, a.z >> b);
 }
 
-__device__ uint3 &operator&=(uint3 &a, uint3 b)
+KCUDA_INLINE KCUDA_HOST_DEVICE uint3 &operator&=(uint3 &a, uint3 b)
 {
 	a.x &= b.x;
 	a.y &= b.y;
@@ -2625,7 +2625,7 @@ __device__ uint3 &operator&=(uint3 &a, uint3 b)
 	return a;
 }
 
-__device__ uint3 &operator|=(uint3 &a, uint3 b)
+KCUDA_INLINE KCUDA_HOST_DEVICE uint3 &operator|=(uint3 &a, uint3 b)
 {
 	a.x |= b.x;
 	a.y |= b.y;
@@ -2633,7 +2633,7 @@ __device__ uint3 &operator|=(uint3 &a, uint3 b)
 	return a;
 }
 
-__device__ uint3 &operator^=(uint3 &a, uint3 b)
+KCUDA_INLINE KCUDA_HOST_DEVICE uint3 &operator^=(uint3 &a, uint3 b)
 {
 	a.x ^= b.x;
 	a.y ^= b.y;
@@ -2641,8 +2641,8 @@ __device__ uint3 &operator^=(uint3 &a, uint3 b)
 	return a;
 }
 
-__device__ __forceinline__
-float3 rotate(float3 s, float3 n)
+
+KCUDA_INLINE KCUDA_HOST_DEVICE float3 rotate(float3 s, float3 n)
 {
 	float3 w = n;
 	float3 a = float3 {0.0f, 1.0f, 0.0f};
@@ -2659,8 +2659,7 @@ float3 rotate(float3 s, float3 n)
 	return u * s.x + v * s.y + w * s.z;
 }
 
-__forceinline__ __device__
-float max(float3 v)
+KCUDA_INLINE KCUDA_HOST_DEVICE float max(float3 v)
 {
 	return fmaxf(v.x, fmaxf(v.y, v.z));
 }

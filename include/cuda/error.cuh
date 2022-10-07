@@ -116,6 +116,7 @@ inline void cudaCheckNoThrow( cudaError_t error, const char* call, const char* f
 
 #define CUDA_SYNC_CHECK() kobra::cuda::sync_check(__FILE__, __LINE__)
 
+// TODO: move these two into optix/
 #define OPTIX_CHECK( call )                                                    \
     kobra::cuda::optixCheck( call, #call, __FILE__, __LINE__ )
 

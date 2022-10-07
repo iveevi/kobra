@@ -1,7 +1,7 @@
 // Standard headers
 #include <cstdint>
 
-#define KCUDA_DEBUG
+// #define KCUDA_DEBUG
 
 // Engine headers
 #include "../../include/cuda/math.cuh"
@@ -34,7 +34,7 @@ extern "C"
 	__constant__ kobra::optix_rt::Params params;
 }
 
-// Helper functionss
+// Helper functions
 template <class T>
 static __forceinline__ __device__ T *unpack_point(uint32_t i0, uint32_t i1)
 {

@@ -435,10 +435,10 @@ void OptixTracer::_initialize_optix()
 	static size_t sizeof_log = sizeof(log);
 
 	// Initialize CUDA
-	CUDA_CHECK( cudaFree( 0 ) );
+	CUDA_CHECK(cudaFree(0));
 
 	// Initialize the OptiX API, loading all API entry points
-	OPTIX_CHECK( optixInit() );
+	OPTIX_CHECK(optixInit());
 
 	// Specify context options
 	OptixDeviceContextOptions options = {};
@@ -473,7 +473,6 @@ void OptixTracer::_initialize_optix()
 #endif
 
 		pipeline_compile_options.usesMotionBlur        = false;
-		pipeline_compile_options.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_GAS;
 		pipeline_compile_options.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING;
 		pipeline_compile_options.numPayloadValues      = 2;
 		pipeline_compile_options.numAttributeValues    = 0;
@@ -597,7 +596,7 @@ void OptixTracer::_initialize_optix()
 	//
 	_optix_pipeline = nullptr;
 	{
-		const int max_trace_depth = 15;
+		const int max_trace_depth = 5;
 
 		OptixProgramGroup program_groups[] = {
 			_programs.raygen,
@@ -610,7 +609,7 @@ void OptixTracer::_initialize_optix()
 		OptixPipelineLinkOptions pipeline_link_options = {};
 		
 		pipeline_link_options.maxTraceDepth          = max_trace_depth;
-		pipeline_link_options.debugLevel             = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
+		pipeline_link_options.debugLevel             = OPTIX_COMPILE_DEBUG_LEVEL_NONE;
 
 		OPTIX_CHECK_LOG( optixPipelineCreate(
 					_optix_ctx,
@@ -636,7 +635,8 @@ void OptixTracer::_initialize_optix()
 					0,  // maxCCDepth
 					0,  // maxDCDEpth
 					&direct_callable_stack_size_from_traversal,
-					&direct_callable_stack_size_from_state, &continuation_stack_size ) );
+					&direct_callable_stack_size_from_state,
+					&continuation_stack_size ) );
 		OPTIX_CHECK( optixPipelineSetStackSize( _optix_pipeline, direct_callable_stack_size_from_traversal,
 					direct_callable_stack_size_from_state, continuation_stack_size,
 					2  // maxTraversableDepth

@@ -33,24 +33,42 @@ struct MotionCapture : public kobra::BaseApp {
 	std::vector <byte> frame;
 
 	const std::vector <glm::vec3> camera_pos {
-		{0.00, 27.36, 31.03},
-		{62.62, 25.96, 9.59},
-		{58.98, 23.88, -41.79},
-		{17.60, 23.88, -60.29},
-		{-25.29, 34.61, -30.43}
+		{-13.81, 23.40, 24.29},
+		{24.87, 21.49, 22.52},
+		{59.04, 21.49, 4.70},
+		{65.30, 21.49, -20.18},
+		{57.76, 21.49, -45.75},
+		{0.61, 24.94, -53.59},
+		{-16.36, 23.35, -35.79},
+		{-18.45, 21.34, -13.25},
+		{0.40, 14.35, -3.78},
+		{18.99, 8.53, -6.17},
+		{37.84, 6.21, -16.40},
+		{32.84, 6.21, -27.41},
+		{29.18, 16.56, -26.53},
+		{18.24, 15.16, -27.63},
+		{6.65, 15.16, -22.16}
 	};
 
 	const std::vector <glm::vec3> camera_rot {
-		{-0.30, -0.09, 0.00},
-		{-0.28, 0.74, 0.00},
-		{-0.31, 2.20, 0.00},
-		{-0.18, 3.01, 0.00},
-		{-0.67, 4.47, 0.00}
+		{-0.24, -0.44, 0.00},
+		{-0.29, 0.09, 0.00},
+		{-0.29, 0.85, 0.00},
+		{-0.33, 1.55, 0.00},
+		{-0.39, 2.41, 0.00},
+		{-0.34, 3.67, 0.00},
+		{-0.37, 4.11, 0.00},
+		{-0.35, 4.71, 0.00},
+		{-0.35, 4.84, 0.00},
+		{-0.24, 4.74, 0.00},
+		{-0.21, 7.67, 0.00},
+		{-0.23, 8.51, 0.00},
+		{-0.54, 8.56, 0.00},
+		{-0.27, 9.26, 0.00},
+		{-0.49, 10.19, 0.00}
 	};
 
-	const std::vector <float> times {
-		0.0f, 1.0f, 2.0f, 3.0f, 4.0f
-	};
+	std::vector <float> times;
 
 	kobra::core::Sequence <glm::vec3> camera_pos_seq {
 		.values = camera_pos,
@@ -97,6 +115,13 @@ struct MotionCapture : public kobra::BaseApp {
 			std::cout << "Failed to open capture" << std::endl;
 		else
 			std::cout << "Capture opened" << std::endl;
+
+		// Fill in time intervals
+		for (int i = 0; i < camera_pos.size(); i++)
+			times.push_back(i);
+
+		camera_pos_seq.times = times;
+		camera_rot_seq.times = times;
 	}
 
 	float time = 0.0f;
@@ -105,23 +130,10 @@ struct MotionCapture : public kobra::BaseApp {
 		// Move the camera
 		auto &transform = camera.get <kobra::Transform> ();
 		
-		static const glm::vec3 origin {10, 5, -10};
-		transform.position = glm::vec3 {
-			5.0f * std::sin(time) + 7,
-			6.0f,
-			5.0f * std::cos(time) - 10
-		};
-
-		// Look at the origin always
-		glm::vec3 eye = transform.position;
-		glm::vec3 dir = glm::normalize(origin - eye);
-		
-		transform.look(dir);
-
-		// Interpolation sequence
-		if (time > 4.0f) time = 0.0f;
-
 		// Interpolate camera position
+		if (time > camera_pos.size() - 1)
+			terminate_now();
+
 		glm::vec3 pos = kobra::core::piecewise_linear(camera_pos_seq, time);
 		glm::vec3 rot = kobra::core::piecewise_linear(camera_rot_seq, time);
 
@@ -130,14 +142,18 @@ struct MotionCapture : public kobra::BaseApp {
 
 		// Now trace and render
 		cmd.begin({});
-			for (int i = 0; i < 4; i++)
+			/* for (int i = 0; i < 2; i++)
 				tracer.compute(scene.ecs);
-			tracer.render(cmd, framebuffer);
+			tracer.render(cmd, framebuffer); */
 
 			kobra::layers::compute(hybrid_tracer,
 				scene.ecs,
 				camera.get <kobra::Camera> (),
 				camera.get <kobra::Transform> ()
+			);
+
+			kobra::layers::render(hybrid_tracer,
+				cmd, framebuffer
 			);
 		cmd.end();
 
