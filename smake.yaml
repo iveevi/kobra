@@ -71,7 +71,7 @@ builds:
   - hybrid_ptx_release:
     - sources: source/optix/hybrid_rt.cu
     - idirs: includes
-    - flags: '-ptx -O3'
+    - flags: '-ptx -lineinfo'
     - options: 'nolink, output_dir=./bin/ptx, output_format={filename}.ptx'
   - glsl_compute:
     - sources: shaders/rt/progressive_path_tracer.glsl

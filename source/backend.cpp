@@ -453,12 +453,14 @@ vk::raii::Device make_device(const vk::raii::PhysicalDevice &phdev,
 		queue_priorities.data()
 	};
 
+	// Device features
+	vk::PhysicalDeviceFeatures device_features;
+	device_features.independentBlend = true;
+
 	// Create the device
 	vk::DeviceCreateInfo device_info {
-		vk::DeviceCreateFlags(),
-		queue_info,
-		{}, extensions,
-		nullptr, nullptr
+		vk::DeviceCreateFlags(), queue_info,
+		{}, extensions, &device_features, nullptr
 	};
 
 	return vk::raii::Device {
@@ -1092,7 +1094,7 @@ vk::raii::Pipeline make_graphics_pipeline(const GraphicsPipelineInfo &info)
 	// Color blend state
 	std::vector <vk::PipelineColorBlendAttachmentState> color_blend_attachments;
 
-	for (int i = 0; i < info.color_blend_attachments; i++) {
+	for (int i = 0; i < info.blend_attachments.size(); i++) {
 		vk::PipelineColorBlendAttachmentState color_blend_attachment;
 
 		color_blend_attachment.colorWriteMask = vk::ColorComponentFlagBits::eR
@@ -1100,7 +1102,7 @@ vk::raii::Pipeline make_graphics_pipeline(const GraphicsPipelineInfo &info)
 				| vk::ColorComponentFlagBits::eB
 				| vk::ColorComponentFlagBits::eA;
 
-		color_blend_attachment.blendEnable = info.blend_enabled;
+		color_blend_attachment.blendEnable = info.blend_attachments[i];
 		color_blend_attachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
 		color_blend_attachment.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
 		color_blend_attachment.colorBlendOp = vk::BlendOp::eAdd;
@@ -1114,7 +1116,7 @@ vk::raii::Pipeline make_graphics_pipeline(const GraphicsPipelineInfo &info)
 	vk::PipelineColorBlendStateCreateInfo color_blend_info {
 		{}, VK_FALSE,
 		vk::LogicOp::eCopy,
-		info.color_blend_attachments,
+		uint32_t(info.blend_attachments.size()),
 		color_blend_attachments.data(),
 		{ 0.0f, 0.0f, 0.0f, 0.0f }
 	};

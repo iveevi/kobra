@@ -1273,12 +1273,11 @@ struct GraphicsPipelineInfo {
 	vk::CullModeFlags cull_mode = vk::CullModeFlagBits::eBack;
 	vk::FrontFace front_face = vk::FrontFace::eCounterClockwise;
 
-	bool blend_enabled = true;
 	bool depth_test = true;
 	bool depth_write = true;
 	bool no_bindings = false;
 
-	uint32_t color_blend_attachments = 1;
+	std::vector <bool> blend_attachments = { true };
 
 	// Constructor
 	GraphicsPipelineInfo(const vk::raii::Device &device,

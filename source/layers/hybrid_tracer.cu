@@ -33,6 +33,7 @@ struct PushConstants {
 	glm::mat4 model;
 	glm::mat4 view;
 	glm::mat4 projection;
+	int index;
 };
 
 // Static member variables
@@ -72,6 +73,7 @@ static void allocate_framebuffer_images(HybridTracer &layer, const Context &cont
 	static vk::Format fmt_albedo = vk::Format::eR32G32B32A32Sfloat;
 	static vk::Format fmt_specular = vk::Format::eR32G32B32A32Sfloat;
 	static vk::Format fmt_extra = vk::Format::eR32G32B32A32Sfloat;
+	static vk::Format fmt_ids = vk::Format::eR8Uint;
 
 	// Other image propreties
 	static vk::MemoryPropertyFlags mem_flags = vk::MemoryPropertyFlagBits::eDeviceLocal;
@@ -109,6 +111,12 @@ static void allocate_framebuffer_images(HybridTracer &layer, const Context &cont
 	layer.extra = ImageData {
 		*context.phdev, *context.device,
 		fmt_extra, extent, tiling,
+		usage, layout, mem_flags, aspect
+	};
+
+	layer.ids = ImageData {
+		*context.phdev, *context.device,
+		fmt_ids, extent, tiling,
 		usage, layout, mem_flags, aspect
 	};
 }
@@ -151,7 +159,7 @@ static void load_optix_program_groups(HybridTracer &layer)
 	OPTIX_CHECK_LOG(
 		optixProgramGroupCreate(
 			layer.optix_context,
-			&program_desc1, 1,
+			&program_desc2, 1,
 			&program_options,
 			log, &sizeof_log,
 			&layer.optix_programs.miss
@@ -194,6 +202,7 @@ static void load_optix_program_groups(HybridTracer &layer)
 		)
 	);
 	
+	// TODO: get rid of shadow hit
 	OptixProgramGroupDesc program_desc5 {
 		.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
 		.hitgroup = {
@@ -232,8 +241,8 @@ static void load_optix_pipeline
 
 	OptixPipelineLinkOptions ppl_link_options = {};
 
-	ppl_link_options.maxTraceDepth = 5;
-	ppl_link_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
+	ppl_link_options.maxTraceDepth = 10;
+	ppl_link_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_NONE;
 		
 	OPTIX_CHECK_LOG(
 		optixPipelineCreate(
@@ -281,6 +290,11 @@ static void load_optix_pipeline
 			2
 		)
 	);
+
+	KOBRA_LOG_FUNC(Log::INFO) << "OptiX pipeline created: "
+		<< "direct traversable = " << direct_callable_stack_size_from_traversal << ", "
+		<< "direct state = " << direct_callable_stack_size_from_state << ", "
+		<< "continuation = " << continuation_stack_size << std::endl;
 }
 
 // Setup and load OptiX things
@@ -299,6 +313,7 @@ static void initialize_optix(HybridTracer &layer)
 	ppl_compile_options.numPayloadValues = 2;
 	ppl_compile_options.numAttributeValues = 0;
 	ppl_compile_options.exceptionFlags = OPTIX_EXCEPTION_FLAG_NONE;
+
 	ppl_compile_options.pipelineLaunchParamsVariableName = "ht_params";
 	
 	ppl_compile_options.usesPrimitiveTypeFlags =
@@ -310,7 +325,8 @@ static void initialize_optix(HybridTracer &layer)
 	// Module configuration
 	OptixModuleCompileOptions module_options = {};
 
-	module_options.optLevel = OPTIX_COMPILE_OPTIMIZATION_DEFAULT;
+	module_options.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_3;
+	module_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_NONE;
 
 	// Now load the module
 	char log[2048];
@@ -366,6 +382,7 @@ static void initialize_optix(HybridTracer &layer)
 	// G-buffer results
 	layer.launch_params.positions = layer.cuda_tex.positions;
 	layer.launch_params.normals = layer.cuda_tex.normals;
+	layer.launch_params.ids = layer.cuda_tex.ids;
 	
 	layer.launch_params.albedo = layer.cuda_tex.albedo;
 	layer.launch_params.specular = layer.cuda_tex.specular;
@@ -423,6 +440,8 @@ HybridTracer HybridTracer::make(const Context &context)
 	// Export to CUDA
 	layer.cuda_tex.positions = cuda::import_vulkan_texture_32f(*layer.device, layer.positions);
 	layer.cuda_tex.normals = cuda::import_vulkan_texture_32f(*layer.device, layer.normals);
+	layer.cuda_tex.ids = cuda::import_vulkan_texture_8u(*layer.device, layer.ids);
+
 	layer.cuda_tex.albedo = cuda::import_vulkan_texture_32f(*layer.device, layer.albedo);
 	layer.cuda_tex.specular = cuda::import_vulkan_texture_32f(*layer.device, layer.specular);
 	layer.cuda_tex.extra = cuda::import_vulkan_texture_32f(*layer.device, layer.extra);
@@ -439,9 +458,13 @@ HybridTracer HybridTracer::make(const Context &context)
 			layer.normals.format,
 			layer.albedo.format,
 			layer.specular.format,
-			layer.extra.format
+			layer.extra.format,
+			layer.ids.format
 		},
-		{eClear, eClear, eClear, eClear, eClear},
+		{
+			eClear, eClear, eClear,
+			eClear, eClear, eClear
+		},
 		layer.depth.format,
 		eClear
 	);
@@ -453,6 +476,7 @@ HybridTracer HybridTracer::make(const Context &context)
 		*layer.albedo.view,
 		*layer.specular.view,
 		*layer.extra.view,
+		*layer.ids.view,
 		*layer.depth.view
 	};
 
@@ -520,7 +544,11 @@ HybridTracer HybridTracer::make(const Context &context)
 		layer.gbuffer_ppl
 	};
 
-	gbuffer_grp_info.color_blend_attachments = 5;
+	gbuffer_grp_info.blend_attachments = {
+		true, true, true,
+		true, true, false
+	};
+
 	gbuffer_grp_info.cull_mode = vk::CullModeFlagBits::eNone;
 
 	layer.gbuffer_pipeline = make_graphics_pipeline(gbuffer_grp_info);
@@ -587,6 +615,17 @@ HybridTracer HybridTracer::make(const Context &context)
 
 	// Return
 	return layer;
+}
+
+// Set the environment map
+void set_envmap(HybridTracer &layer, const std::string &path)
+{
+	// First load the environment map
+	const auto &map = TextureManager::load_texture(
+		*layer.phdev, *layer.device, path, true
+	);
+
+	layer.cuda_tex.envmap = cuda::import_vulkan_texture(*layer.device, map);
 }
 
 // Create a descriptor set for the layer
@@ -958,34 +997,37 @@ static void update_sbt_data(HybridTracer &layer,
 
 		generate_submesh_data(*submesh, *submesh_transforms[i], hit_record.data);
 
-		/* Import textures if necessary
+		// Import textures if necessary
 		// TODO: method?
 		if (mat.has_albedo()) {
 			const ImageData &diffuse = TextureManager::load_texture(
-				_ctx.dev(), mat.albedo_texture
+				*layer.phdev, *layer.device, mat.albedo_texture
 			);
 
-			hg_sbt.data.textures.diffuse = cuda::import_vulkan_texture(*_ctx.device, diffuse);
-			hg_sbt.data.textures.has_diffuse = true;
+			hit_record.data.textures.diffuse
+				= cuda::import_vulkan_texture(*layer.device, diffuse);
+			hit_record.data.textures.has_diffuse = true;
 		}
 
 		if (mat.has_normal()) {
 			const ImageData &normal = TextureManager::load_texture(
-				_ctx.dev(), mat.normal_texture
+				*layer.phdev, *layer.device, mat.normal_texture
 			);
 
-			hg_sbt.data.textures.normal = cuda::import_vulkan_texture(*_ctx.device, normal);
-			hg_sbt.data.textures.has_normal = true;
+			hit_record.data.textures.normal
+				= cuda::import_vulkan_texture(*layer.device, normal);
+			hit_record.data.textures.has_normal = true;
 		}
 
 		if (mat.has_roughness()) {
 			const ImageData &roughness = TextureManager::load_texture(
-				_ctx.dev(), mat.roughness_texture
+				*layer.phdev, *layer.device, mat.roughness_texture
 			);
 
-			hg_sbt.data.textures.roughness = cuda::import_vulkan_texture(*_ctx.device, roughness);
-			hg_sbt.data.textures.has_roughness = true;
-		} */
+			hit_record.data.textures.roughness
+				= cuda::import_vulkan_texture(*layer.device, roughness);
+			hit_record.data.textures.has_roughness = true;
+		}
 	
 		optix::pack_header(layer.optix_programs.hit, hit_record);
 		hit_records[i] = hit_record;
@@ -994,6 +1036,7 @@ static void update_sbt_data(HybridTracer &layer,
 	// TODO: delete hit shadow below
 
 	// Duplicate the SBTs for the shadow program
+	// TODO: just get rid of this altogether
 	int size = hit_records.size();
 
 	hit_records.resize(size * 2);
@@ -1105,9 +1148,19 @@ static void generate_gbuffers(HybridTracer &layer,
 
 	// Set viewing position
 	layer.launch_params.camera = cuda::to_f3(transform.position);
+	
+	auto uvw = kobra::uvw_frame(camera, transform);
+
+	layer.launch_params.cam_u = cuda::to_f3(uvw.u);
+	layer.launch_params.cam_v = cuda::to_f3(uvw.v);
+	layer.launch_params.cam_w = cuda::to_f3(uvw.w);
 
 	// Get time
 	layer.launch_params.time = layer.timer.elapsed_start();
+
+	// Environment map
+	// TODO: detect changes in the environment map
+	layer.launch_params.envmap = layer.cuda_tex.envmap;
 
 	// Default render area (viewport and scissor)
 	RenderArea ra {{-1, -1}, {-1, -1}};
@@ -1119,9 +1172,17 @@ static void generate_gbuffers(HybridTracer &layer,
 		std::array <float, 4> {0.0f, 0.0f, 0.0f, 0.0f}
 	};
 
-	std::array <vk::ClearValue, 6> clear_values {
-		color_clear, color_clear, color_clear,
-		color_clear, color_clear,
+	std::array <vk::ClearValue, 7> clear_values {
+		color_clear,
+		color_clear,
+		color_clear,
+		color_clear,
+		color_clear,
+	
+		vk::ClearValue {
+			std::array <int, 4> {0}
+		},
+
 		vk::ClearValue {
 			vk::ClearDepthStencilValue {
 				1.0f, 0
@@ -1154,14 +1215,10 @@ static void generate_gbuffers(HybridTracer &layer,
 	pc.projection = camera.perspective_matrix();
 
 	// Render all entities with a rasterizer component
+	int submesh_index = 0;
 	for (int i = 0; i < ecs.size(); i++) {
 		if (ecs.exists <Rasterizer> (i)) {
 			pc.model = ecs.get <Transform> (i).matrix();
-
-			cmd.pushConstants <PushConstants> (*layer.gbuffer_ppl,
-				vk::ShaderStageFlagBits::eVertex,
-				0, pc
-			);
 
 			// Bind and draw
 			const Rasterizer &rasterizer = ecs.get <Rasterizer> (i);
@@ -1170,6 +1227,14 @@ static void generate_gbuffers(HybridTracer &layer,
 
 			int submeshes = rasterizer.size();
 			for (int i = 0; i < submeshes; i++) {
+				pc.index = submesh_index++;
+
+				// Push constants
+				cmd.pushConstants <PushConstants> (*layer.gbuffer_ppl,
+					vk::ShaderStageFlagBits::eVertex,
+					0, pc
+				);
+
 				// Bind buffers
 				cmd.bindVertexBuffers(0, *rasterizer.get_vertex_buffer(i).buffer, {0});
 				cmd.bindIndexBuffer(*rasterizer.get_index_buffer(i).buffer,
@@ -1286,6 +1351,7 @@ void compute(HybridTracer &layer,
 }
 
 // Render to the presentable framebuffer
+// TODO: custom extent
 void render(HybridTracer &layer,
 		const CommandBuffer &cmd,
 		const Framebuffer &framebuffer,

@@ -12,6 +12,7 @@ layout (push_constant) uniform PushConstants {
 	mat4 model;
 	mat4 view;
 	mat4 proj;
+	int index;
 };
 
 // G-buffer outputs
@@ -47,5 +48,5 @@ void main()
 	out_normal = normalize(mv_matrix * in_normal);
 	out_uv = in_uv;
 	out_tbn = tbn;
-	out_id = gl_VertexIndex;
+	out_id = index;
 }

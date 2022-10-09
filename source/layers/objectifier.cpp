@@ -103,7 +103,7 @@ Objectifier make_layer(const Context &context)
 		layer.ppl
 	};
 
-	grp_info.blend_enabled = false;
+	grp_info.blend_attachments = { false };
 
 	layer.pipeline = make_graphics_pipeline(grp_info);
 

@@ -40,6 +40,7 @@ struct HybridTracer {
 	// Geometry buffers
 	ImageData positions = nullptr;
 	ImageData normals = nullptr;
+	ImageData ids = nullptr;
 
 	// Material buffers
 	ImageData albedo = nullptr;
@@ -50,9 +51,13 @@ struct HybridTracer {
 	struct {
 		cudaTextureObject_t positions = 0;
 		cudaTextureObject_t normals = 0;
+		cudaTextureObject_t ids = 0;
+
 		cudaTextureObject_t albedo = 0;
 		cudaTextureObject_t specular = 0;
 		cudaTextureObject_t extra = 0;
+
+		cudaTextureObject_t envmap = 0;
 	} cuda_tex;
 
 	// CUDA launch stream
@@ -140,6 +145,8 @@ struct HybridTracer {
 };
 
 // Other methods
+void set_envmap(HybridTracer &, const std::string &);
+
 void compute(HybridTracer &, const ECS &, const Camera &, const Transform &);
 
 void render(HybridTracer &,

@@ -158,6 +158,10 @@ struct HT_Parameters {
 	// Camera position
 	float3 camera;
 
+	float3 cam_u;
+	float3 cam_v;
+	float3 cam_w;
+
 	// Time
 	float time;
 
@@ -169,10 +173,13 @@ struct HT_Parameters {
 	// G-buffer textures
 	cudaTextureObject_t positions;
 	cudaTextureObject_t normals;
+	cudaTextureObject_t ids;
 
 	cudaTextureObject_t albedo;
 	cudaTextureObject_t specular;
 	cudaTextureObject_t extra;
+
+	cudaTextureObject_t envmap;
 
 	// Lights
 	struct {

@@ -30,6 +30,7 @@ layout (location = 1) out vec4 g_normal;
 layout (location = 2) out vec4 g_albedo;
 layout (location = 3) out vec4 g_specular;
 layout (location = 4) out vec4 g_extra;
+layout (location = 5) out int g_id;
 
 // Color wheel
 #define COLOR_WHEEL_SIZE 8
@@ -70,4 +71,6 @@ void main()
 	g_extra = vec4(mat.shininess, mat.roughness, 0.0, 1.0); // TODO:
 								// refraction as
 								// well...
+	
+	g_id = in_id + 1;
 }

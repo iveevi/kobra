@@ -641,6 +641,11 @@ void OptixTracer::_initialize_optix()
 					direct_callable_stack_size_from_state, continuation_stack_size,
 					2  // maxTraversableDepth
 					) );
+
+		KOBRA_LOG_FUNC(Log::INFO) << "OptiX pipeline created: "
+			<< "direct traversable = " << direct_callable_stack_size_from_traversal << ", "
+			<< "direct state = " << direct_callable_stack_size_from_state << ", "
+			<< "continuation = " << continuation_stack_size << std::endl;
 	}
 
 	/////////////////////////////////
