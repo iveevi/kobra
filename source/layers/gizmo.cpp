@@ -85,7 +85,8 @@ static Rasterizer *make_translate_rasterizer(const Device &dev)
 	Submesh::transform(sphere, sphere_transform);
 
 	// Populate a mesh (TODO: turn in to a move operation)
-	Mesh mesh {{
+	// TODO: store this mesh in the structure
+	Mesh *mesh = new Mesh {{
 		cone_x,
 		cone_y,
 		cone_z,

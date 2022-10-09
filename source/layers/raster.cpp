@@ -213,7 +213,7 @@ Raster::Raster(const Context &ctx, const vk::AttachmentLoadOp &load)
 	{
 		auto box = Mesh::box({0, 0, 0}, {0.5, 0.01, 0.5});
 
-		_area_light = new Rasterizer(_ctx.dev(), box);
+		_area_light = new Rasterizer(_ctx.dev(), new Mesh(box));
 
 		// Setup descriptor set for area light
 		_cached_rasterizers.insert(_area_light);

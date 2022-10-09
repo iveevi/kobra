@@ -88,6 +88,9 @@ struct Rasterizer {
 					_dsets = {};
 	std::vector <Material>		materials;
 
+	// Mesh itself
+	const Mesh			*mesh = nullptr;
+
 	// Raster mode
 	RasterMode mode = RasterMode::eAlbedo;
 
@@ -95,7 +98,7 @@ struct Rasterizer {
 	Rasterizer() = delete;
 
 	// Constructor initializes the buffers
-	Rasterizer(const Device &, const Mesh &);
+	Rasterizer(const Device &, Mesh *);
 
 	// Properties
 	size_t size() const {

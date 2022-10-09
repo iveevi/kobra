@@ -19,6 +19,7 @@ layout (location = 0) out vec3 out_position;
 layout (location = 1) out vec3 out_normal;
 layout (location = 2) out vec2 out_uv;
 layout (location = 3) out mat3 out_tbn;
+layout (location = 6) out int out_id;
 
 void main()
 {
@@ -46,4 +47,5 @@ void main()
 	out_normal = normalize(mv_matrix * in_normal);
 	out_uv = in_uv;
 	out_tbn = tbn;
+	out_id = gl_VertexIndex;
 }

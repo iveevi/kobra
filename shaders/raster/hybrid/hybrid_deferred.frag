@@ -9,6 +9,7 @@ layout (location = 0) in vec3 in_position;
 layout (location = 1) in vec3 in_normal;
 layout (location = 2) in vec2 in_uv;
 layout (location = 3) in mat3 in_tbn;
+layout (location = 6) flat in int in_id;
 
 // Uniform buffer for material
 layout (binding = RASTER_BINDING_UBO) uniform MaterialBlock
@@ -30,6 +31,21 @@ layout (location = 2) out vec4 g_albedo;
 layout (location = 3) out vec4 g_specular;
 layout (location = 4) out vec4 g_extra;
 
+// Color wheel
+#define COLOR_WHEEL_SIZE 8
+
+vec3 color_wheel[COLOR_WHEEL_SIZE] = vec3[]
+(
+	vec3(1.0, 0.0, 0.0),
+	vec3(1.0, 1.0, 0.0),
+	vec3(0.0, 1.0, 0.0),
+	vec3(0.0, 1.0, 1.0),
+	vec3(0.0, 0.0, 1.0),
+	vec3(1.0, 0.0, 1.0),
+	vec3(1.0, 0.0, 0.0),
+	vec3(1.0, 1.0, 0.0)
+);
+
 void main()
 {
 	g_position = vec4(in_position, 1.0);
@@ -39,6 +55,8 @@ void main()
 		g_albedo = texture(albedo_map, in_uv);
 	else
 		g_albedo = vec4(mat.diffuse, 1.0);
+
+	// g_albedo.rgb = color_wheel[in_id % COLOR_WHEEL_SIZE];
 
 	// Normal (TODO: use int instead of float for has_normal)
 	if (mat.has_normal > 0.5) {

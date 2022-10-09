@@ -299,7 +299,7 @@ __device__ __forceinline__ float3 operator*(mat3 m, float3 v)
 	);
 }
 
-// Evaluate BRDF of material
+/* Evaluate BRDF of material
 __device__ float3 brdf(const Material &mat, float3 n, float3 wi,
 		float3 wo, bool entering, Shading out)
 {
@@ -424,7 +424,7 @@ float3 eval(const Material &mat, float3 n, float3 wo, bool entering,
 
 	// Fallback to GGX
 	return eval <GGX> (mat, n, wo, entering, wi, pdf, out, seed);
-}
+} */
 
 // Power heurestic
 static const float p = 2.0f;

@@ -11,6 +11,7 @@
 // Engine headers
 #include "../logger.hpp"
 #include "../cuda/error.cuh"
+#include "../cuda/math.cuh"
 
 namespace kobra {
 
@@ -34,6 +35,25 @@ void pack_header(const OptixProgramGroup &program, Record <T> &r)
 			program, &r
 		)
 	);
+}
+
+// Packing pointers for 32-bit registers
+template <class T>
+static KCUDA_INLINE KCUDA_HOST_DEVICE
+T *unpack_point(uint32_t i0, uint32_t i1)
+{
+	const uint64_t uptr = static_cast <uint64_t> (i0) << 32 | i1;
+	T *ptr = reinterpret_cast <T *> (uptr);
+	return ptr;
+}
+
+template <class T>
+static KCUDA_INLINE KCUDA_HOST_DEVICE
+void pack_pointer(T * ptr, uint32_t &i0, uint32_t &i1)
+{
+	const uint64_t uptr = reinterpret_cast <uint64_t> (ptr);
+	i0 = uptr >> 32;
+	i1 = uptr & 0x00000000ffffffff;
 }
 
 // TODO: move to source

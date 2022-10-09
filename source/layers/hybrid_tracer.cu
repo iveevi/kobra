@@ -26,7 +26,7 @@ namespace layers {
 // SBT record types
 using RaygenRecord = optix::Record <int>;
 using MissRecord = optix::Record <int>;
-using HitgroupRecord = optix::Record <int>;
+using HitRecord = optix::Record <optix::Hit>;
 
 // Push constants
 struct PushConstants {
@@ -113,49 +113,11 @@ static void allocate_framebuffer_images(HybridTracer &layer, const Context &cont
 	};
 }
 
-// Setup and load OptiX things
-static void initialize_optix(HybridTracer &layer)
+// Load OptiX program groups
+static void load_optix_program_groups(HybridTracer &layer)
 {
-	// Create the context
-	layer.optix_context = optix::make_context();
-
-	// Allocate a stream for the layer
-	CUDA_CHECK(cudaStreamCreate(&layer.optix_stream));
-	
-	// Pipeline configuration
-	OptixPipelineCompileOptions ppl_compile_options = {};
-
-	ppl_compile_options.usesMotionBlur = false;
-	ppl_compile_options.numPayloadValues = 2;
-	ppl_compile_options.numAttributeValues = 0;
-	ppl_compile_options.exceptionFlags = OPTIX_EXCEPTION_FLAG_NONE;
-	ppl_compile_options.pipelineLaunchParamsVariableName = "ht_params";
-	
-	ppl_compile_options.usesPrimitiveTypeFlags =
-		OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE;
-	
-	ppl_compile_options.traversableGraphFlags =
-		OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING;
-
-	// Module configuration
-	OptixModuleCompileOptions module_options = {};
-
-	module_options.optLevel = OPTIX_COMPILE_OPTIMIZATION_DEFAULT;
-
-	// Now load the module
-	char log[2048];
-	size_t sizeof_log = sizeof(log);
-
-	std::string file = common::read_file(OPTIX_PTX_FILE);
-	OPTIX_CHECK_LOG(
-		optixModuleCreateFromPTX(
-			layer.optix_context,
-			&module_options, &ppl_compile_options,
-			file.c_str(), file.size(),
-			log, &sizeof_log,
-			&layer.optix_module
-		)
-	);
+	static char log[2048];
+	static size_t sizeof_log = sizeof(log);
 
 	// Load programs
 	OptixProgramGroupOptions program_options = {};
@@ -197,6 +159,24 @@ static void initialize_optix(HybridTracer &layer)
 	);
 	
 	OptixProgramGroupDesc program_desc3 {
+		.kind = OPTIX_PROGRAM_GROUP_KIND_MISS,
+		.miss = {
+			.module = layer.optix_module,
+			.entryFunctionName = "__miss__shadow"
+		}
+	};
+
+	OPTIX_CHECK_LOG(
+		optixProgramGroupCreate(
+			layer.optix_context,
+			&program_desc3, 1,
+			&program_options,
+			log, &sizeof_log,
+			&layer.optix_programs.shadow_miss
+		)
+	);
+	
+	OptixProgramGroupDesc program_desc4 {
 		.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
 		.hitgroup = {
 			.moduleCH = layer.optix_module,
@@ -207,16 +187,47 @@ static void initialize_optix(HybridTracer &layer)
 	OPTIX_CHECK_LOG(
 		optixProgramGroupCreate(
 			layer.optix_context,
-			&program_desc3, 1,
+			&program_desc4, 1,
 			&program_options,
 			log, &sizeof_log,
 			&layer.optix_programs.hit
 		)
 	);
+	
+	OptixProgramGroupDesc program_desc5 {
+		.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
+		.hitgroup = {
+			.moduleCH = layer.optix_module,
+			.entryFunctionNameCH = "__closesthit__shadow",
+		}
+	};
+
+	OPTIX_CHECK_LOG(
+		optixProgramGroupCreate(
+			layer.optix_context,
+			&program_desc5, 1,
+			&program_options,
+			log, &sizeof_log,
+			&layer.optix_programs.shadow_hit
+		)
+	);
+}
+
+// Create and configure OptiX pipeline
+static void load_optix_pipeline
+		(HybridTracer &layer,
+		 const OptixPipelineCompileOptions &ppl_compile_options)
+{
+	static char log[2048];
+	static size_t sizeof_log = sizeof(log);
 
 	// Create the pipeline and configure it
 	std::vector <OptixProgramGroup> program_groups {
-		layer.optix_programs.raygen
+		layer.optix_programs.raygen,
+		layer.optix_programs.miss,
+		layer.optix_programs.shadow_miss,
+		layer.optix_programs.hit,
+		layer.optix_programs.shadow_hit
 	};
 
 	OptixPipelineLinkOptions ppl_link_options = {};
@@ -270,29 +281,75 @@ static void initialize_optix(HybridTracer &layer)
 			2
 		)
 	);
+}
+
+// Setup and load OptiX things
+static void initialize_optix(HybridTracer &layer)
+{
+	// Create the context
+	layer.optix_context = optix::make_context();
+
+	// Allocate a stream for the layer
+	CUDA_CHECK(cudaStreamCreate(&layer.optix_stream));
+	
+	// Pipeline configuration
+	OptixPipelineCompileOptions ppl_compile_options = {};
+
+	ppl_compile_options.usesMotionBlur = false;
+	ppl_compile_options.numPayloadValues = 2;
+	ppl_compile_options.numAttributeValues = 0;
+	ppl_compile_options.exceptionFlags = OPTIX_EXCEPTION_FLAG_NONE;
+	ppl_compile_options.pipelineLaunchParamsVariableName = "ht_params";
+	
+	ppl_compile_options.usesPrimitiveTypeFlags =
+		OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE;
+	
+	ppl_compile_options.traversableGraphFlags =
+		OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING;
+
+	// Module configuration
+	OptixModuleCompileOptions module_options = {};
+
+	module_options.optLevel = OPTIX_COMPILE_OPTIMIZATION_DEFAULT;
+
+	// Now load the module
+	char log[2048];
+	size_t sizeof_log = sizeof(log);
+
+	std::string file = common::read_file(OPTIX_PTX_FILE);
+	OPTIX_CHECK_LOG(
+		optixModuleCreateFromPTX(
+			layer.optix_context,
+			&module_options, &ppl_compile_options,
+			file.c_str(), file.size(),
+			log, &sizeof_log,
+			&layer.optix_module
+		)
+	);
+
+	// Load programs
+	load_optix_program_groups(layer);
+
+	// Create the pipeline and configure it
+	load_optix_pipeline(layer, ppl_compile_options);
 
 	// Create the shader binding table
 	std::vector <RaygenRecord> rg_records(1);
-	std::vector <MissRecord> ms_records(1);
-	std::vector <HitgroupRecord> hg_records(1);
+	std::vector <MissRecord> ms_records(2);
 
 	optix::pack_header(layer.optix_programs.raygen, rg_records[0]);
+
 	optix::pack_header(layer.optix_programs.miss, ms_records[0]);
-	optix::pack_header(layer.optix_programs.hit, hg_records[0]);
+	optix::pack_header(layer.optix_programs.shadow_miss, ms_records[1]);
 
-	CUdeviceptr d_rg_sbt = cuda::make_buffer_ptr(rg_records);
-	CUdeviceptr d_ms_sbt = cuda::make_buffer_ptr(ms_records);
-	CUdeviceptr d_hg_sbt = cuda::make_buffer_ptr(hg_records);
+	CUdeviceptr d_raygen_sbt = cuda::make_buffer_ptr(rg_records);
+	CUdeviceptr d_miss_sbt = cuda::make_buffer_ptr(ms_records);
 
-	layer.optix_sbt.raygenRecord = d_rg_sbt;
+	layer.optix_sbt.raygenRecord = d_raygen_sbt;
 	
-	layer.optix_sbt.missRecordBase = d_ms_sbt;
+	layer.optix_sbt.missRecordBase = d_miss_sbt;
 	layer.optix_sbt.missRecordCount = ms_records.size();
 	layer.optix_sbt.missRecordStrideInBytes = sizeof(MissRecord);
-
-	layer.optix_sbt.hitgroupRecordBase = d_hg_sbt;
-	layer.optix_sbt.hitgroupRecordCount = hg_records.size();
-	layer.optix_sbt.hitgroupRecordStrideInBytes = sizeof(HitgroupRecord);
 
 	// Configure launch parameters
 	layer.launch_params.resolution = {
@@ -314,6 +371,10 @@ static void initialize_optix(HybridTracer &layer)
 	layer.launch_params.specular = layer.cuda_tex.specular;
 	layer.launch_params.extra = layer.cuda_tex.extra;
 
+	// Lights (set to null, etc)
+	layer.launch_params.lights.quad_count = 0;
+	layer.launch_params.lights.triangle_count = 0;
+
 	// Allocate the parameters buffer
 	layer.launch_params_buffer = cuda::alloc(
 		sizeof(optix::HT_Parameters)
@@ -324,6 +385,9 @@ static void initialize_optix(HybridTracer &layer)
 		layer.extent.width * layer.extent.height
 		* sizeof(uint32_t)
 	);
+
+	// Start the timer
+	layer.timer.start();
 }
 
 // Create the layer
@@ -457,6 +521,7 @@ HybridTracer HybridTracer::make(const Context &context)
 	};
 
 	gbuffer_grp_info.color_blend_attachments = 5;
+	gbuffer_grp_info.cull_mode = vk::CullModeFlagBits::eNone;
 
 	layer.gbuffer_pipeline = make_graphics_pipeline(gbuffer_grp_info);
 
@@ -590,6 +655,364 @@ static void configure_dset(HybridTracer &layer,
 	}
 }
 
+// Update the light buffers if needed
+static void update_light_buffers(HybridTracer &layer,
+		const std::vector <const Light *> &lights,
+		const std::vector <const Transform *> &light_transforms)
+{
+	if (layer.host.quad_lights.size() != lights.size()) {
+		layer.host.quad_lights.resize(lights.size());
+	
+		auto &quad_lights = layer.host.quad_lights;
+		for (int i = 0; i < lights.size(); i++) {
+			const Light *light = lights[i];
+			const Transform *transform = light_transforms[i];
+			
+			glm::vec3 a {-0.5f, 0, -0.5f};
+			glm::vec3 b {0.5f, 0, -0.5f};
+			glm::vec3 c {-0.5f, 0, 0.5f};
+
+			a = transform->apply(a);
+			b = transform->apply(b);
+			c = transform->apply(c);
+
+			quad_lights[i].a = cuda::to_f3(a);
+			quad_lights[i].ab = cuda::to_f3(b - a);
+			quad_lights[i].ac = cuda::to_f3(c - a);
+			quad_lights[i].intensity = cuda::to_f3(light->power * light->color);
+		}
+
+		layer.launch_params.lights.quads = cuda::make_buffer(quad_lights);
+		layer.launch_params.lights.quad_count = quad_lights.size();
+	}
+}
+
+// Build or update acceleration structures for the scene
+static void update_acceleration_structure(HybridTracer &layer,
+		const std::vector <const Submesh *> &submeshes,
+		const std::vector <const Transform *> &submesh_transforms)
+{
+	int submesh_count = submeshes.size();
+
+	// Build acceleration structures
+	OptixAccelBuildOptions gas_accel_options = {};
+	gas_accel_options.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
+	gas_accel_options.operation  = OPTIX_BUILD_OPERATION_BUILD;
+
+	std::vector <OptixTraversableHandle> instance_gas(submesh_count);
+	
+	// Flags
+	const uint32_t triangle_input_flags[1] = {OPTIX_GEOMETRY_FLAG_NONE};
+
+	KOBRA_LOG_FUNC(Log::INFO) << "Building GAS for instances (# = "
+		<< submesh_count << ")" << std::endl;
+
+	// TODO: CACHE the vertices for the sbts
+	// TODO: reuse the vertex buffer from the rasterizer
+
+	for (int i = 0; i < submesh_count; i++) {
+		const Submesh *s = submeshes[i];
+
+		// Prepare submesh vertices and triangles
+		std::vector <float3> vertices;
+		std::vector <uint3> triangles;
+		
+		// TODO: method to generate accel handle from cuda buffers
+		for (int j = 0; j < s->indices.size(); j += 3) {
+			triangles.push_back({
+				s->indices[j],
+				s->indices[j + 1],
+				s->indices[j + 2]
+			});
+		}
+
+		for (int j = 0; j < s->vertices.size(); j++) {
+			auto p = s->vertices[j].position;
+			vertices.push_back(cuda::to_f3(p));
+		}
+
+		// Create the build input
+		OptixBuildInput build_input {};
+
+		build_input.type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
+
+		CUdeviceptr d_vertices = cuda::make_buffer_ptr(vertices);
+		CUdeviceptr d_triangles = cuda::make_buffer_ptr(triangles);
+
+		OptixBuildInputTriangleArray &triangle_array = build_input.triangleArray;
+		triangle_array.vertexFormat	= OPTIX_VERTEX_FORMAT_FLOAT3;
+		triangle_array.numVertices	= vertices.size();
+		triangle_array.vertexBuffers	= &d_vertices;
+
+		triangle_array.indexFormat	= OPTIX_INDICES_FORMAT_UNSIGNED_INT3;
+		triangle_array.numIndexTriplets	= triangles.size();
+		triangle_array.indexBuffer	= d_triangles;
+
+		triangle_array.flags		= triangle_input_flags;
+
+		// SBT record properties
+		triangle_array.numSbtRecords	= 1;
+		triangle_array.sbtIndexOffsetBuffer = 0;
+		triangle_array.sbtIndexOffsetStrideInBytes = 0;
+		triangle_array.sbtIndexOffsetSizeInBytes = 0;
+
+		// Build GAS
+		CUdeviceptr d_gas_output;
+		CUdeviceptr d_gas_tmp;
+
+		OptixAccelBufferSizes gas_buffer_sizes;
+		OPTIX_CHECK(
+			optixAccelComputeMemoryUsage(
+				layer.optix_context, &gas_accel_options,
+				&build_input, 1,
+				&gas_buffer_sizes
+			)
+		);
+		
+		KOBRA_LOG_FUNC(Log::INFO) << "GAS buffer sizes: " << gas_buffer_sizes.tempSizeInBytes
+			<< " " << gas_buffer_sizes.outputSizeInBytes << std::endl;
+
+		d_gas_output = cuda::alloc(gas_buffer_sizes.outputSizeInBytes);
+		d_gas_tmp = cuda::alloc(gas_buffer_sizes.tempSizeInBytes);
+
+		OptixTraversableHandle handle;
+		OPTIX_CHECK(
+			optixAccelBuild(layer.optix_context,
+				0, &gas_accel_options,
+				&build_input, 1,
+				d_gas_tmp, gas_buffer_sizes.tempSizeInBytes,
+				d_gas_output, gas_buffer_sizes.outputSizeInBytes,
+				&handle, nullptr, 0
+			)
+		);
+
+		instance_gas[i] = handle;
+
+		// Free data at the end
+		cuda::free(d_vertices);
+		cuda::free(d_triangles);
+		cuda::free(d_gas_tmp);
+	}
+
+	// Build instances and top level acceleration structure
+	std::vector <OptixInstance> instances;
+
+	for (int i = 0; i < submesh_count; i++) {
+		glm::mat4 mat = submesh_transforms[i]->matrix();
+
+		float transform[12] = {
+			mat[0][0], mat[1][0], mat[2][0], mat[3][0],
+			mat[0][1], mat[1][1], mat[2][1], mat[3][1],
+			mat[0][2], mat[1][2], mat[2][2], mat[3][2]
+		};
+
+		OptixInstance instance {};
+		memcpy(instance.transform, transform, sizeof(float) * 12);
+
+		// Set the instance handle
+		instance.traversableHandle = instance_gas[i];
+		instance.visibilityMask = 0b1;
+		instance.sbtOffset = i;
+
+		instances.push_back(instance);
+	}
+
+	// Create top level acceleration structure
+	CUdeviceptr d_instances = cuda::make_buffer_ptr(instances);
+
+	// TLAS for objects and lights
+	{
+		OptixBuildInput ias_build_input {};
+		ias_build_input.type = OPTIX_BUILD_INPUT_TYPE_INSTANCES;
+		ias_build_input.instanceArray.instances = d_instances;
+		ias_build_input.instanceArray.numInstances = instances.size();
+
+		// IAS options
+		OptixAccelBuildOptions ias_accel_options {};
+		ias_accel_options.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
+		ias_accel_options.operation = OPTIX_BUILD_OPERATION_BUILD;
+
+		// IAS buffer sizes
+		OptixAccelBufferSizes ias_buffer_sizes;
+		OPTIX_CHECK(
+			optixAccelComputeMemoryUsage(
+				layer.optix_context, &ias_accel_options,
+				&ias_build_input, 1,
+				&ias_buffer_sizes
+			)
+		);
+
+		KOBRA_LOG_FUNC(Log::INFO) << "IAS buffer sizes: " << ias_buffer_sizes.tempSizeInBytes << " " << ias_buffer_sizes.outputSizeInBytes << std::endl;
+
+		// Allocate the IAS
+		CUdeviceptr d_ias_output = cuda::alloc(ias_buffer_sizes.outputSizeInBytes);
+		CUdeviceptr d_ias_tmp = cuda::alloc(ias_buffer_sizes.tempSizeInBytes);
+
+		// Build the IAS
+		OPTIX_CHECK(
+			optixAccelBuild(layer.optix_context,
+				0, &ias_accel_options,
+				&ias_build_input, 1,
+				d_ias_tmp, ias_buffer_sizes.tempSizeInBytes,
+				d_ias_output, ias_buffer_sizes.outputSizeInBytes,
+				&layer.optix.handle, nullptr, 0
+			)
+		);
+
+		cuda::free(d_ias_tmp);
+		cuda::free(d_instances);
+	}
+
+	// Copy address to launch parameters
+	layer.launch_params.traversable = layer.optix.handle;
+}
+
+static void generate_submesh_data
+		(const Submesh &submesh,
+		const Transform &transform,
+		optix::Hit &data)
+{
+	std::vector <float3> vertices(submesh.vertices.size());
+	std::vector <float2> uvs(submesh.vertices.size());
+	std::vector <uint3> triangles(submesh.triangles());
+	
+	std::vector <float3> normals(submesh.vertices.size());
+	std::vector <float3> tangents(submesh.vertices.size());
+	std::vector <float3> bitangents(submesh.vertices.size());
+
+	int vertex_index = 0;
+	int uv_index = 0;
+	int triangle_index = 0;
+	
+	int normal_index = 0;
+	int tangent_index = 0;
+	int bitangent_index = 0;
+
+	for (int j = 0; j < submesh.vertices.size(); j++) {
+		glm::vec3 n = submesh.vertices[j].normal;
+		glm::vec3 t = submesh.vertices[j].tangent;
+		glm::vec3 b = submesh.vertices[j].bitangent;
+		
+		glm::vec3 v = submesh.vertices[j].position;
+		glm::vec2 uv = submesh.vertices[j].tex_coords;
+
+		v = transform.apply(v);
+		n = transform.apply_vector(n);
+		t = transform.apply_vector(t);
+		b = transform.apply_vector(b);
+		
+		normals[normal_index++] = {n.x, n.y, n.z};
+		tangents[tangent_index++] = {t.x, t.y, t.z};
+		bitangents[bitangent_index++] = {b.x, b.y, b.z};
+
+		vertices[vertex_index++] = {v.x, v.y, v.z};
+		uvs[uv_index++] = {uv.x, uv.y};
+	}
+
+	for (int j = 0; j < submesh.indices.size(); j += 3) {
+		triangles[triangle_index++] = {
+			submesh.indices[j],
+			submesh.indices[j + 1],
+			submesh.indices[j + 2]
+		};
+	}
+
+	// Store the data
+	// TODO: cache later
+	data.vertices = cuda::make_buffer(vertices);
+	data.texcoords = cuda::make_buffer(uvs);
+
+	data.normals = cuda::make_buffer(normals);
+	data.tangents = cuda::make_buffer(tangents);
+	data.bitangents = cuda::make_buffer(bitangents);
+
+	data.triangles = cuda::make_buffer(triangles);
+}
+
+// Update the SBT data
+static void update_sbt_data(HybridTracer &layer,
+		const std::vector <const Submesh *> &submeshes,
+		const std::vector <const Transform *> &submesh_transforms)
+{
+	int submesh_count = submeshes.size();
+
+	std::vector <HitRecord> hit_records(submesh_count);
+	for (int i = 0; i < submesh_count; i++) {
+		const Submesh *submesh = submeshes[i];
+
+		// Material
+		Material mat = submesh->material;
+
+		cuda::Material material;
+		material.diffuse = cuda::to_f3(mat.diffuse);
+		material.specular = cuda::to_f3(mat.specular);
+		material.emission = cuda::to_f3(mat.emission);
+		material.ambient = cuda::to_f3(mat.ambient);
+		material.shininess = mat.shininess;
+		material.roughness = mat.roughness;
+		material.refraction = mat.refraction;
+		material.type = mat.type;
+
+		HitRecord hit_record {};
+		hit_record.data.material = material;
+
+		generate_submesh_data(*submesh, *submesh_transforms[i], hit_record.data);
+
+		/* Import textures if necessary
+		// TODO: method?
+		if (mat.has_albedo()) {
+			const ImageData &diffuse = TextureManager::load_texture(
+				_ctx.dev(), mat.albedo_texture
+			);
+
+			hg_sbt.data.textures.diffuse = cuda::import_vulkan_texture(*_ctx.device, diffuse);
+			hg_sbt.data.textures.has_diffuse = true;
+		}
+
+		if (mat.has_normal()) {
+			const ImageData &normal = TextureManager::load_texture(
+				_ctx.dev(), mat.normal_texture
+			);
+
+			hg_sbt.data.textures.normal = cuda::import_vulkan_texture(*_ctx.device, normal);
+			hg_sbt.data.textures.has_normal = true;
+		}
+
+		if (mat.has_roughness()) {
+			const ImageData &roughness = TextureManager::load_texture(
+				_ctx.dev(), mat.roughness_texture
+			);
+
+			hg_sbt.data.textures.roughness = cuda::import_vulkan_texture(*_ctx.device, roughness);
+			hg_sbt.data.textures.has_roughness = true;
+		} */
+	
+		optix::pack_header(layer.optix_programs.hit, hit_record);
+		hit_records[i] = hit_record;
+	}
+	
+	// TODO: delete hit shadow below
+
+	// Duplicate the SBTs for the shadow program
+	int size = hit_records.size();
+
+	hit_records.resize(size * 2);
+	for (int i = 0; i < size; i++) {
+		HitRecord hit_record = hit_records[i];
+		optix::pack_header(layer.optix_programs.shadow_hit, hit_record);
+		hit_records[size + i] = hit_record;
+	}
+
+	// Update the SBT
+	CUdeviceptr d_hit_records = cuda::make_buffer_ptr(hit_records);
+	
+	layer.optix_sbt.hitgroupRecordBase = d_hit_records;
+	layer.optix_sbt.hitgroupRecordCount = hit_records.size();
+	layer.optix_sbt.hitgroupRecordStrideInBytes = sizeof(HitRecord);
+
+	layer.launch_params.instances = submesh_count;
+}
+
 // Render the deferred stage (generate the G-buffer)
 
 // TODO: perform this in a separate command buffer than the main one used to
@@ -603,13 +1026,20 @@ static void generate_gbuffers(HybridTracer &layer,
 
 	// Preprocess the entities
 	std::vector <const Rasterizer *> rasterizers;
+	std::vector <const Transform *> rasterizer_transforms;
+
+	std::vector <const Light *> lights;
+	std::vector <const Transform *> light_transforms;
 
 	for (int i = 0; i < ecs.size(); i++) {
 		// TODO: one unifying renderer component, with options for
 		// raytracing, etc
 		if (ecs.exists <Rasterizer> (i)) {
 			const auto *rasterizer = &ecs.get <Rasterizer> (i);
+			const auto *transform = &ecs.get <Transform> (i);
+
 			rasterizers.push_back(rasterizer);
+			rasterizer_transforms.push_back(transform);
 
 			// If not it the dsets dictionary, create it
 			if (layer.gbuffer_dsets.find(rasterizer) ==
@@ -623,7 +1053,61 @@ static void generate_gbuffers(HybridTracer &layer,
 				configure_dset(layer, layer.gbuffer_dsets[rasterizer], rasterizer);
 			}
 		}
+		
+		if (ecs.exists <Light> (i)) {
+			const auto *light = &ecs.get <Light> (i);
+			const auto *transform = &ecs.get <Transform> (i);
+
+			lights.push_back(light);
+			light_transforms.push_back(transform);
+		}
 	}
+
+	// Check if an update is needed
+	bool update = false;
+	if (rasterizers.size() == layer.cache.rasterizers.size()) {
+		for (int i = 0; i < rasterizers.size(); i++) {
+			if (rasterizers[i] != layer.cache.rasterizers[i]) {
+				update = true;
+				break;
+			}
+		}
+	} else {
+		update = true;
+	}
+
+	// Update data if necessary 
+	if (update) {
+		// Update the cache
+		layer.cache.rasterizers = rasterizers;
+	
+		// Load the list of all submeshes
+		std::vector <const Submesh *> submeshes;
+		std::vector <const Transform *> submesh_transforms;
+
+		for (int i = 0; i < rasterizers.size(); i++) {
+			const Rasterizer *rasterizer = rasterizers[i];
+			const Transform *transform = rasterizer_transforms[i];
+
+			for (int j = 0; j < rasterizer->mesh->submeshes.size(); j++) {
+				const Submesh *submesh = &rasterizer->mesh->submeshes[j];
+
+				submeshes.push_back(submesh);
+				submesh_transforms.push_back(transform);
+			}
+		}
+
+		// Update the data
+		update_light_buffers(layer, lights, light_transforms);
+		update_acceleration_structure(layer, submeshes, submesh_transforms);
+		update_sbt_data(layer, submeshes, submesh_transforms);
+	}
+
+	// Set viewing position
+	layer.launch_params.camera = cuda::to_f3(transform.position);
+
+	// Get time
+	layer.launch_params.time = layer.timer.elapsed_start();
 
 	// Default render area (viewport and scissor)
 	RenderArea ra {{-1, -1}, {-1, -1}};
@@ -771,6 +1255,8 @@ void compute(HybridTracer &layer,
 		)
 	);
 	
+	CUDA_SYNC_CHECK();
+
 	// Conversion kernel
 	uint width = layer.extent.width;
 	uint height = layer.extent.height;

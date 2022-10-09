@@ -6,12 +6,13 @@
 namespace kobra {
 
 // Rasterizer
-Rasterizer::Rasterizer(const Device &dev, const Mesh &mesh)
+Rasterizer::Rasterizer(const Device &dev, Mesh *mesh_)
+		: mesh(mesh_)
 {
-	for (size_t i = 0; i < mesh.submeshes.size(); i++) {
+	for (size_t i = 0; i < mesh->submeshes.size(); i++) {
 		// Allocate memory for the vertex, index, and uniform buffers
-		vk::DeviceSize vbuf_size = mesh[i].vertices.size() * sizeof(Vertex);
-		vk::DeviceSize ibuf_size = mesh[i].indices.size() * sizeof(uint32_t);
+		vk::DeviceSize vbuf_size = (*mesh)[i].vertices.size() * sizeof(Vertex);
+		vk::DeviceSize ibuf_size = (*mesh)[i].indices.size() * sizeof(uint32_t);
 
 		vertex_buffer.emplace_back(*dev.phdev, *dev.device,
 			vbuf_size,
@@ -35,11 +36,11 @@ Rasterizer::Rasterizer(const Device &dev, const Mesh &mesh)
 		);
 
 		// Upload data to buffers
-		vertex_buffer[i].upload(mesh[i].vertices);
-		index_buffer[i].upload(mesh[i].indices);
+		vertex_buffer[i].upload((*mesh)[i].vertices);
+		index_buffer[i].upload((*mesh)[i].indices);
 
 		// UBO
-		kobra::Material mat = mesh[i].material;
+		kobra::Material mat = (*mesh)[i].material;
 
 		UBO ubo_data {
 			.diffuse = mat.diffuse,
@@ -58,8 +59,8 @@ Rasterizer::Rasterizer(const Device &dev, const Mesh &mesh)
 		ubo[i].upload(&ubo_data, sizeof(UBO));
 
 		// Other data
-		index_count.push_back(mesh[i].indices.size());
-		materials.push_back(mesh[i].material);
+		index_count.push_back((*mesh)[i].indices.size());
+		materials.push_back((*mesh)[i].material);
 	}
 }
 

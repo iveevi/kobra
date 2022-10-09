@@ -11,8 +11,9 @@
 
 // Engine headers
 #include "../backend.hpp"
-#include "../vertex.hpp"
 #include "../optix/parameters.cuh"
+#include "../timer.hpp"
+#include "../vertex.hpp"
 
 namespace kobra {
 
@@ -93,11 +94,18 @@ struct HybridTracer {
 	OptixPipeline optix_pipeline = nullptr;
 	OptixShaderBindingTable optix_sbt = {};
 
+	struct {
+		OptixTraversableHandle handle = 0;
+	} optix;
+
 	// Program groups
 	struct {
 		OptixProgramGroup raygen = nullptr;
 		OptixProgramGroup miss = nullptr;
 		OptixProgramGroup hit = nullptr;
+
+		OptixProgramGroup shadow_miss = nullptr;
+		OptixProgramGroup shadow_hit = nullptr;
 	} optix_programs;
 
 	// Launch parameters
@@ -105,6 +113,19 @@ struct HybridTracer {
 
 	CUdeviceptr launch_params_buffer = 0;
 	CUdeviceptr truncated = 0;
+
+	// Host buffer analogues
+	struct {
+		std::vector <optix::QuadLight> quad_lights;
+	} host;
+
+	// Cached data
+	struct {
+		std::vector <const Rasterizer *> rasterizers;
+	} cache;
+
+	// Timer
+	Timer timer;
 
 	// Output buffer
 	std::vector <uint32_t> color_buffer;

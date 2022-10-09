@@ -394,7 +394,7 @@ void load_rasterizer(Entity &e, std::ifstream &fin, const Device &dev)
 		return;
 	}
 
-	e.add <Rasterizer> (dev, e.get <Mesh> ());
+	e.add <Rasterizer> (dev, &e.get <Mesh> ());
 
 	// Read mode
 	std::string line;
