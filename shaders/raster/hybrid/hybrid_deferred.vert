@@ -46,7 +46,7 @@ void main()
 	// Pass outputs
 	out_position = vec3(model * vec4(in_position, 1.0));
 	out_normal = normalize(mv_matrix * in_normal);
-	out_uv = in_uv;
+	out_uv = vec2(in_uv.x, 1.0 - in_uv.y);
 	out_tbn = tbn;
 	out_id = index;
 }

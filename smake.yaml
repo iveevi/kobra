@@ -55,6 +55,7 @@ definitions:
     ffi,
     opencv_core,
     opencv_videoio,
+    opencv_imgcodecs,
     opencv_imgproc'
 
 builds:
@@ -71,7 +72,7 @@ builds:
   - hybrid_ptx_release:
     - sources: source/optix/hybrid_rt.cu
     - idirs: includes
-    - flags: '-ptx -lineinfo'
+    - flags: '-ptx -O3'
     - options: 'nolink, output_dir=./bin/ptx, output_format={filename}.ptx'
   - glsl_compute:
     - sources: shaders/rt/progressive_path_tracer.glsl

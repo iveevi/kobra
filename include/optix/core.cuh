@@ -40,7 +40,7 @@ void pack_header(const OptixProgramGroup &program, Record <T> &r)
 // Packing pointers for 32-bit registers
 template <class T>
 static KCUDA_INLINE KCUDA_HOST_DEVICE
-T *unpack_point(uint32_t i0, uint32_t i1)
+T *unpack_pointer(uint32_t i0, uint32_t i1)
 {
 	const uint64_t uptr = static_cast <uint64_t> (i0) << 32 | i1;
 	T *ptr = reinterpret_cast <T *> (uptr);

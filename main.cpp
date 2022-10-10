@@ -29,7 +29,7 @@
 using namespace kobra;
 
 // Scene path
-std::string scene_path = "/home/venki/models/fireplace_room.kobra";
+std::string scene_path = "/home/venki/models/sponza.kobra";
 // std::string scene_path = "scenes/ggx.kobra";
 
 // Test app
@@ -664,7 +664,7 @@ struct ECSApp : public BaseApp {
 			auto pos = common::sprintf("{%.2f, %.2f, %.2f}", transform.position.x, transform.position.y, transform.position.z);
 			auto rot = common::sprintf("{%.2f, %.2f, %.2f}", transform.rotation.x, transform.rotation.y, transform.rotation.z);
 
-			printf("%30s %30s\n", pos.c_str(), rot.c_str());
+			printf("%s\t%s\n", pos.c_str(), rot.c_str());
 		}
 	}
 };

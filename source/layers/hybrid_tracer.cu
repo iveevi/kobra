@@ -15,6 +15,7 @@
 #include "../../include/texture_manager.hpp"
 #include "../../include/transform.hpp"
 #include "../../shaders/raster/bindings.h"
+#include "../../include/profiler.hpp"
 
 // OptiX Source PTX
 #define OPTIX_PTX_FILE "bin/ptx/hybrid_rt.ptx"
@@ -628,6 +629,19 @@ void set_envmap(HybridTracer &layer, const std::string &path)
 	layer.cuda_tex.envmap = cuda::import_vulkan_texture(*layer.device, map);
 }
 
+// Capture frame data
+void capture(HybridTracer &layer, std::vector <uint8_t> &data)
+{
+	int width = layer.extent.width;
+	int height = layer.extent.height;
+
+	// Copy the result image to the staging buffer
+	if (data.size() != width * height * 4)
+		data.resize(width * height * 4);
+
+	std::memcpy(data.data(), layer.color_buffer.data(), data.size());
+}
+
 // Create a descriptor set for the layer
 static HybridTracer::RasterizerDset serve_dset(HybridTracer &layer, uint32_t count)
 {
@@ -743,8 +757,7 @@ static void update_acceleration_structure(HybridTracer &layer,
 	// Flags
 	const uint32_t triangle_input_flags[1] = {OPTIX_GEOMETRY_FLAG_NONE};
 
-	KOBRA_LOG_FUNC(Log::INFO) << "Building GAS for instances (# = "
-		<< submesh_count << ")" << std::endl;
+	KOBRA_LOG_FUNC(Log::INFO) << "Building GAS for instances (# = " << submesh_count << ")" << std::endl;
 
 	// TODO: CACHE the vertices for the sbts
 	// TODO: reuse the vertex buffer from the rasterizer
@@ -1074,35 +1087,39 @@ static void generate_gbuffers(HybridTracer &layer,
 	std::vector <const Light *> lights;
 	std::vector <const Transform *> light_transforms;
 
-	for (int i = 0; i < ecs.size(); i++) {
-		// TODO: one unifying renderer component, with options for
-		// raytracing, etc
-		if (ecs.exists <Rasterizer> (i)) {
-			const auto *rasterizer = &ecs.get <Rasterizer> (i);
-			const auto *transform = &ecs.get <Transform> (i);
+	{
+		KOBRA_PROFILE_TASK(G-buffer preprocess of ECS)
 
-			rasterizers.push_back(rasterizer);
-			rasterizer_transforms.push_back(transform);
+		for (int i = 0; i < ecs.size(); i++) {
+			// TODO: one unifying renderer component, with options for
+			// raytracing, etc
+			if (ecs.exists <Rasterizer> (i)) {
+				const auto *rasterizer = &ecs.get <Rasterizer> (i);
+				const auto *transform = &ecs.get <Transform> (i);
 
-			// If not it the dsets dictionary, create it
-			if (layer.gbuffer_dsets.find(rasterizer) ==
-					layer.gbuffer_dsets.end()) {
-				layer.gbuffer_dsets[rasterizer] = serve_dset(
-					layer,
-					rasterizer->materials.size()
-				);
+				rasterizers.push_back(rasterizer);
+				rasterizer_transforms.push_back(transform);
 
-				// Configure the dset
-				configure_dset(layer, layer.gbuffer_dsets[rasterizer], rasterizer);
+				// If not it the dsets dictionary, create it
+				if (layer.gbuffer_dsets.find(rasterizer) ==
+						layer.gbuffer_dsets.end()) {
+					layer.gbuffer_dsets[rasterizer] = serve_dset(
+						layer,
+						rasterizer->materials.size()
+					);
+
+					// Configure the dset
+					configure_dset(layer, layer.gbuffer_dsets[rasterizer], rasterizer);
+				}
 			}
-		}
-		
-		if (ecs.exists <Light> (i)) {
-			const auto *light = &ecs.get <Light> (i);
-			const auto *transform = &ecs.get <Transform> (i);
+			
+			if (ecs.exists <Light> (i)) {
+				const auto *light = &ecs.get <Light> (i);
+				const auto *transform = &ecs.get <Transform> (i);
 
-			lights.push_back(light);
-			light_transforms.push_back(transform);
+				lights.push_back(light);
+				light_transforms.push_back(transform);
+			}
 		}
 	}
 
@@ -1121,6 +1138,8 @@ static void generate_gbuffers(HybridTracer &layer,
 
 	// Update data if necessary 
 	if (update) {
+		KOBRA_PROFILE_TASK(G-buffer update)
+
 		// Update the cache
 		layer.cache.rasterizers = rasterizers;
 	
@@ -1215,41 +1234,46 @@ static void generate_gbuffers(HybridTracer &layer,
 	pc.projection = camera.perspective_matrix();
 
 	// Render all entities with a rasterizer component
-	int submesh_index = 0;
-	for (int i = 0; i < ecs.size(); i++) {
-		if (ecs.exists <Rasterizer> (i)) {
-			pc.model = ecs.get <Transform> (i).matrix();
+	{
+		KOBRA_PROFILE_TASK(G-buffer adding draw commands)
 
-			// Bind and draw
-			const Rasterizer &rasterizer = ecs.get <Rasterizer> (i);
-			const HybridTracer::RasterizerDset &dset
-				= layer.gbuffer_dsets[&rasterizer];
+		int submesh_index = 0;
+		for (int i = 0; i < ecs.size(); i++) {
+			if (ecs.exists <Rasterizer> (i)) {
+				pc.model = ecs.get <Transform> (i).matrix();
 
-			int submeshes = rasterizer.size();
-			for (int i = 0; i < submeshes; i++) {
-				pc.index = submesh_index++;
+				// Bind and draw
+				const Rasterizer &rasterizer = ecs.get <Rasterizer> (i);
+				const HybridTracer::RasterizerDset &dset
+					= layer.gbuffer_dsets[&rasterizer];
 
-				// Push constants
-				cmd.pushConstants <PushConstants> (*layer.gbuffer_ppl,
-					vk::ShaderStageFlagBits::eVertex,
-					0, pc
-				);
+				int submeshes = rasterizer.size();
+				for (int i = 0; i < submeshes; i++) {
+					pc.index = submesh_index++;
 
-				// Bind buffers
-				cmd.bindVertexBuffers(0, *rasterizer.get_vertex_buffer(i).buffer, {0});
-				cmd.bindIndexBuffer(*rasterizer.get_index_buffer(i).buffer,
-					0, vk::IndexType::eUint32
-				);
+					// Push constants
+					cmd.pushConstants <PushConstants> (*layer.gbuffer_ppl,
+						vk::ShaderStageFlagBits::eVertex,
+						0, pc
+					);
 
-				// Bind descriptor set
-				cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-					*layer.gbuffer_ppl, 0, *dset[i], {}
-				);
+					// Bind buffers
+					cmd.bindVertexBuffers(0, *rasterizer.get_vertex_buffer(i).buffer, {0});
+					cmd.bindIndexBuffer(*rasterizer.get_index_buffer(i).buffer,
+						0, vk::IndexType::eUint32
+					);
 
-				// Draw
-				cmd.drawIndexed(rasterizer.get_index_count(i), 1, 0, 0, 0);
+					// Bind descriptor set
+					cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+						*layer.gbuffer_ppl, 0, *dset[i], {}
+					);
+
+					// Draw
+					cmd.drawIndexed(rasterizer.get_index_count(i), 1, 0, 0, 0);
+				}
 			}
 		}
+
 	}
 
 	// End render pass
@@ -1282,24 +1306,38 @@ void compute(HybridTracer &layer,
 		const Camera &camera,
 		const Transform &transform)
 {
+	KOBRA_PROFILE_TASK(HyrbidTracer compute path tracing);
+
 	// Generate the G-buffer
-	layer.cmd.begin({});
-		generate_gbuffers(layer, layer.cmd, ecs, camera, transform);
-	layer.cmd.end();
+	{
+		KOBRA_PROFILE_TASK(Rasterize G-buffer);
 
-	// Submit the command buffer
-	layer.queue.submit(
-		vk::SubmitInfo {
-			0, nullptr,
-			nullptr,
-			1, &*layer.cmd,
-			0, nullptr
-		},
-		nullptr
-	);
+		{
+			KOBRA_PROFILE_TASK(Update data and fill command buffer);
 
-	// Wait for the queue to finish
-	layer.queue.waitIdle();
+			layer.cmd.begin({});
+				generate_gbuffers(layer, layer.cmd, ecs, camera, transform);
+			layer.cmd.end();
+		}
+
+		{
+			KOBRA_PROFILE_TASK(Submit command buffer and wait for completion);
+
+			// Submit the command buffer
+			layer.queue.submit(
+				vk::SubmitInfo {
+					0, nullptr,
+					nullptr,
+					1, &*layer.cmd,
+					0, nullptr
+				},
+				nullptr
+			);
+
+			// Wait for the queue to finish
+			layer.queue.waitIdle();
+		}
+	}
 
 	// Copy parameters to the GPU
 	cuda::copy(
@@ -1308,46 +1346,56 @@ void compute(HybridTracer &layer,
 		cudaMemcpyHostToDevice
 	);
 	
-	// TODO: depth?
-	OPTIX_CHECK(
-		optixLaunch(
-			layer.optix_pipeline,
-			layer.optix_stream,
-			layer.launch_params_buffer,
-			sizeof(optix::HT_Parameters),
-			&layer.optix_sbt,
-			layer.extent.width, layer.extent.height, 1
-		)
-	);
-	
-	CUDA_SYNC_CHECK();
+	{
+		KOBRA_PROFILE_TASK(OptiX path tracing);
 
-	// Conversion kernel
-	uint width = layer.extent.width;
-	uint height = layer.extent.height;
+		// TODO: depth?
+		OPTIX_CHECK(
+			optixLaunch(
+				layer.optix_pipeline,
+				layer.optix_stream,
+				layer.launch_params_buffer,
+				sizeof(optix::HT_Parameters),
+				&layer.optix_sbt,
+				layer.extent.width, layer.extent.height, 1
+			)
+		);
+		
+		CUDA_SYNC_CHECK();
+	}
 
-	dim3 block(16, 16);
-	dim3 grid(
-		(width + block.x - 1)/block.x,
-		(height + block.y - 1)/block.y
-	);
+	{
+		KOBRA_PROFILE_TASK(Compute postprocessing);
 
-	compute_pixel_values <<<grid, block>>> (
-		layer.launch_params.color_buffer,
-		(uint32_t *) layer.truncated,
-		width, height, 1
-	);
-	
-	// Copy results to the CPU
-	uint32_t size = layer.extent.width * layer.extent.height;
-	if (layer.color_buffer.size() != size)
-		layer.color_buffer.resize(size);
+		// Conversion kernel
+		uint width = layer.extent.width;
+		uint height = layer.extent.height;
 
-	cuda::copy(
-		layer.color_buffer,
-		layer.truncated,
-		size
-	);
+		dim3 block(16, 16);
+		dim3 grid(
+			(width + block.x - 1)/block.x,
+			(height + block.y - 1)/block.y
+		);
+
+		compute_pixel_values <<<grid, block>>> (
+			layer.launch_params.color_buffer,
+			(uint32_t *) layer.truncated,
+			width, height, 0
+		);
+		
+		// Copy results to the CPU
+		uint32_t size = layer.extent.width * layer.extent.height;
+		if (layer.color_buffer.size() != size)
+			layer.color_buffer.resize(size);
+
+		cuda::copy(
+			layer.color_buffer,
+			layer.truncated,
+			size
+		);
+	}
+
+	KOBRA_PROFILE_PRINT();
 }
 
 // Render to the presentable framebuffer
