@@ -23,12 +23,12 @@ struct Reservoir {
 	int	max_count;
 
 	// Constructor
-	__forceinline__ __host__ __device__
+	KCUDA_INLINE KCUDA_HOST_DEVICE
 	Reservoir(int max) : W(0.0f), weight(0.0f),
 			count(0), max_count(max) {}
 
 	// Reset
-	__forceinline__ __device__
+	KCUDA_INLINE __device__
 	void reset() {
 		sample = Sample();
 		weight = 0.0f;
@@ -36,7 +36,7 @@ struct Reservoir {
 	}
 
 	// Update the reservoir
-	__forceinline__ __device__
+	KCUDA_INLINE __device__
 	void update(const Sample &sample, const float weight) {
 		static const float eps = 1e-4f;
 
@@ -54,7 +54,7 @@ struct Reservoir {
 	}
 
 	// Merge two reservoirs
-	__forceinline__ __device__
+	KCUDA_INLINE __device__
 	void merge(const Reservoir &reservoir, float target) {
 		int current = count;
 		update(reservoir.sample, target * reservoir.weight * reservoir.count);

@@ -369,16 +369,15 @@ static void initialize_optix(HybridTracer &layer)
 	layer.optix_sbt.missRecordStrideInBytes = sizeof(MissRecord);
 
 	// Configure launch parameters
-	layer.launch_params.resolution = {
+	auto &params = layer.launch_params;
+
+	int width = layer.extent.width;
+	int height = layer.extent.height;
+
+	params.resolution = {
 		layer.extent.width,
 		layer.extent.height
 	};
-
-	layer.launch_params.color_buffer = (float4 *)
-		cuda::alloc(
-			layer.extent.width * layer.extent.height
-			* sizeof(float4)
-		);
 
 	// G-buffer results
 	layer.launch_params.positions = layer.cuda_tex.positions;
@@ -392,6 +391,20 @@ static void initialize_optix(HybridTracer &layer)
 	// Lights (set to null, etc)
 	layer.launch_params.lights.quad_count = 0;
 	layer.launch_params.lights.triangle_count = 0;
+
+	// Accumulatoin on by default
+	layer.launch_params.accumulate = true;
+
+	// Advanced sampling resources
+	std::vector <optix::ReSTIR_Reservoir> r_temporal(width * height, 30);
+	params.advanced.r_temporal = cuda::make_buffer(r_temporal);
+
+	// Color buffe (output)
+	layer.launch_params.color_buffer = (float4 *)
+		cuda::alloc(
+			layer.extent.width * layer.extent.height
+			* sizeof(float4)
+		);
 
 	// Allocate the parameters buffer
 	layer.launch_params_buffer = cuda::alloc(
@@ -1163,6 +1176,9 @@ static void generate_gbuffers(HybridTracer &layer,
 		update_light_buffers(layer, lights, light_transforms);
 		update_acceleration_structure(layer, submeshes, submesh_transforms);
 		update_sbt_data(layer, submeshes, submesh_transforms);
+
+		// Reset the number of samples stored
+		layer.launch_params.samples = 0;
 	}
 
 	// Set viewing position
@@ -1304,7 +1320,8 @@ static __global__ void compute_pixel_values
 void compute(HybridTracer &layer,
 		const ECS &ecs,
 		const Camera &camera,
-		const Transform &transform)
+		const Transform &transform,
+		bool accumulate)
 {
 	KOBRA_PROFILE_TASK(HyrbidTracer compute path tracing);
 
@@ -1339,6 +1356,10 @@ void compute(HybridTracer &layer,
 		}
 	}
 
+	// Reset the accumulation state if needed
+	if (!accumulate)
+		layer.launch_params.samples = 0;
+
 	// Copy parameters to the GPU
 	cuda::copy(
 		layer.launch_params_buffer,
@@ -1362,6 +1383,9 @@ void compute(HybridTracer &layer,
 		);
 		
 		CUDA_SYNC_CHECK();
+
+		// Increment number of samples
+		layer.launch_params.samples++;
 	}
 
 	{

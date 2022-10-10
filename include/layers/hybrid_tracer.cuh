@@ -148,7 +148,7 @@ struct HybridTracer {
 void set_envmap(HybridTracer &, const std::string &);
 void capture(HybridTracer &, std::vector <uint8_t> &);
 
-void compute(HybridTracer &, const ECS &, const Camera &, const Transform &);
+void compute(HybridTracer &, const ECS &, const Camera &, const Transform &, bool = false);
 
 void render(HybridTracer &,
 	const CommandBuffer &,

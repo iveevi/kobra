@@ -2,9 +2,10 @@
 #define KOBRA_OPTIX_PARAMETERS_H_
 
 // Engine headers
+#include "../cuda/material.cuh"
 #include "../cuda/math.cuh"
 #include "../cuda/random.cuh"
-#include "../cuda/material.cuh"
+#include "reservoir.cuh"
 
 namespace kobra {
 
@@ -125,6 +126,13 @@ float3 sample_area_light(TriangleLight light, float3 &seed)
 	return light.a + u * light.ab + v * light.ac;
 }
 
+// Reservoir sample for ReSTIR
+struct PathSample {
+	float3 value;
+};
+
+using ReSTIR_Reservoir = Reservoir <PathSample>;
+
 // Hit data record
 struct Hit {
 	// Mesh data
@@ -165,6 +173,10 @@ struct HT_Parameters {
 	// Time
 	float time;
 
+	// Accumulation status
+	bool accumulate;
+	int samples;
+
 	// Scene information
 	OptixTraversableHandle traversable;
 
@@ -189,6 +201,11 @@ struct HT_Parameters {
 		uint quad_count;
 		uint triangle_count;
 	} lights;
+
+	// Reservoirs and advanced sampling strategies
+	struct {
+		ReSTIR_Reservoir *r_temporal;
+	} advanced;
 
 	// Output buffers
 	float4 *color_buffer;

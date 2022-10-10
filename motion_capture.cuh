@@ -230,6 +230,9 @@ struct MotionCapture : public kobra::BaseApp {
 	float time = 0.0f;
 	int mode = 0;
 
+	std::queue <bool> events;
+	std::mutex events_mutex;
+
 	void record(const vk::raii::CommandBuffer &cmd,
 			const vk::raii::Framebuffer &framebuffer) override {
 		// Move the camera
@@ -248,20 +251,40 @@ struct MotionCapture : public kobra::BaseApp {
 		glm::vec3 right = transform.right();
 		glm::vec3 up = transform.up();
 
-		if (io.input.is_key_down(GLFW_KEY_W))
+		bool accumulate = true;
+
+		if (io.input.is_key_down(GLFW_KEY_W)) {
 			transform.move(forward * speed);
-		else if (io.input.is_key_down(GLFW_KEY_S))
+			accumulate = false;
+		} else if (io.input.is_key_down(GLFW_KEY_S)) {
 			transform.move(-forward * speed);
+			accumulate = false;
+		}
 
-		if (io.input.is_key_down(GLFW_KEY_A))
+		if (io.input.is_key_down(GLFW_KEY_A)) {
 			transform.move(-right * speed);
-		else if (io.input.is_key_down(GLFW_KEY_D))
+			accumulate = false;
+		} else if (io.input.is_key_down(GLFW_KEY_D)) {
 			transform.move(right * speed);
+			accumulate = false;
+		}
 
-		if (io.input.is_key_down(GLFW_KEY_E))
+		if (io.input.is_key_down(GLFW_KEY_E)) {
 			transform.move(up * speed);
-		else if (io.input.is_key_down(GLFW_KEY_Q))
+			accumulate = false;
+		} else if (io.input.is_key_down(GLFW_KEY_Q)) {
 			transform.move(-up * speed);
+			accumulate = false;
+		}
+
+		// Also check our events
+		events_mutex.lock();
+		if (!events.empty())
+			accumulate = false; // Means that camera direction
+					    // changed
+
+		events = std::queue <bool> (); // Clear events
+		events_mutex.unlock();
 
 		// Now trace and render
 		cmd.begin({});
@@ -274,7 +297,8 @@ struct MotionCapture : public kobra::BaseApp {
 				kobra::layers::compute(hybrid_tracer,
 					scene.ecs,
 					camera.get <kobra::Camera> (),
-					camera.get <kobra::Transform> ()
+					camera.get <kobra::Transform> (),
+					accumulate
 				);
 
 				kobra::layers::render(hybrid_tracer, cmd, framebuffer);
@@ -382,6 +406,11 @@ struct MotionCapture : public kobra::BaseApp {
 
 			transform.rotation.x = pitch;
 			transform.rotation.y = yaw;
+
+			// Add to event queue
+			app.events_mutex.lock();
+			app.events.push(true);
+			app.events_mutex.unlock();
 		}
 
 		// Update previous position

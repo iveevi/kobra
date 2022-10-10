@@ -100,8 +100,8 @@ float3 compute_radiance(uint3 idx, float3 x, float3 n, float3 wo, const Material
 
 	// Store the result
 	RayPacket rp {
-		.throughput = f * abs(dot(wi, n))/pdf,
-		.value = direct,
+		.throughput = make_float3(1.0f),
+		.value = make_float3(0.0f),
 		.seed = seed,
 		.ior = 1, // TODO: get from textures
 		.depth = 1,
@@ -127,7 +127,33 @@ float3 compute_radiance(uint3 idx, float3 x, float3 n, float3 wo, const Material
 		);
 	}
 
-	return rp.value;
+	///////////////////////
+	// Advanced sampling //
+	///////////////////////
+	
+	// ReSTIR GI
+	//	Rese the reservoir if needed
+	int index = idx.x + idx.y * ht_params.resolution.x;
+
+	ReSTIR_Reservoir &r_temporal = ht_params.advanced.r_temporal[index];
+
+	if (ht_params.samples == 0)
+		r_temporal.reset();
+
+	// Proceed to add the current sample to the reservoir
+	float weight = length(rp.value)/pdf;
+	r_temporal.update(
+		PathSample {
+			.value = rp.value
+		},
+		weight
+	);
+
+	// Get resulting indirect illumination
+	float3 indirect = r_temporal.sample.value;
+
+	// Compute total radiance
+	return direct + indirect * f * abs(dot(n, wi))/pdf;
 }
 
 // Ray generation kernel
@@ -213,7 +239,13 @@ extern "C" __global__ void __raygen__rg()
 	radiance /= float(samples);
 
 	// Finally, store the result
-	ht_params.color_buffer[index] = make_float4(radiance);
+	if (ht_params.accumulate) {
+		float4 prev = ht_params.color_buffer[index];
+		float4 curr = make_float4(radiance, 1.0f);
+		ht_params.color_buffer[index] = (prev * ht_params.samples + curr)/(ht_params.samples + samples);
+	} else {
+		ht_params.color_buffer[index] = make_float4(radiance);
+	}
 }
 
 struct mat3 {
