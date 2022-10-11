@@ -17,6 +17,7 @@
 #include "include/layers/font_renderer.hpp"
 #include "include/layers/hybrid_tracer.cuh"
 #include "include/layers/optix_tracer.cuh"
+#include "include/layers/wadjet.cuh"
 #include "include/optix/options.cuh"
 #include "include/scene.hpp"
 
@@ -29,6 +30,7 @@ struct MotionCapture : public kobra::BaseApp {
 
 	kobra::layers::OptixTracer tracer;
 	kobra::layers::HybridTracer hybrid_tracer;
+	kobra::layers::Wadjet wadjet_tracer;
 	kobra::layers::FontRenderer font_renderer;
 
 	// Capture
@@ -186,13 +188,18 @@ struct MotionCapture : public kobra::BaseApp {
 
 		// Setup tracer
 		tracer.environment_map("resources/skies/background_1.jpg");
-		tracer.sampling_strategy = kobra::optix::eTemporal;
+		tracer.sampling_strategy = kobra::optix::eSpatioTemporal;
 		tracer.denoiser_enabled = false;
 
 		// Setup hybrid tracer
 		KOBRA_LOG_FILE(kobra::Log::INFO) << "Hybrid tracer setup\n";
 		hybrid_tracer = kobra::layers::HybridTracer::make(get_context());
 		kobra::layers::set_envmap(hybrid_tracer, "resources/skies/background_1.jpg");
+		
+		// Setup Wadjet tracer
+		KOBRA_LOG_FILE(kobra::Log::INFO) << "Hybrid tracer setup\n";
+		wadjet_tracer = kobra::layers::Wadjet::make(get_context());
+		kobra::layers::set_envmap(wadjet_tracer, "resources/skies/background_1.jpg");
 
 #ifdef RECORD
 
@@ -294,15 +301,15 @@ struct MotionCapture : public kobra::BaseApp {
 				tracer.render(cmd, framebuffer);
 				tracer.capture(frame);
 			} else {
-				kobra::layers::compute(hybrid_tracer,
+				kobra::layers::compute(wadjet_tracer,
 					scene.ecs,
 					camera.get <kobra::Camera> (),
 					camera.get <kobra::Transform> (),
 					accumulate
 				);
 
-				kobra::layers::render(hybrid_tracer, cmd, framebuffer);
-				kobra::layers::capture(hybrid_tracer, frame);
+				kobra::layers::render(wadjet_tracer, cmd, framebuffer);
+				kobra::layers::capture(wadjet_tracer, frame);
 			}
 
 			// Text to render

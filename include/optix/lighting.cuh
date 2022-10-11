@@ -6,7 +6,7 @@
 #include "../cuda/brdf.cuh"
 
 // Forward declarations
-bool shadow_visibility(float3, float3, float);
+bool is_occluded(float3, float3, float);
 
 namespace kobra {
 
@@ -30,7 +30,7 @@ KCUDA_HOST_DEVICE
 float3 Ld_light(const Light &light, float3 x, float3 wo, float3 n,
 		cuda::Material mat, bool entering, float3 &seed)
 {
-	static const float eps = 1e-3f;
+	static const float eps = 0.05f;
 
 	float3 contr_nee {0.0f};
 	float3 contr_brdf {0.0f};
@@ -49,8 +49,8 @@ float3 Ld_light(const Light &light, float3 x, float3 wo, float3 n,
 		// TODO: how to decide ray type for this?
 		float pdf_brdf = cuda::pdf(mat, n, wi, wo, entering, mat.type);
 
-		bool vis = shadow_visibility(x + n * eps, wi, R);
-		if (pdf_light > 1e-9 && vis) {
+		bool vis = is_occluded(x + n * eps, wi, R);
+		if (pdf_light > 1e-9 && !vis) {
 			float weight = power(pdf_light, pdf_brdf);
 			float3 intensity = light.intensity;
 			contr_nee += weight * f * intensity/pdf_light;

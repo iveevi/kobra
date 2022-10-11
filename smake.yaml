@@ -15,6 +15,7 @@ definitions:
     source/io/event.cpp,
     source/layers/gizmo.cpp,
     source/layers/hybrid_tracer.cu,
+    source/layers/wadjet.cu,
     source/layers/objectifier.cpp,
     source/layers/optix_tracer.cu,
     source/layers/raster.cpp,
@@ -74,6 +75,11 @@ builds:
     - idirs: includes
     - flags: '-ptx -O3'
     - options: 'nolink, output_dir=./bin/ptx, output_format={filename}.ptx'
+  - wadjet_ptx_release:
+    - sources: source/optix/wadjet_rt.cu
+    - idirs: includes
+    - flags: '-ptx -O3'
+    - options: 'nolink, output_dir=./bin/ptx, output_format={filename}.ptx'
   - glsl_compute:
     - sources: shaders/rt/progressive_path_tracer.glsl
     - flags: '-fshader-stage=compute'
@@ -108,7 +114,7 @@ builds:
     - idirs: includes
     - flags: '-O3 -std=c++17'
     - libraries: libs
-    - dependencies: optix_ptx_debug, hybrid_ptx_release, glsl_compute, glsl_vertex, glsl_frag
+    - dependencies: optix_ptx_debug, hybrid_ptx_release, wadjet_ptx_release, glsl_compute, glsl_vertex, glsl_frag
   - kobra_debug:
     - sources: main.cpp, kobra_source, tinyfd_source, glslang_source
     - idirs: includes

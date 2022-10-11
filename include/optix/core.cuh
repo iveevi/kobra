@@ -69,7 +69,7 @@ static void context_logger
 }
 
 // Create an OptiX context
-OptixDeviceContext make_context()
+inline OptixDeviceContext make_context()
 {
 	// Initialize CUDA
 	CUDA_CHECK(cudaFree(0));

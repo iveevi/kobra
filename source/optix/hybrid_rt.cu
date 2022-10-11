@@ -90,7 +90,7 @@ float3 compute_radiance(uint3 idx, float3 x, float3 n, float3 wo, const Material
 	// Store color
 	float3 seed {float(idx.x), float(idx.y), ht_params.time};
 	float3 direct = Ld(x, wo, n, mat, true, seed);
-	
+
 	// Generate new ray
 	Shading out;
 	float3 wi;
@@ -153,7 +153,12 @@ float3 compute_radiance(uint3 idx, float3 x, float3 n, float3 wo, const Material
 	float3 indirect = r_temporal.sample.value;
 
 	// Compute total radiance
-	return direct + indirect * f * abs(dot(n, wi))/pdf;
+	float3 ret = direct + indirect * f * abs(dot(n, wi))/pdf;
+
+	if (isnan(ret.x) || isnan(ret.y) || isnan(ret.z))
+		ret = float3 {0.0f, 0.0f, 0.0f};
+
+	return ret;
 }
 
 // Ray generation kernel
@@ -209,15 +214,15 @@ extern "C" __global__ void __raygen__rg()
 	float3 wo = normalize(ht_params.camera - x);
 
 	n = normalize(n);
-	if (dot(n, wo) < 0.0f)
-		n = -n;
+	// if (dot(n, wo) < 0.0f)
+	//	n = -n;
 
 	// TODO: why would the following condition be triggered
 	if(isnan(n.x) || isnan(n.y) || isnan(n.z)) {
 		ht_params.color_buffer[index] = float4 {0, 0, 0, 1};
 		return;
 	}
-
+	
 	// Construct the material
 	Material mat {};
 	mat.diffuse = make_float3(tex2D <float4> (ht_params.albedo, uv.x, uv.y));
@@ -228,7 +233,7 @@ extern "C" __global__ void __raygen__rg()
 	mat.shininess = extra.x;
 	mat.roughness = extra.y;
 	mat.type = eDiffuse;
-
+	
 	// Average samples
 	const int samples = 1;
 

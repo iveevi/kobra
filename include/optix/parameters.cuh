@@ -129,6 +129,15 @@ float3 sample_area_light(TriangleLight light, float3 &seed)
 // Reservoir sample for ReSTIR
 struct PathSample {
 	float3 value;
+	float3 dir;
+
+	float3 p_pos;
+	float3 p_normal;
+
+	float3 s_pos;
+	float3 s_normal;
+
+	bool missed;
 };
 
 using ReSTIR_Reservoir = Reservoir <PathSample>;
@@ -205,6 +214,59 @@ struct HT_Parameters {
 	// Reservoirs and advanced sampling strategies
 	struct {
 		ReSTIR_Reservoir *r_temporal;
+		ReSTIR_Reservoir *r_temporal_prev;
+		
+		ReSTIR_Reservoir *r_spatial;
+		ReSTIR_Reservoir *r_spatial_prev;
+	} advanced;
+
+	// Output buffers
+	float4 *color_buffer;
+};
+
+// Kernel-common parameters for Wadjet path tracer
+struct WadjetParameters {
+	// Image resolution
+	uint2 resolution;
+
+	// Camera position
+	float3 camera;
+
+	float3 cam_u;
+	float3 cam_v;
+	float3 cam_w;
+
+	// Time
+	float time;
+
+	// Accumulation status
+	bool accumulate;
+	int samples;
+
+	// Scene information
+	OptixTraversableHandle traversable;
+
+	int instances;
+
+	// Textures
+	cudaTextureObject_t envmap;
+
+	// Lights
+	struct {
+		QuadLight *quads;
+		TriangleLight *triangles;
+
+		uint quad_count;
+		uint triangle_count;
+	} lights;
+
+	// Reservoirs and advanced sampling strategies
+	struct {
+		ReSTIR_Reservoir *r_temporal;
+		ReSTIR_Reservoir *r_temporal_prev;
+		
+		ReSTIR_Reservoir *r_spatial;
+		ReSTIR_Reservoir *r_spatial_prev;
 	} advanced;
 
 	// Output buffers
