@@ -188,7 +188,10 @@ struct MotionCapture : public kobra::BaseApp {
 
 		// Setup tracer
 		tracer.environment_map("resources/skies/background_1.jpg");
-		tracer.sampling_strategy = kobra::optix::eSpatioTemporal;
+		tracer.sampling_strategy = kobra::optix::eDefault; // TODO:
+								   // switch
+								   // with t or
+								   // something
 		tracer.denoiser_enabled = false;
 
 		// Setup hybrid tracer

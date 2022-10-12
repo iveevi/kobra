@@ -267,6 +267,8 @@ struct WadjetParameters {
 		
 		ReSTIR_Reservoir *r_spatial;
 		ReSTIR_Reservoir *r_spatial_prev;
+
+		float *sampling_radii;
 	} advanced;
 
 	// Output buffers

@@ -241,6 +241,13 @@ void calculate_material(Hit *hit_data, Material &mat, uint3 triangle, float2 uv)
 
 #define MAX_DEPTH 3
 
+// Weighting function
+KCUDA_INLINE static __device__
+float weight_kernel(const PathSample &sample)
+{
+	return length(sample.value);
+}
+
 // Temporal resampling
 KCUDA_INLINE __device__
 float3 temporal_reuse(RayPacket *rp, const PathSample &sample, float weight)
@@ -250,6 +257,10 @@ float3 temporal_reuse(RayPacket *rp, const PathSample &sample, float weight)
 
 	// Proceed to add the current sample to the reservoir
 	r_temporal.update(sample, weight);
+	r_temporal.W = r_temporal.weight/(
+		r_temporal.count * weight_kernel(r_temporal.sample)
+		+ 1e-6f
+	);
 
 	// Get resampled value
 	return r_temporal.sample.value;
@@ -265,13 +276,21 @@ float3 spatiotemporal_reuse(RayPacket *rp, float3 x, float3 n)
 
 	// Then use spatial resampling
 	auto &r_spatial = parameters.advanced.r_spatial[rp->index];
+	auto &r_temporal = parameters.advanced.r_temporal[rp->index];
+	auto &s_radius = parameters.advanced.sampling_radii[rp->index];
+
+	int Z = 0;
+	int success = 0;
+
+	r_spatial.merge(r_temporal, weight_kernel(r_temporal.sample));
+	Z += r_temporal.count;
 	
 	const int SPATIAL_SAMPLES = (r_spatial.count < 250) ? 9 : 3;
 	for (int i = 0; i < SPATIAL_SAMPLES; i++) {
 		// Generate random neighboring pixel
 		random3(rp->seed);
 
-		float radius = 500.0f * fract(rp->seed.x);
+		float radius = s_radius * fract(rp->seed.x);
 		float angle = 2 * M_PI * fract(rp->seed.y);
 
 		int ny = iy + radius * sin(angle);
@@ -285,24 +304,14 @@ float3 spatiotemporal_reuse(RayPacket *rp, float3 x, float3 n)
 
 		// Get the appropriate reservoir
 		auto *reservoir = &parameters.advanced.r_spatial_prev[nindex];
-		if (reservoir->count < 50)
+		if (reservoir->count > 50)
 			reservoir = &parameters.advanced.r_temporal_prev[nindex];
+
+		if (reservoir->count == 0)
+			continue;
 
 		// Get information relative to sample
 		auto &sample = reservoir->sample;
-
-		float3 direction = normalize(sample.p_pos - x);
-		float distance = length(sample.p_pos - x);
-
-		// Check if the sample is visible
-		bool occluded;
-		if (sample.missed)
-			occluded = is_occluded(x, sample.dir, 1e6);
-		else
-			occluded = is_occluded(x, direction, distance);
-
-		if (occluded)
-			continue;
 
 		// Check geometry similarity
 		float depth_x = length(x - parameters.camera);
@@ -312,6 +321,19 @@ float3 spatiotemporal_reuse(RayPacket *rp, float3 x, float3 n)
 		float ndepth = abs(depth_x - depth_s)/max(depth_x, depth_s);
 
 		if (angle > 25 || ndepth > 0.1)
+			continue;
+
+		// Check if the sample is visible
+		float3 direction = normalize(sample.p_pos - x);
+		float distance = length(sample.p_pos - x);
+
+		bool occluded;
+		if (sample.missed)
+			occluded = is_occluded(x + sample.dir * eps, sample.dir, 1e6);
+		else
+			occluded = is_occluded(x + direction * eps, direction, distance);
+
+		if (occluded)
 			continue;
 
 		// Compute Jacobian
@@ -334,13 +356,24 @@ float3 spatiotemporal_reuse(RayPacket *rp, float3 x, float3 n)
 		float J = abs(phi_r/phi_q) * (d_q * d_q)/(d_r * d_r);
 
 		// If conditions are sufficient, merge reservoir
-		if (!occluded) {
-			r_spatial.merge(
-				*reservoir,
-				max(reservoir->sample.value)/J
-			);
-		}
+		r_spatial.merge(
+			*reservoir,
+			weight_kernel(reservoir->sample)/J
+		);
+
+		Z += reservoir->count;
+		success++;
 	}
+
+	// Compute final weight
+	r_spatial.W = r_spatial.weight/(
+		Z * weight_kernel(r_spatial.sample)
+		+ 1e-6f
+	);
+
+	// Reduce radius if no samples were found
+	if (success == 0)
+		s_radius = max(s_radius * 0.5f, 3.0f);
 
 	// Get resampled value
 	return r_spatial.sample.value;
@@ -426,15 +459,23 @@ extern "C" __global__ void __closesthit__ch()
 	float3 indirect = rp->value;
 
 	// ReSTIR GI
+	float max_radius = min(
+		parameters.resolution.x,
+		parameters.resolution.y
+	)/10.0f;
+
 	if (parameters.samples == 0) {
 		auto &r_temporal = parameters.advanced.r_temporal[rp->index];
 		auto &r_spatial = parameters.advanced.r_spatial[rp->index];
+		auto &s_radius = parameters.advanced.sampling_radii[rp->index];
 
 		// Reset for motion
 		r_temporal.reset();
 		r_spatial.reset();
+		s_radius = max_radius;
 	}
 
+	rp->value = direct + T * indirect;
 	if (primary && parameters.samples > 0) {
 		// TODO: The ray misses if its depth is 1
 		//	but not if it hits a light (check value)
@@ -452,7 +493,7 @@ extern "C" __global__ void __closesthit__ch()
 			.missed = missed
 		};
 
-		float weight = max(rp->value)/pdf;
+		float weight = weight_kernel(sample)/pdf;
 
 		// First actually update the temporal reservoir
 		temporal_reuse(rp, sample, weight);
@@ -460,10 +501,17 @@ extern "C" __global__ void __closesthit__ch()
 		if (parameters.samples > 0) {
 			// Then use spatiotemporal resampling
 			indirect = spatiotemporal_reuse(rp, x, n);
+
+			auto &r_spatial = parameters.advanced.r_temporal[rp->index];
+			rp->value = direct + f * indirect * r_spatial.W * abs(dot(wi, n));
+			// rp->value = direct + T * indirect * r_spatial.W;
+			// rp->value = direct + T * indirect;
 		}
 	}
 
-	rp->value = direct + T * indirect;
+	// float radius = parameters.advanced.sampling_radii[rp->index];
+	// rp->value = make_float3(radius/max_radius);
+
 	rp->position = x;
 	rp->normal = n;
 }

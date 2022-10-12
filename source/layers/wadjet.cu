@@ -302,14 +302,19 @@ static void initialize_optix(Wadjet &layer)
 	layer.launch_params.accumulate = true;
 
 	// Advanced sampling resources
+	float radius = std::min(width, height)/10.0f;
+
 	std::vector <optix::ReSTIR_Reservoir> r_temporal(width * height, 30);
 	std::vector <optix::ReSTIR_Reservoir> r_spatial(width * height, 200);
+	std::vector <float> sampling_radii(width * height, radius);
 
 	params.advanced.r_temporal = cuda::make_buffer(r_temporal);
 	params.advanced.r_temporal_prev = cuda::make_buffer(r_temporal);
 	
 	params.advanced.r_spatial = cuda::make_buffer(r_spatial);
 	params.advanced.r_spatial_prev = cuda::make_buffer(r_spatial);
+
+	params.advanced.sampling_radii = cuda::make_buffer(sampling_radii);
 
 	// Color buffer (output)
 	layer.launch_params.color_buffer = (float4 *)
