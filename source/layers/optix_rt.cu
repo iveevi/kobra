@@ -857,8 +857,8 @@ extern "C" __global__ void __closesthit__radiance()
 			else
 				rp->value = svalue;
 		} else {
-			rp->value = direct + temporal.sample.brdf
-				* temporal.sample.value;
+			rp->value = direct + temporal.sample.brdf * temporal.sample.value;
+			// rp->value = direct + f * temporal.W * abs(dot(n, wi)) * temporal.sample.value;
 		}
 
 		// Double buffering

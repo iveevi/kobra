@@ -40,6 +40,9 @@ public:
 		return indices.size()/3;
 	}
 
+	// Generate a bounding box
+	BoundingBox bbox(const Transform &) const;
+
 	// Generate a BVH for this submesh
 	BVHPtr bvh(const Transform &transform) const {
 		// Generate list of bounding boxes

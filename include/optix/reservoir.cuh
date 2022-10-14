@@ -37,7 +37,7 @@ struct Reservoir {
 
 	// Update the reservoir
 	KCUDA_INLINE __device__
-	void update(const Sample &sample, const float weight) {
+	bool update(const Sample &sample, const float weight) {
 		static const float eps = 1e-4f;
 
 		// Update the cumulative weight
@@ -51,6 +51,8 @@ struct Reservoir {
 		bool selected = (r < w + eps);
 		if (selected || this->count == 1)
 			this->sample = sample;
+
+		return selected;
 	}
 
 	// Merge two reservoirs

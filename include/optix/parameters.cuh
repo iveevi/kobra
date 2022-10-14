@@ -140,7 +140,13 @@ struct PathSample {
 	bool missed;
 };
 
+struct VoxelSample {
+	float3 value;
+	float3 position;
+};
+
 using ReSTIR_Reservoir = Reservoir <PathSample>;
+using Voxel_Reservoir = Reservoir <VoxelSample>;
 
 // Hit data record
 struct Hit {
@@ -262,6 +268,7 @@ struct WadjetParameters {
 
 	// Reservoirs and advanced sampling strategies
 	struct {
+		// ReSTIR
 		ReSTIR_Reservoir *r_temporal;
 		ReSTIR_Reservoir *r_temporal_prev;
 		
@@ -270,6 +277,16 @@ struct WadjetParameters {
 
 		float *sampling_radii;
 	} advanced;
+
+	// Voxel reservoirs sampling
+	struct {
+		Voxel_Reservoir *reservoirs;
+		int **locks;
+		int resolution;
+
+		float3 min;
+		float3 max;
+	} voxel;
 
 	// Output buffers
 	float4 *color_buffer;

@@ -159,7 +159,7 @@ extern "C" __global__ void __raygen__rg()
 		
 	// Finally, store the result
 	float4 sample = make_float4(rp.value, 1.0f);
-	if (parameters.accumulate) {
+	if (parameters.accumulate && false) {
 		float4 prev = parameters.color_buffer[index];
 		parameters.color_buffer[index] = (prev * parameters.samples + sample)
 			/(parameters.samples + 1);
@@ -387,7 +387,7 @@ extern "C" __global__ void __closesthit__ch()
 	unsigned int i0 = optixGetPayload_0();
 	unsigned int i1 = optixGetPayload_1();
 	rp = unpack_pointer <RayPacket> (i0, i1);
-
+	
 	if (rp->depth > MAX_DEPTH)
 		return;
 
@@ -422,6 +422,22 @@ extern "C" __global__ void __closesthit__ch()
 	float3 n = calculate_normal(hit, triangle, bary, uv, entering);
 	float3 x = interpolate(hit->vertices, triangle, bary);
 
+	// Get voxel coordinates
+	float3 v_min = parameters.voxel.min;
+	float3 v_max = parameters.voxel.max;
+	int res = parameters.voxel.resolution;
+
+	uint3 c = make_uint3(
+		(x.x - v_min.x)/(v_max.x - v_min.x) * res,
+		(x.y - v_min.y)/(v_max.y - v_min.y) * res,
+		(x.z - v_min.z)/(v_max.z - v_min.z) * res
+	);
+
+	/* rp->value = make_float3((c.x + c.y + c.z) % 2);
+	rp->value = make_float3(c.x/(float)res, c.y/(float)res, c.z/(float)res);
+	return; */
+
+
 	float3 direct = Ld(x, wo, n, material, entering, rp->seed);
 
 	// Generate new ray
@@ -444,6 +460,10 @@ extern "C" __global__ void __closesthit__ch()
 	// Update ior
 	rp->ior = material.refraction;
 	rp->depth++;
+
+#define VOXEL_SAMPLING
+
+#if defined(RESTIR_SAMPLING)
 
 	// Recurse
 	optixTrace(parameters.traversable,
@@ -475,7 +495,6 @@ extern "C" __global__ void __closesthit__ch()
 		s_radius = max_radius;
 	}
 
-	rp->value = direct + T * indirect;
 	if (primary && parameters.samples > 0) {
 		// TODO: The ray misses if its depth is 1
 		//	but not if it hits a light (check value)
@@ -503,14 +522,131 @@ extern "C" __global__ void __closesthit__ch()
 			indirect = spatiotemporal_reuse(rp, x, n);
 
 			auto &r_spatial = parameters.advanced.r_temporal[rp->index];
-			rp->value = direct + f * indirect * r_spatial.W * abs(dot(wi, n));
+			rp->value = direct + f * r_spatial.sample.value *
+				r_spatial.W * abs(dot(wi, n));
 			// rp->value = direct + T * indirect * r_spatial.W;
 			// rp->value = direct + T * indirect;
 		}
+	} else {
+		rp->value = direct + T * indirect;
 	}
 
 	// float radius = parameters.advanced.sampling_radii[rp->index];
 	// rp->value = make_float3(radius/max_radius);
+
+#elif defined(VOXEL_SAMPLING)
+
+	// Issue with this approach using the same sample in a voxel creates
+	// extreme aliasing (you can distinguish the voxels by color...)
+
+	// TODO: screen shot for reference in a writeup
+
+	// Get reservoir at the voxel
+	uint index = c.x + c.y * res + c.z * res * res;
+
+	auto &r_voxel = parameters.voxel.reservoirs[index];
+	int *lock = parameters.voxel.locks[index];
+
+	/* bool occluded = false;
+	float3 cached_sample = make_float3(0.0f);
+	float3 cached_position = make_float3(0.0f);
+	float cached_W = 0;
+
+	if (parameters.samples == 0) {
+		while (atomicCAS(lock, 0, 1) == 0);
+		if (r_voxel.count > 0) {
+			r_voxel.reset();
+			r_voxel.sample.value = make_float3(0.0f);
+			r_voxel.sample.position = make_float3(0.0f);
+		}
+		atomicExch(lock, 0);
+	} */
+
+	if (r_voxel.count > 0) {
+		while (atomicCAS(lock, 0, 1) == 0);
+		cached_position = r_voxel.sample.position;
+		cached_sample = r_voxel.sample.value;
+		cached_W = r_voxel.weight/(r_voxel.count * length(cached_sample) + 1e-6);
+		atomicExch(lock, 0);
+
+		// Check if the sample is occluded
+		float3 L = cached_position - x;
+		float3 L_n = normalize(L);
+		occluded = is_occluded(x + n * 0.01, L_n, length(L));
+	}
+
+	float e = fract(random3(rp->seed).x);
+	int count = r_voxel.count;
+	if (primary && count > 0 && !occluded) {
+		// rp->value = normalize(cached_position - x) * 0.5f + 0.5f;
+		// rp->value = make_float3(0, 1, 0);
+		rp->value = direct + f * cached_sample * cached_W * abs(dot(wi, n));
+	} else if (primary) {
+		// Recurse
+		optixTrace(parameters.traversable,
+			x + offset, wi,
+			0.0f, 1e16f, 0.0f,
+			OptixVisibilityMask(0b1),
+			OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+			0, 0, 0,
+			i0, i1
+		);
+
+		float weight = length(rp->value)/pdf;
+
+		// Update reservoir, locking
+		VoxelSample vs {
+			.value = rp->value,
+			.position = rp->position
+		};
+
+		while (atomicCAS(lock, 0, 1) == 0);
+		bool selected = r_voxel.update(vs, weight);
+		float3 value = r_voxel.sample.value;
+		float3 position = r_voxel.sample.position;
+		float W = r_voxel.weight/(r_voxel.count * length(value) + 1e-6);
+		atomicExch(lock, 0);
+
+		// Set value
+		/* if (count > 0)
+			rp->value = make_float3(1, 0, 1);
+		else {
+			rp->value = make_float3(0, 0, 1);
+			rp->value = direct + f * value * W * abs(dot(wi, n));
+		} */
+
+		rp->value = direct + T * rp->value;
+		
+		/* if (selected) {
+			// No need to check for occlusion
+		} else {
+			// Check if the sample is occluded
+			float3 L = position - x;
+			float3 L_n = normalize(L);
+
+			if (is_occluded(x + n * 0.01, L_n, length(L)))
+				rp->value = direct + T * rp->value;
+			else
+				rp->value = direct + f * value * W * abs(dot(wi, n));
+		} */
+	} else {
+		optixTrace(parameters.traversable,
+			x + offset, wi,
+			0.0f, 1e16f, 0.0f,
+			OptixVisibilityMask(0b1),
+			OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+			0, 0, 0,
+			i0, i1
+		);
+
+		rp->value = direct + T * rp->value;
+	}
+
+#else
+
+#error "No sampling technique selected"
+
+#endif
 
 	rp->position = x;
 	rp->normal = n;

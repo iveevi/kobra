@@ -214,6 +214,8 @@ static void load_optix_pipeline
 }
 
 // Setup and load OptiX things
+const int VOXEL_RESOLUTION = 256;
+
 static void initialize_optix(Wadjet &layer)
 {
 	// Create the context
@@ -301,7 +303,7 @@ static void initialize_optix(Wadjet &layer)
 	// Accumulatoin on by default
 	layer.launch_params.accumulate = true;
 
-	// Advanced sampling resources
+	// Advanced sampling resources - ReSTIR GI
 	float radius = std::min(width, height)/10.0f;
 
 	std::vector <optix::ReSTIR_Reservoir> r_temporal(width * height, 30);
@@ -315,6 +317,21 @@ static void initialize_optix(Wadjet &layer)
 	params.advanced.r_spatial_prev = cuda::make_buffer(r_spatial);
 
 	params.advanced.sampling_radii = cuda::make_buffer(sampling_radii);
+
+	// Advanced sampling resources - Voxel
+	int voxel_count = VOXEL_RESOLUTION * VOXEL_RESOLUTION * VOXEL_RESOLUTION;
+	std::vector <optix::Voxel_Reservoir> v_reservoir(voxel_count, 200);
+	params.voxel.reservoirs = cuda::make_buffer(v_reservoir);
+	params.voxel.resolution = VOXEL_RESOLUTION;
+
+	std::vector <int> lock_data(voxel_count, 0);
+	CUdeviceptr d_lock_data = cuda::make_buffer_ptr(lock_data);
+
+	std::vector <int *> lock_ptrs(voxel_count);
+	for (int i = 0; i < voxel_count; i++)
+		lock_ptrs[i] = (int *) (d_lock_data + i * sizeof(int));
+
+	params.voxel.locks = cuda::make_buffer(lock_ptrs);
 
 	// Color buffer (output)
 	layer.launch_params.color_buffer = (float4 *)
@@ -687,6 +704,47 @@ static void update_acceleration_structure(Wadjet &layer,
 	layer.launch_params.traversable = layer.optix.handle;
 }
 
+// Compute scene bounds
+static void update_scene_bounds(Wadjet &layer,
+		const std::vector <const Submesh *> &submeshes,
+		const std::vector <const Transform *> &submesh_transforms)
+{
+	// Collect all bounding boxes
+	std::vector <BoundingBox> bboxes;
+
+	for (int i = 0; i < submeshes.size(); i++) {
+		const Submesh *submesh = submeshes[i];
+		const Transform *transform = submesh_transforms[i];
+
+		BoundingBox bbox = submesh->bbox(*transform);
+		bboxes.push_back(bbox);
+	}
+
+	// Now merge them in pairs
+	while (bboxes.size() > 1) {
+		std::vector <BoundingBox> new_bboxes;
+
+		for (int i = 0; i < bboxes.size(); i += 2) {
+			BoundingBox bbox;
+
+			if (i + 1 < bboxes.size())
+				bbox = bbox_union(bboxes[i], bboxes[i + 1]);
+			else
+				bbox = bboxes[i];
+
+			new_bboxes.push_back(bbox);
+		}
+
+		bboxes = new_bboxes;
+	}
+
+	float3 min = cuda::to_f3(bboxes[0].min);
+	float3 max = cuda::to_f3(bboxes[0].max);
+
+	layer.launch_params.voxel.min = min;
+	layer.launch_params.voxel.max = max;
+}
+
 static void generate_submesh_data
 		(const Submesh &submesh,
 		const Transform &transform,
@@ -918,6 +976,7 @@ static void preprocess_scene(Wadjet &layer,
 		update_light_buffers(layer, lights, light_transforms);
 		update_acceleration_structure(layer, submeshes, submesh_transforms);
 		update_sbt_data(layer, submeshes, submesh_transforms);
+		update_scene_bounds(layer, submeshes, submesh_transforms);
 
 		// Reset the number of samples stored
 		layer.launch_params.samples = 0;

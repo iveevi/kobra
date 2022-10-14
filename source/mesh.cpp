@@ -88,6 +88,28 @@ struct hash <kobra::Vertex> {
 
 namespace kobra {
 
+// Generate bounding box for submesh
+BoundingBox Submesh::bbox(const Transform &transform) const
+{
+	// TODO: multithread
+	glm::mat4 m = transform.matrix();
+	
+	// Create a bounding box
+	BoundingBox box {
+		.min = glm::vec3(std::numeric_limits <float>::max()),
+		.max = glm::vec3(std::numeric_limits <float>::lowest())
+	};
+
+	// Add all vertices to the bounding box
+	for (const auto &v : vertices) {
+		glm::vec4 p = m * glm::vec4(v.position, 1.0f);
+		box.min = glm::min(box.min, glm::vec3(p));
+		box.max = glm::max(box.max, glm::vec3(p));
+	}
+
+	return box;
+}
+
 // Process submesh vertex data, generate tangents and bitangents
 void Submesh::_process_vertex_data()
 {

@@ -26,6 +26,14 @@ struct BoundingBox {
 	}
 };
 
+inline BoundingBox bbox_union(const BoundingBox &a, const BoundingBox &b)
+{
+	BoundingBox box;
+	box.min = glm::min(a.min, b.min);
+	box.max = glm::max(a.max, b.max);
+	return box;
+}
+
 }
 
 #endif
