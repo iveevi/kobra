@@ -496,7 +496,9 @@ void capture(Wadjet &layer, std::vector <uint8_t> &data)
 // Update the light buffers if needed
 static void update_light_buffers(Wadjet &layer,
 		const std::vector <const Light *> &lights,
-		const std::vector <const Transform *> &light_transforms)
+		const std::vector <const Transform *> &light_transforms,
+		const std::vector <const Submesh *> &submeshes,
+		const std::vector <const Transform *> &submesh_transforms)
 {
 	if (layer.host.quad_lights.size() != lights.size()) {
 		layer.host.quad_lights.resize(lights.size());
@@ -522,6 +524,47 @@ static void update_light_buffers(Wadjet &layer,
 
 		layer.launch_params.lights.quads = cuda::make_buffer(quad_lights);
 		layer.launch_params.lights.quad_count = quad_lights.size();
+	}
+
+	// Count number of emissive submeshes
+	int emissive_count = 0;
+
+	std::vector <std::pair <const Submesh *, int>> emissive_submeshes;
+	for (int i = 0; i < submeshes.size(); i++) {
+		const Submesh *submesh = submeshes[i];
+		if (glm::length(submesh->material.emission) > 0) {
+			emissive_submeshes.push_back({submesh, i});
+			emissive_count += submesh->triangles();
+		}
+	}
+
+	if (layer.host.tri_lights.size() != emissive_count) {
+		for (const auto &pr : emissive_submeshes) {
+			const Submesh *submesh = pr.first;
+			const Transform *transform = submesh_transforms[pr.second];
+
+			for (int i = 0; i < submesh->triangles(); i++) {
+				uint32_t i0 = submesh->indices[i * 3 + 0];
+				uint32_t i1 = submesh->indices[i * 3 + 1];
+				uint32_t i2 = submesh->indices[i * 3 + 2];
+
+				glm::vec3 a = transform->apply(submesh->vertices[i0].position);
+				glm::vec3 b = transform->apply(submesh->vertices[i1].position);
+				glm::vec3 c = transform->apply(submesh->vertices[i2].position);
+
+				layer.host.tri_lights.push_back(
+					optix::TriangleLight {
+						cuda::to_f3(a),
+						cuda::to_f3(b - a),
+						cuda::to_f3(c - a),
+						cuda::to_f3(submesh->material.emission)
+					}
+				);
+			}
+		}
+
+		layer.launch_params.lights.triangles = cuda::make_buffer(layer.host.tri_lights);
+		layer.launch_params.lights.triangle_count = layer.host.tri_lights.size();
 	}
 }
 
@@ -973,7 +1016,11 @@ static void preprocess_scene(Wadjet &layer,
 		}
 
 		// Update the data
-		update_light_buffers(layer, lights, light_transforms);
+		update_light_buffers(layer,
+			lights, light_transforms,
+			submeshes, submesh_transforms
+		);
+
 		update_acceleration_structure(layer, submeshes, submesh_transforms);
 		update_sbt_data(layer, submeshes, submesh_transforms);
 		update_scene_bounds(layer, submeshes, submesh_transforms);

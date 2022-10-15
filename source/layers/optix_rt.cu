@@ -424,39 +424,34 @@ __device__ float3 Ld_light(const Light &light, HitGroupData *hit_data, float3 x,
 __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 		Material mat, bool entering, float3 &seed)
 {
+
+// #define GROUND_TRUTH
+
+#ifdef GROUND_TRUTH
+
+	float3 contr = {0.0f};
+
+	int quad_count = hit_data->n_quad_lights;
+	for (int i = 0; i < quad_count; i++) {
+		QuadLight light = hit_data->quad_lights[i];
+		contr += Ld_light(light, hit_data, x, wo, n, mat, entering, seed);
+	}
+
+	int tri_count = hit_data->n_tri_lights;
+	for (int i = 0; i < tri_count; i++) {
+		TriangleLight light = hit_data->tri_lights[i];
+		contr += Ld_light(light, hit_data, x, wo, n, mat, entering, seed);
+	}
+
+	return contr;
+#else
+
 	if (hit_data->n_quad_lights == 0
 			&& hit_data->n_tri_lights == 0)
 		return float3 {0.0f, 0.0f, 0.0f};
 
-	// TODO: multiply result by # of total lights
-
-	// Random area light for NEE
-// #define LIGHT_SAMPLES 5
-
-#ifdef LIGHT_SAMPLES
-
-	float3 contr {0.0f};
-
-	for (int k = 0; k < LIGHT_SAMPLES; k++) {
-		random3(seed);
-		unsigned int i = seed.x * (hit_data->n_quad_lights + hit_data->n_tri_lights);
-		i = min(i, hit_data->n_quad_lights + hit_data->n_tri_lights - 1);
-
-		if (i < hit_data->n_quad_lights) {
-			QuadLight light = hit_data->quad_lights[i];
-			contr += Ld_light(light, hit_data, x, wo, n, mat, entering, seed);
-		} else {
-			TriangleLight light = hit_data->tri_lights[i - hit_data->n_quad_lights];
-			contr += Ld_light(light, hit_data, x, wo, n, mat, entering, seed);
-		}
-	}
-
-	return contr/LIGHT_SAMPLES;
-
-#else 
-
 	random3(seed);
-	unsigned int i = seed.x * (hit_data->n_quad_lights + hit_data->n_tri_lights);
+	unsigned int i = fract(seed.x) * (hit_data->n_quad_lights + hit_data->n_tri_lights);
 	i = min(i, hit_data->n_quad_lights + hit_data->n_tri_lights - 1);
 
 	if (i < hit_data->n_quad_lights) {

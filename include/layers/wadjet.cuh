@@ -84,6 +84,7 @@ struct Wadjet {
 	// Host buffer analogues
 	struct {
 		std::vector <optix::QuadLight> quad_lights;
+		std::vector <optix::TriangleLight> tri_lights;
 	} host;
 
 	// Cached data

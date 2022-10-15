@@ -25,6 +25,8 @@ static const float eps = 1e-3f;
 KCUDA_INLINE __device__
 bool is_occluded(float3 origin, float3 dir, float R)
 {
+	static float eps = 0.05f;
+
 	bool vis = true;
 
 	unsigned int j0, j1;
@@ -32,7 +34,7 @@ bool is_occluded(float3 origin, float3 dir, float R)
 
 	optixTrace(parameters.traversable,
 		origin, dir,
-		0, R - 0.01f, 0,
+		0, R - eps, 0,
 		OptixVisibilityMask(0b1),
 		OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT
 			| OPTIX_RAY_FLAG_DISABLE_ANYHIT
@@ -51,27 +53,45 @@ __device__ float3 Ld(float3 x, float3 wo, float3 n,
 	int quad_count = parameters.lights.quad_count;
 	int tri_count = parameters.lights.triangle_count;
 
+#define GROUND_TRUTH
+
+#ifdef GROUND_TRUTH
+	
+	float3 contr = {0.0f};
+
+	for (int i = 0; i < quad_count; i++) {
+		QuadLight light = parameters.lights.quads[i];
+		contr += Ld_light(light, x, wo, n, mat, entering, seed);
+	}
+
+	/* for (int i = 0; i < tri_count; i++) {
+		TriangleLight light = parameters.lights.triangles[i];
+		contr += Ld_light(light, x, wo, n, mat, entering, seed);
+	} */
+
+	return contr;
+
+#else
+
 	if (quad_count == 0 && tri_count == 0)
 		return make_float3(0.0f);
 
-#define LIGHT_SAMPLES 1
+	int total_count = quad_count + tri_count;
 
-	float3 contr = make_float3(0.0f);
-	for (int k = 0; k < LIGHT_SAMPLES; k++) {
-		random3(seed);
-		unsigned int i = seed.x * (quad_count + tri_count);
-		i = min(i, quad_count + tri_count - 1);
+	random3(seed);
+	unsigned int i = fract(seed.x) * (quad_count + tri_count);
+	i = min(i, quad_count + tri_count - 1);
 
-		if (i < quad_count) {
-			QuadLight light = parameters.lights.quads[i];
-			contr += Ld_light(light, x, wo, n, mat, entering, seed);
-		} else {
-			TriangleLight light = parameters.lights.triangles[i - quad_count];
-			contr += Ld_light(light, x, wo, n, mat, entering, seed);
-		}
+	if (i < quad_count) {
+		QuadLight light = parameters.lights.quads[i];
+		return total_count * Ld_light(light, x, wo, n, mat, entering, seed);
 	}
 
-	return contr/LIGHT_SAMPLES;
+	TriangleLight light = parameters.lights.triangles[i - quad_count];
+	return total_count * Ld_light(light, x, wo, n, mat, entering, seed);
+
+#endif
+
 }
 
 // Ray packet data
@@ -159,7 +179,7 @@ extern "C" __global__ void __raygen__rg()
 		
 	// Finally, store the result
 	float4 sample = make_float4(rp.value, 1.0f);
-	if (parameters.accumulate && false) {
+	if (parameters.accumulate) {
 		float4 prev = parameters.color_buffer[index];
 		parameters.color_buffer[index] = (prev * parameters.samples + sample)
 			/(parameters.samples + 1);
@@ -411,7 +431,7 @@ extern "C" __global__ void __closesthit__ch()
 
 	// TODO: check for light, not just emissive material
 	if (hit->material.type == Shading::eEmissive) {
-		rp->value = material.emission;
+		rp->value = material.diffuse;
 		return;
 	}
 	
@@ -422,21 +442,9 @@ extern "C" __global__ void __closesthit__ch()
 	float3 n = calculate_normal(hit, triangle, bary, uv, entering);
 	float3 x = interpolate(hit->vertices, triangle, bary);
 
-	// Get voxel coordinates
-	float3 v_min = parameters.voxel.min;
-	float3 v_max = parameters.voxel.max;
-	int res = parameters.voxel.resolution;
-
-	uint3 c = make_uint3(
-		(x.x - v_min.x)/(v_max.x - v_min.x) * res,
-		(x.y - v_min.y)/(v_max.y - v_min.y) * res,
-		(x.z - v_min.z)/(v_max.z - v_min.z) * res
-	);
-
-	/* rp->value = make_float3((c.x + c.y + c.z) % 2);
-	rp->value = make_float3(c.x/(float)res, c.y/(float)res, c.z/(float)res);
-	return; */
-
+	// Offset by normal
+	// TODO: use more complex shadow bias functions
+	x += n * eps;
 
 	float3 direct = Ld(x, wo, n, material, entering, rp->seed);
 
@@ -460,8 +468,6 @@ extern "C" __global__ void __closesthit__ch()
 	// Update ior
 	rp->ior = material.refraction;
 	rp->depth++;
-
-#define VOXEL_SAMPLING
 
 #if defined(RESTIR_SAMPLING)
 
@@ -535,6 +541,21 @@ extern "C" __global__ void __closesthit__ch()
 	// rp->value = make_float3(radius/max_radius);
 
 #elif defined(VOXEL_SAMPLING)
+
+	// Get voxel coordinates
+	float3 v_min = parameters.voxel.min;
+	float3 v_max = parameters.voxel.max;
+	int res = parameters.voxel.resolution;
+
+	uint3 c = make_uint3(
+		(x.x - v_min.x)/(v_max.x - v_min.x) * res,
+		(x.y - v_min.y)/(v_max.y - v_min.y) * res,
+		(x.z - v_min.z)/(v_max.z - v_min.z) * res
+	);
+
+	/* rp->value = make_float3((c.x + c.y + c.z) % 2);
+	rp->value = make_float3(c.x/(float)res, c.y/(float)res, c.z/(float)res);
+	return; */
 
 	// Issue with this approach using the same sample in a voxel creates
 	// extreme aliasing (you can distinguish the voxels by color...)
@@ -643,8 +664,17 @@ extern "C" __global__ void __closesthit__ch()
 	}
 
 #else
+		
+	optixTrace(parameters.traversable,
+		x + offset, wi,
+		0.0f, 1e16f, 0.0f,
+		OptixVisibilityMask(0b1),
+		OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+		0, 0, 0,
+		i0, i1
+	);
 
-#error "No sampling technique selected"
+	rp->value = direct + T * rp->value;
 
 #endif
 

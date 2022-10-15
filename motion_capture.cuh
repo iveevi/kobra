@@ -197,7 +197,7 @@ struct MotionCapture : public kobra::BaseApp {
 		// Setup hybrid tracer
 		KOBRA_LOG_FILE(kobra::Log::INFO) << "Hybrid tracer setup\n";
 		hybrid_tracer = kobra::layers::HybridTracer::make(get_context());
-		kobra::layers::set_envmap(hybrid_tracer, "resources/skies/background_1.jpg");
+		// kobra::layers::set_envmap(hybrid_tracer, "resources/skies/background_1.jpg");
 		
 		// Setup Wadjet tracer
 		KOBRA_LOG_FILE(kobra::Log::INFO) << "Hybrid tracer setup\n";

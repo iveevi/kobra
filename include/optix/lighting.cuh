@@ -49,8 +49,8 @@ float3 Ld_light(const Light &light, float3 x, float3 wo, float3 n,
 		// TODO: how to decide ray type for this?
 		float pdf_brdf = cuda::pdf(mat, n, wi, wo, entering, mat.type);
 
-		bool vis = is_occluded(x + n * eps, wi, R);
-		if (pdf_light > 1e-9 && !vis) {
+		bool occluded = is_occluded(x, wi, R);
+		if (pdf_light > 1e-9 && !occluded) {
 			float weight = power(pdf_light, pdf_brdf);
 			float3 intensity = light.intensity;
 			contr_nee += weight * f * intensity/pdf_light;

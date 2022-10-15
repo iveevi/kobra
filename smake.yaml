@@ -1,4 +1,4 @@
-default_compiler: nvcc
+default_compiler: nvcc -ccbin g++-11
 default_standard: c++17
 
 # TODO: detect whether nvcc exists (on non nvcc systems)
