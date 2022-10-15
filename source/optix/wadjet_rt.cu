@@ -64,10 +64,10 @@ __device__ float3 Ld(float3 x, float3 wo, float3 n,
 		contr += Ld_light(light, x, wo, n, mat, entering, seed);
 	}
 
-	/* for (int i = 0; i < tri_count; i++) {
+	for (int i = 0; i < tri_count; i++) {
 		TriangleLight light = parameters.lights.triangles[i];
 		contr += Ld_light(light, x, wo, n, mat, entering, seed);
-	} */
+	}
 
 	return contr;
 
@@ -431,7 +431,7 @@ extern "C" __global__ void __closesthit__ch()
 
 	// TODO: check for light, not just emissive material
 	if (hit->material.type == Shading::eEmissive) {
-		rp->value = material.diffuse;
+		rp->value = material.emission;
 		return;
 	}
 	
@@ -444,7 +444,9 @@ extern "C" __global__ void __closesthit__ch()
 
 	// Offset by normal
 	// TODO: use more complex shadow bias functions
-	x += n * eps;
+
+	// TODO: an easier check for transmissive objects
+	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
 
 	float3 direct = Ld(x, wo, n, material, entering, rp->seed);
 

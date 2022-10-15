@@ -303,7 +303,7 @@ __device__ float3 brdf(const Material &mat, float3 n, float3 wi,
 {
 	// TODO: diffuse should be in conjunction with the material
 	if (out & Shading::eTransmission)
-		return FresnelSpecular::brdf(mat, n, wi, wo, entering, out);
+		return SpecularTransmission::brdf(mat, n, wi, wo, entering, out);
 	
 	return mat.diffuse/M_PI + GGX::brdf(mat, n, wi, wo, entering, out);
 }
@@ -313,7 +313,7 @@ __device__ float pdf(const Material &mat, float3 n, float3 wi,
 		float3 wo, bool entering, Shading out)
 {
 	if (out & Shading::eTransmission)
-		return FresnelSpecular::pdf(mat, n, wi, wo, entering, out);
+		return SpecularTransmission::pdf(mat, n, wi, wo, entering, out);
 	
 	return GGX::pdf(mat, n, wi, wo, entering, out);
 }
@@ -323,7 +323,7 @@ __device__ float3 sample(const Material &mat, float3 n, float3 wo,
 		bool entering, float3 &seed, Shading &out)
 {
 	if (mat.type & Shading::eTransmission)
-		return FresnelSpecular::sample(mat, n, wo, entering, seed, out);
+		return SpecularTransmission::sample(mat, n, wo, entering, seed, out);
 
 	return GGX::sample(mat, n, wo, entering, seed, out);
 }
@@ -418,7 +418,7 @@ float3 eval(const Material &mat, float3 n, float3 wo, bool entering,
 		float3 &wi, float &pdf, Shading &out, float3 &seed)
 {
 	if (mat.type & Shading::eTransmission)
-		return eval <FresnelSpecular> (mat, n, wo, entering, wi, pdf, out, seed);
+		return eval <SpecularTransmission> (mat, n, wo, entering, wi, pdf, out, seed);
 
 	// Fallback to GGX
 	return eval <GGX> (mat, n, wo, entering, wi, pdf, out, seed);
