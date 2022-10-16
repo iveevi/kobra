@@ -72,6 +72,7 @@ float FrDielectric(float cosThetaI, float etaI, float etaT)
 	// Handle total internal reflection
 	if (sinThetaT >= 1)
 		return 1;
+
 	float cosThetaT = sqrt(fmax((float)0, 1 - sinThetaT * sinThetaT));
 	float Rparl = ((etaT * cosThetaI) - (etaI * cosThetaT)) /
 		((etaT * cosThetaI) + (etaI * cosThetaT));
@@ -81,16 +82,19 @@ float FrDielectric(float cosThetaI, float etaI, float etaT)
 }
 
 __device__ __forceinline__
-float3 Refract(const float3 &wi, const float3 &n, float eta) {
-    float cosThetaI = dot(n, wi);
-    float sin2ThetaI = max(float(0), float(1 - cosThetaI * cosThetaI));
-    float sin2ThetaT = eta * eta * sin2ThetaI;
+float3 Refract(const float3 &wi, const float3 &n, float eta)
+{
+	float cosThetaI = dot(n, wi);
+	float sin2ThetaI = max(float(0), float(1 - cosThetaI * cosThetaI));
+	float sin2ThetaT = eta * eta * sin2ThetaI;
 
-    // Handle total internal reflection for transmission
-    if (sin2ThetaT >= 1)
-	    return reflect(wi, n);
-    float cosThetaT = sqrt(1 - sin2ThetaT);
-    return normalize(eta * -wi + (eta * cosThetaI - cosThetaT) * n);
+	// Handle total internal reflection for transmission
+	if (sin2ThetaT >= 1)
+		return reflect(wi, n);
+		// return float3 {0, 0, 0};
+
+	float cosThetaT = sqrt(1 - sin2ThetaT);
+	return normalize(eta * -wi + (eta * cosThetaI - cosThetaT) * n);
 }
 
 ////////////////////
@@ -128,8 +132,6 @@ struct SpecularReflection {
 
 // Perfect specular transmission
 struct SpecularTransmission {
-	// TODO: evaluate function: sample, brdf and pdf
-
 	// TODO: tr and tf
 
 	// Evaluate the BRDF
@@ -158,6 +160,8 @@ struct SpecularTransmission {
 		float eta_i = entering ? 1 : mat.refraction;
 		float eta_t = entering ? mat.refraction : 1;
 		float3 np = dot(wo, n) < 0 ? -n : n;
+
+		// WARNING: can return 0 vector...
 		return Refract(wo, np, eta_i/eta_t);
 	}
 };
@@ -303,7 +307,7 @@ __device__ float3 brdf(const Material &mat, float3 n, float3 wi,
 {
 	// TODO: diffuse should be in conjunction with the material
 	if (out & Shading::eTransmission)
-		return SpecularTransmission::brdf(mat, n, wi, wo, entering, out);
+		return FresnelSpecular::brdf(mat, n, wi, wo, entering, out);
 	
 	return mat.diffuse/M_PI + GGX::brdf(mat, n, wi, wo, entering, out);
 }
@@ -313,7 +317,7 @@ __device__ float pdf(const Material &mat, float3 n, float3 wi,
 		float3 wo, bool entering, Shading out)
 {
 	if (out & Shading::eTransmission)
-		return SpecularTransmission::pdf(mat, n, wi, wo, entering, out);
+		return FresnelSpecular::pdf(mat, n, wi, wo, entering, out);
 	
 	return GGX::pdf(mat, n, wi, wo, entering, out);
 }
@@ -323,7 +327,7 @@ __device__ float3 sample(const Material &mat, float3 n, float3 wo,
 		bool entering, float3 &seed, Shading &out)
 {
 	if (mat.type & Shading::eTransmission)
-		return SpecularTransmission::sample(mat, n, wo, entering, seed, out);
+		return FresnelSpecular::sample(mat, n, wo, entering, seed, out);
 
 	return GGX::sample(mat, n, wo, entering, seed, out);
 }
@@ -362,6 +366,8 @@ float3 eval <SpecularTransmission>
 
 	float eta = eta_i/eta_t;
 	wi = kobra::cuda::Refract(wo, n, eta);
+	if (length(wi) < 1e-6f)
+		return make_float3(1, 0, 0);
 	pdf = 1;
 
 	float fr = kobra::cuda::FrDielectric(dot(n, wi), eta_i, eta_t);
@@ -418,7 +424,7 @@ float3 eval(const Material &mat, float3 n, float3 wo, bool entering,
 		float3 &wi, float &pdf, Shading &out, float3 &seed)
 {
 	if (mat.type & Shading::eTransmission)
-		return eval <SpecularTransmission> (mat, n, wo, entering, wi, pdf, out, seed);
+		return eval <FresnelSpecular> (mat, n, wo, entering, wi, pdf, out, seed);
 
 	// Fallback to GGX
 	return eval <GGX> (mat, n, wo, entering, wi, pdf, out, seed);

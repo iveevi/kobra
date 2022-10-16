@@ -36,7 +36,7 @@ name: e1
 [TRANSFORM]
 position: -12.5 0 0
 rotation: 0 90 0
-scale: 3 3 3
+scale: 1 1 1
 
 [MESH]
 source: resources/benchmark/suzanne.obj

@@ -214,7 +214,7 @@ static void load_optix_pipeline
 }
 
 // Setup and load OptiX things
-const int VOXEL_RESOLUTION = 256;
+const int VOXEL_RESOLUTION = 300;
 
 static void initialize_optix(Wadjet &layer)
 {

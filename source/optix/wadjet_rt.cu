@@ -259,7 +259,7 @@ void calculate_material(Hit *hit_data, Material &mat, uint3 triangle, float2 uv)
 	}
 }
 
-#define MAX_DEPTH 3
+#define MAX_DEPTH 10
 
 // Weighting function
 KCUDA_INLINE static __device__
@@ -471,6 +471,8 @@ extern "C" __global__ void __closesthit__ch()
 	rp->ior = material.refraction;
 	rp->depth++;
 
+#define RESTIR_SAMPLING 
+
 #if defined(RESTIR_SAMPLING)
 
 	// Recurse
@@ -531,7 +533,7 @@ extern "C" __global__ void __closesthit__ch()
 
 			auto &r_spatial = parameters.advanced.r_temporal[rp->index];
 			rp->value = direct + f * r_spatial.sample.value *
-				r_spatial.W * abs(dot(wi, n));
+				r_spatial.W * abs(dot(wi, n))/pdf;
 			// rp->value = direct + T * indirect * r_spatial.W;
 			// rp->value = direct + T * indirect;
 		}
@@ -542,6 +544,8 @@ extern "C" __global__ void __closesthit__ch()
 	// float radius = parameters.advanced.sampling_radii[rp->index];
 	// rp->value = make_float3(radius/max_radius);
 
+	// TODO: write different programs for these, then create mutliple
+	// pipelines
 #elif defined(VOXEL_SAMPLING)
 
 	// Get voxel coordinates
@@ -555,9 +559,10 @@ extern "C" __global__ void __closesthit__ch()
 		(x.z - v_min.z)/(v_max.z - v_min.z) * res
 	);
 
-	/* rp->value = make_float3((c.x + c.y + c.z) % 2);
-	rp->value = make_float3(c.x/(float)res, c.y/(float)res, c.z/(float)res);
-	return; */
+	c = min(c, make_uint3(res - 1));
+
+	// rp->value = make_float3((c.x + c.y + c.z) % 2);
+	// return;
 
 	// Issue with this approach using the same sample in a voxel creates
 	// extreme aliasing (you can distinguish the voxels by color...)
@@ -570,12 +575,12 @@ extern "C" __global__ void __closesthit__ch()
 	auto &r_voxel = parameters.voxel.reservoirs[index];
 	int *lock = parameters.voxel.locks[index];
 
-	/* bool occluded = false;
+	bool occluded = false;
 	float3 cached_sample = make_float3(0.0f);
 	float3 cached_position = make_float3(0.0f);
 	float cached_W = 0;
 
-	if (parameters.samples == 0) {
+	/* if (parameters.samples == 0) {
 		while (atomicCAS(lock, 0, 1) == 0);
 		if (r_voxel.count > 0) {
 			r_voxel.reset();
@@ -601,8 +606,6 @@ extern "C" __global__ void __closesthit__ch()
 	float e = fract(random3(rp->seed).x);
 	int count = r_voxel.count;
 	if (primary && count > 0 && !occluded) {
-		// rp->value = normalize(cached_position - x) * 0.5f + 0.5f;
-		// rp->value = make_float3(0, 1, 0);
 		rp->value = direct + f * cached_sample * cached_W * abs(dot(wi, n));
 	} else if (primary) {
 		// Recurse
@@ -630,28 +633,7 @@ extern "C" __global__ void __closesthit__ch()
 		float W = r_voxel.weight/(r_voxel.count * length(value) + 1e-6);
 		atomicExch(lock, 0);
 
-		// Set value
-		/* if (count > 0)
-			rp->value = make_float3(1, 0, 1);
-		else {
-			rp->value = make_float3(0, 0, 1);
-			rp->value = direct + f * value * W * abs(dot(wi, n));
-		} */
-
 		rp->value = direct + T * rp->value;
-		
-		/* if (selected) {
-			// No need to check for occlusion
-		} else {
-			// Check if the sample is occluded
-			float3 L = position - x;
-			float3 L_n = normalize(L);
-
-			if (is_occluded(x + n * 0.01, L_n, length(L)))
-				rp->value = direct + T * rp->value;
-			else
-				rp->value = direct + f * value * W * abs(dot(wi, n));
-		} */
 	} else {
 		optixTrace(parameters.traversable,
 			x + offset, wi,
