@@ -524,6 +524,9 @@ static void update_light_buffers(Wadjet &layer,
 
 		layer.launch_params.lights.quads = cuda::make_buffer(quad_lights);
 		layer.launch_params.lights.quad_count = quad_lights.size();
+
+		KOBRA_LOG_FUNC(Log::INFO) << "Uploaded " << quad_lights.size()
+			<< " quad lights to the GPU\n";
 	}
 
 	// Count number of emissive submeshes
@@ -565,6 +568,9 @@ static void update_light_buffers(Wadjet &layer,
 
 		layer.launch_params.lights.triangles = cuda::make_buffer(layer.host.tri_lights);
 		layer.launch_params.lights.triangle_count = layer.host.tri_lights.size();
+
+		KOBRA_LOG_FUNC(Log::INFO) << "Uploaded " << layer.host.tri_lights.size()
+			<< " triangle lights to the GPU\n";
 	}
 }
 

@@ -53,7 +53,7 @@ __device__ float3 Ld(float3 x, float3 wo, float3 n,
 	int quad_count = parameters.lights.quad_count;
 	int tri_count = parameters.lights.triangle_count;
 
-#define GROUND_TRUTH
+// #define GROUND_TRUTH
 
 #ifdef GROUND_TRUTH
 	

@@ -814,7 +814,7 @@ static Submesh process_mesh(aiMesh *mesh, const aiScene *scene, const std::strin
 	if (material->GetTexture(aiTextureType_DIFFUSE, 0, &path) == AI_SUCCESS) {
 		mat.albedo_texture = path.C_Str();
 		mat.albedo_texture = common::resolve_path(path.C_Str(), {dir});
-		assert(!mat.albedo_texture.empty());
+		// assert(!mat.albedo_texture.empty());
 	} else {
 		aiColor3D diffuse;
 		material->Get(AI_MATKEY_COLOR_DIFFUSE, diffuse);
@@ -825,7 +825,7 @@ static Submesh process_mesh(aiMesh *mesh, const aiScene *scene, const std::strin
 	if (material->GetTexture(aiTextureType_NORMALS, 0, &path) == AI_SUCCESS) {
 		mat.normal_texture = path.C_Str();
 		mat.normal_texture = common::resolve_path(path.C_Str(), {dir});
-		assert(!mat.normal_texture.empty());
+		// assert(!mat.normal_texture.empty());
 	}
 
 	// Get specular

@@ -238,7 +238,8 @@ struct MotionCapture : public kobra::BaseApp {
 	}
 
 	float time = 0.0f;
-	int mode = 0;
+	int mode = 1;
+	int samples = 0;
 
 	std::queue <bool> events;
 	std::mutex events_mutex;
@@ -289,9 +290,12 @@ struct MotionCapture : public kobra::BaseApp {
 
 		// Also check our events
 		events_mutex.lock();
-		if (!events.empty())
+		if (!events.empty()) {
 			accumulate = false; // Means that camera direction
 					    // changed
+
+			samples = 0;
+		}
 
 		events = std::queue <bool> (); // Clear events
 		events_mutex.unlock();
@@ -313,6 +317,8 @@ struct MotionCapture : public kobra::BaseApp {
 
 				kobra::layers::render(wadjet_tracer, cmd, framebuffer);
 				kobra::layers::capture(wadjet_tracer, frame);
+
+				samples++;
 			}
 
 			// Text to render
@@ -320,6 +326,14 @@ struct MotionCapture : public kobra::BaseApp {
 				kobra::common::sprintf("%.2f fps", 1.0f/frame_time),
 				{5, 5}, glm::vec3 {0.8, 0.8, 1}, 0.7f
 			);
+
+			kobra::ui::Text t_samples(
+				kobra::common::sprintf("%d samples", samples),
+				{0, 5}, glm::vec3 {0.8, 0.8, 1}, 0.7f
+			);
+
+			glm::vec2 size = font_renderer.size(t_samples);
+			t_samples.anchor.x = 1000 - size.x - 5;
 		
 			// Start render pass
 			// TODO: Make this a function
@@ -350,7 +364,7 @@ struct MotionCapture : public kobra::BaseApp {
 				vk::SubpassContents::eInline
 			);
 
-			font_renderer.render(cmd, {t_fps});
+			font_renderer.render(cmd, {t_fps, t_samples});
 
 			cmd.endRenderPass();
 		cmd.end();
