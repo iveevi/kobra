@@ -29,7 +29,7 @@
 using namespace kobra;
 
 // Scene path
-std::string scene_path = "/home/venki/models/fireplace_room.kobra";
+std::string scene_path = "/home/venki/models/san_miguel.kobra";
 // std::string scene_path = "scenes/ggx.kobra";
 
 // Test app

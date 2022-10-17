@@ -143,6 +143,7 @@ struct PathSample {
 struct VoxelSample {
 	float3 value;
 	float3 position;
+	float3 direction;
 };
 
 using ReSTIR_Reservoir = Reservoir <PathSample>;

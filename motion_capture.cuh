@@ -412,6 +412,12 @@ struct MotionCapture : public kobra::BaseApp {
 		else if (event.action == GLFW_RELEASE && is_drag_button)
 			dragging = false;
 
+		bool is_alt_down = app.io.input.is_key_down(GLFW_KEY_LEFT_ALT);
+		if (!dragging && is_alt_down)
+			dragging = true;
+		else if (dragging && !is_alt_down)
+			dragging = false;
+
 		// Pan only when dragging
 		if (dragging) {
 			yaw -= dx * sensitivity;

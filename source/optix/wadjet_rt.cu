@@ -179,7 +179,7 @@ extern "C" __global__ void __raygen__rg()
 		
 	// Finally, store the result
 	float4 sample = make_float4(rp.value, 1.0f);
-	if (parameters.accumulate) {
+	if (parameters.accumulate && false) {
 		float4 prev = parameters.color_buffer[index];
 		parameters.color_buffer[index] = (prev * parameters.samples + sample)
 			/(parameters.samples + 1);
@@ -259,7 +259,9 @@ void calculate_material(Hit *hit_data, Material &mat, uint3 triangle, float2 uv)
 	}
 }
 
-#define MAX_DEPTH 10
+// TODO: launch parameter for ray depth
+// #define MAX_DEPTH 10
+#define MAX_DEPTH 3
 
 // Weighting function
 KCUDA_INLINE static __device__
@@ -471,7 +473,7 @@ extern "C" __global__ void __closesthit__ch()
 	rp->ior = material.refraction;
 	rp->depth++;
 
-#define RESTIR_SAMPLING 
+#define VOXEL_SAMPLE_REUSE
 
 #if defined(RESTIR_SAMPLING)
 
@@ -546,20 +548,20 @@ extern "C" __global__ void __closesthit__ch()
 
 	// TODO: write different programs for these, then create mutliple
 	// pipelines
-#elif defined(VOXEL_SAMPLING)
+#elif defined(VOXEL_SAMPLE_REUSE)
 
 	// Get voxel coordinates
 	float3 v_min = parameters.voxel.min;
 	float3 v_max = parameters.voxel.max;
 	int res = parameters.voxel.resolution;
 
-	uint3 c = make_uint3(
+	int3 c = make_int3(
 		(x.x - v_min.x)/(v_max.x - v_min.x) * res,
 		(x.y - v_min.y)/(v_max.y - v_min.y) * res,
 		(x.z - v_min.z)/(v_max.z - v_min.z) * res
 	);
 
-	c = min(c, make_uint3(res - 1));
+	c = min(c, make_int3(res - 1));
 
 	// rp->value = make_float3((c.x + c.y + c.z) % 2);
 	// return;
@@ -567,7 +569,8 @@ extern "C" __global__ void __closesthit__ch()
 	// Issue with this approach using the same sample in a voxel creates
 	// extreme aliasing (you can distinguish the voxels by color...)
 
-	// TODO: screen shot for reference in a writeup
+	// TODO: screen shot of the naive approach (no spatial reuse, only
+	// temporal) for reference in a writeup
 
 	// Get reservoir at the voxel
 	uint index = c.x + c.y * res + c.z * res * res;
@@ -575,10 +578,11 @@ extern "C" __global__ void __closesthit__ch()
 	auto &r_voxel = parameters.voxel.reservoirs[index];
 	int *lock = parameters.voxel.locks[index];
 
-	bool occluded = false;
+	/* bool occluded = false;
 	float3 cached_sample = make_float3(0.0f);
 	float3 cached_position = make_float3(0.0f);
-	float cached_W = 0;
+	float3 cached_direction = make_float3(0.0f);
+	float cached_W = 0; */
 
 	/* if (parameters.samples == 0) {
 		while (atomicCAS(lock, 0, 1) == 0);
@@ -590,23 +594,123 @@ extern "C" __global__ void __closesthit__ch()
 		atomicExch(lock, 0);
 	} */
 
-	if (r_voxel.count > 0) {
+	/* if (r_voxel.count > 0) {
 		while (atomicCAS(lock, 0, 1) == 0);
 		cached_position = r_voxel.sample.position;
 		cached_sample = r_voxel.sample.value;
+		cached_direction = r_voxel.sample.direction;
 		cached_W = r_voxel.weight/(r_voxel.count * length(cached_sample) + 1e-6);
 		atomicExch(lock, 0);
 
 		// Check if the sample is occluded
 		float3 L = cached_position - x;
 		float3 L_n = normalize(L);
-		occluded = is_occluded(x + n * 0.01, L_n, length(L));
-	}
+		// occluded = is_occluded(x + n * 0.01, L_n, length(L));
+	} */
 
 	float e = fract(random3(rp->seed).x);
 	int count = r_voxel.count;
-	if (primary && count > 0 && !occluded) {
-		rp->value = direct + f * cached_sample * cached_W * abs(dot(wi, n));
+
+	
+	// TODO: use a different threshold than 0.5 for spatial reuse
+	// TODO: threshold should decrease over time
+	float threshold = (1.0f - tanh(count/10))/2.0f;
+
+	// TODO: analyze speedup when recursively updating voxels
+	// primary = rp->depth < (MAX_DEPTH - 1);
+	if (primary && count > 0 && e > threshold) {
+		/* float3 brdf = kobra::cuda::brdf(material, n,
+			cached_direction, wo,
+			entering, material.type
+		);
+
+		float pdf = kobra::cuda::pdf(material, n,
+			cached_direction, wo,
+			entering, material.type
+		);
+
+		if (pdf > 0) {
+			rp->value = direct + brdf * cached_sample *
+				abs(dot(cached_direction, n))/pdf;
+		} else {
+			rp->value = make_float3(1, 0, 1);
+		} */
+
+		float3 total_indirect = make_float3(0.0f);
+
+		// TODO: how to determine number of samples to take?
+		//	probably shouldnt be too low
+		const int samples = 9;
+		const float radius = float(res)/100.0f;
+
+		int success = 0;
+		int n_occluded = 0;
+		for (int i = 0; i < samples; i++) {
+			// Generate random 3D offset index
+			int3 offset = make_int3(
+				int(random3(rp->seed).x * radius),
+				int(random3(rp->seed).y * radius),
+				int(random3(rp->seed).z * radius)
+			);
+
+			int3 nindex = c + offset;
+
+			// Check if the offset is in bounds
+			if (nindex.x < 0 || nindex.x >= res ||
+				nindex.y < 0 || nindex.y >= res ||
+				nindex.z < 0 || nindex.z >= res)
+				continue;
+
+			// Get the reservoir at the offset
+			uint nindex_1d = nindex.x + nindex.y * res + nindex.z * res * res;
+
+			auto &r_voxel = parameters.voxel.reservoirs[nindex_1d];
+
+			// Lock and extract the sample
+			while (atomicCAS(lock, 0, 1) == 0);
+			float3 sample = r_voxel.sample.value;
+			float3 position = r_voxel.sample.position;
+			float3 direction = r_voxel.sample.direction;
+			float W = r_voxel.W;
+			int count = r_voxel.count;
+			atomicExch(lock, 0);
+
+			// Skip if the reservoir is empty
+			if (count == 0)
+				continue;
+
+			// Check for occulsion
+			float3 L = position - x;
+			float3 L_n = normalize(L);
+
+			bool occluded = is_occluded(x, L_n, length(L));
+			if (occluded) {
+				n_occluded++;
+				continue;
+			}
+
+			// Add the contribution
+			float3 brdf = kobra::cuda::brdf(material, n,
+				direction, wo,
+				entering, material.type
+			);
+
+			float pdf = kobra::cuda::pdf(material, n,
+				direction, wo,
+				entering, material.type
+			);
+
+			// total_indirect += sample * brdf * abs(dot(direction, n))/pdf;
+			total_indirect += sample * brdf * abs(dot(direction, n)) * W;
+			success++;
+		}
+
+		if (success == 0) {
+			// NOTE: keep this viualization of occlusions density
+			// TODO: also show sample density (i.e. the threshold value)
+			rp->value = make_float3(float(n_occluded)/float(samples));
+		} else
+			rp->value = direct + total_indirect/success;
 	} else if (primary) {
 		// Recurse
 		optixTrace(parameters.traversable,
@@ -623,17 +727,20 @@ extern "C" __global__ void __closesthit__ch()
 		// Update reservoir, locking
 		VoxelSample vs {
 			.value = rp->value,
-			.position = rp->position
+			.position = rp->position,
+			.direction = wi,
 		};
 
 		while (atomicCAS(lock, 0, 1) == 0);
 		bool selected = r_voxel.update(vs, weight);
 		float3 value = r_voxel.sample.value;
 		float3 position = r_voxel.sample.position;
-		float W = r_voxel.weight/(r_voxel.count * length(value) + 1e-6);
+		float3 direction = r_voxel.sample.direction;
+		float W = r_voxel.W  = r_voxel.weight/(r_voxel.count * length(value) + 1e-6);
 		atomicExch(lock, 0);
 
-		rp->value = direct + T * rp->value;
+		// rp->value = direct + T * rp->value;
+		rp->value = make_float3(0, 1, 0);
 	} else {
 		optixTrace(parameters.traversable,
 			x + offset, wi,
@@ -644,7 +751,8 @@ extern "C" __global__ void __closesthit__ch()
 			i0, i1
 		);
 
-		rp->value = direct + T * rp->value;
+		// rp->value = direct + T * rp->value;
+		rp->value = make_float3(0, 0, 0);
 	}
 
 #else
