@@ -381,7 +381,7 @@ struct MotionCapture : public kobra::BaseApp {
 		time += 1/60.0f;
 	}
 
-	void terminate() override {
+	/* void terminate() override {
 		if (wadjet_tracer.launch_params.samples > 100) {
 			// Get data to save
 			std::vector <uint32_t> &data = wadjet_tracer.color_buffer;
@@ -396,7 +396,7 @@ struct MotionCapture : public kobra::BaseApp {
 
 			terminate_now();
 		}
-	}
+	} */
 	
 	// Mouse callback
 	static void mouse_callback(void *us, const kobra::io::MouseEvent &event) {

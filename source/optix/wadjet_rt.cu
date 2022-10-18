@@ -39,7 +39,7 @@ bool is_occluded(float3 origin, float3 dir, float R)
 		OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT
 			| OPTIX_RAY_FLAG_DISABLE_ANYHIT
 			| OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT,
-		parameters.instances, 0, 1,
+		2 * parameters.instances, 0, 1,
 		j0, j1
 	);
 
@@ -141,6 +141,45 @@ void make_ray(uint3 idx,
 	direction = normalize(d.x * U + d.y * V + W);
 }
 
+__device__
+void trace_regular(float3 origin, float3 direction, uint i0, uint i1)
+{
+	optixTrace(parameters.traversable,
+		origin, direction,
+		0.0f, 1e16f, 0.0f,
+		OptixVisibilityMask(0b11),
+		OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+		WadjetParameters::eRegular, WadjetParameters::eCount, 0,
+		i0, i1
+	);
+}
+
+__device__
+void trace_restir(float3 origin, float3 direction, uint i0, uint i1)
+{
+	optixTrace(parameters.traversable,
+		origin, direction,
+		0.0f, 1e16f, 0.0f,
+		OptixVisibilityMask(0b11),
+		OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+		WadjetParameters::eReSTIR, WadjetParameters::eCount, 0,
+		i0, i1
+	);
+}
+
+__device__
+void trace_voxel(float3 origin, float3 direction, uint i0, uint i1)
+{
+	optixTrace(parameters.traversable,
+		origin, direction,
+		0.0f, 1e16f, 0.0f,
+		OptixVisibilityMask(0b11),
+		OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+		WadjetParameters::eVoxel, WadjetParameters::eCount, 0,
+		i0, i1
+	);
+}
+
 // Ray generation kernel
 extern "C" __global__ void __raygen__rg()
 {
@@ -167,15 +206,7 @@ extern "C" __global__ void __raygen__rg()
 	float3 direction;
 
 	make_ray(idx, origin, direction, rp.seed);
-
-	optixTrace(parameters.traversable,
-		origin, direction,
-		0.0f, 1e16f, 0.0f,
-		OptixVisibilityMask(0b11),
-		OPTIX_RAY_FLAG_DISABLE_ANYHIT,
-		0, 0, 0,
-		i0, i1
-	);
+	trace_voxel(origin, direction, i0, i1);
 		
 	// Finally, store the result
 	float4 sample = make_float4(rp.value, 1.0f);
@@ -402,6 +433,7 @@ float3 spatiotemporal_reuse(RayPacket *rp, float3 x, float3 n)
 }
 
 // Closest hit kernel
+// TODO: separate files and compile
 extern "C" __global__ void __closesthit__ch()
 {
 	// Get payload
@@ -464,28 +496,85 @@ extern "C" __global__ void __closesthit__ch()
 	// Get threshold value for current ray
 	float3 T = f * abs(dot(wi, n))/pdf;
 
-	// Recursive raytrace
-	float3 offset = 1e-3f * n;
-	if (out & Shading::eTransmission)
-		offset = 1e-3f * wi;
+	// Update ior
+	rp->ior = material.refraction;
+	rp->depth++;
+	
+	trace_regular(x, wi, i0, i1);
+	rp->value = direct + T * rp->value;
+	rp->position = x;
+	rp->normal = n;
+}
+
+// Closest hit program for ReSTIR
+extern "C" __global__ void __closesthit__restir()
+{
+	// Get payload
+	RayPacket *rp;
+	unsigned int i0 = optixGetPayload_0();
+	unsigned int i1 = optixGetPayload_1();
+	rp = unpack_pointer <RayPacket> (i0, i1);
+	
+	if (rp->depth > MAX_DEPTH)
+		return;
+
+	// Check if primary ray
+	bool primary = (rp->depth == 0);
+	
+	// Get data from the SBT
+	Hit *hit = reinterpret_cast <Hit *> (optixGetSbtDataPointer());
+
+	// Calculate relevant data for the hit
+	float2 bary = optixGetTriangleBarycentrics();
+	int primitive_index = optixGetPrimitiveIndex();
+	uint3 triangle = hit->triangles[primitive_index];
+
+	// Get UV coordinates
+	float2 uv = interpolate(hit->texcoords, triangle, bary);
+	uv.y = 1 - uv.y;
+
+	// Calculate the material
+	Material material = hit->material;
+
+	// TODO: check for light, not just emissive material
+	if (hit->material.type == Shading::eEmissive) {
+		rp->value = material.emission;
+		return;
+	}
+	
+	calculate_material(hit, material, triangle, uv);
+
+	bool entering;
+	float3 wo = -optixGetWorldRayDirection();
+	float3 n = calculate_normal(hit, triangle, bary, uv, entering);
+	float3 x = interpolate(hit->vertices, triangle, bary);
+
+	// Offset by normal
+	// TODO: use more complex shadow bias functions
+
+	// TODO: an easier check for transmissive objects
+	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
+
+	float3 direct = Ld(x, wo, n, material, entering, rp->seed);
+
+	// Generate new ray
+	Shading out;
+	float3 wi;
+	float pdf;
+
+	float3 f = eval(material, n, wo, entering, wi, pdf, out, rp->seed);
+	if (length(f) < 1e-6f)
+		return;
+
+	// Get threshold value for current ray
+	float3 T = f * abs(dot(wi, n))/pdf;
 
 	// Update ior
 	rp->ior = material.refraction;
 	rp->depth++;
 
-// #define VOXEL_SAMPLE_REUSE
-
-#if defined(RESTIR_SAMPLING)
-
 	// Recurse
-	optixTrace(parameters.traversable,
-		x + offset, wi,
-		0.0f, 1e16f, 0.0f,
-		OptixVisibilityMask(0b1),
-		OPTIX_RAY_FLAG_DISABLE_ANYHIT,
-		0, 0, 0,
-		i0, i1
-	);
+	trace_regular(x, wi, i0, i1);
 
 	// Post: advanced sampling techniques if any
 	float3 indirect = rp->value;
@@ -547,16 +636,81 @@ extern "C" __global__ void __closesthit__ch()
 			// rp->value = direct + T * indirect * r_spatial.W;
 			// rp->value = direct + T * indirect;
 		}
-	} else {
-		rp->value = direct + T * indirect;
 	}
-
+	
 	// float radius = parameters.advanced.sampling_radii[rp->index];
 	// rp->value = make_float3(radius/max_radius);
 
-	// TODO: write different programs for these, then create mutliple
-	// pipelines
-#elif defined(VOXEL_SAMPLE_REUSE)
+	rp->position = x;
+	rp->normal = n;
+}
+
+// Closest hit program for Voxel Reservoirs
+extern "C" __global__ void __closesthit__voxel()
+{
+	// Get payload
+	RayPacket *rp;
+	unsigned int i0 = optixGetPayload_0();
+	unsigned int i1 = optixGetPayload_1();
+	rp = unpack_pointer <RayPacket> (i0, i1);
+	
+	if (rp->depth > MAX_DEPTH)
+		return;
+
+	// Check if primary ray
+	bool primary = (rp->depth == 0);
+	
+	// Get data from the SBT
+	Hit *hit = reinterpret_cast <Hit *> (optixGetSbtDataPointer());
+
+	// Calculate relevant data for the hit
+	float2 bary = optixGetTriangleBarycentrics();
+	int primitive_index = optixGetPrimitiveIndex();
+	uint3 triangle = hit->triangles[primitive_index];
+
+	// Get UV coordinates
+	float2 uv = interpolate(hit->texcoords, triangle, bary);
+	uv.y = 1 - uv.y;
+
+	// Calculate the material
+	Material material = hit->material;
+
+	// TODO: check for light, not just emissive material
+	if (hit->material.type == Shading::eEmissive) {
+		rp->value = material.emission;
+		return;
+	}
+	
+	calculate_material(hit, material, triangle, uv);
+
+	bool entering;
+	float3 wo = -optixGetWorldRayDirection();
+	float3 n = calculate_normal(hit, triangle, bary, uv, entering);
+	float3 x = interpolate(hit->vertices, triangle, bary);
+
+	// Offset by normal
+	// TODO: use more complex shadow bias functions
+
+	// TODO: an easier check for transmissive objects
+	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
+
+	float3 direct = Ld(x, wo, n, material, entering, rp->seed);
+
+	// Generate new ray
+	Shading out;
+	float3 wi;
+	float pdf;
+
+	float3 f = eval(material, n, wo, entering, wi, pdf, out, rp->seed);
+	if (length(f) < 1e-6f)
+		return;
+
+	// Get threshold value for current ray
+	float3 T = f * abs(dot(wi, n))/pdf;
+
+	// Update ior
+	rp->ior = material.refraction;
+	rp->depth++;
 
 	// Get voxel coordinates
 	float3 v_min = parameters.voxel.min;
@@ -651,7 +805,7 @@ extern "C" __global__ void __closesthit__ch()
 		// TODO: how to determine number of samples to take?
 		//	probably shouldnt be too low
 		const int samples = 9; // 25, 100, etc
-		const float radius = float(res)/10.0f;
+		const float radius = float(res)/5.0f;
 
 		int success = 0;
 		int n_occluded = 0;
@@ -729,33 +883,17 @@ extern "C" __global__ void __closesthit__ch()
 			// rp->value = make_float3(float(n_empty)/float(samples));
 
 			// TODO: want to avoid this:
-			optixTrace(parameters.traversable,
-				x + offset, wi,
-				0.0f, 1e16f, 0.0f,
-				OptixVisibilityMask(0b1),
-				OPTIX_RAY_FLAG_DISABLE_ANYHIT,
-				0, 0, 0,
-				i0, i1
-			);
+			trace_voxel(x, wi, i0, i1);
 			
 			// rp->value = direct;
-			// rp->value = direct + T * rp->value;
-			rp->value = make_float3(1, 1, 1);
+			rp->value = direct + T * rp->value;
 		} else {
-			// rp->value = direct + total_indirect/success;
-			rp->value = make_float3(1, 0, 0);
+			rp->value = direct + total_indirect/success;
+			// rp->value = make_float3(1, 0, 0);
 		}
 	} else if (primary) {
 		// Recurse
-		optixTrace(parameters.traversable,
-			x + offset, wi,
-			0.0f, 1e16f, 0.0f,
-			OptixVisibilityMask(0b1),
-			OPTIX_RAY_FLAG_DISABLE_ANYHIT,
-			0, 0, 0,
-			i0, i1
-		);
-
+		trace_voxel(x, wi, i0, i1);
 		float weight = length(rp->value)/pdf;
 
 		// Update reservoir, locking
@@ -773,37 +911,12 @@ extern "C" __global__ void __closesthit__ch()
 		float W = r_voxel.W  = r_voxel.weight/(r_voxel.count * length(value) + 1e-6);
 		atomicExch(lock, 0);
 
-		// rp->value = direct + T * rp->value;
-		rp->value = make_float3(0, 1, 0);
+		rp->value = direct + T * rp->value;
+		// rp->value = make_float3(0, 1, 0);
 	} else {
-		optixTrace(parameters.traversable,
-			x + offset, wi,
-			0.0f, 1e16f, 0.0f,
-			OptixVisibilityMask(0b1),
-			OPTIX_RAY_FLAG_DISABLE_ANYHIT,
-			0, 0, 0,
-			i0, i1
-		);
-
-		// TODO: comput this purely...
-		// rp->value = direct + T * rp->value;
-		rp->value = make_float3(0, 0, 0);
+		trace_voxel(x, wi, i0, i1);
+		rp->value = direct + T * rp->value;
 	}
-
-#else
-		
-	optixTrace(parameters.traversable,
-		x + offset, wi,
-		0.0f, 1e16f, 0.0f,
-		OptixVisibilityMask(0b1),
-		OPTIX_RAY_FLAG_DISABLE_ANYHIT,
-		0, 0, 0,
-		i0, i1
-	);
-
-	rp->value = direct + T * rp->value;
-
-#endif
 
 	rp->position = x;
 	rp->normal = n;

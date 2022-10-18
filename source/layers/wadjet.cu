@@ -37,7 +37,42 @@ const std::vector <DSLB> Wadjet::dsl_bindings = {
 	}
 };
 
+static OptixProgramGroup load_program_group
+		(const OptixDeviceContext &optix_context,
+		 const OptixProgramGroupDesc &desc,
+		 const OptixProgramGroupOptions &options)
+{
+	static char log[2048];
+	static size_t sizeof_log = sizeof(log);
+
+	OptixProgramGroup group;
+	OPTIX_CHECK_LOG(
+		optixProgramGroupCreate(
+			optix_context,
+			&desc, 1,
+			&options,
+			log, &sizeof_log,
+			&group
+		)
+	);
+
+	return group;
+}
+
+static void load_program_groups
+		(const OptixDeviceContext &optix_context,
+		 const std::vector <OptixProgramGroupDesc> &descs,
+		 const OptixProgramGroupOptions &options,
+		 const std::vector <OptixProgramGroup *> &groups)
+{
+	assert(descs.size() == groups.size());
+	for (int i = 0; i < descs.size(); i++)
+		*groups[i] = load_program_group(optix_context, descs[i], options);
+}
+
 // Load OptiX program groups
+// #define KOBRA_OPTIX_DEBUG
+
 static void load_optix_program_groups(Wadjet &layer)
 {
 	static char log[2048];
@@ -46,129 +81,123 @@ static void load_optix_program_groups(Wadjet &layer)
 	// Load programs
 	OptixProgramGroupOptions program_options = {};
 
-	OptixProgramGroupDesc program_desc1 {
-		.kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
-		.raygen = {
-			.module = layer.optix_module,
-			.entryFunctionName = "__raygen__rg"
-		}
-	};
+	// Descriptions of all the programs
+	std::vector <OptixProgramGroupDesc> program_descs = {
+		// Ray generation groups
+		OptixProgramGroupDesc {
+			.kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
+			.raygen = {
+				.module = layer.optix_module,
+				.entryFunctionName = "__raygen__rg"
+			}
+		},
 
-	OPTIX_CHECK_LOG(
-		optixProgramGroupCreate(
-			layer.optix_context,
-			&program_desc1, 1,
-			&program_options,
-			log, &sizeof_log,
-			&layer.optix_programs.raygen
-		)
-	);
+		// Hit groups
+		OptixProgramGroupDesc {
+			.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
+			.hitgroup = {
+				.moduleCH = layer.optix_module,
+				.entryFunctionNameCH = "__closesthit__ch",
+			}
+		},
+
+		OptixProgramGroupDesc {
+			.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
+			.hitgroup = {
+				.moduleCH = layer.optix_module,
+				.entryFunctionNameCH = "__closesthit__restir"
+			}
+		},
+		
+		OptixProgramGroupDesc {
+			.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
+			.hitgroup = {
+				.moduleCH = layer.optix_module,
+				.entryFunctionNameCH = "__closesthit__voxel"
+			}
+		},
 	
-	OptixProgramGroupDesc program_desc2 {
-		.kind = OPTIX_PROGRAM_GROUP_KIND_MISS,
-		.miss = {
-			.module = layer.optix_module,
-			.entryFunctionName = "__miss__ms"
+		// TODO: get rid of shadow hit
+		OptixProgramGroupDesc {
+			.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
+			.hitgroup = {
+				.moduleCH = layer.optix_module,
+				.entryFunctionNameCH = "__closesthit__shadow",
+			}
+		},
+
+		// Miss groups
+		OptixProgramGroupDesc {
+			.kind = OPTIX_PROGRAM_GROUP_KIND_MISS,
+			.miss = {
+				.module = layer.optix_module,
+				.entryFunctionName = "__miss__ms"
+			}
+		},
+
+		OptixProgramGroupDesc {
+			.kind = OPTIX_PROGRAM_GROUP_KIND_MISS,
+			.miss = {
+				.module = layer.optix_module,
+				.entryFunctionName = "__miss__shadow"
+			}
 		}
 	};
 
-	OPTIX_CHECK_LOG(
-		optixProgramGroupCreate(
-			layer.optix_context,
-			&program_desc2, 1,
-			&program_options,
-			log, &sizeof_log,
-			&layer.optix_programs.miss
-		)
-	);
-	
-	OptixProgramGroupDesc program_desc3 {
-		.kind = OPTIX_PROGRAM_GROUP_KIND_MISS,
-		.miss = {
-			.module = layer.optix_module,
-			.entryFunctionName = "__miss__shadow"
-		}
+	// Corresponding program groups
+	std::vector <OptixProgramGroup *> program_groups = {
+		&layer.optix_programs.raygen,
+		&layer.optix_programs.hit,
+		&layer.optix_programs.hit_restir,
+		&layer.optix_programs.hit_voxel,
+		&layer.optix_programs.shadow_hit,
+		&layer.optix_programs.miss,
+		&layer.optix_programs.shadow_miss
 	};
 
-	OPTIX_CHECK_LOG(
-		optixProgramGroupCreate(
-			layer.optix_context,
-			&program_desc3, 1,
-			&program_options,
-			log, &sizeof_log,
-			&layer.optix_programs.shadow_miss
-		)
-	);
-	
-	OptixProgramGroupDesc program_desc4 {
-		.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
-		.hitgroup = {
-			.moduleCH = layer.optix_module,
-			.entryFunctionNameCH = "__closesthit__ch",
-		}
-	};
-
-	OPTIX_CHECK_LOG(
-		optixProgramGroupCreate(
-			layer.optix_context,
-			&program_desc4, 1,
-			&program_options,
-			log, &sizeof_log,
-			&layer.optix_programs.hit
-		)
-	);
-	
-	// TODO: get rid of shadow hit
-	OptixProgramGroupDesc program_desc5 {
-		.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
-		.hitgroup = {
-			.moduleCH = layer.optix_module,
-			.entryFunctionNameCH = "__closesthit__shadow",
-		}
-	};
-
-	OPTIX_CHECK_LOG(
-		optixProgramGroupCreate(
-			layer.optix_context,
-			&program_desc5, 1,
-			&program_options,
-			log, &sizeof_log,
-			&layer.optix_programs.shadow_hit
-		)
+	load_program_groups(
+		layer.optix_context,
+		program_descs,
+		program_options,
+		program_groups
 	);
 }
 
 // Create and configure OptiX pipeline
-static void load_optix_pipeline
-		(Wadjet &layer,
+static OptixPipeline load_optix_pipeline
+		(const OptixDeviceContext &optix_context,
+		 const std::vector <OptixProgramGroup> &program_groups,
 		 const OptixPipelineCompileOptions &ppl_compile_options)
 {
 	static char log[2048];
 	static size_t sizeof_log = sizeof(log);
 
-	// Create the pipeline and configure it
-	std::vector <OptixProgramGroup> program_groups {
-		layer.optix_programs.raygen,
-		layer.optix_programs.miss,
-		layer.optix_programs.shadow_miss,
-		layer.optix_programs.hit,
-		layer.optix_programs.shadow_hit
-	};
+	OptixPipeline pipeline;
 
+	// Create the pipeline and configure it
 	OptixPipelineLinkOptions ppl_link_options = {};
 
 	ppl_link_options.maxTraceDepth = 10;
+
+#ifdef KOBRA_OPTIX_DEBUG
+
+	ppl_link_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
+
+#else
+
 	ppl_link_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_NONE;
+
+#endif
 		
 	OPTIX_CHECK_LOG(
 		optixPipelineCreate(
-			layer.optix_context,
+			optix_context,
 			&ppl_compile_options,
 			&ppl_link_options,
 			program_groups.data(),
 			program_groups.size(),
 			log, &sizeof_log,
-			&layer.optix_pipeline
+			&pipeline
 		)
 	);
 
@@ -199,7 +228,7 @@ static void load_optix_pipeline
 
 	OPTIX_CHECK(
 		optixPipelineSetStackSize(
-			layer.optix_pipeline,
+			pipeline,
 			direct_callable_stack_size_from_traversal,
 			direct_callable_stack_size_from_state,
 			continuation_stack_size,
@@ -211,6 +240,8 @@ static void load_optix_pipeline
 		<< "direct traversable = " << direct_callable_stack_size_from_traversal << ", "
 		<< "direct state = " << direct_callable_stack_size_from_state << ", "
 		<< "continuation = " << continuation_stack_size << std::endl;
+
+	return pipeline;
 }
 
 // Setup and load OptiX things
@@ -230,7 +261,18 @@ static void initialize_optix(Wadjet &layer)
 	ppl_compile_options.usesMotionBlur = false;
 	ppl_compile_options.numPayloadValues = 2;
 	ppl_compile_options.numAttributeValues = 0;
+
+#ifdef KOBRA_OPTIX_DEBUG
+
+	ppl_compile_options.exceptionFlags = OPTIX_EXCEPTION_FLAG_DEBUG
+		| OPTIX_EXCEPTION_FLAG_TRACE_DEPTH
+		| OPTIX_EXCEPTION_FLAG_STACK_OVERFLOW;
+
+#else
+
 	ppl_compile_options.exceptionFlags = OPTIX_EXCEPTION_FLAG_NONE;
+
+#endif
 
 	ppl_compile_options.pipelineLaunchParamsVariableName = "parameters";
 	
@@ -243,8 +285,18 @@ static void initialize_optix(Wadjet &layer)
 	// Module configuration
 	OptixModuleCompileOptions module_options = {};
 
+
+#ifdef KOBRA_OPTIX_DEBUG
+
+	module_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
+	module_options.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_0;
+
+#else
+
 	module_options.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_3;
 	module_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_NONE;
+
+#endif
 
 	// Now load the module
 	char log[2048];
@@ -265,7 +317,19 @@ static void initialize_optix(Wadjet &layer)
 	load_optix_program_groups(layer);
 
 	// Create the pipeline and configure it
-	load_optix_pipeline(layer, ppl_compile_options);
+	layer.optix_pipeline = load_optix_pipeline(
+		layer.optix_context,
+		{
+			layer.optix_programs.raygen,
+			layer.optix_programs.miss,
+			layer.optix_programs.shadow_miss,
+			layer.optix_programs.hit,
+			layer.optix_programs.hit_restir,
+			layer.optix_programs.hit_voxel,
+			layer.optix_programs.shadow_hit
+		},
+		ppl_compile_options
+	);
 
 	// Create the shader binding table
 	std::vector <RaygenRecord> rg_records(1);
@@ -698,7 +762,8 @@ static void update_acceleration_structure(Wadjet &layer,
 		// Set the instance handle
 		instance.traversableHandle = instance_gas[i];
 		instance.visibilityMask = 0b1;
-		instance.sbtOffset = i;
+		instance.sbtOffset = optix::WadjetParameters::eCount * i;
+		instance.instanceId = i;
 
 		instances.push_back(instance);
 	}
@@ -863,7 +928,7 @@ static void update_sbt_data(Wadjet &layer,
 {
 	int submesh_count = submeshes.size();
 
-	std::vector <HitRecord> hit_records(submesh_count);
+	std::vector <HitRecord> hit_records;
 	for (int i = 0; i < submesh_count; i++) {
 		const Submesh *submesh = submeshes[i];
 
@@ -918,20 +983,13 @@ static void update_sbt_data(Wadjet &layer,
 		}
 	
 		optix::pack_header(layer.optix_programs.hit, hit_record);
-		hit_records[i] = hit_record;
-	}
-	
-	// TODO: delete hit shadow below
+		hit_records.push_back(hit_record);
+		
+		optix::pack_header(layer.optix_programs.hit_restir, hit_record);
+		hit_records.push_back(hit_record);
 
-	// Duplicate the SBTs for the shadow program
-	// TODO: just get rid of this altogether
-	int size = hit_records.size();
-
-	hit_records.resize(size * 2);
-	for (int i = 0; i < size; i++) {
-		HitRecord hit_record = hit_records[i];
-		optix::pack_header(layer.optix_programs.shadow_hit, hit_record);
-		hit_records[size + i] = hit_record;
+		optix::pack_header(layer.optix_programs.hit_voxel, hit_record);
+		hit_records.push_back(hit_record);
 	}
 
 	// Update the SBT
@@ -942,6 +1000,9 @@ static void update_sbt_data(Wadjet &layer,
 	layer.optix_sbt.hitgroupRecordStrideInBytes = sizeof(HitRecord);
 
 	layer.launch_params.instances = submesh_count;
+
+	KOBRA_LOG_FUNC(Log::INFO) << "Updated SBT with " << submesh_count
+		<< " submeshes, for total of " << hit_records.size() << " hit records\n";
 }
 
 // Preprocess scene data

@@ -233,6 +233,14 @@ struct HT_Parameters {
 
 // Kernel-common parameters for Wadjet path tracer
 struct WadjetParameters {
+	// Constants
+	enum {
+		eRegular = 0,
+		eReSTIR,
+		eVoxel,
+		eCount
+	};
+
 	// Image resolution
 	uint2 resolution;
 

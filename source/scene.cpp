@@ -504,6 +504,7 @@ std::string load_components(Entity &e, std::ifstream &fin, const Device &dev)
 			continue;
 		}
 
+		KOBRA_LOG_FUNC(Log::WARN) << "Unknown component: " << header << std::endl;
 		break;
 	}
 

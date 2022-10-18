@@ -68,7 +68,7 @@ builds:
   - optix_ptx_release:
     - sources: source/layers/optix_rt.cu
     - idirs: includes
-    - flags: '-ptx -O3'
+    - flags: '-ptx -O3 -lineinfo'
     - options: 'nolink, output_dir=./bin/ptx, output_format={filename}.ptx'
   - hybrid_ptx_release:
     - sources: source/optix/hybrid_rt.cu

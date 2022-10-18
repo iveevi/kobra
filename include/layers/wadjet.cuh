@@ -70,6 +70,8 @@ struct Wadjet {
 		OptixProgramGroup raygen = nullptr;
 		OptixProgramGroup miss = nullptr;
 		OptixProgramGroup hit = nullptr;
+		OptixProgramGroup hit_restir = nullptr;
+		OptixProgramGroup hit_voxel = nullptr;
 
 		OptixProgramGroup shadow_miss = nullptr;
 		OptixProgramGroup shadow_hit = nullptr;
