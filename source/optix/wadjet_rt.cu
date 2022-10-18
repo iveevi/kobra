@@ -179,7 +179,7 @@ extern "C" __global__ void __raygen__rg()
 		
 	// Finally, store the result
 	float4 sample = make_float4(rp.value, 1.0f);
-	if (parameters.accumulate && false) {
+	if (parameters.accumulate) {
 		float4 prev = parameters.color_buffer[index];
 		parameters.color_buffer[index] = (prev * parameters.samples + sample)
 			/(parameters.samples + 1);
@@ -473,7 +473,7 @@ extern "C" __global__ void __closesthit__ch()
 	rp->ior = material.refraction;
 	rp->depth++;
 
-#define VOXEL_SAMPLE_REUSE
+// #define VOXEL_SAMPLE_REUSE
 
 #if defined(RESTIR_SAMPLING)
 
@@ -507,6 +507,7 @@ extern "C" __global__ void __closesthit__ch()
 		s_radius = max_radius;
 	}
 
+	// TODO: skip restir if material is specular
 	if (primary && parameters.samples > 0) {
 		// TODO: The ray misses if its depth is 1
 		//	but not if it hits a light (check value)
@@ -534,8 +535,15 @@ extern "C" __global__ void __closesthit__ch()
 			indirect = spatiotemporal_reuse(rp, x, n);
 
 			auto &r_spatial = parameters.advanced.r_temporal[rp->index];
-			rp->value = direct + f * r_spatial.sample.value *
-				r_spatial.W * abs(dot(wi, n))/pdf;
+
+			// TODO: recalculate value of f, using brdf...
+			float3 brdf = kobra::cuda::brdf(material, n,
+				r_spatial.sample.dir, wo,
+				entering, material.type
+			);
+
+			rp->value = direct + brdf * r_spatial.sample.value *
+				r_spatial.W * abs(dot(wi, n));
 			// rp->value = direct + T * indirect * r_spatial.W;
 			// rp->value = direct + T * indirect;
 		}
@@ -618,7 +626,9 @@ extern "C" __global__ void __closesthit__ch()
 
 	// TODO: analyze speedup when recursively updating voxels
 	// primary = rp->depth < (MAX_DEPTH - 1);
-	if (primary && count > 0 && e > threshold) {
+
+	// primary = true;
+	if (primary && count > 0 && e > 0.2) {
 		/* float3 brdf = kobra::cuda::brdf(material, n,
 			cached_direction, wo,
 			entering, material.type
@@ -640,13 +650,17 @@ extern "C" __global__ void __closesthit__ch()
 
 		// TODO: how to determine number of samples to take?
 		//	probably shouldnt be too low
-		const int samples = 9;
-		const float radius = float(res)/100.0f;
+		const int samples = 9; // 25, 100, etc
+		const float radius = float(res)/10.0f;
 
 		int success = 0;
 		int n_occluded = 0;
+		int n_out = 0;
+		int n_empty = 0;
+
 		for (int i = 0; i < samples; i++) {
 			// Generate random 3D offset index
+			// TODO: use spherical mapping instead of rectangular
 			int3 offset = make_int3(
 				int(random3(rp->seed).x * radius),
 				int(random3(rp->seed).y * radius),
@@ -658,8 +672,10 @@ extern "C" __global__ void __closesthit__ch()
 			// Check if the offset is in bounds
 			if (nindex.x < 0 || nindex.x >= res ||
 				nindex.y < 0 || nindex.y >= res ||
-				nindex.z < 0 || nindex.z >= res)
+				nindex.z < 0 || nindex.z >= res) {
+				n_out++;
 				continue;
+			}
 
 			// Get the reservoir at the offset
 			uint nindex_1d = nindex.x + nindex.y * res + nindex.z * res * res;
@@ -676,8 +692,10 @@ extern "C" __global__ void __closesthit__ch()
 			atomicExch(lock, 0);
 
 			// Skip if the reservoir is empty
-			if (count == 0)
+			if (count == 0) {
+				n_empty++;
 				continue;
+			}
 
 			// Check for occulsion
 			float3 L = position - x;
@@ -708,9 +726,25 @@ extern "C" __global__ void __closesthit__ch()
 		if (success == 0) {
 			// NOTE: keep this viualization of occlusions density
 			// TODO: also show sample density (i.e. the threshold value)
-			rp->value = make_float3(float(n_occluded)/float(samples));
-		} else
-			rp->value = direct + total_indirect/success;
+			// rp->value = make_float3(float(n_empty)/float(samples));
+
+			// TODO: want to avoid this:
+			optixTrace(parameters.traversable,
+				x + offset, wi,
+				0.0f, 1e16f, 0.0f,
+				OptixVisibilityMask(0b1),
+				OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+				0, 0, 0,
+				i0, i1
+			);
+			
+			// rp->value = direct;
+			// rp->value = direct + T * rp->value;
+			rp->value = make_float3(1, 1, 1);
+		} else {
+			// rp->value = direct + total_indirect/success;
+			rp->value = make_float3(1, 0, 0);
+		}
 	} else if (primary) {
 		// Recurse
 		optixTrace(parameters.traversable,
@@ -751,6 +785,7 @@ extern "C" __global__ void __closesthit__ch()
 			i0, i1
 		);
 
+		// TODO: comput this purely...
 		// rp->value = direct + T * rp->value;
 		rp->value = make_float3(0, 0, 0);
 	}

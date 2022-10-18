@@ -380,6 +380,23 @@ struct MotionCapture : public kobra::BaseApp {
 		// Update time (fixed)
 		time += 1/60.0f;
 	}
+
+	void terminate() override {
+		if (wadjet_tracer.launch_params.samples > 100) {
+			// Get data to save
+			std::vector <uint32_t> &data = wadjet_tracer.color_buffer;
+
+			int width = wadjet_tracer.extent.width;
+			int height = wadjet_tracer.extent.height;
+
+			stbi_write_png("capture_100.png",
+				width, height, 4, data.data(),
+				width * 4
+			);
+
+			terminate_now();
+		}
+	}
 	
 	// Mouse callback
 	static void mouse_callback(void *us, const kobra::io::MouseEvent &event) {
@@ -405,6 +422,7 @@ struct MotionCapture : public kobra::BaseApp {
 		
 		// Check if panning
 		static bool dragging = false;
+		static bool alt_dragging = false;
 
 		bool is_drag_button = (event.button == pan_button);
 		if (event.action == GLFW_PRESS && is_drag_button)
@@ -413,13 +431,13 @@ struct MotionCapture : public kobra::BaseApp {
 			dragging = false;
 
 		bool is_alt_down = app.io.input.is_key_down(GLFW_KEY_LEFT_ALT);
-		if (!dragging && is_alt_down)
-			dragging = true;
-		else if (dragging && !is_alt_down)
-			dragging = false;
+		if (!alt_dragging && is_alt_down)
+			alt_dragging = true;
+		else if (alt_dragging && !is_alt_down)
+			alt_dragging = false;
 
 		// Pan only when dragging
-		if (dragging) {
+		if (dragging || alt_dragging) {
 			yaw -= dx * sensitivity;
 			pitch -= dy * sensitivity;
 
@@ -452,6 +470,13 @@ struct MotionCapture : public kobra::BaseApp {
 		// M to switch between modes
 		if (event.key == GLFW_KEY_M && event.action == GLFW_PRESS)
 			app.mode = 1 - app.mode;
+
+		// I for info
+		if (event.key == GLFW_KEY_I && event.action == GLFW_PRESS) {
+			std::cout << "Camera transform:\n";
+			std::cout << "\tPosition: " << transform.position.x << ", " << transform.position.y << ", " << transform.position.z << "\n";
+			std::cout << "\tRotation: " << transform.rotation.x << ", " << transform.rotation.y << ", " << transform.rotation.z << "\n";
+		}
 	}
 
 };
