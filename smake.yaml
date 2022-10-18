@@ -76,7 +76,9 @@ builds:
     - flags: '-ptx -O3'
     - options: 'nolink, output_dir=./bin/ptx, output_format={filename}.ptx'
   - wadjet_ptx_release:
-    - sources: source/optix/wadjet_rt.cu
+    - sources: 'source/optix/wadjet_rt.cu,
+      source/optix/wadjet_restir.cu,
+      source/optix/wadjet_voxel.cu'
     - idirs: includes
     - flags: '-ptx -O3 --expt-relaxed-constexpr'
     - options: 'nolink, output_dir=./bin/ptx, output_format={filename}.ptx'

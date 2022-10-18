@@ -57,9 +57,13 @@ struct Wadjet {
 
 	// Optix structures
 	OptixDeviceContext optix_context = nullptr;
-	OptixModule optix_module = nullptr;
 	OptixPipeline optix_pipeline = nullptr;
 	OptixShaderBindingTable optix_sbt = {};
+
+	// OptiX modules
+	OptixModule optix_module = nullptr;
+	OptixModule optix_restir_module = nullptr;
+	OptixModule optix_voxel_module = nullptr;
 
 	struct {
 		OptixTraversableHandle handle = 0;

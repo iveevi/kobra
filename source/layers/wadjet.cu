@@ -19,6 +19,8 @@
 
 // OptiX Source PTX
 #define OPTIX_PTX_FILE "bin/ptx/wadjet_rt.ptx"
+#define OPTIX_RESTIR_PTX_FILE "bin/ptx/wadjet_restir.ptx"
+#define OPTIX_VOXEL_PTX_FILE "bin/ptx/wadjet_voxel.ptx"
 
 namespace kobra {
 
@@ -104,7 +106,7 @@ static void load_optix_program_groups(Wadjet &layer)
 		OptixProgramGroupDesc {
 			.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
 			.hitgroup = {
-				.moduleCH = layer.optix_module,
+				.moduleCH = layer.optix_restir_module,
 				.entryFunctionNameCH = "__closesthit__restir"
 			}
 		},
@@ -112,7 +114,7 @@ static void load_optix_program_groups(Wadjet &layer)
 		OptixProgramGroupDesc {
 			.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
 			.hitgroup = {
-				.moduleCH = layer.optix_module,
+				.moduleCH = layer.optix_voxel_module,
 				.entryFunctionNameCH = "__closesthit__voxel"
 			}
 		},
@@ -310,6 +312,28 @@ static void initialize_optix(Wadjet &layer)
 			file.c_str(), file.size(),
 			log, &sizeof_log,
 			&layer.optix_module
+		)
+	);
+	
+	std::string restir_file = common::read_file(OPTIX_RESTIR_PTX_FILE);
+	OPTIX_CHECK_LOG(
+		optixModuleCreateFromPTX(
+			layer.optix_context,
+			&module_options, &ppl_compile_options,
+			restir_file.c_str(), restir_file.size(),
+			log, &sizeof_log,
+			&layer.optix_restir_module
+		)
+	);
+	
+	std::string voxel_file = common::read_file(OPTIX_VOXEL_PTX_FILE);
+	OPTIX_CHECK_LOG(
+		optixModuleCreateFromPTX(
+			layer.optix_context,
+			&module_options, &ppl_compile_options,
+			voxel_file.c_str(), voxel_file.size(),
+			log, &sizeof_log,
+			&layer.optix_voxel_module
 		)
 	);
 
