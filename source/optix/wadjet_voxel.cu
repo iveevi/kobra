@@ -8,49 +8,19 @@
 // Closest hit program for Voxel Reservoirs
 extern "C" __global__ void __closesthit__voxel()
 {
-	// Get payload
-	RayPacket *rp;
-	unsigned int i0 = optixGetPayload_0();
-	unsigned int i1 = optixGetPayload_1();
-	rp = unpack_pointer <RayPacket> (i0, i1);
-	
-	if (rp->depth > MAX_DEPTH)
-		return;
+	LOAD_RAYPACKET();
+	LOAD_INTERSECTION_DATA();
 
 	// Check if primary ray
 	bool primary = (rp->depth == 0);
 	
-	// Get data from the SBT
-	Hit *hit = reinterpret_cast <Hit *> (optixGetSbtDataPointer());
-
-	// Calculate relevant data for the hit
-	float2 bary = optixGetTriangleBarycentrics();
-	int primitive_index = optixGetPrimitiveIndex();
-	uint3 triangle = hit->triangles[primitive_index];
-
-	// Get UV coordinates
-	float2 uv = interpolate(hit->texcoords, triangle, bary);
-	uv.y = 1 - uv.y;
-
-	// Calculate the material
-	Material material = hit->material;
-
-	// TODO: check for light, not just emissive material
 	if (hit->material.type == Shading::eEmissive) {
 		rp->value = material.emission;
 		return;
 	}
 	
-	calculate_material(hit, material, triangle, uv);
-
-	bool entering;
-	float3 wo = -optixGetWorldRayDirection();
-	float3 n = calculate_normal(hit, triangle, bary, uv, entering);
-	float3 x = interpolate(hit->vertices, triangle, bary);
-
 	// Offset by normal
 	// TODO: use more complex shadow bias functions
-
 	// TODO: an easier check for transmissive objects
 	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
 
@@ -101,7 +71,7 @@ extern "C" __global__ void __closesthit__voxel()
 	float threshold = (1.0f - tanh(count/10))/2.0f;
 
 	// TODO: analyze speedup when recursively updating voxels
-	if (primary && count > 0 && e > 0.2) {
+	if (primary && count > 100) {
 		float3 total_indirect = make_float3(0.0f);
 
 		// TODO: how to determine number of samples to take?
@@ -112,15 +82,19 @@ extern "C" __global__ void __closesthit__voxel()
 		int success = 0;
 		int n_occluded = 0;
 		int n_out = 0;
-		int n_empty = 0;
+		int n_void = 0;
 
 		for (int i = 0; i < samples; i++) {
 			// Generate random 3D offset index
 			// TODO: use spherical mapping instead of rectangular
+
+			float3 r = fract(random3(rp->seed));
+			r = r * 2.0f - 1.0f;
+
 			int3 offset = make_int3(
-				int(random3(rp->seed).x * radius),
-				int(random3(rp->seed).y * radius),
-				int(random3(rp->seed).z * radius)
+				r.x * radius,
+				r.y * radius,
+				r.z * radius
 			);
 
 			int3 nindex = c + offset;
@@ -136,22 +110,23 @@ extern "C" __global__ void __closesthit__voxel()
 			// Get the reservoir at the offset
 			int nindex_1d = nindex.x + nindex.y * res + nindex.z * res * res;
 
-			// FIXME: use the correct lock! instead of using the
-			// same one as the current voxel
+			// Get voxel and lock
 			auto &r_voxel = parameters.voxel.reservoirs[nindex_1d];
+			int *lock = parameters.voxel.locks[nindex_1d];
 
 			// Lock and extract the sample
-			while (atomicCAS(lock, 0, 1) == 0);
+			// TODO: is the lock necessary?
+			// while (atomicCAS(lock, 0, 1) == 0);
 			float3 sample = r_voxel.sample.value;
 			float3 position = r_voxel.sample.position;
 			float3 direction = r_voxel.sample.direction;
 			float W = r_voxel.W;
 			int count = r_voxel.count;
-			atomicExch(lock, 0);
+			// atomicExch(lock, 0);
 
 			// Skip if the reservoir is empty
 			if (count == 0) {
-				n_empty++;
+				n_void++;
 				continue;
 			}
 
@@ -181,23 +156,22 @@ extern "C" __global__ void __closesthit__voxel()
 			success++;
 		}
 
-		if (success == 0) {
+		/* if (success == 0) {
 			// NOTE: keep this viualization of occlusions density
 			// TODO: also show sample density (i.e. the threshold value)
 			// rp->value = make_float3(float(n_empty)/float(samples));
 
 			// TODO: want to avoid this:
-			trace_voxel(x, wi, i0, i1);
-			
-			// rp->value = direct;
+			trace <eVoxel> (x, wi, i0, i1);
 			rp->value = direct + T * rp->value;
 		} else {
 			rp->value = direct + total_indirect/success;
-			// rp->value = make_float3(1, 0, 0);
-		}
+		} */
+
+		rp->value = make_float3(n_void)/float(samples);
 	} else if (primary) {
 		// Recurse
-		trace_voxel(x, wi, i0, i1);
+		trace <eVoxel> (x, wi, i0, i1);
 		float weight = length(rp->value)/pdf;
 
 		// Update reservoir, locking
@@ -215,9 +189,10 @@ extern "C" __global__ void __closesthit__voxel()
 		float W = r_voxel.W  = r_voxel.weight/(r_voxel.count * length(value) + 1e-6);
 		atomicExch(lock, 0);
 
-		rp->value = direct + T * rp->value;
+		// rp->value = direct + T * rp->value;
+		rp->value = make_float3(1, 0, 1);
 	} else {
-		trace_voxel(x, wi, i0, i1);
+		trace <eVoxel> (x, wi, i0, i1);
 		rp->value = direct + T * rp->value;
 	}
 
@@ -360,7 +335,7 @@ extern "C" __global__ void __closesthit__voxel()
 		}
 	} else if (primary) {
 		// Recurse
-		trace_voxel(x, wi, i0, i1);
+		trace <eVoxel> (x, wi, i0, i1);
 		float weight = length(rp->value)/pdf;
 
 		// Update reservoir, locking
@@ -380,7 +355,7 @@ extern "C" __global__ void __closesthit__voxel()
 
 		rp->value = direct + T * rp->value;
 	} else {
-		trace_voxel(x, wi, i0, i1);
+		trace <eVoxel> (x, wi, i0, i1);
 		rp->value = direct + T * rp->value;
 	}
 

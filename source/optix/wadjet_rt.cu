@@ -89,49 +89,18 @@ extern "C" __global__ void __raygen__rg()
 // Closest hit kernel
 extern "C" __global__ void __closesthit__ch()
 {
-	// Get payload
-	RayPacket *rp;
-	unsigned int i0 = optixGetPayload_0();
-	unsigned int i1 = optixGetPayload_1();
-	rp = unpack_pointer <RayPacket> (i0, i1);
-	
-	if (rp->depth > MAX_DEPTH)
-		return;
-
-	// Check if primary ray
-	bool primary = (rp->depth == 0);
-	
-	// Get data from the SBT
-	Hit *hit = reinterpret_cast <Hit *> (optixGetSbtDataPointer());
-
-	// Calculate relevant data for the hit
-	float2 bary = optixGetTriangleBarycentrics();
-	int primitive_index = optixGetPrimitiveIndex();
-	uint3 triangle = hit->triangles[primitive_index];
-
-	// Get UV coordinates
-	float2 uv = interpolate(hit->texcoords, triangle, bary);
-	uv.y = 1 - uv.y;
-
-	// Calculate the material
-	Material material = hit->material;
+	// Load all necessary data
+	LOAD_RAYPACKET();
+	LOAD_INTERSECTION_DATA();
 
 	// TODO: check for light, not just emissive material
 	if (hit->material.type == Shading::eEmissive) {
 		rp->value = material.emission;
 		return;
 	}
-	
-	calculate_material(hit, material, triangle, uv);
-
-	bool entering;
-	float3 wo = -optixGetWorldRayDirection();
-	float3 n = calculate_normal(hit, triangle, bary, uv, entering);
-	float3 x = interpolate(hit->vertices, triangle, bary);
 
 	// Offset by normal
 	// TODO: use more complex shadow bias functions
-
 	// TODO: an easier check for transmissive objects
 	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
 
@@ -146,17 +115,18 @@ extern "C" __global__ void __closesthit__ch()
 	if (length(f) < 1e-6f)
 		return;
 
-	// rp->value = f;
-	// return;
-
 	// Get threshold value for current ray
 	float3 T = f * abs(dot(wi, n))/pdf;
 
-	// Update ior
+	// Update for next ray
+	// TODO: boolean member for toggling russian roulette
 	rp->ior = material.refraction;
 	rp->depth++;
 	
+	// Trace the next ray
 	trace <eRegular> (x, wi, i0, i1);
+
+	// Update the value
 	rp->value = direct + T * rp->value;
 	rp->position = x;
 	rp->normal = n;

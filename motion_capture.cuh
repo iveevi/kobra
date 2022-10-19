@@ -36,6 +36,8 @@ struct MotionCapture : public kobra::BaseApp {
 	cv::VideoWriter capture;
 	std::vector <byte> frame;
 
+	std::string capture_path;
+
 	/* const std::vector <glm::vec3> camera_pos {
 		{-13.81, 23.40, 24.29},
 		{24.87, 21.49, 22.52},
@@ -185,6 +187,10 @@ struct MotionCapture : public kobra::BaseApp {
 		KOBRA_LOG_FILE(kobra::Log::INFO) << "Hybrid tracer setup\n";
 		tracer = kobra::layers::Wadjet::make(get_context());
 		kobra::layers::set_envmap(tracer, "resources/skies/background_1.jpg");
+
+		std::cout << "Enter capture path: ";
+		std::cin >> capture_path;
+		std::cout << "Got capture path: " << capture_path << "\n";
 
 #ifdef RECORD
 
@@ -361,22 +367,25 @@ struct MotionCapture : public kobra::BaseApp {
 		time += 1/60.0f;
 	}
 
-	/* void terminate() override {
-		if (tracer.launch_params.samples > 100) {
+	void terminate() override {
+		if (tracer.launch_params.samples > 4096) {
 			// Get data to save
 			std::vector <uint32_t> &data = tracer.color_buffer;
 
 			int width = tracer.extent.width;
 			int height = tracer.extent.height;
 
-			stbi_write_png("capture_100.png",
+			stbi_write_png(capture_path.c_str(),
 				width, height, 4, data.data(),
 				width * 4
 			);
+		
+			KOBRA_LOG_FILE(kobra::Log::INFO) << "Saved image to "
+				<< capture_path << "\n";
 
 			terminate_now();
 		}
-	} */
+	}
 	
 	// Mouse callback
 	static void mouse_callback(void *us, const kobra::io::MouseEvent &event) {

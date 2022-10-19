@@ -384,6 +384,7 @@ static void initialize_optix(Wadjet &layer)
 	};
 
 	params.envmap = 0;
+	params.samples = 0;
 
 	// Lights (set to null, etc)
 	layer.launch_params.lights.quad_count = 0;
@@ -744,8 +745,8 @@ static void update_acceleration_structure(Wadjet &layer,
 			)
 		);
 		
-		KOBRA_LOG_FUNC(Log::INFO) << "GAS buffer sizes: " << gas_buffer_sizes.tempSizeInBytes
-			<< " " << gas_buffer_sizes.outputSizeInBytes << std::endl;
+		// KOBRA_LOG_FUNC(Log::INFO) << "GAS buffer sizes: " << gas_buffer_sizes.tempSizeInBytes
+		//	<< " " << gas_buffer_sizes.outputSizeInBytes << std::endl;
 
 		d_gas_output = cuda::alloc(gas_buffer_sizes.outputSizeInBytes);
 		d_gas_tmp = cuda::alloc(gas_buffer_sizes.tempSizeInBytes);
@@ -818,7 +819,7 @@ static void update_acceleration_structure(Wadjet &layer,
 			)
 		);
 
-		KOBRA_LOG_FUNC(Log::INFO) << "IAS buffer sizes: " << ias_buffer_sizes.tempSizeInBytes << " " << ias_buffer_sizes.outputSizeInBytes << std::endl;
+		// KOBRA_LOG_FUNC(Log::INFO) << "IAS buffer sizes: " << ias_buffer_sizes.tempSizeInBytes << " " << ias_buffer_sizes.outputSizeInBytes << std::endl;
 
 		// Allocate the IAS
 		CUdeviceptr d_ias_output = cuda::alloc(ias_buffer_sizes.outputSizeInBytes);

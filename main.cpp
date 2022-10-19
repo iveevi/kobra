@@ -29,6 +29,7 @@
 using namespace kobra;
 
 // Scene path
+// TODO: project manager to avoid hardcoding scene path...
 std::string scene_path = "/home/venki/models/san_miguel.kobra";
 // std::string scene_path = "scenes/ggx.kobra";
 

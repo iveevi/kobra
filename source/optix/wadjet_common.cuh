@@ -145,6 +145,9 @@ __device__ float3 Ld(float3 x, float3 wo, float3 n,
 	int quad_count = parameters.lights.quad_count;
 	int tri_count = parameters.lights.triangle_count;
 
+	// TODO: launch parameter to control single light-single sample or
+	// multiple light-single sample
+
 // #define GROUND_TRUTH
 
 #ifdef GROUND_TRUTH
@@ -186,46 +189,7 @@ __device__ float3 Ld(float3 x, float3 wo, float3 n,
 
 }
 
-// Trace specializations
-__device__
-void trace_regular(float3 origin, float3 direction, uint i0, uint i1)
-{
-	optixTrace(parameters.traversable,
-		origin, direction,
-		0.0f, 1e16f, 0.0f,
-		OptixVisibilityMask(0b11),
-		OPTIX_RAY_FLAG_DISABLE_ANYHIT,
-		eRegular, eCount, 0,
-		i0, i1
-	);
-}
-
-__device__
-void trace_restir(float3 origin, float3 direction, uint i0, uint i1)
-{
-	optixTrace(parameters.traversable,
-		origin, direction,
-		0.0f, 1e16f, 0.0f,
-		OptixVisibilityMask(0b11),
-		OPTIX_RAY_FLAG_DISABLE_ANYHIT,
-		eReSTIR, eCount, 0,
-		i0, i1
-	);
-}
-
-__device__
-void trace_voxel(float3 origin, float3 direction, uint i0, uint i1)
-{
-	optixTrace(parameters.traversable,
-		origin, direction,
-		0.0f, 1e16f, 0.0f,
-		OptixVisibilityMask(0b11),
-		OPTIX_RAY_FLAG_DISABLE_ANYHIT,
-		eVoxel, eCount, 0,
-		i0, i1
-	);
-}
-
+// Kernel helpers/code blocks
 template <unsigned int Mode>
 KCUDA_INLINE __device__
 void trace(float3 origin, float3 direction, uint i0, uint i1)
@@ -239,5 +203,32 @@ void trace(float3 origin, float3 direction, uint i0, uint i1)
 		i0, i1
 	);
 }
+
+#define LOAD_RAYPACKET()						\
+	RayPacket *rp;							\
+	unsigned int i0 = optixGetPayload_0();				\
+	unsigned int i1 = optixGetPayload_1();				\
+	rp = unpack_pointer <RayPacket> (i0, i1);			\
+	if (rp->depth > MAX_DEPTH)					\
+		return;
+
+#define LOAD_INTERSECTION_DATA()					\
+	Hit *hit = reinterpret_cast <Hit *>				\
+		(optixGetSbtDataPointer());				\
+									\
+	float2 bary = optixGetTriangleBarycentrics();			\
+	int primitive_index = optixGetPrimitiveIndex();			\
+	uint3 triangle = hit->triangles[primitive_index];		\
+									\
+	float2 uv = interpolate(hit->texcoords, triangle, bary);	\
+	uv.y = 1 - uv.y;						\
+									\
+	Material material = hit->material;				\
+	calculate_material(hit, material, triangle, uv);		\
+									\
+	bool entering;							\
+	float3 wo = -optixGetWorldRayDirection();			\
+	float3 n = calculate_normal(hit, triangle, bary, uv, entering);	\
+	float3 x = interpolate(hit->vertices, triangle, bary);
 
 #endif

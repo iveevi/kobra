@@ -126,7 +126,7 @@ float3 spatiotemporal_reuse(RayPacket *rp, float3 x, float3 n)
 
 	// Compute final weight
 	r_spatial.W = r_spatial.weight/(
-		Z * weight_kernel(r_spatial.sample)
+		r_spatial.count * weight_kernel(r_spatial.sample)
 		+ 1e-6f
 	);
 
@@ -141,49 +141,29 @@ float3 spatiotemporal_reuse(RayPacket *rp, float3 x, float3 n)
 // Closest hit program for ReSTIR
 extern "C" __global__ void __closesthit__restir()
 {
-	// Get payload
+	/* Get payload
 	RayPacket *rp;
 	unsigned int i0 = optixGetPayload_0();
 	unsigned int i1 = optixGetPayload_1();
 	rp = unpack_pointer <RayPacket> (i0, i1);
 	
 	if (rp->depth > MAX_DEPTH)
-		return;
+		return; */
+
+	LOAD_RAYPACKET();
+	LOAD_INTERSECTION_DATA();
 
 	// Check if primary ray
 	bool primary = (rp->depth == 0);
 	
-	// Get data from the SBT
-	Hit *hit = reinterpret_cast <Hit *> (optixGetSbtDataPointer());
-
-	// Calculate relevant data for the hit
-	float2 bary = optixGetTriangleBarycentrics();
-	int primitive_index = optixGetPrimitiveIndex();
-	uint3 triangle = hit->triangles[primitive_index];
-
-	// Get UV coordinates
-	float2 uv = interpolate(hit->texcoords, triangle, bary);
-	uv.y = 1 - uv.y;
-
-	// Calculate the material
-	Material material = hit->material;
-
 	// TODO: check for light, not just emissive material
 	if (hit->material.type == Shading::eEmissive) {
 		rp->value = material.emission;
 		return;
 	}
 	
-	calculate_material(hit, material, triangle, uv);
-
-	bool entering;
-	float3 wo = -optixGetWorldRayDirection();
-	float3 n = calculate_normal(hit, triangle, bary, uv, entering);
-	float3 x = interpolate(hit->vertices, triangle, bary);
-
 	// Offset by normal
 	// TODO: use more complex shadow bias functions
-
 	// TODO: an easier check for transmissive objects
 	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
 
@@ -206,7 +186,7 @@ extern "C" __global__ void __closesthit__restir()
 	rp->depth++;
 
 	// Recurse
-	trace_regular(x, wi, i0, i1);
+	trace <eRegular> (x, wi, i0, i1);
 
 	// Post: advanced sampling techniques if any
 	float3 indirect = rp->value;
@@ -217,6 +197,7 @@ extern "C" __global__ void __closesthit__restir()
 		parameters.resolution.y
 	)/10.0f;
 
+	// TODO: temporal reporjection at some point
 	if (parameters.samples == 0) {
 		auto &r_temporal = parameters.advanced.r_temporal[rp->index];
 		auto &r_spatial = parameters.advanced.r_spatial[rp->index];
@@ -230,7 +211,7 @@ extern "C" __global__ void __closesthit__restir()
 
 	// TODO: skip restir if material is specular
 	if (primary && parameters.samples > 0) {
-		// TODO: The ray misses if its depth is 1
+		// NOTE: The ray misses if its depth is 1
 		//	but not if it hits a light (check value)
 		//	this fixes lights being black with ReSTIR
 		bool missed = (rp->depth == 1);
@@ -251,7 +232,17 @@ extern "C" __global__ void __closesthit__restir()
 		// First actually update the temporal reservoir
 		temporal_reuse(rp, sample, weight);
 
-		if (parameters.samples > 0) {
+		auto &r_temporal = parameters.advanced.r_temporal[rp->index];
+		sample = r_temporal.sample;
+
+		float3 brdf = kobra::cuda::brdf(material, n,
+			sample.dir, wo,
+			entering, material.type
+		);
+
+		rp->value = direct + brdf * sample.value * r_temporal.W * abs(dot(sample.dir, n));
+
+		/* if (parameters.samples > 0) {
 			// Then use spatiotemporal resampling
 			indirect = spatiotemporal_reuse(rp, x, n);
 
@@ -264,10 +255,10 @@ extern "C" __global__ void __closesthit__restir()
 			);
 
 			rp->value = direct + brdf * r_spatial.sample.value *
-				r_spatial.W * abs(dot(wi, n));
-			// rp->value = direct + T * indirect * r_spatial.W;
-			// rp->value = direct + T * indirect;
-		}
+				r_spatial.W * abs(dot(r_spatial.sample.dir, n));
+		} */
+	} else {
+		rp->value = direct + T * indirect;
 	}
 	
 	// float radius = parameters.advanced.sampling_radii[rp->index];
