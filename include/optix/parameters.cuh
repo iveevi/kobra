@@ -5,126 +5,26 @@
 #include "../cuda/material.cuh"
 #include "../cuda/math.cuh"
 #include "../cuda/random.cuh"
+#include "lighting.cuh"
 #include "reservoir.cuh"
 
 namespace kobra {
 
 namespace optix {
-
-KCUDA_INLINE KCUDA_HOST_DEVICE
-float intersects_triangle
-		(float3 v1, float3 v2, float3 v3,
-		float3 origin, float3 dir)
-{
-	float3 e1 = v2 - v1;
-	float3 e2 = v3 - v1;
-	float3 s1 = cross(dir, e2);
-	float divisor = dot(s1, e1);
-	if (divisor == 0.0)
-		return -1;
-	float3 s = origin - v1;
-	float inv_divisor = 1.0 / divisor;
-	float b1 = dot(s, s1) * inv_divisor;
-	if (b1 < 0.0 || b1 > 1.0)
-		return -1;
-	float3 s2 = cross(s, e1);
-	float b2 = dot(dir, s2) * inv_divisor;
-	if (b2 < 0.0 || b1 + b2 > 1.0)
-		return -1;
-	float t = dot(e2, s2) * inv_divisor;
-	return t;
-}
-
-// Light type
-struct QuadLight {
-	float3 a;
-	float3 ab;
-	float3 ac;
-	float3 intensity;
-
-	KCUDA_INLINE KCUDA_HOST_DEVICE
-	float area() const {
-		return length(cross(ab, ac));
-	}
-
-	KCUDA_INLINE KCUDA_HOST_DEVICE
-	float3 normal() const {
-		return normalize(cross(ab, ac));
-	}
-
-	KCUDA_INLINE KCUDA_HOST_DEVICE
-	float intersects(float3 origin, float3 dir) const {
-		float3 v1 = a;
-		float3 v2 = a + ab;
-		float3 v3 = a + ac;
-		float3 v4 = a + ab + ac;
-
-		float t1 = intersects_triangle(v1, v2, v3, origin, dir);
-		float t2 = intersects_triangle(v2, v3, v4, origin, dir);
-
-		if (t1 < 0.0 && t2 < 0.0)
-			return -1.0;
-		if (t1 < 0.0)
-			return t2;
-		if (t2 < 0.0)
-			return t1;
-
-		return (t1 < t2) ? t1 : t2;
-	}
+	
+// Constants
+enum : unsigned int {
+	eRegular = 0,
+	eReSTIR,
+	eVoxel,
+	eCount
 };
 
-// Triangular area light
-struct TriangleLight {
-	float3 a;
-	float3 ab;
-	float3 ac;
-	float3 intensity;
-
-	KCUDA_INLINE KCUDA_HOST_DEVICE
-	float area() const {
-		return length(cross(ab, ac)) * 0.5;
-	}
-
-	KCUDA_INLINE KCUDA_HOST_DEVICE
-	float3 normal() const {
-		return normalize(cross(ab, ac));
-	}
-
-	KCUDA_INLINE KCUDA_HOST_DEVICE
-	float intersects(float3 origin, float3 dir) const {
-		float3 v1 = a;
-		float3 v2 = a + ab;
-		float3 v3 = a + ac;
-
-		return intersects_triangle(v1, v2, v3, origin, dir);
-	}
+constexpr const char *str_modes[eCount] = {
+	"Regular",
+	"ReSTIR",
+	"Voxel"
 };
-
-// Sampling methods
-// TODO: move else where
-KCUDA_INLINE KCUDA_HOST_DEVICE
-float3 sample_area_light(QuadLight light, float3 &seed)
-{
-	float3 rand = random3(seed);
-	float u = fract(rand.x);
-	float v = fract(rand.y);
-	return light.a + u * light.ab + v * light.ac;
-}
-
-KCUDA_INLINE KCUDA_HOST_DEVICE
-float3 sample_area_light(TriangleLight light, float3 &seed)
-{
-	float3 rand = random3(seed);
-	float u = fract(rand.x);
-	float v = fract(rand.y);
-	
-	if (u + v > 1.0f) {
-		u = 1.0f - u;
-		v = 1.0f - v;
-	}
-	
-	return light.a + u * light.ab + v * light.ac;
-}
 
 // Reservoir sample for ReSTIR
 struct PathSample {
@@ -233,16 +133,9 @@ struct HT_Parameters {
 
 // Kernel-common parameters for Wadjet path tracer
 struct WadjetParameters {
-	// Constants
-	enum {
-		eRegular = 0,
-		eReSTIR,
-		eVoxel,
-		eCount
-	};
-
 	// Image resolution
 	uint2 resolution;
+	uint mode;
 
 	// Camera position
 	float3 camera;

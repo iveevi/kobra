@@ -80,7 +80,7 @@ builds:
       source/optix/wadjet_restir.cu,
       source/optix/wadjet_voxel.cu'
     - idirs: includes
-    - flags: '-ptx -O3 --expt-relaxed-constexpr'
+    - flags: '-ptx -g --expt-relaxed-constexpr'
     - options: 'nolink, output_dir=./bin/ptx, output_format={filename}.ptx'
   - glsl_compute:
     - sources: shaders/rt/progressive_path_tracer.glsl

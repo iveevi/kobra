@@ -19,6 +19,7 @@
 #include "include/layers/optix_tracer.cuh"
 #include "include/layers/wadjet.cuh"
 #include "include/optix/options.cuh"
+#include "include/optix/parameters.cuh"
 #include "include/scene.hpp"
 
 // TODO: do base app without inheritance (simple struct..., app and baseapp not
@@ -28,9 +29,7 @@ struct MotionCapture : public kobra::BaseApp {
 	kobra::Entity camera;
 	kobra::Scene scene;
 
-	kobra::layers::OptixTracer tracer;
-	kobra::layers::HybridTracer hybrid_tracer;
-	kobra::layers::Wadjet wadjet_tracer;
+	kobra::layers::Wadjet tracer;
 	kobra::layers::FontRenderer font_renderer;
 
 	// Capture
@@ -174,10 +173,6 @@ struct MotionCapture : public kobra::BaseApp {
 				vk::Extent2D {1000, 1000},
 				extensions, vk::AttachmentLoadOp::eLoad
 			),
-			tracer(get_context(),
-				vk::AttachmentLoadOp::eClear,
-				1000, 1000
-			),
 			font_renderer(get_context(),
 				render_pass,
 				"resources/fonts/noto_sans.ttf"
@@ -186,23 +181,10 @@ struct MotionCapture : public kobra::BaseApp {
 		scene.load(get_device(), scene_path);
 		camera = scene.ecs.get_entity("Camera");
 
-		// Setup tracer
-		tracer.environment_map("resources/skies/background_1.jpg");
-		tracer.sampling_strategy = kobra::optix::eDefault; // TODO:
-								   // switch
-								   // with t or
-								   // something
-		tracer.denoiser_enabled = false;
-
-		// Setup hybrid tracer
-		KOBRA_LOG_FILE(kobra::Log::INFO) << "Hybrid tracer setup\n";
-		hybrid_tracer = kobra::layers::HybridTracer::make(get_context());
-		// kobra::layers::set_envmap(hybrid_tracer, "resources/skies/background_1.jpg");
-		
 		// Setup Wadjet tracer
 		KOBRA_LOG_FILE(kobra::Log::INFO) << "Hybrid tracer setup\n";
-		wadjet_tracer = kobra::layers::Wadjet::make(get_context());
-		kobra::layers::set_envmap(wadjet_tracer, "resources/skies/background_1.jpg");
+		tracer = kobra::layers::Wadjet::make(get_context());
+		kobra::layers::set_envmap(tracer, "resources/skies/background_1.jpg");
 
 #ifdef RECORD
 
@@ -238,7 +220,7 @@ struct MotionCapture : public kobra::BaseApp {
 	}
 
 	float time = 0.0f;
-	int mode = 0;
+	unsigned int mode = kobra::optix::eRegular;
 
 	std::queue <bool> events;
 	std::mutex events_mutex;
@@ -298,32 +280,30 @@ struct MotionCapture : public kobra::BaseApp {
 
 		// Now trace and render
 		cmd.begin({});
-			if (mode) {
-				for (int i = 0; i < 1; i++)
-					tracer.compute(scene.ecs);
-				tracer.render(cmd, framebuffer);
-				tracer.capture(frame);
-			} else {
-				kobra::layers::compute(wadjet_tracer,
-					scene.ecs,
-					camera.get <kobra::Camera> (),
-					camera.get <kobra::Transform> (),
-					accumulate
-				);
+			kobra::layers::compute(tracer,
+				scene.ecs,
+				camera.get <kobra::Camera> (),
+				camera.get <kobra::Transform> (),
+				mode, accumulate
+			);
 
-				kobra::layers::render(wadjet_tracer, cmd, framebuffer);
-				kobra::layers::capture(wadjet_tracer, frame);
-			}
+			kobra::layers::render(tracer, cmd, framebuffer);
+			// kobra::layers::capture(tracer, frame);
 
 			// Text to render
 			kobra::ui::Text t_fps(
 				kobra::common::sprintf("%.2f fps", 1.0f/frame_time),
-				{5, 5}, glm::vec3 {0.8, 0.8, 1}, 0.7f
+				{5, 5}, glm::vec3 {1, 0.6, 0.6}, 0.7f
 			);
 
 			kobra::ui::Text t_samples(
-				kobra::common::sprintf("%d samples", wadjet_tracer.launch_params.samples),
-				{0, 5}, glm::vec3 {0.8, 0.8, 1}, 0.7f
+				kobra::common::sprintf("%d samples", tracer.launch_params.samples),
+				{0, 5}, glm::vec3 {1, 0.6, 0.6}, 0.7f
+			);
+
+			kobra::ui::Text t_mode(
+				kobra::common::sprintf("Mode: %s", kobra::optix::str_modes[mode]),
+				{5, 45}, glm::vec3 {1, 0.6, 0.6}, 0.5f
 			);
 
 			glm::vec2 size = font_renderer.size(t_samples);
@@ -358,7 +338,7 @@ struct MotionCapture : public kobra::BaseApp {
 				vk::SubpassContents::eInline
 			);
 
-			font_renderer.render(cmd, {t_fps, t_samples});
+			font_renderer.render(cmd, {t_fps, t_samples, t_mode});
 
 			cmd.endRenderPass();
 		cmd.end();
@@ -382,12 +362,12 @@ struct MotionCapture : public kobra::BaseApp {
 	}
 
 	/* void terminate() override {
-		if (wadjet_tracer.launch_params.samples > 100) {
+		if (tracer.launch_params.samples > 100) {
 			// Get data to save
-			std::vector <uint32_t> &data = wadjet_tracer.color_buffer;
+			std::vector <uint32_t> &data = tracer.color_buffer;
 
-			int width = wadjet_tracer.extent.width;
-			int height = wadjet_tracer.extent.height;
+			int width = tracer.extent.width;
+			int height = tracer.extent.height;
 
 			stbi_write_png("capture_100.png",
 				width, height, 4, data.data(),
@@ -468,8 +448,14 @@ struct MotionCapture : public kobra::BaseApp {
 		auto &transform = app.camera.get <kobra::Transform> ();
 
 		// M to switch between modes
-		if (event.key == GLFW_KEY_M && event.action == GLFW_PRESS)
-			app.mode = 1 - app.mode;
+		if (event.key == GLFW_KEY_M && event.action == GLFW_PRESS) {
+			app.mode = (app.mode + 1) % kobra::optix::eCount;
+			
+			// Add to event queue
+			app.events_mutex.lock();
+			app.events.push(true);
+			app.events_mutex.unlock();
+		}
 
 		// I for info
 		if (event.key == GLFW_KEY_I && event.action == GLFW_PRESS) {

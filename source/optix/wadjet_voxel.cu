@@ -1,6 +1,7 @@
 #include "wadjet_common.cuh"
 
 #define VOXEL_SPATIAL_REUSE
+// #define VOXEL_NAIVE_RESERVOIRS
 
 #if defined(VOXEL_SPATIAL_REUSE)
 
@@ -70,7 +71,7 @@ extern "C" __global__ void __closesthit__voxel()
 	// Update ior
 	rp->ior = material.refraction;
 	rp->depth++;
-
+	
 	// Get voxel coordinates
 	float3 v_min = parameters.voxel.min;
 	float3 v_max = parameters.voxel.max;
@@ -83,6 +84,7 @@ extern "C" __global__ void __closesthit__voxel()
 	);
 
 	c = min(c, make_int3(res - 1));
+
 
 	// Get reservoir at the voxel
 	uint index = c.x + c.y * res + c.z * res * res;
@@ -99,9 +101,6 @@ extern "C" __global__ void __closesthit__voxel()
 	float threshold = (1.0f - tanh(count/10))/2.0f;
 
 	// TODO: analyze speedup when recursively updating voxels
-	// primary = rp->depth < (MAX_DEPTH - 1);
-
-	// primary = true;
 	if (primary && count > 0 && e > 0.2) {
 		float3 total_indirect = make_float3(0.0f);
 
@@ -135,8 +134,10 @@ extern "C" __global__ void __closesthit__voxel()
 			}
 
 			// Get the reservoir at the offset
-			uint nindex_1d = nindex.x + nindex.y * res + nindex.z * res * res;
+			int nindex_1d = nindex.x + nindex.y * res + nindex.z * res * res;
 
+			// FIXME: use the correct lock! instead of using the
+			// same one as the current voxel
 			auto &r_voxel = parameters.voxel.reservoirs[nindex_1d];
 
 			// Lock and extract the sample
@@ -186,10 +187,10 @@ extern "C" __global__ void __closesthit__voxel()
 			// rp->value = make_float3(float(n_empty)/float(samples));
 
 			// TODO: want to avoid this:
-			// trace_voxel(x, wi, i0, i1);
+			trace_voxel(x, wi, i0, i1);
 			
-			rp->value = direct;
-			// rp->value = direct + T * rp->value;
+			// rp->value = direct;
+			rp->value = direct + T * rp->value;
 		} else {
 			rp->value = direct + total_indirect/success;
 			// rp->value = make_float3(1, 0, 0);
@@ -215,7 +216,6 @@ extern "C" __global__ void __closesthit__voxel()
 		atomicExch(lock, 0);
 
 		rp->value = direct + T * rp->value;
-		// rp->value = make_float3(0, 1, 0);
 	} else {
 		trace_voxel(x, wi, i0, i1);
 		rp->value = direct + T * rp->value;

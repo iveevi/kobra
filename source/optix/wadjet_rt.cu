@@ -59,7 +59,21 @@ extern "C" __global__ void __raygen__rg()
 	float3 direction;
 
 	make_ray(idx, origin, direction, rp.seed);
-	trace_restir(origin, direction, i0, i1);
+
+	// Switch on the ray type
+	switch (parameters.mode) {
+	case eRegular:
+		trace <eRegular> (origin, direction, i0, i1);
+		break;
+	case eReSTIR:
+		trace <eReSTIR> (origin, direction, i0, i1);
+		break;
+	case eVoxel:
+		trace <eVoxel> (origin, direction, i0, i1);
+		break;
+	default:
+		break;
+	}
 		
 	// Finally, store the result
 	float4 sample = make_float4(rp.value, 1.0f);
@@ -132,6 +146,9 @@ extern "C" __global__ void __closesthit__ch()
 	if (length(f) < 1e-6f)
 		return;
 
+	// rp->value = f;
+	// return;
+
 	// Get threshold value for current ray
 	float3 T = f * abs(dot(wi, n))/pdf;
 
@@ -139,7 +156,7 @@ extern "C" __global__ void __closesthit__ch()
 	rp->ior = material.refraction;
 	rp->depth++;
 	
-	trace_regular(x, wi, i0, i1);
+	trace <eRegular> (x, wi, i0, i1);
 	rp->value = direct + T * rp->value;
 	rp->position = x;
 	rp->normal = n;
@@ -156,7 +173,9 @@ extern "C" __global__ void __miss__ms()
 	float u = atan2(ray_direction.x, ray_direction.z)/(2.0f * M_PI) + 0.5f;
 	float v = asin(ray_direction.y)/M_PI + 0.5f;
 
-	float4 c = tex2D <float4> (parameters.envmap, u, v);
+	float4 c = make_float4(0);
+	if (parameters.envmap != 0)
+		c = tex2D <float4> (parameters.envmap, u, v);
 
 	// Transfer to payload
 	RayPacket *rp;

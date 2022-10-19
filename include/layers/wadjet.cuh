@@ -117,7 +117,8 @@ struct Wadjet {
 void set_envmap(Wadjet &, const std::string &);
 void capture(Wadjet &, std::vector <uint8_t> &);
 
-void compute(Wadjet &, const ECS &, const Camera &, const Transform &, bool = false);
+void compute(Wadjet &, const ECS &, const Camera &, const Transform &,
+		unsigned int, bool = false);
 
 void render(Wadjet &,
 	const CommandBuffer &,

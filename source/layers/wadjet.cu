@@ -247,7 +247,7 @@ static OptixPipeline load_optix_pipeline
 }
 
 // Setup and load OptiX things
-const int VOXEL_RESOLUTION = 256;
+const int VOXEL_RESOLUTION = 100;
 
 static void initialize_optix(Wadjet &layer)
 {
@@ -350,7 +350,6 @@ static void initialize_optix(Wadjet &layer)
 			layer.optix_programs.hit,
 			layer.optix_programs.hit_restir,
 			layer.optix_programs.hit_voxel,
-			layer.optix_programs.shadow_hit
 		},
 		ppl_compile_options
 	);
@@ -383,6 +382,8 @@ static void initialize_optix(Wadjet &layer)
 		layer.extent.width,
 		layer.extent.height
 	};
+
+	params.envmap = 0;
 
 	// Lights (set to null, etc)
 	layer.launch_params.lights.quad_count = 0;
@@ -786,7 +787,7 @@ static void update_acceleration_structure(Wadjet &layer,
 		// Set the instance handle
 		instance.traversableHandle = instance_gas[i];
 		instance.visibilityMask = 0b1;
-		instance.sbtOffset = optix::WadjetParameters::eCount * i;
+		instance.sbtOffset = optix::eCount * i;
 		instance.instanceId = i;
 
 		instances.push_back(instance);
@@ -1158,6 +1159,7 @@ void compute(Wadjet &layer,
 		const ECS &ecs,
 		const Camera &camera,
 		const Transform &transform,
+		unsigned int mode,
 		bool accumulate)
 {
 	KOBRA_PROFILE_TASK(HyrbidTracer compute path tracing);
@@ -1168,6 +1170,9 @@ void compute(Wadjet &layer,
 
 		preprocess_scene(layer, ecs, camera, transform);
 	}
+
+	// Set rendering mode
+	layer.launch_params.mode = mode;
 
 	// Reset the accumulation state if needed
 	if (!accumulate)

@@ -131,7 +131,7 @@ bool is_occluded(float3 origin, float3 dir, float R)
 		OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT
 			| OPTIX_RAY_FLAG_DISABLE_ANYHIT
 			| OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT,
-		2 * parameters.instances, 0, 1,
+		0, 0, 1,
 		j0, j1
 	);
 
@@ -195,7 +195,7 @@ void trace_regular(float3 origin, float3 direction, uint i0, uint i1)
 		0.0f, 1e16f, 0.0f,
 		OptixVisibilityMask(0b11),
 		OPTIX_RAY_FLAG_DISABLE_ANYHIT,
-		WadjetParameters::eRegular, WadjetParameters::eCount, 0,
+		eRegular, eCount, 0,
 		i0, i1
 	);
 }
@@ -208,7 +208,7 @@ void trace_restir(float3 origin, float3 direction, uint i0, uint i1)
 		0.0f, 1e16f, 0.0f,
 		OptixVisibilityMask(0b11),
 		OPTIX_RAY_FLAG_DISABLE_ANYHIT,
-		WadjetParameters::eReSTIR, WadjetParameters::eCount, 0,
+		eReSTIR, eCount, 0,
 		i0, i1
 	);
 }
@@ -221,7 +221,21 @@ void trace_voxel(float3 origin, float3 direction, uint i0, uint i1)
 		0.0f, 1e16f, 0.0f,
 		OptixVisibilityMask(0b11),
 		OPTIX_RAY_FLAG_DISABLE_ANYHIT,
-		WadjetParameters::eVoxel, WadjetParameters::eCount, 0,
+		eVoxel, eCount, 0,
+		i0, i1
+	);
+}
+
+template <unsigned int Mode>
+KCUDA_INLINE __device__
+void trace(float3 origin, float3 direction, uint i0, uint i1)
+{
+	optixTrace(parameters.traversable,
+		origin, direction,
+		0.0f, 1e16f, 0.0f,
+		OptixVisibilityMask(0b11),
+		OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+		Mode, eCount, 0,
 		i0, i1
 	);
 }

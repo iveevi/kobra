@@ -67,6 +67,15 @@ KCUDA_INLINE KCUDA_HOST_DEVICE unsigned long long min(unsigned long long a, unsi
     return a < b ? a : b;
 }
 
+/* KCUDA_INLINE KCUDA_HOST_DEVICE float max(float a, float b)
+{
+    return a > b ? a : b;
+}
+
+KCUDA_INLINE KCUDA_HOST_DEVICE float min(float a, float b)
+{
+    return a < b ? a : b;
+} */
 
 /** lerp */
 KCUDA_INLINE KCUDA_HOST_DEVICE float lerp(const float a, const float b, const float t)
