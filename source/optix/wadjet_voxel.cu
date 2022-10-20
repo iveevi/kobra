@@ -1,7 +1,7 @@
 #include "wadjet_common.cuh"
 
-#define VOXEL_SPATIAL_REUSE
-// #define VOXEL_NAIVE_RESERVOIRS
+// #define VOXEL_SPATIAL_REUSE
+#define VOXEL_NAIVE_RESERVOIRS
 
 #if defined(VOXEL_SPATIAL_REUSE)
 
@@ -71,13 +71,13 @@ extern "C" __global__ void __closesthit__voxel()
 	float threshold = (1.0f - tanh(count/10))/2.0f;
 
 	// TODO: analyze speedup when recursively updating voxels
-	if (primary && count > 100) {
+	if (primary && count > 10 && e > 0.25) {
 		float3 total_indirect = make_float3(0.0f);
 
 		// TODO: how to determine number of samples to take?
 		//	probably shouldnt be too low
-		const int samples = 9; // 25, 100, etc
-		const float radius = float(res)/5.0f;
+		const int samples = 3; // 25, 100, etc
+		const float max_radius = float(res);
 
 		int success = 0;
 		int n_occluded = 0;
@@ -87,8 +87,18 @@ extern "C" __global__ void __closesthit__voxel()
 		for (int i = 0; i < samples; i++) {
 			// Generate random 3D offset index
 			// TODO: use spherical mapping instead of rectangular
-
+			
 			float3 r = fract(random3(rp->seed));
+
+			// NOTE: sqrt of the random variable results in larger
+			// radii
+			float radius = fract(sqrt(random3(r).x)) * max_radius;
+
+			// TODO: select between these filters by sampling ~5
+			// from each in the inital stage
+#if 0
+
+			// Cubic sampling
 			r = r * 2.0f - 1.0f;
 
 			int3 offset = make_int3(
@@ -96,6 +106,46 @@ extern "C" __global__ void __closesthit__voxel()
 				r.y * radius,
 				r.z * radius
 			);
+
+#elif 0
+
+			// Spherical sampling
+			float theta = r.x * 2.0f * M_PI;
+			float phi = r.y * M_PI;
+
+			float3 pre_offset = make_int3(
+				radius * sin(phi) * cos(theta),
+				radius * sin(phi) * sin(theta),
+				radius * cos(phi)
+			);
+
+			// pre_offset += n * 
+
+#else
+
+			// Normal disk sampling
+			float theta = r.x * 2.0f * M_PI;
+
+			// Get vectors orthogonal to n
+			const float3 up = make_float3(0.0f, 1.0f, 0.0f);
+			const float3 right = make_float3(1.0f, 0.0f, 0.0f);
+
+			float3 u = normalize(cross(n, up));
+			if (length(u) < 1e-6f)
+				u = normalize(cross(n, right));
+
+			float3 v = normalize(cross(n, u));
+
+			float3 pre_offset = make_float3(
+				radius * cos(theta) * u.x + radius * sin(theta) * v.x,
+				radius * cos(theta) * u.y + radius * sin(theta) * v.y,
+				radius * cos(theta) * u.z + radius * sin(theta) * v.z
+			);
+
+			pre_offset += 0.5 * n * (2 * r.y - 1);
+			int3 offset = make_int3(pre_offset);
+
+#endif
 
 			int3 nindex = c + offset;
 
@@ -155,20 +205,29 @@ extern "C" __global__ void __closesthit__voxel()
 			total_indirect += sample * brdf * abs(dot(direction, n)) * W;
 			success++;
 		}
+		
+		// TODO: spatial reservoirs as well...
 
-		/* if (success == 0) {
-			// NOTE: keep this viualization of occlusions density
-			// TODO: also show sample density (i.e. the threshold value)
-			// rp->value = make_float3(float(n_empty)/float(samples));
+// #define VISUALIZE
 
+		if (success == 0) {
+#ifdef VISUALIZE
+			if (n_void > n_occluded)
+				rp->value = make_float3(0, 0, n_void)/float(samples);
+			else
+				rp->value = make_float3(n_occluded, 0, 0)/float(samples);
+#else
 			// TODO: want to avoid this:
 			trace <eVoxel> (x, wi, i0, i1);
 			rp->value = direct + T * rp->value;
+#endif
 		} else {
+#ifdef VISUALIZE
+			rp->value = make_float3(0, 1, 0);
+#else
 			rp->value = direct + total_indirect/success;
-		} */
-
-		rp->value = make_float3(n_void)/float(samples);
+#endif
+		}
 	} else if (primary) {
 		// Recurse
 		trace <eVoxel> (x, wi, i0, i1);
@@ -189,9 +248,13 @@ extern "C" __global__ void __closesthit__voxel()
 		float W = r_voxel.W  = r_voxel.weight/(r_voxel.count * length(value) + 1e-6);
 		atomicExch(lock, 0);
 
-		// rp->value = direct + T * rp->value;
+#ifdef VISUALIZE
 		rp->value = make_float3(1, 0, 1);
+#else
+		rp->value = direct + T * rp->value;
+#endif
 	} else {
+		// Regular rays
 		trace <eVoxel> (x, wi, i0, i1);
 		rp->value = direct + T * rp->value;
 	}
@@ -266,7 +329,6 @@ extern "C" __global__ void __closesthit__voxel()
 
 	// Update ior
 	rp->ior = material.refraction;
-	rp->depth++;
 
 	// Get voxel coordinates
 	float3 v_min = parameters.voxel.min;
@@ -293,7 +355,91 @@ extern "C" __global__ void __closesthit__voxel()
 	auto &r_voxel = parameters.voxel.reservoirs[index];
 	int *lock = parameters.voxel.locks[index];
 
-	bool occluded = false;
+	int success = 0;
+
+	float3 total_indirect = make_float3(0);
+
+	// primary = ((MAX_DEPTH - rp->depth) >= MAX_DEPTH);
+	primary = (rp->depth < 1);
+	for (int i = 0; i < Voxel_Reservoir::size; i++) {
+		// while (atomicCAS(lock, 0, 1) == 0);
+
+		auto sample = r_voxel.samples[i];
+
+		float3 value = sample.value;
+		float3 position = sample.position;
+		float3 direction = sample.direction;
+
+		// atomicExch(lock, 0);
+
+		// Check if the sample is occluded
+		float3 L = position - x;
+		float3 L_n = normalize(L);
+
+		bool occluded = is_occluded(x + n * 0.01, L_n, length(L));
+		if (occluded)
+			continue;
+
+		// Add to indirect lighting
+		float pdf = kobra::cuda::pdf(material, n,
+			direction, wo,
+			entering, material.type
+		);
+
+		if (isnan(pdf) || pdf < 0.01)
+			continue;
+
+		/* if (isnan(pdf) || isnan(1.0/pdf)) {
+			printf("pdf: %f\t1/pdf: %f\n", pdf, 1.0/pdf);
+			assert(false);
+		} */
+		
+		float3 brdf = kobra::cuda::brdf(material, n,
+			direction, wo,
+			entering, material.type
+		);
+
+		float3 f = brdf * abs(dot(direction, n))/pdf;
+		total_indirect += value * f;
+
+		success++;
+	}
+
+	// Reuse only if primary
+	float r = fract(random3(rp->seed).x);
+	if (primary && success > 0) {
+		// rp->value = make_float3(success/float(Voxel_Reservoir::size));
+		rp->value = direct + total_indirect/float(success);
+		return;
+	}
+
+	// Regular rays and add to reservoir
+	rp->depth++;
+	trace <eVoxel> (x, wi, i0, i1);
+
+	// Construct sample if primary ray
+	if (primary) {
+		VoxelSample sample {
+			.value = rp->value,
+			.position = x,
+			.direction = wi
+		};
+
+		float weight = length(sample.value)/pdf;
+
+		// Add to reservoir
+		while (atomicCAS(lock, 0, 1) == 0);
+		r_voxel.update(sample, weight);
+		atomicExch(lock, 0);
+		
+		// rp->value = make_float3(1, 0, 0);
+		// return;
+	}
+
+	// rp->value = make_float3(1, 0, 0);
+	rp->value = direct + T * rp->value;
+
+	/* bool occluded = false;
 	float3 cached_sample = make_float3(0.0f);
 	float3 cached_position = make_float3(0.0f);
 	float3 cached_direction = make_float3(0.0f);
@@ -301,9 +447,9 @@ extern "C" __global__ void __closesthit__voxel()
 
 	if (r_voxel.count > 0) {
 		while (atomicCAS(lock, 0, 1) == 0);
-		cached_position = r_voxel.sample.position;
-		cached_sample = r_voxel.sample.value;
-		cached_direction = r_voxel.sample.direction;
+		cached_position = r_voxel.samples[0].position;
+		cached_sample = r_voxel.samples[0].value;
+		cached_direction = r_voxel.samples[0].direction;
 		cached_W = r_voxel.weight/(r_voxel.count * length(cached_sample) + 1e-6);
 		atomicExch(lock, 0);
 
@@ -329,7 +475,7 @@ extern "C" __global__ void __closesthit__voxel()
 
 		if (pdf > 0) {
 			rp->value = direct + brdf * cached_sample *
-				abs(dot(cached_direction, n))/pdf;
+				cached_W * abs(dot(cached_direction, n));
 		} else {
 			rp->value = direct;
 		}
@@ -347,9 +493,9 @@ extern "C" __global__ void __closesthit__voxel()
 
 		while (atomicCAS(lock, 0, 1) == 0);
 		bool selected = r_voxel.update(vs, weight);
-		float3 value = r_voxel.sample.value;
-		float3 position = r_voxel.sample.position;
-		float3 direction = r_voxel.sample.direction;
+		float3 value = r_voxel.samples[0].value;
+		float3 position = r_voxel.samples[0].position;
+		float3 direction = r_voxel.samples[0].direction;
 		float W = r_voxel.W  = r_voxel.weight/(r_voxel.count * length(value) + 1e-6);
 		atomicExch(lock, 0);
 
@@ -357,7 +503,7 @@ extern "C" __global__ void __closesthit__voxel()
 	} else {
 		trace <eVoxel> (x, wi, i0, i1);
 		rp->value = direct + T * rp->value;
-	}
+	} */
 
 	rp->position = x;
 	rp->normal = n;

@@ -31,6 +31,7 @@ struct MotionCapture : public kobra::BaseApp {
 
 	kobra::layers::Wadjet tracer;
 	kobra::layers::FontRenderer font_renderer;
+	// TODO: denoising layer which takes CUDA buffer as input
 
 	// Capture
 	cv::VideoWriter capture;
@@ -189,7 +190,8 @@ struct MotionCapture : public kobra::BaseApp {
 		kobra::layers::set_envmap(tracer, "resources/skies/background_1.jpg");
 
 		std::cout << "Enter capture path: ";
-		std::cin >> capture_path;
+		// std::cin >> capture_path;
+		capture_path = "capture_4096.png";
 		std::cout << "Got capture path: " << capture_path << "\n";
 
 #ifdef RECORD
@@ -226,7 +228,7 @@ struct MotionCapture : public kobra::BaseApp {
 	}
 
 	float time = 0.0f;
-	unsigned int mode = kobra::optix::eRegular;
+	unsigned int mode = kobra::optix::eVoxel;
 
 	std::queue <bool> events;
 	std::mutex events_mutex;
@@ -382,8 +384,6 @@ struct MotionCapture : public kobra::BaseApp {
 		
 			KOBRA_LOG_FILE(kobra::Log::INFO) << "Saved image to "
 				<< capture_path << "\n";
-
-			terminate_now();
 		}
 	}
 	

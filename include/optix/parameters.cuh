@@ -47,7 +47,7 @@ struct VoxelSample {
 };
 
 using ReSTIR_Reservoir = Reservoir <PathSample>;
-using Voxel_Reservoir = Reservoir <VoxelSample>;
+using Voxel_Reservoir = MultiReservoir <VoxelSample, 10>;
 
 // Hit data record
 struct Hit {
