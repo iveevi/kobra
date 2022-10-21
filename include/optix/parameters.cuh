@@ -46,8 +46,15 @@ struct VoxelSample {
 	float3 direction;
 };
 
+struct TMRIS_Sample {
+	float3 value;
+	float3 position;
+	float3 direction;
+};
+
 using ReSTIR_Reservoir = Reservoir <PathSample>;
 using Voxel_Reservoir = MultiReservoir <VoxelSample, 10>;
+using TMRIS_Reservoir = Reservoir <TMRIS_Sample>;
 
 // Hit data record
 struct Hit {
@@ -59,6 +66,14 @@ struct Hit {
 	float3			*normals;
 	float3			*tangents;
 	float3			*bitangents;
+
+	// Auto UV mapping parameters
+	float3			opt_normal;
+	float3			opt_tangent;
+	float3			opt_bitangent;
+	float2			extent_tangent;
+	float2			extent_bitangent;
+	float3			centroid;
 
 	// Material and textures
 	cuda::Material		material;
@@ -72,6 +87,19 @@ struct Hit {
 		bool			has_normal = false;
 		bool			has_roughness = false;
 	} textures;
+	
+	// Texture mapped reservoir sampling
+	static constexpr int TMRIS_RESOLUTION = 400;
+
+	struct {
+		TMRIS_Reservoir	*f_res; //facing forward
+		TMRIS_Reservoir	*b_res; //facing backward
+
+		int		**f_locks;
+		int		**b_locks;
+
+		int		resolution;
+	} tmris;
 };
 
 // Kernel-common parameters for hybrid tracer

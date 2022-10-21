@@ -46,8 +46,8 @@ struct Reservoir {
 
 		// Update the cumulative weight
 		this->weight += weight;
-		// this->count = min(this->count + 1, max_count);
-		this->count++;
+		this->count = min(this->count + 1, max_count);
+		// this->count++;
 
 		// Randomly select the sample
 		float r = fract(random3(random).x);
@@ -65,7 +65,7 @@ struct Reservoir {
 	void merge(const Reservoir &reservoir, float target) {
 		int current = count;
 		update(reservoir.sample, target * reservoir.weight * reservoir.count);
-		// count = min(current + reservoir.count, max_count);
+		count = min(current + reservoir.count, max_count);
 	}
 };
 

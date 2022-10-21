@@ -1,7 +1,8 @@
 #include "wadjet_common.cuh"
 
 // #define VOXEL_SPATIAL_REUSE
-#define VOXEL_NAIVE_RESERVOIRS
+// #define VOXEL_NAIVE_RESERVOIRS
+#define TEXTURE_MAPPED_RESERVOIRS
 
 #if defined(VOXEL_SPATIAL_REUSE)
 
@@ -307,6 +308,9 @@ extern "C" __global__ void __closesthit__voxel()
 	float3 n = calculate_normal(hit, triangle, bary, uv, entering);
 	float3 x = interpolate(hit->vertices, triangle, bary);
 
+	rp->value = make_float3(uv, 0);
+	return;
+
 	// Offset by normal
 	// TODO: use more complex shadow bias functions
 
@@ -507,6 +511,127 @@ extern "C" __global__ void __closesthit__voxel()
 
 	rp->position = x;
 	rp->normal = n;
+}
+
+#elif defined(TEXTURE_MAPPED_RESERVOIRS)
+
+// TMRIS
+// TODO: move to separate file and kernel
+extern "C" __global__ void __closesthit__voxel()
+{
+	LOAD_RAYPACKET();
+	LOAD_INTERSECTION_DATA();
+
+	// Compute projection onto optimal plane
+	float3 xvec = (x - hit->centroid) + n;
+	float3 d = normalize(xvec);
+
+	float u = atan2(d.x, d.z)/(2.0f * M_PI) + 0.5f;
+	float v = asin(d.y)/M_PI + 0.5f;
+	
+	// TODO: dual textures?
+
+	float3 nvec = hit->opt_normal;
+
+	/* float3 xproj = xvec - dot(xvec, nvec) * nvec;
+
+	float u = dot(xproj, hit->opt_tangent);
+	float v = dot(xproj, hit->opt_bitangent);
+	
+	// Normalize
+	float2 u_extent = hit->extent_tangent;
+	float2 v_extent = hit->extent_bitangent;
+
+	u = (u - u_extent.x)/(u_extent.y - u_extent.x);
+	v = (v - v_extent.x)/(v_extent.y - v_extent.x); */
+
+	// Check for emissive objects
+	if (hit->material.type == Shading::eEmissive) {
+		rp->value = material.emission;
+		return;
+	}
+	
+	// Offset by normal
+	// TODO: use more complex shadow bias functions
+	// TODO: an easier check for transmissive objects
+	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
+
+	float3 direct = Ld(x, wo, n, material, entering, rp->seed);
+
+	// Generate new ray
+	Shading out;
+	float3 wi;
+	float pdf;
+
+	float3 f = eval(material, n, wo, entering, wi, pdf, out, rp->seed);
+	if (length(f) < 1e-6f) // TODO: caveat must "return" pos and n
+		return;
+
+	// Get threshold value for current ray
+	float3 T = f * abs(dot(wi, n))/pdf;
+
+	// Update ior
+	rp->ior = material.refraction;
+	rp->depth++;
+
+	// TMRIS
+	// TODO: reolution based on mesh size/complexity (mostly size)
+	constexpr int res = Hit::TMRIS_RESOLUTION;
+
+	int index = int(u * res) + int(v * res) * res;
+	index = clamp(index, 0, res * res - 1);
+
+	// Get reservoir and lock
+	auto &reservoir = hit->tmris.f_res[index];
+	int *lock = hit->tmris.f_locks[index];
+
+	// NOTE: this dual buffering apparently does a lot... use it more effectively
+	if (dot(n, nvec)) {
+		reservoir = hit->tmris.b_res[index];
+		lock = hit->tmris.b_locks[index];
+	}
+
+	trace <eRegular> (x, wi, i0, i1);
+	
+	float weight = length(rp->value)/pdf;
+	TMRIS_Sample sample {
+		.value = rp->value,
+		.position = rp->position,
+		.direction = wi,
+	};
+
+	// TODO: locking?
+	while (atomicCAS(lock, 0, 1) == 0);
+	if (pdf > 1e-6f)
+		reservoir.update(sample, weight);
+
+	sample = reservoir.sample;
+	float W = reservoir.weight/(reservoir.count * length(sample.value) + 1e-6);
+	
+	atomicExch(lock, 0);
+	
+	float3 brdf = kobra::cuda::brdf(material, n,
+		sample.direction, wo,
+		entering, material.type
+	);
+
+	float pdf_brdf = kobra::cuda::pdf(material, n,
+		sample.direction, wo,
+		entering, material.type
+	);
+
+	if (pdf_brdf > 0) {
+		rp->value = direct + brdf * sample.value *
+			abs(dot(sample.direction, n)) * W;
+	} else {
+		rp->value = direct;
+	}
+
+	// rp->value = direct + brdf * sample.value
+	// 	* abs(dot(sample.direction, n)) * W;
+
+	// rp->position = x;
+	// rp->normal = n;
 }
 
 #endif

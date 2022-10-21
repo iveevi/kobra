@@ -37,6 +37,7 @@ float3 spatiotemporal_reuse(RayPacket *rp, float3 x, float3 n)
 	auto &r_spatial = parameters.advanced.r_spatial[rp->index];
 	auto &r_temporal = parameters.advanced.r_temporal[rp->index];
 	auto &s_radius = parameters.advanced.sampling_radii[rp->index];
+	// s_radius = 10.0f;
 
 	int Z = 0;
 	int success = 0;
@@ -126,7 +127,7 @@ float3 spatiotemporal_reuse(RayPacket *rp, float3 x, float3 n)
 
 	// Compute final weight
 	r_spatial.W = r_spatial.weight/(
-		r_spatial.count * weight_kernel(r_spatial.sample)
+		Z * weight_kernel(r_spatial.sample)
 		+ 1e-6f
 	);
 
@@ -242,7 +243,7 @@ extern "C" __global__ void __closesthit__restir()
 
 		rp->value = direct + brdf * sample.value * r_temporal.W * abs(dot(sample.dir, n));
 
-		/* if (parameters.samples > 0) {
+		if (parameters.samples > 0) {
 			// Then use spatiotemporal resampling
 			indirect = spatiotemporal_reuse(rp, x, n);
 
@@ -256,7 +257,7 @@ extern "C" __global__ void __closesthit__restir()
 
 			rp->value = direct + brdf * r_spatial.sample.value *
 				r_spatial.W * abs(dot(r_spatial.sample.dir, n));
-		} */
+		}
 	} else {
 		rp->value = direct + T * indirect;
 	}

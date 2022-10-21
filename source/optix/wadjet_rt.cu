@@ -77,6 +77,9 @@ extern "C" __global__ void __raygen__rg()
 		
 	// Finally, store the result
 	float4 sample = make_float4(rp.value, 1.0f);
+	if (isnan(sample.x) || isnan(sample.y) || isnan(sample.z))
+		sample = make_float4(0.0f, 0.0f, 0.0f, 1.0f);
+
 	if (parameters.accumulate) {
 		float4 prev = parameters.color_buffer[index];
 		parameters.color_buffer[index] = (prev * parameters.samples + sample)

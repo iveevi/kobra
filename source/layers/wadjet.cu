@@ -3,6 +3,10 @@
 #include <optix_host.h>
 #include <optix_stack_size.h>
 
+// Eigen headers
+#include <Eigen/Core>
+#include <Eigen/Eigenvalues>
+
 // Engine headers
 #include "../../include/camera.hpp"
 #include "../../include/cuda/alloc.cuh"
@@ -38,6 +42,116 @@ const std::vector <DSLB> Wadjet::dsl_bindings = {
 		1, vk::ShaderStageFlagBits::eFragment
 	}
 };
+
+// Perform PCA on submesh normals
+// TODO: this is only one method of uv generation...
+// TODO: first make a low poly mesh, then unwrap that, since local geometry is
+// similar enough
+static void orthonormal_basis(const Submesh &submesh,
+		const Transform &transform,
+		float3 &u, float3 &v, float3 &w,
+		float2 &extent_v, float2 &extent_w,
+		float3 &centroid)
+{
+	// Compute the centroid of the submesh
+	// TODO: we really need a generic vector type to cast to all these other types
+	glm::vec3 gcentroid = glm::vec3(0.0f);
+	for (const auto &vertex : submesh.vertices)
+		gcentroid += transform.apply(vertex.position);
+	gcentroid /= submesh.vertices.size();
+
+	centroid = make_float3(gcentroid.x, gcentroid.y, gcentroid.z);
+
+	// First do PCA to find axis where the
+	//	surface normals are most spread out
+	Eigen::Matrix3f covariance = Eigen::Matrix3f::Zero();
+
+	for (int i = 0; i < submesh.indices.size(); i += 3) {
+		glm::vec3 gn0 = submesh.vertices[submesh.indices[i]].normal;
+		glm::vec3 gn1 = submesh.vertices[submesh.indices[i + 1]].normal;
+		glm::vec3 gn2 = submesh.vertices[submesh.indices[i + 2]].normal;
+
+		gn0 = glm::normalize(transform.apply_vector(gn0));
+		gn1 = glm::normalize(transform.apply_vector(gn1));
+		gn2 = glm::normalize(transform.apply_vector(gn2));
+
+		Eigen::Vector3f n0(gn0.x, gn0.y, gn0.z);
+		Eigen::Vector3f n1(gn1.x, gn1.y, gn1.z);
+		Eigen::Vector3f n2(gn2.x, gn2.y, gn2.z);
+
+		Eigen::Vector3f n = (n0 + n1 + n2) / 3.0f;
+
+		covariance += n * n.transpose();
+	}
+
+	Eigen::SelfAdjointEigenSolver <Eigen::Matrix3f> solver(covariance);
+	
+	Eigen::Vector3f eigenvalues = solver.eigenvalues();
+	Eigen::Matrix3f eigenvectors = solver.eigenvectors();
+
+	// Collect eigenvalues with non-zero eigenvalues
+	// Get the eigenvector with the largest eigenvalue
+	int index = -1;
+	float max_value = -std::numeric_limits <float>::infinity();
+
+	// float max_value = std::numeric_limits <float>::infinity();
+
+	for (int i = 0; i < 3; i++) {
+		float e = eigenvalues[i];
+		if (e > 0 && e > max_value) {
+			max_value = eigenvalues[i];
+			index = i;
+		}
+	}
+
+	Eigen::Vector3f axis = eigenvectors.col(index);
+	
+	// std::cout << "Axis: " << axis << std::endl;
+
+	// Generte orthonormal basis
+	Eigen::Vector3f e1 { 1.0f, 0.0f, 0.0f };
+
+	Eigen::Vector3f bu = axis.normalized();
+	if (bu.dot(e1) > 0.999f)
+		e1 = Eigen::Vector3f { 0.0f, 1.0f, 0.0f };
+
+	Eigen::Vector3f bv = bu.cross(e1).normalized();
+	Eigen::Vector3f bw = bu.cross(bv).normalized();
+
+	/* std::cout << "\tu: " << bu << std::endl;
+	std::cout << "\tv: " << bv << std::endl;
+	std::cout << "\tw: " << bw << std::endl; */
+
+	u = make_float3(bu.x(), bu.y(), bu.z());
+	v = make_float3(bv.x(), bv.y(), bv.z());
+	w = make_float3(bw.x(), bw.y(), bw.z());
+
+	// Compute extent of the submesh wrt to non-normal basis
+	float min_te = std::numeric_limits <float>::infinity();
+	float max_te = -std::numeric_limits <float>::infinity();
+
+	float min_bte = std::numeric_limits <float>::infinity();
+	float max_bte = -std::numeric_limits <float>::infinity();
+
+	for (auto &vertex : submesh.vertices) {
+		glm::vec3 gpos = transform.apply(vertex.position);
+		gpos -= gcentroid;
+
+		Eigen::Vector3f pos(gpos.x, gpos.y, gpos.z);
+
+		float te = bv.dot(pos);
+		float bte = bw.dot(pos);
+
+		min_te = std::min(min_te, te);
+		max_te = std::max(max_te, te);
+
+		min_bte = std::min(min_bte, bte);
+		max_bte = std::max(max_bte, bte);
+	}
+
+	extent_v = make_float2(min_te, max_te);
+	extent_w = make_float2(min_bte, max_bte);
+}
 
 static OptixProgramGroup load_program_group
 		(const OptixDeviceContext &optix_context,
@@ -1007,7 +1121,42 @@ static void update_sbt_data(Wadjet &layer,
 				= cuda::import_vulkan_texture(*layer.device, roughness);
 			hit_record.data.textures.has_roughness = true;
 		}
+
+		// TMRIS resoures
+		orthonormal_basis(
+			*submesh, *submesh_transforms[i],
+			hit_record.data.opt_normal,
+			hit_record.data.opt_tangent,
+			hit_record.data.opt_bitangent,
+			hit_record.data.extent_tangent,
+			hit_record.data.extent_bitangent,
+			hit_record.data.centroid
+		);
+
+		int res = optix::Hit::TMRIS_RESOLUTION;
+		
+		std::vector <optix::TMRIS_Reservoir> reservoirs(res * res, 20);
+
+		hit_record.data.tmris.f_res = cuda::make_buffer(reservoirs);
+		hit_record.data.tmris.b_res = cuda::make_buffer(reservoirs);
+
+		std::vector <int> lock_data(res * res, 0);
+
+		CUdeviceptr d_f_locks = cuda::make_buffer_ptr(lock_data);
+		CUdeviceptr d_b_locks = cuda::make_buffer_ptr(lock_data);
+
+		std::vector <int *> f_locks(res * res);
+		std::vector <int *> b_locks(res * res);
+
+		for (int i = 0; i < res * res; i++) {
+			f_locks[i] = (int *) (d_f_locks + i * sizeof(int));
+			b_locks[i] = (int *) (d_b_locks + i * sizeof(int));
+		}
+
+		hit_record.data.tmris.f_locks = cuda::make_buffer(f_locks);
+		hit_record.data.tmris.b_locks = cuda::make_buffer(b_locks);
 	
+		// Push back
 		optix::pack_header(layer.optix_programs.hit, hit_record);
 		hit_records.push_back(hit_record);
 		
@@ -1193,6 +1342,7 @@ void compute(Wadjet &layer,
 		int height = layer.extent.height;
 
 		// TODO: depth?
+		// TODO: alpha transparency...
 		OPTIX_CHECK(
 			optixLaunch(
 				layer.optix_pipeline,

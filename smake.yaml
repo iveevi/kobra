@@ -40,7 +40,8 @@ definitions:
     thirdparty/optix,
     thirdparty/tinyexr,
     thirdparty/stb,
-    /usr/include/opencv4'
+    /usr/include/opencv4,
+    /usr/include/eigen3'
   - libs: 'glfw,
     vulkan,
     assimp,
