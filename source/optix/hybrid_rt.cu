@@ -137,7 +137,7 @@ float3 compute_radiance(uint3 idx, float3 x, float3 n, float3 wo, const Material
 
 	ReSTIR_Reservoir &r_temporal = ht_params.advanced.r_temporal[index];
 
-	if (ht_params.samples == 0)
+	/* if (ht_params.samples == 0)
 		r_temporal.reset();
 
 	// Proceed to add the current sample to the reservoir
@@ -147,7 +147,7 @@ float3 compute_radiance(uint3 idx, float3 x, float3 n, float3 wo, const Material
 			.value = rp.value
 		},
 		weight
-	);
+	); */
 
 	// Get resulting indirect illumination
 	float3 indirect = r_temporal.sample.value;

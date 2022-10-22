@@ -7,7 +7,7 @@ float weight_kernel(const PathSample &sample)
 	return length(sample.value);
 }
 
-// Temporal resampling
+/* Temporal resampling
 KCUDA_INLINE __device__
 float3 temporal_reuse(RayPacket *rp, const PathSample &sample, float weight)
 {
@@ -137,7 +137,7 @@ float3 spatiotemporal_reuse(RayPacket *rp, float3 x, float3 n)
 
 	// Get resampled value
 	return r_spatial.sample.value;
-}
+} */
 
 // Closest hit program for ReSTIR
 extern "C" __global__ void __closesthit__restir()
@@ -200,71 +200,100 @@ extern "C" __global__ void __closesthit__restir()
 
 	// TODO: temporal reporjection at some point
 	if (parameters.samples == 0) {
-		auto &r_temporal = parameters.advanced.r_temporal[rp->index];
-		auto &r_spatial = parameters.advanced.r_spatial[rp->index];
-		auto &s_radius = parameters.advanced.sampling_radii[rp->index];
+		auto *r_temporal = &parameters.advanced.r_temporal[rp->index];
+		// auto *r_spatial = &parameters.advanced.r_spatial[rp->index];
+		auto *s_radius = &parameters.advanced.sampling_radii[rp->index];
 
 		// Reset for motion
-		r_temporal.reset();
-		r_spatial.reset();
-		s_radius = max_radius;
+		// r_temporal->reset();
+		r_temporal->count = 0;
+		r_temporal->weight = 0.0f;
+		r_temporal->mis = 0.0f;
+
+		// r_spatial->reset();
+		*s_radius = max_radius;
 	}
 
 	// TODO: skip restir if material is specular
-	if (primary && parameters.samples > 0) {
-		// NOTE: The ray misses if its depth is 1
-		//	but not if it hits a light (check value)
-		//	this fixes lights being black with ReSTIR
-		bool missed = (rp->depth == 1);
+	// NOTE: The ray misses if its depth is 1
+	//	but not if it hits a light (check value)
+	//	this fixes lights being black with ReSTIR
+	bool missed = (rp->depth == 1);
 
-		// Generate sample and weight
-		PathSample sample {
-			.value = rp->value,
-			.dir = wi,
-			.p_pos = x,
-			.p_normal = n,
-			.s_pos = rp->position,
-			.s_normal = rp->normal,
-			.missed = missed
-		};
+	// Generate sample and weight
+	PathSample sample {
+		.value = f * rp->value * abs(dot(wi, n)),
+		.dir = wi,
+		.p_pos = x,
+		.p_normal = n,
+		.s_pos = rp->position,
+		.s_normal = rp->normal,
+		.target = length(f * rp->value * abs(dot(wi, n))),
+		.missed = missed,
+	};
 
-		float weight = weight_kernel(sample)/pdf;
+	ReSTIR_Reservoir *r_temporal = &parameters.advanced.r_temporal[rp->index];
 
-		// First actually update the temporal reservoir
-		temporal_reuse(rp, sample, weight);
+	float weight = (sample.target/pdf);
 
-		auto &r_temporal = parameters.advanced.r_temporal[rp->index];
-		sample = r_temporal.sample;
+	// r_temporal->update(sample, weight);
+	r_temporal->mis += pdf + 1e-4f;
 
+	float mis = pdf/r_temporal->mis;
+	r_temporal->weight += mis * weight;
+	r_temporal->count = min(r_temporal->count + 1, 20);
+	// r_temporal->count++;
+
+	float q = weight/r_temporal->weight;
+	float e = fract(random3(rp->seed)).x;
+	if (e < q)
+		r_temporal->sample = sample;
+
+	sample = r_temporal->sample;
+
+	int count = r_temporal->count;
+	// float W = (r_temporal->weight/count)/(sample.target + 1e-6f);
+	float W = r_temporal->weight/(sample.target + 1e-4f);
+
+	float3 brdf_value = brdf(material, n, sample.dir, wo, entering, material.type);
+	rp->value = direct + sample.value * W;
+
+	// rp->value = make_float3(1/(1 + W));
+
+	// TODO: spatial sampling if samples > 0
+
+	/* First actually update the temporal reservoir
+	temporal_reuse(rp, sample, weight);
+
+	auto &r_temporal = parameters.advanced.r_temporal[rp->index];
+	sample = r_temporal.sample;
+
+	float3 brdf = kobra::cuda::brdf(material, n,
+		sample.dir, wo,
+		entering, material.type
+	);
+
+	rp->value = direct + brdf * sample.value * r_temporal.W *
+	abs(dot(sample.dir, n)); */
+
+	/* if (parameters.samples > 0) {
+		// Then use spatiotemporal resampling
+		indirect = spatiotemporal_reuse(rp, x, n);
+
+		auto &r_spatial = parameters.advanced.r_temporal[rp->index];
+
+		// TODO: recalculate value of f, using brdf...
 		float3 brdf = kobra::cuda::brdf(material, n,
-			sample.dir, wo,
+			r_spatial.sample.dir, wo,
 			entering, material.type
 		);
 
-		rp->value = direct + brdf * sample.value * r_temporal.W * abs(dot(sample.dir, n));
+		float pdf = kobra::cuda::pdf(material, n,
+			r_spatial.sample.dir, wo,
+			entering, material.type
+		);
 
-		if (parameters.samples > 0) {
-			// Then use spatiotemporal resampling
-			indirect = spatiotemporal_reuse(rp, x, n);
-
-			auto &r_spatial = parameters.advanced.r_temporal[rp->index];
-
-			// TODO: recalculate value of f, using brdf...
-			float3 brdf = kobra::cuda::brdf(material, n,
-				r_spatial.sample.dir, wo,
-				entering, material.type
-			);
-
-			rp->value = direct + brdf * r_spatial.sample.value *
-				r_spatial.W * abs(dot(r_spatial.sample.dir, n));
-		}
-	} else {
-		rp->value = direct + T * indirect;
-	}
-	
-	// float radius = parameters.advanced.sampling_radii[rp->index];
-	// rp->value = make_float3(radius/max_radius);
-
-	rp->position = x;
-	rp->normal = n;
+		rp->value = direct + brdf * r_spatial.sample.value *
+			r_spatial.W * abs(dot(r_spatial.sample.dir, n));
+	} */
 }

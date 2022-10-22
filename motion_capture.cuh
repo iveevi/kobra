@@ -466,6 +466,16 @@ struct MotionCapture : public kobra::BaseApp {
 			app.events_mutex.unlock();
 		}
 
+		// Numbers 1-3 for the same function
+		if (event.key >= GLFW_KEY_1 && event.key <= GLFW_KEY_3 && event.action == GLFW_PRESS) {
+			app.mode = event.key - GLFW_KEY_1;
+			
+			// Add to event queue
+			app.events_mutex.lock();
+			app.events.push(true);
+			app.events_mutex.unlock();
+		}
+
 		// I for info
 		if (event.key == GLFW_KEY_I && event.action == GLFW_PRESS) {
 			std::cout << "Camera transform:\n";

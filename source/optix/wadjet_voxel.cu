@@ -523,7 +523,12 @@ extern "C" __global__ void __closesthit__voxel()
 	LOAD_INTERSECTION_DATA();
 
 	// Compute projection onto optimal plane
-	float3 xvec = (x - hit->centroid) + n;
+	float3 xvec = (x - hit->centroid);
+	float3 nvec = hit->opt_normal;
+	bool forward = dot(nvec, n) > 0;
+
+#if 0
+
 	float3 d = normalize(xvec);
 
 	float u = atan2(d.x, d.z)/(2.0f * M_PI) + 0.5f;
@@ -531,10 +536,10 @@ extern "C" __global__ void __closesthit__voxel()
 	
 	// TODO: dual textures?
 
-	float3 nvec = hit->opt_normal;
+#else
 
-	/* float3 xproj = xvec - dot(xvec, nvec) * nvec;
-
+	float3 xproj = xvec - dot(xvec, nvec) * nvec;
+	
 	float u = dot(xproj, hit->opt_tangent);
 	float v = dot(xproj, hit->opt_bitangent);
 	
@@ -543,7 +548,27 @@ extern "C" __global__ void __closesthit__voxel()
 	float2 v_extent = hit->extent_bitangent;
 
 	u = (u - u_extent.x)/(u_extent.y - u_extent.x);
-	v = (v - v_extent.x)/(v_extent.y - v_extent.x); */
+	v = (v - v_extent.x)/(v_extent.y - v_extent.x);
+
+#endif
+	
+	// TODO: reolution based on mesh size/complexity (mostly size)
+	constexpr int res = Hit::TMRIS_RESOLUTION;
+
+	int ix = u * res;
+	int iy = v * res;
+
+	int index = ix + iy * res;
+	index = clamp(index, 0, res * res - 1);
+
+#if 0
+
+	int mod = (ix + iy) % 2;
+	rp->value = make_float3(mod * forward, mod * !forward, 1);
+	// rp->value = make_float3(mod);
+	return;
+
+#endif
 
 	// Check for emissive objects
 	if (hit->material.type == Shading::eEmissive) {
@@ -564,8 +589,11 @@ extern "C" __global__ void __closesthit__voxel()
 	float pdf;
 
 	float3 f = eval(material, n, wo, entering, wi, pdf, out, rp->seed);
-	if (length(f) < 1e-6f) // TODO: caveat must "return" pos and n
+	if (length(wi) + 0.01 < 1) {// TODO: caveat must "return" pos and n
+		// rp->value = direct;
+		rp->value = make_float3(1, 0, 1);
 		return;
+	}
 
 	// Get threshold value for current ray
 	float3 T = f * abs(dot(wi, n))/pdf;
@@ -575,19 +603,16 @@ extern "C" __global__ void __closesthit__voxel()
 	rp->depth++;
 
 	// TMRIS
-	// TODO: reolution based on mesh size/complexity (mostly size)
-	constexpr int res = Hit::TMRIS_RESOLUTION;
-
-	int index = int(u * res) + int(v * res) * res;
-	index = clamp(index, 0, res * res - 1);
 
 	// Get reservoir and lock
-	auto &reservoir = hit->tmris.f_res[index];
+	TMRIS_Reservoir *reservoir = &hit->tmris.f_res[index];
+	// assert(reservoir.count == 0);
+
 	int *lock = hit->tmris.f_locks[index];
 
 	// NOTE: this dual buffering apparently does a lot... use it more effectively
-	if (dot(n, nvec)) {
-		reservoir = hit->tmris.b_res[index];
+	if (!forward) {
+		reservoir = &hit->tmris.b_res[index];
 		lock = hit->tmris.b_locks[index];
 	}
 
@@ -600,14 +625,13 @@ extern "C" __global__ void __closesthit__voxel()
 		.direction = wi,
 	};
 
-	// TODO: locking?
+	// TODO: locking...
 	while (atomicCAS(lock, 0, 1) == 0);
 	if (pdf > 1e-6f)
-		reservoir.update(sample, weight);
+		reservoir->update(sample, weight);
 
-	sample = reservoir.sample;
-	float W = reservoir.weight/(reservoir.count * length(sample.value) + 1e-6);
-	
+	sample = reservoir->sample;
+	float W = reservoir->weight/(reservoir->count * length(sample.value) + 1e-6);
 	atomicExch(lock, 0);
 	
 	float3 brdf = kobra::cuda::brdf(material, n,
@@ -620,18 +644,21 @@ extern "C" __global__ void __closesthit__voxel()
 		entering, material.type
 	);
 
-	if (pdf_brdf > 0) {
-		rp->value = direct + brdf * sample.value *
-			abs(dot(sample.direction, n)) * W;
+	bool occluded = false;
+	if (rp->missed) {
+		occluded &= is_occluded(x, rp->wi, 1e10);
 	} else {
-		rp->value = direct;
+		float3 L = sample.position - x;
+		float d = length(L);
+		occluded &= is_occluded(x, L/d, d);
 	}
+		
+	rp->value = direct + (1 - occluded) * brdf * sample.value
+		* abs(dot(sample.direction, n));
 
-	// rp->value = direct + brdf * sample.value
-	// 	* abs(dot(sample.direction, n)) * W;
+	// rp->value = make_float3(reservoir->weight/reservoir->count);
 
-	// rp->position = x;
-	// rp->normal = n;
+	// rp->value = make_float3(float(reservoir->count)/reservoir->max_count);
 }
 
 #endif

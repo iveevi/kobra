@@ -396,7 +396,15 @@ static void initialize_optix(HybridTracer &layer)
 	layer.launch_params.accumulate = true;
 
 	// Advanced sampling resources
-	std::vector <optix::ReSTIR_Reservoir> r_temporal(width * height, 30);
+	std::vector <optix::ReSTIR_Reservoir> r_temporal(width * height,
+		optix::ReSTIR_Reservoir {
+			.sample = optix::PathSample {},
+			.count = 0,
+			.weight = 0.0f,
+			.mis = 0.0f
+		}
+	);
+
 	params.advanced.r_temporal = cuda::make_buffer(r_temporal);
 
 	// Color buffe (output)

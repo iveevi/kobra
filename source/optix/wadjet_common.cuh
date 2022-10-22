@@ -34,6 +34,9 @@ struct RayPacket {
 	float3	position;
 	float3	normal;
 
+	float3	wi;
+	bool	missed;
+
 	float	ior;
 	
 	int	depth;

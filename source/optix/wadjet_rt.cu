@@ -99,6 +99,8 @@ extern "C" __global__ void __closesthit__ch()
 	// TODO: check for light, not just emissive material
 	if (hit->material.type == Shading::eEmissive) {
 		rp->value = material.emission;
+		rp->position = x;
+		rp->missed = false;
 		return;
 	}
 
@@ -115,8 +117,12 @@ extern "C" __global__ void __closesthit__ch()
 	float pdf;
 
 	float3 f = eval(material, n, wo, entering, wi, pdf, out, rp->seed);
-	if (length(f) < 1e-6f)
+	if (length(f) < 1e-6f) {
+		rp->value = direct;
+		rp->position = x;
+		rp->missed = false;
 		return;
+	}
 
 	// Get threshold value for current ray
 	float3 T = f * abs(dot(wi, n))/pdf;
@@ -131,8 +137,10 @@ extern "C" __global__ void __closesthit__ch()
 
 	// Update the value
 	rp->value = direct + T * rp->value;
+	rp->missed = false;
 	rp->position = x;
 	rp->normal = n;
+	rp->wi = wi;
 }
 
 extern "C" __global__ void __closesthit__shadow() {}
@@ -157,6 +165,8 @@ extern "C" __global__ void __miss__ms()
 	rp = unpack_pointer <RayPacket> (i0, i1);
 
 	rp->value = make_float3(c);
+	rp->wi = ray_direction;
+	rp->missed = true;
 }
 
 extern "C" __global__ void __miss__shadow()

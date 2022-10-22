@@ -92,13 +92,26 @@ static void orthonormal_basis(const Submesh &submesh,
 	// Collect eigenvalues with non-zero eigenvalues
 	// Get the eigenvector with the largest eigenvalue
 	int index = -1;
-	float max_value = -std::numeric_limits <float>::infinity();
 
-	// float max_value = std::numeric_limits <float>::infinity();
+	float max_value = -std::numeric_limits <float>::infinity();
+	float min_value = std::numeric_limits <float>::infinity();
+
+#define MIN_VARIANCE
 
 	for (int i = 0; i < 3; i++) {
 		float e = eigenvalues[i];
-		if (e > 0 && e > max_value) {
+
+#ifdef MAX_VARIANCE
+
+		bool select = e > max_value;
+
+#else
+
+		bool select = e < min_value;
+
+#endif
+
+		if (e > 0 && select) {
 			max_value = eigenvalues[i];
 			index = i;
 		}
@@ -510,8 +523,15 @@ static void initialize_optix(Wadjet &layer)
 	// Advanced sampling resources - ReSTIR GI
 	float radius = std::min(width, height)/10.0f;
 
-	std::vector <optix::ReSTIR_Reservoir> r_temporal(width * height, 30);
-	std::vector <optix::ReSTIR_Reservoir> r_spatial(width * height, 200);
+	optix::ReSTIR_Reservoir def {
+		.sample = {},
+		.count = 0,
+		.weight = 0.0f,
+		.mis = 0.0f
+	};
+
+	std::vector <optix::ReSTIR_Reservoir> r_temporal(width * height, def);
+	std::vector <optix::ReSTIR_Reservoir> r_spatial(width * height, def);
 	std::vector <float> sampling_radii(width * height, radius);
 
 	params.advanced.r_temporal = cuda::make_buffer(r_temporal);
@@ -1303,6 +1323,23 @@ static __global__ void compute_pixel_values
 	uchar4 color = cuda::make_color(pixel, tonemapping);
 	target[out_idx] = cuda::to_ui32(color);
 }
+
+/* Reset reservoirs kernel
+__global__ void reset_reservoirs(HitRecord *hit_records, int instances)
+{
+	int idx = blockIdx.x * blockDim.x + threadIdx.x;
+	int stride = blockDim.x * gridDim.x;
+
+	for (int i = idx; i < instances; i += stride) {
+		optix::Hit *hit = &hit_records[i].data;
+
+		int res = optix::Hit::TMRIS_RESOLUTION;
+		for (int j = 0; j < res * res; j++) {
+			hit->tmris.f_res[j].reset();
+			hit->tmris.b_res[j].reset();
+		}
+	}
+} */
 
 // Path tracing computation
 void compute(Wadjet &layer,
