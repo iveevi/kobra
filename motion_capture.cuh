@@ -228,7 +228,7 @@ struct MotionCapture : public kobra::BaseApp {
 	}
 
 	float time = 0.0f;
-	unsigned int mode = kobra::optix::eVoxel;
+	unsigned int mode = kobra::optix::eRegular;
 
 	std::queue <bool> events;
 	std::mutex events_mutex;

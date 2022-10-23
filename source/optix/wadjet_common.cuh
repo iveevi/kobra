@@ -22,8 +22,7 @@ extern "C"
 }
 
 // TODO: launch parameter for ray depth
-// #define MAX_DEPTH 10
-#define MAX_DEPTH 3
+#define MAX_DEPTH 7
 
 // Local constants
 static const float eps = 1e-3f;
@@ -33,6 +32,7 @@ struct RayPacket {
 	float3	value;
 	float3	position;
 	float3	normal;
+	float	pdf;
 
 	float3	wi;
 	bool	missed;
@@ -141,6 +141,78 @@ bool is_occluded(float3 origin, float3 dir, float R)
 	return vis;
 }
 
+// Get direct lighting for environment map
+KCUDA_HOST_DEVICE
+float3 Ld_Environment(float3 x, float3 wo, float3 n,
+		Material mat, bool entering, float3 &seed)
+{
+	static const float eps = 0.05f;
+
+	float3 contr_nee {0.0f};
+	float3 contr_brdf {0.0f};
+
+	// Sample random direction
+	seed = random3(seed);
+	float theta = acosf(sqrtf(1.0f - fract(seed.x)));
+	float phi = 2.0f * M_PI * fract(seed.y);
+
+	float3 wi = make_float3(
+		sinf(theta) * cosf(phi),
+		sinf(theta) * sinf(phi),
+		cosf(theta)
+	);
+
+	float u = atan2(wi.x, wi.z)/(2.0f * M_PI) + 0.5f;
+	float v = asin(wi.y)/M_PI + 0.5f;
+
+	float4 sample = tex2D <float4> (parameters.envmap, u, v);
+	float3 Li = make_float3(sample);
+
+	// NEE
+	float R = 1000; // TODO: world radius...
+
+	float3 f = brdf(mat, n, wi, wo, entering, mat.type) * abs(dot(n, wi));
+
+	// TODO: how to decide ray type for this?
+	float pdf_light = 1.0f / (4.0f * M_PI * R * R);
+	float pdf_brdf = pdf(mat, n, wi, wo, entering, mat.type);
+
+	bool occluded = is_occluded(x, wi, R);
+	if (!occluded) {
+		float weight = power(pdf_light, pdf_brdf);
+		contr_nee += weight * f * Li/pdf_light;
+	}
+
+	// BRDF
+	Shading out;
+
+	f = eval(mat, n, wo, entering, wi, pdf_brdf, out, seed) * abs(dot(n, wi));
+	if (length(f) < 1e-6f)
+		return contr_nee;
+
+	occluded = is_occluded(x, wi, R);
+	if (occluded)
+		return contr_nee;
+
+	u = atan2(wi.x, wi.z)/(2.0f * M_PI) + 0.5f;
+	v = asin(wi.y)/M_PI + 0.5f;
+
+	sample = tex2D <float4> (parameters.envmap, u, v);
+	Li = make_float3(sample);
+	
+	float weight = 1.0f;
+	if (out & eTransmission) // TODO: why this?
+		return contr_nee;
+
+	weight = power(pdf_brdf, pdf_light);
+
+	// TODO: shoot shadow ray up to R
+	if (pdf_light > 1e-9 && pdf_brdf > 1e-9)
+		contr_brdf += weight * f * Li/pdf_brdf;
+
+	return contr_nee + contr_brdf;
+}
+
 // Trace ray into scene and get relevant information
 __device__ float3 Ld(float3 x, float3 wo, float3 n,
 		Material mat, bool entering, float3 &seed)
@@ -171,22 +243,26 @@ __device__ float3 Ld(float3 x, float3 wo, float3 n,
 
 #else
 
-	if (quad_count == 0 && tri_count == 0)
-		return make_float3(0.0f);
+	// if (quad_count == 0 && tri_count == 0)
+	//	return make_float3(0.0f);
 
+	// TODO: +1 for envmaps; make more efficient
 	int total_count = quad_count + tri_count;
 
 	random3(seed);
-	unsigned int i = fract(seed.x) * (quad_count + tri_count);
-	i = min(i, quad_count + tri_count - 1);
+	unsigned int i = fract(seed.x) * total_count;
 
 	if (i < quad_count) {
 		QuadLight light = parameters.lights.quads[i];
 		return total_count * Ld_light(light, x, wo, n, mat, entering, seed);
+	} else if (i < quad_count + tri_count) {
+		int ni = i - quad_count;
+		TriangleLight light = parameters.lights.triangles[ni];
+		return total_count * Ld_light(light, x, wo, n, mat, entering, seed);
+	} else {
+		// Environment light
+		return Ld_Environment(x, wo, n, mat, entering, seed);
 	}
-
-	TriangleLight light = parameters.lights.triangles[i - quad_count];
-	return total_count * Ld_light(light, x, wo, n, mat, entering, seed);
 
 #endif
 
@@ -232,6 +308,9 @@ void trace(float3 origin, float3 direction, uint i0, uint i1)
 	bool entering;							\
 	float3 wo = -optixGetWorldRayDirection();			\
 	float3 n = calculate_normal(hit, triangle, bary, uv, entering);	\
-	float3 x = interpolate(hit->vertices, triangle, bary);
+	float3 x = interpolate(hit->vertices, triangle, bary);		\
+									\
+	if (isnan(n.x) || isnan(n.y) || isnan(n.z))			\
+		return;
 
 #endif

@@ -45,6 +45,7 @@ extern "C" __global__ void __raygen__rg()
 	// Prepare the ray packet
 	RayPacket rp {
 		.value = make_float3(0.0f),
+		.pdf = 1.0f,
 		.ior = 1.0f,
 		.depth = 0,
 		.index = index,
@@ -130,6 +131,7 @@ extern "C" __global__ void __closesthit__ch()
 	// Update for next ray
 	// TODO: boolean member for toggling russian roulette
 	rp->ior = material.refraction;
+	rp->pdf *= pdf;
 	rp->depth++;
 	
 	// Trace the next ray
@@ -148,6 +150,8 @@ extern "C" __global__ void __closesthit__shadow() {}
 // Miss kernel
 extern "C" __global__ void __miss__ms()
 {
+	LOAD_RAYPACKET();
+
 	// Get direction
 	const float3 ray_direction = optixGetWorldRayDirection();
 
@@ -158,13 +162,8 @@ extern "C" __global__ void __miss__ms()
 	if (parameters.envmap != 0)
 		c = tex2D <float4> (parameters.envmap, u, v);
 
-	// Transfer to payload
-	RayPacket *rp;
-	unsigned int i0 = optixGetPayload_0();
-	unsigned int i1 = optixGetPayload_1();
-	rp = unpack_pointer <RayPacket> (i0, i1);
-
-	rp->value = make_float3(c);
+	// NOTE: env maps are turned off for now
+	rp->value = make_float3(0);
 	rp->wi = ray_direction;
 	rp->missed = true;
 }

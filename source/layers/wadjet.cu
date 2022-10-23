@@ -96,7 +96,7 @@ static void orthonormal_basis(const Submesh &submesh,
 	float max_value = -std::numeric_limits <float>::infinity();
 	float min_value = std::numeric_limits <float>::infinity();
 
-#define MIN_VARIANCE
+// #define MIN_VARIANCE
 
 	for (int i = 0; i < 3; i++) {
 		float e = eigenvalues[i];
@@ -1155,7 +1155,7 @@ static void update_sbt_data(Wadjet &layer,
 
 		int res = optix::Hit::TMRIS_RESOLUTION;
 		
-		std::vector <optix::TMRIS_Reservoir> reservoirs(res * res, 20);
+		std::vector <optix::TMRIS_Reservoir> reservoirs(res * res);
 
 		hit_record.data.tmris.f_res = cuda::make_buffer(reservoirs);
 		hit_record.data.tmris.b_res = cuda::make_buffer(reservoirs);

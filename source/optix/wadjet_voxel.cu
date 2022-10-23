@@ -617,32 +617,51 @@ extern "C" __global__ void __closesthit__voxel()
 	}
 
 	trace <eRegular> (x, wi, i0, i1);
-	
-	float weight = length(rp->value)/pdf;
+
 	TMRIS_Sample sample {
 		.value = rp->value,
 		.position = rp->position,
 		.direction = wi,
 	};
 
+	reservoir->mis += pdf;
+
+	float mis = pdf/reservoir->mis;
+	float weight = mis * length(rp->value)/pdf;
+	
+	reservoir->weight += weight;
+	reservoir->count = min(reservoir->count + 1, 20);
+	// reservoir->count++;
+
+	float q = weight/reservoir->weight;
+	float e = fract(random3(rp->seed)).x;
+	if (e < q)
+		reservoir->sample = sample;
+
+	sample = reservoir->sample;
+	
+	float W = reservoir->weight/(length(sample.value) + 1e-4f);
+
+	/* float weight = length(rp->value)/pdf;
+
 	// TODO: locking...
-	while (atomicCAS(lock, 0, 1) == 0);
-	if (pdf > 1e-6f)
-		reservoir->update(sample, weight);
+	// while (atomicCAS(lock, 0, 1) == 0);
+	// if (pdf > 1e-6f)
+	reservoir->update(sample, weight);
 
 	sample = reservoir->sample;
 	float W = reservoir->weight/(reservoir->count * length(sample.value) + 1e-6);
-	atomicExch(lock, 0);
+	// atomicExch(lock, 0); */
 	
 	float3 brdf = kobra::cuda::brdf(material, n,
 		sample.direction, wo,
 		entering, material.type
 	);
 
-	float pdf_brdf = kobra::cuda::pdf(material, n,
+	/* float pdf_brdf = kobra::cuda::pdf(material, n,
 		sample.direction, wo,
 		entering, material.type
-	);
+	); */
 
 	bool occluded = false;
 	if (rp->missed) {
@@ -657,8 +676,9 @@ extern "C" __global__ void __closesthit__voxel()
 		* abs(dot(sample.direction, n));
 
 	// rp->value = make_float3(reservoir->weight/reservoir->count);
-
 	// rp->value = make_float3(float(reservoir->count)/reservoir->max_count);
+
+	// rp->value = sample.direction * 0.5f + 0.5f;
 }
 
 #endif

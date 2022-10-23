@@ -214,11 +214,9 @@ extern "C" __global__ void __closesthit__restir()
 		*s_radius = max_radius;
 	}
 
-	// TODO: skip restir if material is specular
-	// NOTE: The ray misses if its depth is 1
-	//	but not if it hits a light (check value)
-	//	this fixes lights being black with ReSTIR
-	bool missed = (rp->depth == 1);
+	ReSTIR_Reservoir *r_temporal = &parameters.advanced.r_temporal[rp->index];
+
+#if 0
 
 	// Generate sample and weight
 	PathSample sample {
@@ -229,18 +227,19 @@ extern "C" __global__ void __closesthit__restir()
 		.s_pos = rp->position,
 		.s_normal = rp->normal,
 		.target = length(f * rp->value * abs(dot(wi, n))),
-		.missed = missed,
+		.missed = rp->missed,
 	};
 
-	ReSTIR_Reservoir *r_temporal = &parameters.advanced.r_temporal[rp->index];
-
-	float weight = (sample.target/pdf);
-
 	// r_temporal->update(sample, weight);
+
+	// NOTE: why is it incorrect to multiply pdf by path pdf?
+	// pdf = rp->pdf;
 	r_temporal->mis += pdf + 1e-4f;
 
 	float mis = pdf/r_temporal->mis;
-	r_temporal->weight += mis * weight;
+	float weight = mis * (sample.target/pdf);
+
+	r_temporal->weight += weight;
 	r_temporal->count = min(r_temporal->count + 1, 20);
 	// r_temporal->count++;
 
@@ -257,43 +256,83 @@ extern "C" __global__ void __closesthit__restir()
 
 	float3 brdf_value = brdf(material, n, sample.dir, wo, entering, material.type);
 	rp->value = direct + sample.value * W;
+	
+	/* reset
+	r_temporal->count = 0;
+	r_temporal->weight = 0.0f;
+	r_temporal->mis = 0.0f; */
 
-	// rp->value = make_float3(1/(1 + W));
+#else
 
-	// TODO: spatial sampling if samples > 0
+	float3 value = direct + T * indirect;
 
-	/* First actually update the temporal reservoir
-	temporal_reuse(rp, sample, weight);
+	PathSample sample {
+		.value = value,
+		.dir = wi,
+		.target = length(value)
+	};
 
-	auto &r_temporal = parameters.advanced.r_temporal[rp->index];
-	sample = r_temporal.sample;
+	// Update reservoir
+	r_temporal->mis += pdf + 1e-4f;
 
+	float mis = pdf/r_temporal->mis;
+	float weight = mis * (sample.target/pdf);
+
+	r_temporal->weight += weight;
+	r_temporal->count = min(r_temporal->count + 1, 20);
+	// r_temporal->count++;
+
+	float q = weight/r_temporal->weight;
+	float e = fract(random3(rp->seed)).x;
+
+	if (e < q)
+		r_temporal->sample = sample;
+
+	sample = r_temporal->sample;
+
+	float W = r_temporal->weight/(sample.target + 1e-4f);
+
+	rp->value = sample.value * W;
+
+#endif
+
+}
+
+// rp->value = make_float3(1/(1 + W));
+
+// TODO: spatial sampling if samples > 0
+
+/* First actually update the temporal reservoir
+temporal_reuse(rp, sample, weight);
+
+auto &r_temporal = parameters.advanced.r_temporal[rp->index];
+sample = r_temporal.sample;
+
+float3 brdf = kobra::cuda::brdf(material, n,
+	sample.dir, wo,
+	entering, material.type
+);
+
+rp->value = direct + brdf * sample.value * r_temporal.W *
+abs(dot(sample.dir, n)); */
+
+/* if (parameters.samples > 0) {
+	// Then use spatiotemporal resampling
+	indirect = spatiotemporal_reuse(rp, x, n);
+
+	auto &r_spatial = parameters.advanced.r_temporal[rp->index];
+
+	// TODO: recalculate value of f, using brdf...
 	float3 brdf = kobra::cuda::brdf(material, n,
-		sample.dir, wo,
+		r_spatial.sample.dir, wo,
 		entering, material.type
 	);
 
-	rp->value = direct + brdf * sample.value * r_temporal.W *
-	abs(dot(sample.dir, n)); */
+	float pdf = kobra::cuda::pdf(material, n,
+		r_spatial.sample.dir, wo,
+		entering, material.type
+	);
 
-	/* if (parameters.samples > 0) {
-		// Then use spatiotemporal resampling
-		indirect = spatiotemporal_reuse(rp, x, n);
-
-		auto &r_spatial = parameters.advanced.r_temporal[rp->index];
-
-		// TODO: recalculate value of f, using brdf...
-		float3 brdf = kobra::cuda::brdf(material, n,
-			r_spatial.sample.dir, wo,
-			entering, material.type
-		);
-
-		float pdf = kobra::cuda::pdf(material, n,
-			r_spatial.sample.dir, wo,
-			entering, material.type
-		);
-
-		rp->value = direct + brdf * r_spatial.sample.value *
-			r_spatial.W * abs(dot(r_spatial.sample.dir, n));
-	} */
-}
+	rp->value = direct + brdf * r_spatial.sample.value *
+		r_spatial.W * abs(dot(r_spatial.sample.dir, n));
+} */

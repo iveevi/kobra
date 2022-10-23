@@ -55,8 +55,9 @@ struct TMRIS_Sample {
 };
 
 // using ReSTIR_Reservoir = Reservoir <PathSample>;
-struct ReSTIR_Reservoir {
-	PathSample sample;
+template <class T>
+struct WeightedReservoir {
+	T sample;
 
 	unsigned int count;
 
@@ -64,8 +65,9 @@ struct ReSTIR_Reservoir {
 	float mis;
 };
 
+using ReSTIR_Reservoir = WeightedReservoir <PathSample>;
 using Voxel_Reservoir = MultiReservoir <VoxelSample, 10>;
-using TMRIS_Reservoir = Reservoir <TMRIS_Sample>;
+using TMRIS_Reservoir = WeightedReservoir <TMRIS_Sample>;
 
 // Hit data record
 struct Hit {
@@ -100,7 +102,7 @@ struct Hit {
 	} textures;
 	
 	// Texture mapped reservoir sampling
-	static constexpr int TMRIS_RESOLUTION = 32;
+	static constexpr int TMRIS_RESOLUTION = 400;
 
 	struct {
 		TMRIS_Reservoir	*f_res; //facing forward
