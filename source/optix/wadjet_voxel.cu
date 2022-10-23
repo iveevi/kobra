@@ -658,11 +658,6 @@ extern "C" __global__ void __closesthit__voxel()
 		entering, material.type
 	);
 
-	/* float pdf_brdf = kobra::cuda::pdf(material, n,
-		sample.direction, wo,
-		entering, material.type
-	); */
-
 	bool occluded = false;
 	if (rp->missed) {
 		occluded &= is_occluded(x, rp->wi, 1e10);
@@ -671,13 +666,70 @@ extern "C" __global__ void __closesthit__voxel()
 		float d = length(L);
 		occluded &= is_occluded(x, L/d, d);
 	}
-		
-	rp->value = direct + (1 - occluded) * brdf * sample.value
+
+	float3 total_indirect = (1 - occluded) * W * brdf * sample.value
 		* abs(dot(sample.direction, n));
+		
+	int successes = 0;
+
+	const int SPATIAL_SAMPLES = 3;
+	for (int i = 0; i < SPATIAL_SAMPLES; i++) {
+		// Sample other reservoirs in a radius
+		const float radius = res/3.0f;
+
+		float3 eta = fract(random3(rp->seed));
+
+		float theta = 2 * M_PI * eta.x;
+		float r = radius * sqrt(eta.y);
+
+		int xoff = r * cos(theta);
+		int yoff = r * sin(theta);
+
+		int nix = ix + xoff;
+		int niy = iy + yoff;
+
+		if (nix < 0 || nix >= res || niy < 0 || niy >= res)
+			continue;
+
+		int nindex = nix + niy * res;
+
+		TMRIS_Reservoir *nreservoir = &hit->tmris.f_res[nindex];
+
+		// TODO: check for correct facing normals and also check for occlusion
+		if (!forward)
+			nreservoir = &hit->tmris.b_res[nindex];
+
+		if (nreservoir->count == 0)
+			continue;
+
+		TMRIS_Sample nsample = nreservoir->sample;
+
+		float3 nwi = nsample.direction;
+		float3 nn = n;
+
+		float3 nL = nsample.position - x;
+		float nd = length(nL);
+
+		float3 nwo = -nL/nd;
+
+		float3 nbrdf = kobra::cuda::brdf(material, nn,
+			nwi, nwo,
+			entering, material.type
+		);
+
+		float3 ntotal_indirect = W * nbrdf * nsample.value
+			* abs(dot(nwi, nn));
+
+		total_indirect += ntotal_indirect;
+		successes++;
+	}
+
+	rp->value = direct + total_indirect/(1 + successes);
+	/* rp->value = direct + (1 - occluded) * brdf * sample.value
+		* abs(dot(sample.direction, n)); */
 
 	// rp->value = make_float3(reservoir->weight/reservoir->count);
 	// rp->value = make_float3(float(reservoir->count)/reservoir->max_count);
-
 	// rp->value = sample.direction * 0.5f + 0.5f;
 }
 

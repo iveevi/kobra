@@ -269,18 +269,20 @@ extern "C" __global__ void __closesthit__restir()
 	PathSample sample {
 		.value = value,
 		.dir = wi,
-		.target = length(value)
+		.target = length(value),
 	};
 
 	// Update reservoir
 	r_temporal->mis += pdf + 1e-4f;
 
 	float mis = pdf/r_temporal->mis;
-	float weight = mis * (sample.target/pdf);
+	float mis_confidence = 1.0f/float(r_temporal->count + 1);
+	float weight = mis * mis_confidence * sample.target/pdf;
 
-	r_temporal->weight += weight;
 	r_temporal->count = min(r_temporal->count + 1, 20);
 	// r_temporal->count++;
+
+	r_temporal->weight += weight;
 
 	float q = weight/r_temporal->weight;
 	float e = fract(random3(rp->seed)).x;
