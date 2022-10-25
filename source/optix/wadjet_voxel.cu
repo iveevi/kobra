@@ -514,13 +514,14 @@ extern "C" __global__ void __closesthit__voxel()
 
 template <class T>
 __forceinline__ __device__
-void update_reservoir(WeightedReservoir <T> *res, const T &sample,
+bool update_reservoir(WeightedReservoir <T> *res, const T &sample,
 		float pdf_hat, float pdf, float3 &seed)
 {
 	res->mis += pdf + 1e-4;
 
 	float mis = pdf/res->mis;
 	float mis_confidence = 1.0f/float(res->count + 1);
+	// float mis_confidence = res->count/float(res->count + 1);
 	float weight = mis * mis_confidence * pdf_hat/pdf;
 	
 	res->weight += weight;
@@ -529,8 +530,12 @@ void update_reservoir(WeightedReservoir <T> *res, const T &sample,
 
 	float q = weight/res->weight;
 	float e = fract(random3(seed)).x;
-	if (e < q)
+
+	bool selected = e < q;
+	if (selected)
 		res->sample = sample;
+
+	return selected;
 }
 
 template <class T>
@@ -553,6 +558,65 @@ void merge_reservoir(WeightedReservoir <T> *a, WeightedReservoir <T> *b,
 		a->sample = b->sample;
 }
 
+const float isqrt2 = 0.70710676908493042;
+
+__device__
+float2 cubify(float3 s)
+{
+	float xx2 = s.x * s.x * 2.0;
+	float yy2 = s.y * s.y * 2.0;
+
+	float2 v {xx2 - yy2, yy2 - xx2};
+
+	float ii = v.y - 3.0;
+	ii *= ii;
+
+	float isqrt = -sqrt(ii - 12.0 * xx2) + 3.0;
+
+	v += {isqrt, isqrt};
+	v = make_float2(sqrt(v.x), sqrt(v.y));
+	v *= isqrt2;
+
+	return v;
+
+	// return sign(s) * make_float3(v, 1.0);
+}
+
+__device__
+float2 sphere2cube(float3 sphere, int &face_index)
+{
+	float3 f = abs(sphere);
+
+	bool a = f.y >= f.x && f.y >= f.z;
+	bool b = f.x >= f.z;
+
+	/* float3 s = a ? make_float3(sphere.y, sphere.z, sphere.x) :
+		(b ? make_float3(sphere.x, sphere.z, sphere.y) :
+		make_float3(sphere.x, sphere.y, sphere.z)); */
+
+	// return a ? cubify(sphere.xzy).xzy : b ? cubify(sphere.yzx).zxy : cubify(sphere);
+	float3 s;
+	if (a) {
+		s = make_float3(sphere.x, sphere.z, sphere.y);
+		face_index = 0;
+	} else {
+		if (b) {
+			s = make_float3(sphere.y, sphere.z, sphere.x);
+			face_index = 1;
+		} else{ 
+			s = sphere;
+			face_index = 2;
+		}
+	}
+
+	if (s.z < 0.0) {
+		s = -s;
+		face_index += 3;
+	}
+
+	return cubify(s);
+}
+
 // TMRIS
 // TODO: move to separate file and kernel
 extern "C" __global__ void __closesthit__voxel()
@@ -565,16 +629,21 @@ extern "C" __global__ void __closesthit__voxel()
 	float3 nvec = hit->opt_normal;
 	bool forward = dot(nvec, n) > 0;
 
-#if 0
+// #define USE_CUBE_SPHERE_MAPPING
+#define USE_OPTIMAL_MAPPING
 
-	float3 d = normalize(xvec + 2 * n);
+#if defined(USE_SPHERICAL_MAPPING)
+
+	float3 d = normalize(xvec + 0.5 * n);
 
 	float u = atan2(d.x, d.z)/(2.0f * M_PI) + 0.5f;
 	float v = asin(d.y)/M_PI + 0.5f;
 	
 	// TODO: dual textures?
 
-#elif 1
+	u = 0.5 * (u + forward);
+
+#elif defined(USE_OPTIMAL_MAPPING)
 
 	float3 xproj = xvec - dot(xvec, nvec) * nvec;
 	
@@ -588,14 +657,28 @@ extern "C" __global__ void __closesthit__voxel()
 	u = (u - u_extent.x)/(u_extent.y - u_extent.x);
 	v = (v - v_extent.x)/(v_extent.y - v_extent.x);
 
+	u = 0.5 * (u + forward);
+
+#elif defined(USE_CUBE_SPHERE_MAPPING)
+
+	// Project to sphere, then to cube
+	float3 d = normalize(xvec + 2 * n);
+
+	int face_index;
+	float2 t_uv = sphere2cube(d, face_index);
+	float u = t_uv.x;
+	float v = t_uv.y;
+
+	// Split into 6 faces
+	u = 0.5 * (u + int(face_index/3));
+	v = (v + face_index % 3)/3.0f;
+
 #else
 
 	float u = uv.x;
 	float v = uv.y;
 
 #endif
-
-	u = 0.5 * (u + forward);
 	
 	// TODO: reolution based on mesh size/complexity (mostly size)
 	constexpr int res = Hit::TMRIS_RESOLUTION;
@@ -614,9 +697,10 @@ extern "C" __global__ void __closesthit__voxel()
 		0
 	);
 
-	// int mod = (ix + iy) % 2;
-	// rp->value = make_float3(mod * forward, mod * !forward, 1);
+	int mod = (ix + iy) % 2;
+	// rp->value = entering * make_float3(mod, mod, face_index/6.0f);
 	// rp->value = make_float3(mod);
+	// rp->value = make_float3(u,v,0);
 	return;
 
 #endif
@@ -667,8 +751,8 @@ extern "C" __global__ void __closesthit__voxel()
 		lock = hit->tmris.b_locks[index];
 	}
 
-	float e = fract(random3(rp->seed)).x;
-	if (reservoir->count < 20 && e > 0.8) {
+	/* float e = fract(random3(rp->seed)).x;
+	if (reservoir->count < 20 || e > 0.99) {
 		trace <eRegular> (x, wi, i0, i1);
 
 		TMRIS_Sample sample {
@@ -676,6 +760,7 @@ extern "C" __global__ void __closesthit__voxel()
 			.position = rp->position,
 			.direction = wi,
 			.pdf = pdf,
+			.missed = rp->missed,
 		};
 
 		/* reservoir->mis += pdf + 1e-4;
@@ -691,13 +776,122 @@ extern "C" __global__ void __closesthit__voxel()
 		float q = weight/reservoir->weight;
 		float e = fract(random3(rp->seed)).x;
 		if (e < q)
-			reservoir->sample = sample; */
+			reservoir->sample = sample;
 
-		update_reservoir(reservoir, sample, length(rp->value), pdf, rp->seed);
+		// FIXME: apparently locking is problematic with reuse...
+		// dual buffering
+	} */
+
+	// Sampling randomly for diffuse...
+	const float radius = res/2.0f;
+
+	float3 eta = fract(random3(rp->seed));
+
+	float theta = 2 * M_PI * eta.x;
+	float r = radius * sqrt(eta.y);
+
+	int xoff = r * cos(theta);
+	int yoff = r * sin(theta);
+
+	int nix = ix + xoff;
+	int niy = iy + yoff;
+
+	if (nix < 0 || nix >= res)
+		nix = ix - xoff;
+	if (niy < 0 || niy >= res)
+		niy = iy - yoff;
+
+	//  TODO: prevent this...
+	bool inbound = !(nix < 0 || nix >= res || niy < 0 || niy >= res);
+	// bool inbound = true;
+
+	// NOTE: we wrap the index around to try preventing seams
+	//	really only for cube maps...
+	// nix = (nix + res) % res;
+	// niy = (niy + res) % res;
+
+	int nindex = nix + niy * res;
+
+	TMRIS_Reservoir *nr = nullptr;
+
+	TMRIS_Sample current_sample = reservoir->sample;
+	if (inbound) {
+		nr = &hit->tmris.f_res_prev[nindex];
+		if (!forward)
+			nr = &hit->tmris.b_res_prev[nindex];
+		current_sample = nr->sample;
 	}
 
-	// sample = reservoir->sample;
-	// float W = reservoir->weight/(length(sample.value) + 1e-4f);
+	if (inbound && nr->count > 15 && material.roughness > 0.1) {
+		float3 brdf = kobra::cuda::brdf(material, n,
+			current_sample.direction, wo,
+			entering, material.type
+		);
+
+		float W = nr->weight/(length(current_sample.value) + 1e-4);
+
+		float3 f = brdf * abs(dot(current_sample.direction, n));
+
+		rp->value = direct + W * f * current_sample.value;
+		// rp->value = make_float3(1, 0, 1);
+		return;
+	}
+
+	trace <eRegular> (x, wi, i0, i1);
+
+	TMRIS_Sample sample {
+		.value = rp->value,
+		.position = rp->position,
+		.direction = wi,
+		.pdf = pdf,
+		.missed = rp->missed,
+	};
+		
+	while (atomicCAS(lock, 0, 1) == 0);
+
+	update_reservoir(
+		reservoir, sample,
+		length(rp->value), pdf, rp->seed
+	);
+
+	atomicExch(lock, 0);
+
+	/* TMRIS_Reservoir *preservoir = &hit->tmris.f_res_prev[ix + iy * res];
+	if (!forward)
+		preservoir = &hit->tmris.b_res_prev[ix + iy * res];
+
+	auto sample = preservoir->sample;
+	float Weight = preservoir->weight/(length(sample.value) + 1e-4f);
+
+	float3 brdf = kobra::cuda::brdf(material,
+		n, sample.direction,
+		wo, entering, out
+	);
+
+	pdf = kobra::cuda::pdf(material,
+		n, sample.direction,
+		wo, entering, out
+	);
+
+	bool occluded = true;
+	if (rp->missed && false) {
+		// FIXME: we need to store miss status in the sample...
+		occluded &= is_occluded(x, sample.direction, 1e10);
+	} else {
+		float3 L = sample.position - x;
+		float d = length(L);
+		occluded &= is_occluded(x, L/d, d);
+	}
+
+	bool valid_pdf = pdf > 1e-4f;
+
+	rp->value = direct + Weight * (1 - occluded)
+		* brdf * abs(dot(sample.direction, n));
+	
+	// Copy current reservoir to previous
+	*preservoir = *reservoir;
+
+	return; */
 
 	/* float weight = length(rp->value)/pdf;
 
@@ -727,8 +921,8 @@ extern "C" __global__ void __closesthit__voxel()
 		// how to do this?
 
 		// Current sample
-		// sample.value = direct + T * rp->value;
-		// update_reservoir(&spatial, sample, length(sample.value), pdf, rp->seed);
+		sample.value = direct + T * rp->value;
+		update_reservoir(&spatial, sample, length(sample.value), pdf, rp->seed);
 	}
 
 	/* {
@@ -767,8 +961,10 @@ extern "C" __global__ void __closesthit__voxel()
 		}
 	} */
 
+	float current_depth = length(parameters.camera - x);
+
 	// Plus other samples spatially...
-	const int SPATIAL_SAMPLES = 3;
+	const int SPATIAL_SAMPLES = 1;
 
 	for (int i = 0; i < SPATIAL_SAMPLES; i++) {
 		// sample other reservoirs in a radius
@@ -785,15 +981,21 @@ extern "C" __global__ void __closesthit__voxel()
 		int nix = ix + xoff;
 		int niy = iy + yoff;
 
+		//  TODO: prevent this...
 		if (nix < 0 || nix >= res || niy < 0 || niy >= res)
 			continue;
+
+		// NOTE: we wrap the index around to try preventing seams
+		//	really only for cube maps...
+		// nix = (nix + res) % res;
+		// niy = (niy + res) % res;
 
 		int nindex = nix + niy * res;
 		
 		// Get the correct reservoir
-		TMRIS_Reservoir *nreservoir = &hit->tmris.f_res[nindex];
+		TMRIS_Reservoir *nreservoir = &hit->tmris.f_res_prev[nindex];
 		if (!forward)
-			nreservoir = &hit->tmris.b_res[nindex];
+			nreservoir = &hit->tmris.b_res_prev[nindex];
 
 		if (nreservoir->count == 0)
 			continue;
@@ -803,6 +1005,13 @@ extern "C" __global__ void __closesthit__voxel()
 		// TODO: merge the entire reservoir, not just one sample
 		
 		TMRIS_Sample nsample = nreservoir->sample;
+
+		float sample_depth = length(parameters.camera - nsample.position);
+		// if (abs(sample_depth - current_depth) > 1)
+		//	continue;
+
+		rp->value = nsample.direction * 0.5f + 0.5f;
+		// return;
 
 		float3 brdf = kobra::cuda::brdf(material, n,
 			nsample.direction, wo,
@@ -816,17 +1025,22 @@ extern "C" __global__ void __closesthit__voxel()
 
 		bool occluded = true;
 		// TODO: how to check if the sample missed?
-		if (rp->missed && false) {
-			occluded &= is_occluded(x, rp->wi, 1e10);
+		if (nsample.missed) {
+			occluded &= is_occluded(x, nsample.direction, 1e10);
+			rp->value = make_float3(0, 1, 0);
+			return;
 		} else {
 			float3 L = nsample.position - x;
 			float d = length(L);
 			occluded &= is_occluded(x, L/d, d);
 		}
 
+		float W = nreservoir->weight/(length(nsample.value) + 1e-6);
+
 		float3 f = brdf * abs(dot(nsample.direction, n))/pdf;
 
-		nsample.value = direct + (1 - occluded) * f * nsample.value;
+		bool valid_pdf = pdf > 1e-4f;
+		nsample.value = direct + valid_pdf * (1 - occluded) * f * nsample.value;
 		nsample.pdf = pdf;
 
 		update_reservoir(&spatial, nsample, length(nsample.value), pdf, rp->seed);
@@ -840,6 +1054,13 @@ extern "C" __global__ void __closesthit__voxel()
 	rp->value = W * spatial.sample.value;
 
 	// rp->value = make_float3(1/(W + 1e-6));
+
+	// Copy current reservoir to previous
+	TMRIS_Reservoir *preservoir = &hit->tmris.f_res_prev[ix + iy * res];
+	if (!forward)
+		preservoir = &hit->tmris.b_res_prev[ix + iy * res];
+
+	*preservoir = *reservoir;
 
 #if 0
 

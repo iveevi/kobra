@@ -296,7 +296,7 @@ extern "C" __global__ void __closesthit__restir()
 	sample = r_temporal->sample;
 
 	// NOTE: is it correct to multiply by the pdf again later?
-	float W = r_temporal->weight * sample.pdf/(sample.target + 1e-4f);
+	float W = r_temporal->weight/(sample.target + 1e-4f);
 
 	rp->value = sample.value * W;
 

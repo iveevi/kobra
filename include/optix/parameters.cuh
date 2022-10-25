@@ -54,6 +54,7 @@ struct TMRIS_Sample {
 	float3	position;
 	float3	direction;
 	float	pdf;
+	bool	missed;
 };
 
 // using ReSTIR_Reservoir = Reservoir <PathSample>;
@@ -104,11 +105,14 @@ struct Hit {
 	} textures;
 	
 	// Texture mapped reservoir sampling
-	static constexpr int TMRIS_RESOLUTION = 128;
+	static constexpr int TMRIS_RESOLUTION = 32;
 
 	struct {
 		TMRIS_Reservoir	*f_res; //facing forward
 		TMRIS_Reservoir	*b_res; //facing backward
+
+		TMRIS_Reservoir	*f_res_prev;
+		TMRIS_Reservoir	*b_res_prev;
 
 		int		**f_locks;
 		int		**b_locks;

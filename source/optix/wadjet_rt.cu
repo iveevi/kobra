@@ -96,7 +96,7 @@ extern "C" __global__ void __closesthit__ch()
 	// Load all necessary data
 	LOAD_RAYPACKET();
 	LOAD_INTERSECTION_DATA();
-
+	
 	// TODO: check for light, not just emissive material
 	if (hit->material.type == Shading::eEmissive) {
 		rp->value = material.emission;

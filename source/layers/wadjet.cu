@@ -1160,6 +1160,9 @@ static void update_sbt_data(Wadjet &layer,
 		hit_record.data.tmris.f_res = cuda::make_buffer(reservoirs);
 		hit_record.data.tmris.b_res = cuda::make_buffer(reservoirs);
 
+		hit_record.data.tmris.f_res_prev = cuda::make_buffer(reservoirs);
+		hit_record.data.tmris.b_res_prev = cuda::make_buffer(reservoirs);
+
 		std::vector <int> lock_data(res * res, 0);
 
 		CUdeviceptr d_f_locks = cuda::make_buffer_ptr(lock_data);
@@ -1324,8 +1327,8 @@ static __global__ void compute_pixel_values
 	target[out_idx] = cuda::to_ui32(color);
 }
 
-/* Reset reservoirs kernel
-__global__ void reset_reservoirs(HitRecord *hit_records, int instances)
+// Copy kernels...
+__global__ void copy_reservoirs(HitRecord *hit_records, int instances)
 {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	int stride = blockDim.x * gridDim.x;
@@ -1335,11 +1338,11 @@ __global__ void reset_reservoirs(HitRecord *hit_records, int instances)
 
 		int res = optix::Hit::TMRIS_RESOLUTION;
 		for (int j = 0; j < res * res; j++) {
-			hit->tmris.f_res[j].reset();
-			hit->tmris.b_res[j].reset();
+			hit->tmris.f_res_prev[j] = hit->tmris.f_res[j];
+			hit->tmris.b_res_prev[j] = hit->tmris.b_res[j];
 		}
 	}
-} */
+}
 
 // Path tracing computation
 void compute(Wadjet &layer,
@@ -1401,6 +1404,18 @@ void compute(Wadjet &layer,
 
 		cuda::copy(advanced.r_temporal_prev, advanced.r_temporal, width * height);
 		cuda::copy(advanced.r_spatial_prev, advanced.r_spatial, width * height);
+
+		// Copy the reservoirs
+		int instances = layer.launch_params.instances;
+
+		int threads = 256;
+		int blocks = (instances + threads - 1) / threads;
+
+		/* copy_reservoirs <<<blocks, threads>>> (
+			(HitRecord *)
+			layer.optix_sbt.hitgroupRecordBase,
+			instances
+		); */
 	}
 
 	{
