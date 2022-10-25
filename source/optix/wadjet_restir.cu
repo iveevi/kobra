@@ -264,12 +264,15 @@ extern "C" __global__ void __closesthit__restir()
 
 #else
 
+	// TODO: try using only one sample always, sreturn hould get the same result as
+	// regular PT
 	float3 value = direct + T * indirect;
 
 	PathSample sample {
 		.value = value,
 		.dir = wi,
 		.target = length(value),
+		.pdf = pdf
 	};
 
 	// Update reservoir
@@ -292,7 +295,8 @@ extern "C" __global__ void __closesthit__restir()
 
 	sample = r_temporal->sample;
 
-	float W = r_temporal->weight/(sample.target + 1e-4f);
+	// NOTE: is it correct to multiply by the pdf again later?
+	float W = r_temporal->weight * sample.pdf/(sample.target + 1e-4f);
 
 	rp->value = sample.value * W;
 

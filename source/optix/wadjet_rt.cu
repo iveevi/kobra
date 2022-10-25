@@ -81,7 +81,7 @@ extern "C" __global__ void __raygen__rg()
 	if (isnan(sample.x) || isnan(sample.y) || isnan(sample.z))
 		sample = make_float4(0.0f, 0.0f, 0.0f, 1.0f);
 
-	if (parameters.accumulate && false) {
+	if (parameters.accumulate) {
 		float4 prev = parameters.color_buffer[index];
 		parameters.color_buffer[index] = (prev * parameters.samples + sample)
 			/(parameters.samples + 1);

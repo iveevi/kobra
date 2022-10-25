@@ -1,5 +1,5 @@
-#ifndef KOBRA_LAYERS_RASTERIZER_H_
-#define KOBRA_LAYERS_RASTERIZER_H_
+#ifndef KOBRA_LAYERS_RASTER_H_
+#define KOBRA_LAYERS_RASTER_H_
 
 // Standard headers
 #include <map>

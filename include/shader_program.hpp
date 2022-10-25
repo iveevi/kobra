@@ -101,18 +101,10 @@ inline _compile_out glsl_to_spriv(const std::string &source, const vk::ShaderSta
 	return out;
 }
 
-// Forward declarations
-namespace layers {
-
-class ShapeRenderer;
-
-}
-
 // Custom shader programs
 //	either fragment or compute shader
 class ShaderProgram {
 	// Pointer to pipeline
-	vk::raii::Pipeline	*_pipeline = nullptr;
 	bool			_cc_failed = false;
 
 	// Reload thread
@@ -122,6 +114,8 @@ class ShaderProgram {
 	std::string		_source = "";
 	std::string		_file = "";
 public:
+	vk::raii::Pipeline	*_pipeline = nullptr;
+
 	// TODO: shader class for including different inputs
 	// 	(i.e. shapes, text, meshes, comute,etc.)
 
@@ -233,8 +227,6 @@ public:
 			)
 		);
 	}
-
-	friend class layers::ShapeRenderer;
 };
 
 }

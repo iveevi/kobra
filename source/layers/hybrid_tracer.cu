@@ -18,6 +18,7 @@
 #include "../../include/profiler.hpp"
 
 // OptiX Source PTX
+// TODO: engine path relative gettre or sometihng...
 #define OPTIX_PTX_FILE "bin/ptx/hybrid_rt.ptx"
 
 namespace kobra {
@@ -1100,7 +1101,6 @@ static void generate_gbuffers(HybridTracer &layer,
 		const Camera &camera,
 		const Transform &transform)
 {
-
 	// Preprocess the entities
 	std::vector <const Rasterizer *> rasterizers;
 	std::vector <const Transform *> rasterizer_transforms;

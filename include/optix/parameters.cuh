@@ -38,6 +38,7 @@ struct PathSample {
 	float3 s_normal;
 
 	float target;
+	float pdf;
 
 	bool missed;
 };
@@ -49,9 +50,10 @@ struct VoxelSample {
 };
 
 struct TMRIS_Sample {
-	float3 value;
-	float3 position;
-	float3 direction;
+	float3	value;
+	float3	position;
+	float3	direction;
+	float	pdf;
 };
 
 // using ReSTIR_Reservoir = Reservoir <PathSample>;
@@ -102,7 +104,7 @@ struct Hit {
 	} textures;
 	
 	// Texture mapped reservoir sampling
-	static constexpr int TMRIS_RESOLUTION = 400;
+	static constexpr int TMRIS_RESOLUTION = 128;
 
 	struct {
 		TMRIS_Reservoir	*f_res; //facing forward

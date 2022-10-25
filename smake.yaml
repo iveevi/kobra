@@ -20,6 +20,7 @@ definitions:
     source/layers/optix_tracer.cu,
     source/layers/raster.cpp,
     source/layers/raytracer.cpp,
+    source/layers/forward_renderer.cpp,
     source/logger.cpp,
     source/material.cpp,
     source/mesh.cpp,
@@ -149,6 +150,12 @@ builds:
     - libraries: libs
     - dependencies: arbok_libs
     - compiler: 'clang++'
+  - uv:
+    - sources: experimental/uv/main.cpp, kobra_source, glslang_source
+    - idirs: includes
+    - libraries: libs
+    - flags: '-O3'
+    - dependencies: glsl_frag, glsl_vertex, wadjet_ptx_release
 
 targets:
   - kobra:
@@ -173,3 +180,8 @@ targets:
     - postbuilds:
       - default: '{}'
       - gdb: 'gdb {}'
+  - uv:
+    - builds:
+      - default: uv
+    - postbuilds:
+      - default: '{}'
