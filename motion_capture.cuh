@@ -1,6 +1,9 @@
 #ifndef MOTION_CAPTURE_H_
 #define MOTION_CAPTURE_H_
 
+// Standard headers
+#include <thread>
+
 // GLM headers
 #include <glm/glm.hpp>
 
@@ -38,137 +41,18 @@ struct MotionCapture : public kobra::BaseApp {
 	std::vector <byte> frame;
 
 	std::string capture_path;
+	int max_samples = 0;
 
-	/* const std::vector <glm::vec3> camera_pos {
-		{-13.81, 23.40, 24.29},
-		{24.87, 21.49, 22.52},
-		{59.04, 21.49, 4.70},
-		{65.30, 21.49, -20.18},
-		{57.76, 21.49, -45.75},
-		{0.61, 24.94, -53.59},
-		{-16.36, 23.35, -35.79},
-		{-18.45, 21.34, -13.25},
-		{0.40, 14.35, -3.78},
-		{18.99, 8.53, -6.17},
-		{37.84, 6.21, -16.40},
-		{32.84, 6.21, -27.41},
-		{29.18, 16.56, -26.53},
-		{18.24, 15.16, -27.63},
-		{6.65, 15.16, -22.16}
-	};
+	// Threads
+	std::thread *compute_thread;
 
-	const std::vector <glm::vec3> camera_rot {
-		{-0.24, -0.44, 0.00},
-		{-0.29, 0.09, 0.00},
-		{-0.29, 0.85, 0.00},
-		{-0.33, 1.55, 0.00},
-		{-0.39, 2.41, 0.00},
-		{-0.34, 3.67, 0.00},
-		{-0.37, 4.11, 0.00},
-		{-0.35, 4.71, 0.00},
-		{-0.35, 4.84, 0.00},
-		{-0.24, 4.74, 0.00},
-		{-0.21, 7.67, 0.00},
-		{-0.23, 8.51, 0.00},
-		{-0.54, 8.56, 0.00},
-		{-0.27, 9.26, 0.00},
-		{-0.49, 10.19, 0.00}
-	}; */
-	
-	const std::vector <glm::vec3> camera_pos {
-		{76.80, 115.63, 83.22},
-		{89.34, 92.42, 71.24},
-		{93.42, 76.90, 59.02},
-		{100.20, 68.60, 52.30},
-		{101.17, 64.25, 44.44},
-		{102.42, 58.69, 32.65},
-		{104.05, 48.85, 14.16},
-		{112.92, 44.75, 11.08},
-		{125.01, 40.79, 8.21},
-		{126.03, 38.04, -0.29},
-		{121.78, 36.74, -5.45},
-		{107.80, 36.30, -8.05},
-		{89.78, 36.01, -9.72},
-		{72.60, 35.70, -10.48},
-		{58.29, 35.34, -10.93},
-		{47.93, 34.95, -10.92},
-		{38.73, 34.77, -5.04},
-		{43.25, 34.96, 2.55},
-		{44.47, 35.05, 16.51},
-		{59.43, 34.80, 24.61},
-		{75.37, 34.80, 32.55},
-		{93.17, 34.80, 32.98},
-		{93.17, 34.80, 32.98},
-		{98.94, 28.53, 23.61},
-		{118.68, 15.86, 14.19},
-		{148.76, 9.78, 12.65},
-		{148.62, 8.16, 10.27},
-		{126.98, 9.01, 4.85},
-		{109.89, 9.01, 1.87},
-		{109.89, 9.01, 1.87},
-		{104.52, 8.56, 7.67},
-		{90.71, 7.54, 12.84},
-		{61.25, 7.45, 4.71},
-		{40.58, 7.25, 6.55},
-		{45.33, 6.55, -6.13},
-		{60.03, 6.87, -7.99},
-		{80.66, 6.26, -7.84},
-		{103.09, 10.09, -7.18}
-	};
-	
-	const std::vector <glm::vec3> camera_rot {
-		{-0.94, 0.06, 0.00},
-		{-0.91, -0.35, 0.00},
-		{-0.83, -0.29, 0.00},
-		{-0.54, -0.13, 0.00},
-		{-0.48, -0.12, 0.00},
-		{-0.42, -0.10, 0.00},
-		{-0.48, -1.21, 0.00},
-		{-0.39, -1.22, 0.00},
-		{-0.32, -0.21, 0.00},
-		{-0.27, 0.11, 0.00},
-		{-0.05, 1.32, 0.00},
-		{-0.02, 1.46, 0.00},
-		{-0.02, 1.52, 0.00},
-		{-0.02, 1.53, 0.00},
-		{-0.04, 1.56, 0.00},
-		{-0.04, 1.61, 0.00},
-		{-0.00, 2.34, 0.00},
-		{0.04, 3.66, 0.00},
-		{-0.05, 5.20, 0.00},
-		{-0.07, 5.62, 0.00},
-		{-0.08, 5.99, 0.00},
-		{-0.10, 6.39, 0.00},
-		{-0.41, 5.98, 0.00},
-		{-0.58, 5.59, 0.00},
-		{-0.36, 4.85, 0.00},
-		{-0.09, 4.76, 0.00},
-		{-0.23, 8.52, 0.00},
-		{-0.14, 9.25, 0.00},
-		{0.22, 9.32, 0.00},
-		{-0.01, 8.98, 0.00},
-		{-0.07, 8.58, 0.00},
-		{-0.06, 8.03, 0.00},
-		{0.06, 7.86, 0.00},
-		{-0.17, 6.09, 0.00},
-		{-0.02, 5.01, 0.00},
-		{0.03, 4.80, 0.00},
-		{-0.04, 4.68, 0.00},
-		{-0.16, 4.61, 0.00},
-	};
+	kobra::Timer compute_timer;
+	float compute_time;
 
-	std::vector <float> times;
+	std::queue <bool> events;
+	std::mutex events_mutex;
+	bool kill = false;
 
-	kobra::core::Sequence <glm::vec3> camera_pos_seq {
-		.values = camera_pos,
-		.times = times
-	};
-
-	kobra::core::Sequence <glm::vec3> camera_rot_seq {
-		.values = camera_rot,
-		.times = times
-	};
-	
 	MotionCapture(const vk::raii::PhysicalDevice &phdev,
 			const std::vector <const char *> &extensions,
 			const std::string &scene_path)
@@ -189,10 +73,21 @@ struct MotionCapture : public kobra::BaseApp {
 		tracer = kobra::layers::Wadjet::make(get_context());
 		kobra::layers::set_envmap(tracer, "resources/skies/background_1.jpg");
 
+#if 0
+
 		std::cout << "Enter capture path: ";
-		// std::cin >> capture_path;
-		capture_path = "capture_4096.png";
-		std::cout << "Got capture path: " << capture_path << "\n";
+		std::cin >> capture_path;
+		std::cout << "Enter max samples: ";
+		std::cin >> max_samples;
+
+#else
+
+		capture_path = "capture.png";
+		max_samples = 100000;
+
+#endif
+
+		std::cout << "Path tracing " << max_samples << " samples to " << capture_path << "\n";
 
 #ifdef RECORD
 
@@ -214,24 +109,42 @@ struct MotionCapture : public kobra::BaseApp {
 			std::cout << "Capture opened" << std::endl;
 
 #endif
-
-		// Fill in time intervals
-		for (int i = 0; i < camera_pos.size(); i++)
-			times.push_back(i);
-
-		camera_pos_seq.times = times;
-		camera_rot_seq.times = times;
 			
 		// Input callbacks
 		io.mouse_events.subscribe(mouse_callback, this);
 		io.keyboard_events.subscribe(keyboard_callback, this);
+			
+		// Launch compute thread
+		compute_thread = new std::thread(
+			[&]() {
+				compute_timer.start();
+				while (!kill) {
+					bool accumulate = true;
+
+					// Also check our events
+					events_mutex.lock();
+					if (!events.empty())
+						accumulate = false; // Means that camera direction
+								    // changed
+
+					events = std::queue <bool> (); // Clear events
+					events_mutex.unlock();
+
+					kobra::layers::compute(tracer,
+						scene.ecs,
+						camera.get <kobra::Camera> (),
+						camera.get <kobra::Transform> (),
+						mode, accumulate
+					);
+
+					compute_time = compute_timer.lap()/1e6;
+				}
+			}
+		);
 	}
 
 	float time = 0.0f;
 	unsigned int mode = kobra::optix::eRegular;
-
-	std::queue <bool> events;
-	std::mutex events_mutex;
 
 	void record(const vk::raii::CommandBuffer &cmd,
 			const vk::raii::Framebuffer &framebuffer) override {
@@ -255,52 +168,43 @@ struct MotionCapture : public kobra::BaseApp {
 
 		if (io.input.is_key_down(GLFW_KEY_W)) {
 			transform.move(forward * speed);
-			accumulate = false;
+			events.push(true);
 		} else if (io.input.is_key_down(GLFW_KEY_S)) {
 			transform.move(-forward * speed);
-			accumulate = false;
+			events.push(true);
 		}
 
 		if (io.input.is_key_down(GLFW_KEY_A)) {
 			transform.move(-right * speed);
-			accumulate = false;
+			events.push(true);
 		} else if (io.input.is_key_down(GLFW_KEY_D)) {
 			transform.move(right * speed);
-			accumulate = false;
+			events.push(true);
 		}
 
 		if (io.input.is_key_down(GLFW_KEY_E)) {
 			transform.move(up * speed);
-			accumulate = false;
+			events.push(true);
 		} else if (io.input.is_key_down(GLFW_KEY_Q)) {
 			transform.move(-up * speed);
-			accumulate = false;
+			events.push(true);
 		}
-
-		// Also check our events
-		events_mutex.lock();
-		if (!events.empty())
-			accumulate = false; // Means that camera direction
-					    // changed
-
-		events = std::queue <bool> (); // Clear events
-		events_mutex.unlock();
 
 		// Now trace and render
 		cmd.begin({});
-			kobra::layers::compute(tracer,
+			/* kobra::layers::compute(tracer,
 				scene.ecs,
 				camera.get <kobra::Camera> (),
 				camera.get <kobra::Transform> (),
 				mode, accumulate
-			);
+			); */
 
 			kobra::layers::render(tracer, cmd, framebuffer);
 			// kobra::layers::capture(tracer, frame);
 
 			// Text to render
 			kobra::ui::Text t_fps(
-				kobra::common::sprintf("%.2f fps", 1.0f/frame_time),
+				kobra::common::sprintf("%.2f fps", 1.0f/compute_time),
 				{5, 5}, glm::vec3 {1, 0.6, 0.6}, 0.7f
 			);
 
@@ -370,12 +274,15 @@ struct MotionCapture : public kobra::BaseApp {
 	}
 
 	void terminate() override {
-		if (tracer.launch_params.samples > 4096) {
+		if (tracer.launch_params.samples > max_samples) {
 			// Get data to save
 			std::vector <uint32_t> &data = tracer.color_buffer;
 
 			int width = tracer.extent.width;
 			int height = tracer.extent.height;
+
+			kill = true;
+			compute_thread->join();
 
 			stbi_write_png(capture_path.c_str(),
 				width, height, 4, data.data(),
@@ -384,6 +291,8 @@ struct MotionCapture : public kobra::BaseApp {
 		
 			KOBRA_LOG_FILE(kobra::Log::INFO) << "Saved image to "
 				<< capture_path << "\n";
+
+			terminate_now();
 		}
 	}
 	

@@ -29,18 +29,6 @@ constexpr const char *str_modes[eCount] = {
 // Reservoir sample for ReSTIR
 struct PathSample {
 	float3 value;
-	float3 dir;
-
-	float3 p_pos;
-	float3 p_normal;
-
-	float3 s_pos;
-	float3 s_normal;
-
-	float target;
-	float pdf;
-
-	bool missed;
 };
 
 struct VoxelSample {
@@ -105,7 +93,7 @@ struct Hit {
 	} textures;
 	
 	// Texture mapped reservoir sampling
-	static constexpr int TMRIS_RESOLUTION = 32;
+	static constexpr int TMRIS_RESOLUTION = 64;
 
 	struct {
 		TMRIS_Reservoir	*f_res; //facing forward

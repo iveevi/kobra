@@ -35,7 +35,7 @@ struct RayPacket {
 	float	pdf;
 
 	float3	wi;
-	bool	missed;
+	int	miss_depth;
 
 	float	ior;
 	

@@ -96,7 +96,7 @@ static void orthonormal_basis(const Submesh &submesh,
 	float max_value = -std::numeric_limits <float>::infinity();
 	float min_value = std::numeric_limits <float>::infinity();
 
-// #define MIN_VARIANCE
+#define MAX_VARIANCE
 
 	for (int i = 0; i < 3; i++) {
 		float e = eigenvalues[i];

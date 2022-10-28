@@ -46,6 +46,7 @@ extern "C" __global__ void __raygen__rg()
 	RayPacket rp {
 		.value = make_float3(0.0f),
 		.pdf = 1.0f,
+		.miss_depth = -1,
 		.ior = 1.0f,
 		.depth = 0,
 		.index = index,
@@ -101,7 +102,7 @@ extern "C" __global__ void __closesthit__ch()
 	if (hit->material.type == Shading::eEmissive) {
 		rp->value = material.emission;
 		rp->position = x;
-		rp->missed = false;
+		// rp->missed = false;
 		return;
 	}
 
@@ -121,12 +122,12 @@ extern "C" __global__ void __closesthit__ch()
 	if (length(f) < 1e-6f) {
 		rp->value = direct;
 		rp->position = x;
-		rp->missed = false;
+		// rp->missed = false;
 		return;
 	}
 
 	// Get threshold value for current ray
-	float3 T = f * abs(dot(wi, n))/pdf;
+	float3 T = f * abs(dot(wi, n));
 
 	// Update for next ray
 	// TODO: boolean member for toggling russian roulette
@@ -138,8 +139,8 @@ extern "C" __global__ void __closesthit__ch()
 	trace <eRegular> (x, wi, i0, i1);
 
 	// Update the value
-	rp->value = direct + T * rp->value;
-	rp->missed = false;
+	rp->value = direct + T * rp->value/pdf;
+	// rp->missed = false;
 	rp->position = x;
 	rp->normal = n;
 	rp->wi = wi;
@@ -165,7 +166,8 @@ extern "C" __global__ void __miss__ms()
 	// NOTE: env maps are turned off for now
 	rp->value = make_float3(0);
 	rp->wi = ray_direction;
-	rp->missed = true;
+	// rp->missed = true;
+	rp->miss_depth = rp->depth;
 }
 
 extern "C" __global__ void __miss__shadow()

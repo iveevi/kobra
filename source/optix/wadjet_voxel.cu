@@ -741,170 +741,55 @@ extern "C" __global__ void __closesthit__voxel()
 
 	// Get reservoir and lock
 	TMRIS_Reservoir *reservoir = &hit->tmris.f_res[index];
-	// assert(reservoir.count == 0);
 
 	int *lock = hit->tmris.f_locks[index];
 
 	// NOTE: this dual buffering apparently does a lot... use it more effectively
+	// TODO: capture the effects of this...
 	if (!forward) {
 		reservoir = &hit->tmris.b_res[index];
 		lock = hit->tmris.b_locks[index];
 	}
 
-	/* float e = fract(random3(rp->seed)).x;
-	if (reservoir->count < 20 || e > 0.99) {
-		trace <eRegular> (x, wi, i0, i1);
-
-		TMRIS_Sample sample {
-			.value = rp->value,
-			.position = rp->position,
-			.direction = wi,
-			.pdf = pdf,
-			.missed = rp->missed,
-		};
-
-		/* reservoir->mis += pdf + 1e-4;
-
-		float mis = pdf/reservoir->mis;
-		float mis_confidence = 1.0f/float(reservoir->count + 1);
-		float weight = mis * mis_confidence * length(rp->value)/pdf;
-		
-		reservoir->weight += weight;
-		reservoir->count = min(reservoir->count + 1, 20);
-		// reservoir->count++;
-
-		float q = weight/reservoir->weight;
-		float e = fract(random3(rp->seed)).x;
-		if (e < q)
-			reservoir->sample = sample;
-
-		// FIXME: apparently locking is problematic with reuse...
-		// dual buffering
-	} */
-
-	// Sampling randomly for diffuse...
-	const float radius = res/2.0f;
-
-	float3 eta = fract(random3(rp->seed));
-
-	float theta = 2 * M_PI * eta.x;
-	float r = radius * sqrt(eta.y);
-
-	int xoff = r * cos(theta);
-	int yoff = r * sin(theta);
-
-	int nix = ix + xoff;
-	int niy = iy + yoff;
-
-	if (nix < 0 || nix >= res)
-		nix = ix - xoff;
-	if (niy < 0 || niy >= res)
-		niy = iy - yoff;
-
-	//  TODO: prevent this...
-	bool inbound = !(nix < 0 || nix >= res || niy < 0 || niy >= res);
-	// bool inbound = true;
-
-	// NOTE: we wrap the index around to try preventing seams
-	//	really only for cube maps...
-	// nix = (nix + res) % res;
-	// niy = (niy + res) % res;
-
-	int nindex = nix + niy * res;
-
-	TMRIS_Reservoir *nr = nullptr;
-
-	TMRIS_Sample current_sample = reservoir->sample;
-	if (inbound) {
-		nr = &hit->tmris.f_res_prev[nindex];
-		if (!forward)
-			nr = &hit->tmris.b_res_prev[nindex];
-		current_sample = nr->sample;
-	}
-
-	if (inbound && nr->count > 15 && material.roughness > 0.1) {
-		float3 brdf = kobra::cuda::brdf(material, n,
-			current_sample.direction, wo,
-			entering, material.type
-		);
-
-		float W = nr->weight/(length(current_sample.value) + 1e-4);
-
-		float3 f = brdf * abs(dot(current_sample.direction, n));
-
-		rp->value = direct + W * f * current_sample.value;
-		// rp->value = make_float3(1, 0, 1);
-		return;
-	}
+	// TODO: check if complete reuse is possible...
 
 	trace <eRegular> (x, wi, i0, i1);
+
+	// If transmissive, then skip reuse...
+	if (material.type == Shading::eTransmission) {
+		rp->value = direct + T * rp->value;
+		return;
+	}
 
 	TMRIS_Sample sample {
 		.value = rp->value,
 		.position = rp->position,
 		.direction = wi,
 		.pdf = pdf,
-		.missed = rp->missed,
+		.missed = (rp->miss_depth == 1),
 	};
-		
+
+	// Insert sample into tyhe reservoir
 	while (atomicCAS(lock, 0, 1) == 0);
 
+	// TODO: need to store the pdf characteristics as well...
 	update_reservoir(
 		reservoir, sample,
-		length(rp->value), pdf, rp->seed
+		length(f * rp->value * abs(dot(wi, n))),
+		pdf, rp->seed
 	);
 
 	atomicExch(lock, 0);
 
-	/* TMRIS_Reservoir *preservoir = &hit->tmris.f_res_prev[ix + iy * res];
-	if (!forward)
-		preservoir = &hit->tmris.b_res_prev[ix + iy * res];
-
-	auto sample = preservoir->sample;
-	float Weight = preservoir->weight/(length(sample.value) + 1e-4f);
-
-	float3 brdf = kobra::cuda::brdf(material,
-		n, sample.direction,
-		wo, entering, out
-	);
-
-	pdf = kobra::cuda::pdf(material,
-		n, sample.direction,
-		wo, entering, out
-	);
-
-	bool occluded = true;
-	if (rp->missed && false) {
-		// FIXME: we need to store miss status in the sample...
-		occluded &= is_occluded(x, sample.direction, 1e10);
-	} else {
-		float3 L = sample.position - x;
-		float d = length(L);
-		occluded &= is_occluded(x, L/d, d);
-	}
-
-	bool valid_pdf = pdf > 1e-4f;
-
-	rp->value = direct + Weight * (1 - occluded)
-		* brdf * abs(dot(sample.direction, n));
-	
-	// Copy current reservoir to previous
-	*preservoir = *reservoir;
-
-	return; */
-
-	/* float weight = length(rp->value)/pdf;
-
-	// TODO: locking...
-	// while (atomicCAS(lock, 0, 1) == 0);
-	// if (pdf > 1e-6f)
-	reservoir->update(sample, weight);
-
+	/*  Compute full lighting
 	sample = reservoir->sample;
-	float W = reservoir->weight/(reservoir->count * length(sample.value) + 1e-6);
-	// atomicExch(lock, 0); */
 
-	// Resampling spatial
+	float3 brdf_value = brdf(material, n, sample.direction, wo, entering, out);
+	float pdf_value = kobra::cuda::pdf(material, n, sample.direction, wo, entering, out);
+
+	rp->value = direct + brdf_value * sample.value * abs(dot(sample.direction, n)); */
+
+	// Resampling spatially
 	TMRIS_Reservoir spatial {
 		.sample = {},
 		.count = 0,
@@ -912,63 +797,24 @@ extern "C" __global__ void __closesthit__voxel()
 		.mis = 0
 	};
 
-	// TODO: template the original reservoir, and use a different sample
-	// type...
-
 	{
 		// NOTE: for complete resue, we need to be able to depend on
 		// only the reservoirs, and not have to recompute the sample
 		// how to do this?
 
 		// Current sample
-		sample.value = direct + T * rp->value;
+		sample.value = T * rp->value; // NOTE: to allow decent sampling for
+					  // neighboring pixels, we need to
+					  // provide a more generic target pdf
 		update_reservoir(&spatial, sample, length(sample.value), pdf, rp->seed);
 	}
-
-	/* {
-		// Current reservoir
-		TMRIS_Sample sample = reservoir->sample;
-
-		// TODO: could always just use the sample we just got (or both :))
-
-		float3 brdf = kobra::cuda::brdf(material, n,
-			sample.direction, wo,
-			entering, material.type
-		);
-
-		float pdf = kobra::cuda::pdf(material, n,
-			sample.direction, wo,
-			entering, material.type
-		);
-
-		bool occluded = false;
-		if (rp->missed) {
-			occluded &= is_occluded(x, rp->wi, 1e10);
-		} else {
-			float3 L = sample.position - x;
-			float d = length(L);
-			occluded &= is_occluded(x, L/d, d);
-		}
-
-		// TODO: direct lighting...?
-		if (!occluded) {
-			float3 f = brdf * abs(dot(sample.direction, n))/pdf;
-
-			sample.value = direct + f * sample.value;
-
-			// TODO: merge instead of udpate...
-			update_reservoir(&spatial, sample, length(sample.value), pdf, rp->seed);
-		}
-	} */
-
-	float current_depth = length(parameters.camera - x);
 
 	// Plus other samples spatially...
 	const int SPATIAL_SAMPLES = 1;
 
 	for (int i = 0; i < SPATIAL_SAMPLES; i++) {
 		// sample other reservoirs in a radius
-		const float radius = res/2.0f;
+		const float radius = res/2.0f; // TODO: show effect of this...
 
 		float3 eta = fract(random3(rp->seed));
 
@@ -1010,9 +856,6 @@ extern "C" __global__ void __closesthit__voxel()
 		// if (abs(sample_depth - current_depth) > 1)
 		//	continue;
 
-		rp->value = nsample.direction * 0.5f + 0.5f;
-		// return;
-
 		float3 brdf = kobra::cuda::brdf(material, n,
 			nsample.direction, wo,
 			entering, material.type
@@ -1024,36 +867,29 @@ extern "C" __global__ void __closesthit__voxel()
 		);
 
 		bool occluded = true;
+
 		// TODO: how to check if the sample missed?
 		if (nsample.missed) {
-			occluded &= is_occluded(x, nsample.direction, 1e10);
-			rp->value = make_float3(0, 1, 0);
-			return;
+			float3 p = x + eps * nsample.direction;
+			occluded &= is_occluded(p, nsample.direction, 1e6);
+			// occluded = false;
 		} else {
 			float3 L = nsample.position - x;
 			float d = length(L);
 			occluded &= is_occluded(x, L/d, d);
 		}
 
-		float W = nreservoir->weight/(length(nsample.value) + 1e-6);
+		float3 f = brdf * abs(dot(nsample.direction, n));
 
-		float3 f = brdf * abs(dot(nsample.direction, n))/pdf;
-
-		bool valid_pdf = pdf > 1e-4f;
-		nsample.value = direct + valid_pdf * (1 - occluded) * f * nsample.value;
+		nsample.value = (1 - occluded) * f * nsample.value;
 		nsample.pdf = pdf;
 
 		update_reservoir(&spatial, nsample, length(nsample.value), pdf, rp->seed);
 	}
 
 	// Final contribution and integration
-	// NOTE: why dont we multiply by the pdf to normalize (fails to match
-	// with 1 sample...)?
-	float W = spatial.weight * spatial.sample.pdf/(length(spatial.sample.value) + 1e-6);
-	// float W = spatial.weight/(spatial.count * length(spatial.sample.value) + 1e-6);
-	rp->value = W * spatial.sample.value;
-
-	// rp->value = make_float3(1/(W + 1e-6));
+	float W = spatial.weight/length(spatial.sample.value);
+	rp->value = direct + spatial.sample.value;
 
 	// Copy current reservoir to previous
 	TMRIS_Reservoir *preservoir = &hit->tmris.f_res_prev[ix + iy * res];
@@ -1061,110 +897,6 @@ extern "C" __global__ void __closesthit__voxel()
 		preservoir = &hit->tmris.b_res_prev[ix + iy * res];
 
 	*preservoir = *reservoir;
-
-#if 0
-
-	float3 brdf = kobra::cuda::brdf(material, n,
-		sample.direction, wo,
-		entering, material.type
-	);
-
-	bool occluded = false;
-	if (rp->missed) {
-		occluded &= is_occluded(x, rp->wi, 1e10);
-	} else {
-		float3 L = sample.position - x;
-		float d = length(L);
-		occluded &= is_occluded(x, L/d, d);
-	}
-
-	float3 total_indirect = (1 - occluded) * W * brdf * sample.value
-		* abs(dot(sample.direction, n));
-		
-	int successes = 0;
-
-	// TODO: separate reservoir to do indepenedent spatial sampling...
-
-	const int SPATIAL_SAMPLES = 5;
-	for (int i = 0; i < SPATIAL_SAMPLES; i++) {
-		// sample other reservoirs in a radius
-		const float radius = 1; // res/3.0f;
-
-		float3 eta = fract(random3(rp->seed));
-
-		float theta = 2 * M_PI * eta.x;
-		float r = radius * sqrt(eta.y);
-
-		int xoff = r * cos(theta);
-		int yoff = r * sin(theta);
-
-		int nix = ix + xoff;
-		int niy = iy + yoff;
-
-		// if (nix < 0 || nix >= res || niy < 0 || niy >= res)
-		//	continue;
-
-		// Allow wrap around
-		nix = (nix + res) % res;
-		niy = (niy + res) % res;
-
-		int nindex = nix + niy * res;
-
-		// Get the correct reservoir
-		TMRIS_Reservoir *nreservoir = &hit->tmris.f_res[nindex];
-		if (!forward)
-			nreservoir = &hit->tmris.b_res[nindex];
-
-		// TODO: check for correct facing normals and also check for occlusion
-
-		if (nreservoir->count == 0)
-			continue;
-
-		TMRIS_Sample nsample = nreservoir->sample;
-
-		float3 nwi = nsample.direction;
-		float3 nn = n;
-
-		float3 nL = nsample.position - x;
-		float nd = length(nL);
-
-		bool n_occluded = false;
-		if (rp->missed) {
-			n_occluded &= is_occluded(x, rp->wi, 1e10);
-		} else {
-			float3 L = nsample.position - x;
-			float d = length(L);
-			n_occluded &= is_occluded(x, L/d, d);
-		}
-
-		if (n_occluded)
-			continue;
-
-		float3 nwo = -nL/nd;
-		float3 nbrdf = kobra::cuda::brdf(material, nn,
-			nwi, nwo,
-			entering, material.type
-		);
-
-		float3 nindirect = W * nbrdf * nsample.value * abs(dot(nwi, nn));
-
-		total_indirect += nindirect;
-		successes++;
-
-		// TODO: merge with original reservoir instead... (with
-		// confidnce mis)
-	}
-
-	rp->value = direct + total_indirect/(1 + successes);
-	/* rp->value = direct + (1 - occluded) * brdf * sample.value
-		* abs(dot(sample.direction, n)); */
-
-	// rp->value = make_float3(reservoir->weight/reservoir->count);
-	// rp->value = make_float3(float(reservoir->count)/reservoir->max_count);
-	// rp->value = sample.direction * 0.5f + 0.5f;
-
-#endif
-
 }
 
 #endif
