@@ -38,11 +38,12 @@ struct VoxelSample {
 };
 
 struct TMRIS_Sample {
-	float3	value;
-	float3	position;
-	float3	direction;
-	float	pdf;
-	bool	missed;
+	float3 value;
+	float3 position;
+	float3 source;
+	float3 normal;
+	float3 direction;
+	bool missed;
 };
 
 // using ReSTIR_Reservoir = Reservoir <PathSample>;
