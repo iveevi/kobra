@@ -15,6 +15,7 @@ namespace kobra {
 
 namespace cuda {
 
+// TODO: turn into struct rather than a class..
 class BufferData {
 	size_t			_size = 0;
 	char			*_device_ptr = nullptr;

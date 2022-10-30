@@ -17,6 +17,8 @@
 #include "include/app.hpp"
 #include "include/capture.hpp"
 #include "include/core/interpolation.hpp"
+#include "include/cuda/color.cuh"
+#include "include/layers/denoiser.cuh"
 #include "include/layers/font_renderer.hpp"
 #include "include/layers/framer.hpp"
 #include "include/layers/hybrid_tracer.cuh"
@@ -25,7 +27,6 @@
 #include "include/optix/options.cuh"
 #include "include/optix/parameters.cuh"
 #include "include/scene.hpp"
-#include "include/cuda/color.cuh"
 
 // TODO: do base app without inheritance (simple struct..., app and baseapp not
 // related)
@@ -36,8 +37,9 @@ struct MotionCapture : public kobra::BaseApp {
 
 	// Necessary layers
 	kobra::layers::Wadjet tracer;
-	kobra::layers::FontRenderer font_renderer;
+	kobra::layers::Denoiser denoiser;
 	kobra::layers::Framer framer;
+	kobra::layers::FontRenderer font_renderer;
 	// TODO: denoising layer which takes CUDA buffer as input
 
 	// Buffers
@@ -81,6 +83,7 @@ struct MotionCapture : public kobra::BaseApp {
 		tracer = kobra::layers::Wadjet::make(get_context());
 		kobra::layers::set_envmap(tracer, "resources/skies/background_1.jpg");
 
+		denoiser = kobra::layers::Denoiser::make(extent);
 		framer = kobra::layers::Framer::make(get_context());
 
 #if 0
@@ -136,30 +139,7 @@ struct MotionCapture : public kobra::BaseApp {
 			
 		// Launch compute thread
 		compute_thread = new std::thread(
-			[&]() {
-				compute_timer.start();
-				while (!kill) {
-					bool accumulate = true;
-
-					// Also check our events
-					events_mutex.lock();
-					if (!events.empty())
-						accumulate = false; // Means that camera direction
-								    // changed
-
-					events = std::queue <bool> (); // Clear events
-					events_mutex.unlock();
-
-					kobra::layers::compute(tracer,
-						scene.ecs,
-						camera.get <kobra::Camera> (),
-						camera.get <kobra::Transform> (),
-						mode, accumulate
-					);
-
-					compute_time = compute_timer.lap()/1e6;
-				}
-			}
+			&MotionCapture::path_trace_kernel, this
 		);
 
 		// Allocate buffers
@@ -167,6 +147,36 @@ struct MotionCapture : public kobra::BaseApp {
 
 		b_traced = kobra::cuda::alloc(size * sizeof(uint32_t));
 		b_traced_cpu.resize(size);
+	}
+
+	// Path tracing kernel
+	void path_trace_kernel() {
+		compute_timer.start();
+		while (!kill) {
+			bool accumulate = true;
+
+			// Also check our events
+			events_mutex.lock();
+			if (!events.empty())
+				accumulate = false; // Means that camera direction
+						    // changed
+
+			events = std::queue <bool> (); // Clear events
+			events_mutex.unlock();
+
+			kobra::layers::compute(tracer,
+				scene.ecs,
+				camera.get <kobra::Camera> (),
+				camera.get <kobra::Transform> (),
+				mode, accumulate
+			);
+
+			kobra::layers::denoise(denoiser, {
+				.color = kobra::layers::color_buffer(tracer)
+			});
+
+			compute_time = compute_timer.lap()/1e6;
+		}
 	}
 
 	float time = 0.0f;
@@ -218,20 +228,11 @@ struct MotionCapture : public kobra::BaseApp {
 
 		// Now trace and render
 		cmd.begin({});
-			/* kobra::layers::compute(tracer,
-				scene.ecs,
-				camera.get <kobra::Camera> (),
-				camera.get <kobra::Transform> (),
-				mode, accumulate
-			); */
-
-			// kobra::layers::render(tracer, cmd, framebuffer);
-
 			int width = tracer.extent.width;
 			int height = tracer.extent.height;
 
 			kobra::cuda::hdr_to_ldr(
-				tracer.launch_params.color_buffer,
+				(float4 *) kobra::layers::color_buffer(tracer),
 				(uint32_t *) b_traced,
 				width, height
 			);

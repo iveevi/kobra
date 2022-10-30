@@ -13,6 +13,7 @@ definitions:
     source/extensions.cpp,
     source/formats.cpp,
     source/io/event.cpp,
+    source/layers/denoiser.cu,
     source/layers/forward_renderer.cpp,
     source/layers/framer.cpp,
     source/layers/gizmo.cpp,
