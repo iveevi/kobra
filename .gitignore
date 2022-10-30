@@ -6,6 +6,7 @@
 *.ptx
 *.spv
 .cache
+.kobra
 .smake
 .vscode
 .xmake

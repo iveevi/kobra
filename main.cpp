@@ -14,6 +14,7 @@
 #include "include/logger.hpp"
 #include "include/optix/options.cuh"
 #include "include/profiler.hpp"
+#include "include/project.hpp"
 #include "include/renderer.hpp"
 #include "include/scene.hpp"
 #include "include/transform.hpp"
@@ -30,7 +31,7 @@ using namespace kobra;
 
 // Scene path
 // TODO: project manager to avoid hardcoding scene path...
-std::string scene_path = "/home/venki/models/cornell_box_modified.kobra";
+// std::string scene_path = "/home/venki/models/cornell_boxes.kobra";
 // std::string scene_path = "scenes/ggx.kobra";
 
 // Test app
@@ -247,7 +248,7 @@ struct ECSApp : public BaseApp {
 		{
 			KOBRA_PROFILE_TASK(Application constructor)
 
-			scene.load(get_device(), scene_path);
+			scene.load(get_device(), "X");
 
 			std::string envmap_path = "resources/skies/background_1.jpg";
 
@@ -672,6 +673,7 @@ struct ECSApp : public BaseApp {
 
 int main()
 {
+	// Load Vulkan physical device
 	auto extensions = {
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 		VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
@@ -684,35 +686,22 @@ int main()
 	};
 
 	// Choose a physical device
-	// TODO: static lambda (FIRST)
+	// TODO: static lambda (GREEDY)
 	auto phdev = pick_physical_device(predicate);
 
 	std::cout << "Extensions:" << std::endl;
 	for (auto str : extensions)
 		std::cout << "\t" << str << std::endl;
 
-#if 0
+	// Load the project
+	kobra::Project project = kobra::Project::load(".kobra/project");
 
-	// Create the app and run it
-	ECSApp app(phdev, {
-		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-		VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
-		VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
-	});
-
-	// Run the app
-	app.run();
-
-#else
-
+	// Create and launch the application
 	MotionCapture app(phdev, {
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 		VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
 		VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
-	}, scene_path);
+	}, project.scene);
 
 	app.run();
-
-#endif
-
 }
