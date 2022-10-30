@@ -1,6 +1,9 @@
 #ifndef KOBRA_CUDA_CAST_H_
 #define KOBRA_CUDA_CAST_H_
 
+// GLM headers
+#include <glm/glm.hpp>
+
 namespace kobra {
 
 namespace cuda {

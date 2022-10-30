@@ -592,14 +592,7 @@ Wadjet Wadjet::make(const Context &context)
 	layer.device = context.device;
 	layer.phdev = context.phdev;
 	layer.descriptor_pool = context.descriptor_pool;
-
-	// Create the framebuffers
 	layer.extent = context.extent;
-
-	layer.depth = DepthBuffer {
-		*context.phdev, *context.device,
-		vk::Format::eD32Sfloat, context.extent
-	};
 
 	// Initialize OptiX
 	initialize_optix(layer);
@@ -1327,23 +1320,6 @@ static __global__ void compute_pixel_values
 	target[out_idx] = cuda::to_ui32(color);
 }
 
-// Copy kernels...
-__global__ void copy_reservoirs(HitRecord *hit_records, int instances)
-{
-	int idx = blockIdx.x * blockDim.x + threadIdx.x;
-	int stride = blockDim.x * gridDim.x;
-
-	for (int i = idx; i < instances; i += stride) {
-		optix::Hit *hit = &hit_records[i].data;
-
-		int res = optix::Hit::TMRIS_RESOLUTION;
-		for (int j = 0; j < res * res; j++) {
-			hit->tmris.f_res_prev[j] = hit->tmris.f_res[j];
-			hit->tmris.b_res_prev[j] = hit->tmris.b_res[j];
-		}
-	}
-}
-
 // Path tracing computation
 void compute(Wadjet &layer,
 		const ECS &ecs,
@@ -1410,118 +1386,9 @@ void compute(Wadjet &layer,
 
 		int threads = 256;
 		int blocks = (instances + threads - 1) / threads;
-
-		/* copy_reservoirs <<<blocks, threads>>> (
-			(HitRecord *)
-			layer.optix_sbt.hitgroupRecordBase,
-			instances
-		); */
-	}
-
-	{
-		KOBRA_PROFILE_TASK(Compute postprocessing);
-
-		// Conversion kernel
-		uint width = layer.extent.width;
-		uint height = layer.extent.height;
-
-		dim3 block(16, 16);
-		dim3 grid(
-			(width + block.x - 1)/block.x,
-			(height + block.y - 1)/block.y
-		);
-
-		compute_pixel_values <<<grid, block>>> (
-			layer.launch_params.color_buffer,
-			(uint32_t *) layer.truncated,
-			width, height, 0
-		);
-		
-		// Copy results to the CPU
-		uint32_t size = layer.extent.width * layer.extent.height;
-		if (layer.color_buffer.size() != size)
-			layer.color_buffer.resize(size);
-
-		cuda::copy(
-			layer.color_buffer,
-			layer.truncated,
-			size
-		);
 	}
 
 	// KOBRA_PROFILE_PRINT();
-}
-
-// Render to the presentable framebuffer
-// TODO: custom extent
-void render(Wadjet &layer,
-		const CommandBuffer &cmd,
-		const Framebuffer &framebuffer,
-		const RenderArea &ra)
-{
-	// Upload data to the buffer
-	layer.result_buffer.upload(layer.color_buffer);
-	
-	// Copy buffer to image
-	layer.result_image.transition_layout(cmd, vk::ImageLayout::eTransferDstOptimal);
-
-	copy_data_to_image(cmd,
-		layer.result_buffer.buffer,
-		layer.result_image.image,
-		layer.result_image.format,
-		layer.extent.width, layer.extent.height
-	);
-
-	// Transition image back to shader read
-	layer.result_image.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);	
-	
-	// Apply render area
-	ra.apply(cmd, layer.extent);
-
-	// Clear colors
-	std::array <vk::ClearValue, 2> clear_values {
-		vk::ClearValue {
-			vk::ClearColorValue {
-				std::array <float, 4> {0.0f, 0.0f, 0.0f, 1.0f}
-			}
-		},
-		vk::ClearValue {
-			vk::ClearDepthStencilValue {
-				1.0f, 0
-			}
-		}
-	};
-	
-	// Start the render pass
-	cmd.beginRenderPass(
-		vk::RenderPassBeginInfo {
-			*layer.render_pass,
-			*framebuffer,
-			vk::Rect2D {
-				vk::Offset2D {0, 0},
-				layer.extent
-			},
-			static_cast <uint32_t> (clear_values.size()),
-			clear_values.data()
-		},
-		vk::SubpassContents::eInline
-	);
-
-	// Presentation pipeline
-	cmd.bindPipeline(
-		vk::PipelineBindPoint::eGraphics,
-		*layer.pipeline
-	);
-
-	// Bind descriptor set
-	cmd.bindDescriptorSets(
-		vk::PipelineBindPoint::eGraphics,
-		*layer.ppl, 0, {*layer.dset}, {}
-	);
-
-	// Draw and end
-	cmd.draw(6, 1, 0, 0);
-	cmd.endRenderPass();
 }
 
 }

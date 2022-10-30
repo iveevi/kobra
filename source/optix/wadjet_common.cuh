@@ -22,7 +22,7 @@ extern "C"
 }
 
 // TODO: launch parameter for ray depth
-#define MAX_DEPTH 10
+#define MAX_DEPTH 3
 
 // Local constants
 static const float eps = 1e-3f;

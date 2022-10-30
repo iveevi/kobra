@@ -29,10 +29,7 @@
 
 using namespace kobra;
 
-// Scene path
-// TODO: project manager to avoid hardcoding scene path...
-// std::string scene_path = "/home/venki/models/cornell_boxes.kobra";
-// std::string scene_path = "scenes/ggx.kobra";
+#if 0
 
 // Test app
 struct ECSApp : public BaseApp {
@@ -670,6 +667,8 @@ struct ECSApp : public BaseApp {
 		}
 	}
 };
+
+#endif
 
 int main()
 {

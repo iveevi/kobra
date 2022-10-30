@@ -2,6 +2,7 @@
 #define KOBRA_CUDA_COLOR_H_
 
 // Engine headers
+#include "cast.cuh"
 #include "math.cuh"
 
 namespace kobra {
@@ -65,6 +66,49 @@ __forceinline__ __host__ __device__
 uchar4 make_color(const float4 &c, int tonemapping = 0)
 {
 	return make_color(make_float3(c.x, c.y, c.z), tonemapping);
+}
+
+// HDR color to LDR mapping kernel
+enum {
+	eTonemappingACES = 0,
+	eTonemappingSRGB = 1
+};
+
+// CUDA kernel
+inline __global__
+void hdr_to_ldr_kernel
+		(float4 *pixels, uint32_t *target,
+		int width, int height,
+		int tonemapping = eTonemappingACES)
+{
+	int x = blockIdx.x * blockDim.x + threadIdx.x;
+	int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if (x >= width || y >= height)
+		return;
+
+	int in_idx = y * width + x;
+	int out_idx = (height - y - 1) * width + x;
+
+	float4 pixel = pixels[in_idx];
+	uchar4 color = cuda::make_color(pixel, tonemapping);
+
+	target[out_idx] = cuda::to_ui32(color);
+}
+
+// C++ wrapper function
+inline void hdr_to_ldr(float4 *pixels, uint32_t *target,
+		int width, int height,
+		int tonemapping = eTonemappingACES)
+{
+	dim3 block(16, 16);
+	dim3 grid(
+		(width + block.x - 1) / block.x,
+		(height + block.y - 1) / block.y
+	);
+
+	hdr_to_ldr_kernel <<<grid, block>>>
+		(pixels, target, width, height, tonemapping);
 }
 
 }

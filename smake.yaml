@@ -13,14 +13,15 @@ definitions:
     source/extensions.cpp,
     source/formats.cpp,
     source/io/event.cpp,
+    source/layers/forward_renderer.cpp,
+    source/layers/framer.cpp,
     source/layers/gizmo.cpp,
     source/layers/hybrid_tracer.cu,
-    source/layers/wadjet.cu,
     source/layers/objectifier.cpp,
     source/layers/optix_tracer.cu,
     source/layers/raster.cpp,
     source/layers/raytracer.cpp,
-    source/layers/forward_renderer.cpp,
+    source/layers/wadjet.cu,
     source/logger.cpp,
     source/material.cpp,
     source/mesh.cpp,
@@ -108,25 +109,25 @@ builds:
     - compiler: glslc
     - options: 'nolink, output_dir=./bin/spv, output_format={filename}_frag.spv'
   - kobra:
-    - sources: main.cpp, kobra_source, tinyfd_source, glslang_source
+    - sources: main.cu, kobra_source, tinyfd_source, glslang_source
     - idirs: includes
     - flags: '-std=c++17'
     - libraries: libs
     - dependencies: optix_ptx_debug, glsl_compute, glsl_vertex, glsl_frag
   - kobra_release:
-    - sources: main.cpp, kobra_source, tinyfd_source, glslang_source
+    - sources: main.cu, kobra_source, tinyfd_source, glslang_source
     - idirs: includes
     - flags: '-O3 -std=c++17'
     - libraries: libs
     - dependencies: optix_ptx_debug, hybrid_ptx_release, wadjet_ptx_release, glsl_compute, glsl_vertex, glsl_frag
   - kobra_debug:
-    - sources: main.cpp, kobra_source, tinyfd_source, glslang_source
+    - sources: main.cu, kobra_source, tinyfd_source, glslang_source
     - idirs: includes
     - libraries: libs
     - flags: '-g -std=c++17'
     - dependencies: optix_ptx_debug, glsl_compute 
   - kobra_wall:
-    - sources: main.cpp, kobra_source, tinyfd_source, glslang_source
+    - sources: main.cu, kobra_source, tinyfd_source, glslang_source
     - idirs: includes
     - libraries: libs
     - flags: '-std=c++17 -Wall -Werror'

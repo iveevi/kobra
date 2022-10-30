@@ -18,12 +18,14 @@
 #include "include/capture.hpp"
 #include "include/core/interpolation.hpp"
 #include "include/layers/font_renderer.hpp"
+#include "include/layers/framer.hpp"
 #include "include/layers/hybrid_tracer.cuh"
 #include "include/layers/optix_tracer.cuh"
 #include "include/layers/wadjet.cuh"
 #include "include/optix/options.cuh"
 #include "include/optix/parameters.cuh"
 #include "include/scene.hpp"
+#include "include/cuda/color.cuh"
 
 // TODO: do base app without inheritance (simple struct..., app and baseapp not
 // related)
@@ -32,9 +34,15 @@ struct MotionCapture : public kobra::BaseApp {
 	kobra::Entity camera;
 	kobra::Scene scene;
 
+	// Necessary layers
 	kobra::layers::Wadjet tracer;
 	kobra::layers::FontRenderer font_renderer;
+	kobra::layers::Framer framer;
 	// TODO: denoising layer which takes CUDA buffer as input
+
+	// Buffers
+	CUdeviceptr b_traced;
+	std::vector <uint32_t> b_traced_cpu;
 
 	// Capture
 	cv::VideoWriter capture;
@@ -72,6 +80,8 @@ struct MotionCapture : public kobra::BaseApp {
 		KOBRA_LOG_FILE(kobra::Log::INFO) << "Hybrid tracer setup\n";
 		tracer = kobra::layers::Wadjet::make(get_context());
 		kobra::layers::set_envmap(tracer, "resources/skies/background_1.jpg");
+
+		framer = kobra::layers::Framer::make(get_context());
 
 #if 0
 
@@ -114,6 +124,16 @@ struct MotionCapture : public kobra::BaseApp {
 		io.mouse_events.subscribe(mouse_callback, this);
 		io.keyboard_events.subscribe(keyboard_callback, this);
 			
+		// NOTE: we need this precomputation step to load all the
+		// resources before rendering; we need some system to allocate
+		// queues so that we dont need to do this...
+		kobra::layers::compute(tracer,
+			scene.ecs,
+			camera.get <kobra::Camera> (),
+			camera.get <kobra::Transform> (),
+			mode, false 
+		);
+			
 		// Launch compute thread
 		compute_thread = new std::thread(
 			[&]() {
@@ -141,6 +161,12 @@ struct MotionCapture : public kobra::BaseApp {
 				}
 			}
 		);
+
+		// Allocate buffers
+		size_t size = kobra::layers::size(tracer);
+
+		b_traced = kobra::cuda::alloc(size * sizeof(uint32_t));
+		b_traced_cpu.resize(size);
 	}
 
 	float time = 0.0f;
@@ -199,7 +225,21 @@ struct MotionCapture : public kobra::BaseApp {
 				mode, accumulate
 			); */
 
-			kobra::layers::render(tracer, cmd, framebuffer);
+			// kobra::layers::render(tracer, cmd, framebuffer);
+
+			int width = tracer.extent.width;
+			int height = tracer.extent.height;
+
+			kobra::cuda::hdr_to_ldr(
+				tracer.launch_params.color_buffer,
+				(uint32_t *) b_traced,
+				width, height
+			);
+			
+
+			kobra::cuda::copy(b_traced_cpu, b_traced, width * height);
+			kobra::layers::render(framer, b_traced_cpu, cmd, framebuffer);
+
 			// kobra::layers::capture(tracer, frame);
 
 			// Text to render

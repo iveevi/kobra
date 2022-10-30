@@ -786,7 +786,7 @@ extern "C" __global__ void __closesthit__voxel()
 	// TODO: additional reservoir for this step (in here...)
 
 	// Get a random reservoir on the texture
-	const float SAMPLING_RADIUS = 0.0f;
+	const float SAMPLING_RADIUS = 20.0f;
 
 	eta = fract(random3(rp->seed));
 	float radius = SAMPLING_RADIUS * sqrt(eta.x);

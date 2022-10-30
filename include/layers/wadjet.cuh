@@ -35,9 +35,6 @@ struct Wadjet {
 	// CUDA launch stream
 	CUstream optix_stream = 0;
 
-	// Depth buffer
-	DepthBuffer depth = nullptr;
-
 	// Vulkan structures
 	RenderPass render_pass = nullptr;
 
@@ -113,17 +110,18 @@ struct Wadjet {
 	static Wadjet make(const Context &);
 };
 
+// Proprety methods
+inline size_t size(const Wadjet &layer)
+{
+	return layer.extent.width * layer.extent.height;
+}
+
 // Other methods
 void set_envmap(Wadjet &, const std::string &);
 void capture(Wadjet &, std::vector <uint8_t> &);
 
 void compute(Wadjet &, const ECS &, const Camera &, const Transform &,
 		unsigned int, bool = false);
-
-void render(Wadjet &,
-	const CommandBuffer &,
-	const Framebuffer &,
-	const RenderArea & = {{-1, -1}, {-1, -1}});
 
 }
 
