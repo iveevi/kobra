@@ -228,6 +228,8 @@ struct WadjetParameters {
 
 	// Output buffers
 	float4 *color_buffer;
+	float4 *normal_buffer;
+	float4 *albedo_buffer;
 };
 
 }

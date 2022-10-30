@@ -558,13 +558,11 @@ static void initialize_optix(Wadjet &layer)
 	params.voxel.locks = cuda::make_buffer(lock_ptrs);
 
 	// Color buffer (output)
-	layer.launch_params.color_buffer = (float4 *)
-		cuda::alloc(
-			layer.extent.width * layer.extent.height
-			* sizeof(float4)
-		);
+	size_t bytes = width * height * sizeof(float4);
 
-	std::cout << "Color buffer of size " << layer.extent.width << "x" << layer.extent.height << std::endl;
+	layer.launch_params.color_buffer = (float4 *) cuda::alloc(bytes);
+	layer.launch_params.normal_buffer = (float4 *) cuda::alloc(bytes);
+	layer.launch_params.albedo_buffer = (float4 *) cuda::alloc(bytes);
 
 	// Allocate the parameters buffer
 	layer.launch_params_buffer = cuda::alloc(
@@ -572,10 +570,7 @@ static void initialize_optix(Wadjet &layer)
 	);
 
 	// Allocate truncated color buffer
-	layer.truncated = cuda::alloc(
-		layer.extent.width * layer.extent.height
-		* sizeof(uint32_t)
-	);
+	layer.truncated = cuda::alloc(width * height * sizeof(uint32_t));
 
 	// Start the timer
 	layer.timer.start();

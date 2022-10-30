@@ -54,7 +54,7 @@ struct MotionCapture : public kobra::BaseApp {
 	int max_samples = 0;
 
 	// Threads
-	std::thread *compute_thread;
+	std::thread *compute_thread = nullptr;
 
 	kobra::Timer compute_timer;
 	float compute_time;
@@ -83,7 +83,13 @@ struct MotionCapture : public kobra::BaseApp {
 		tracer = kobra::layers::Wadjet::make(get_context());
 		kobra::layers::set_envmap(tracer, "resources/skies/background_1.jpg");
 
-		denoiser = kobra::layers::Denoiser::make(extent);
+		// Create the denoiser layer
+		denoiser = kobra::layers::Denoiser::make(
+			extent,
+			kobra::layers::Denoiser::eNormal
+				| kobra::layers::Denoiser::eAlbedo
+		);
+
 		framer = kobra::layers::Framer::make(get_context());
 
 #if 0
@@ -149,6 +155,17 @@ struct MotionCapture : public kobra::BaseApp {
 		b_traced_cpu.resize(size);
 	}
 
+	// Destructor
+	~MotionCapture() {
+		// Wait for compute thread to finish
+		if (compute_thread) {
+			// Send kill signal
+			kill = true;
+			compute_thread->join();
+			delete compute_thread;
+		}
+	}
+
 	// Path tracing kernel
 	void path_trace_kernel() {
 		compute_timer.start();
@@ -172,7 +189,9 @@ struct MotionCapture : public kobra::BaseApp {
 			);
 
 			kobra::layers::denoise(denoiser, {
-				.color = kobra::layers::color_buffer(tracer)
+				.color = kobra::layers::color_buffer(tracer),
+				.normal = kobra::layers::normal_buffer(tracer),
+				.albedo = kobra::layers::albedo_buffer(tracer)
 			});
 
 			compute_time = compute_timer.lap()/1e6;
@@ -232,9 +251,10 @@ struct MotionCapture : public kobra::BaseApp {
 			int height = tracer.extent.height;
 
 			kobra::cuda::hdr_to_ldr(
-				(float4 *) kobra::layers::color_buffer(tracer),
+				(float4 *) denoiser.result,
 				(uint32_t *) b_traced,
-				width, height
+				width, height,
+				kobra::cuda::eTonemappingACES
 			);
 			
 

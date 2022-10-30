@@ -30,8 +30,11 @@ static const float eps = 1e-3f;
 // Ray packet data
 struct RayPacket {
 	float3	value;
+
 	float3	position;
 	float3	normal;
+	float3	albedo;
+
 	float	pdf;
 
 	float3	wi;

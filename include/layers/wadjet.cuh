@@ -121,6 +121,16 @@ inline CUdeviceptr color_buffer(const Wadjet &layer)
 	return (CUdeviceptr) layer.launch_params.color_buffer;
 }
 
+inline CUdeviceptr normal_buffer(const Wadjet &layer)
+{
+	return (CUdeviceptr) layer.launch_params.normal_buffer;
+}
+
+inline CUdeviceptr albedo_buffer(const Wadjet &layer)
+{
+	return (CUdeviceptr) layer.launch_params.albedo_buffer;
+}
+
 // Other methods
 void set_envmap(Wadjet &, const std::string &);
 void capture(Wadjet &, std::vector <uint8_t> &);

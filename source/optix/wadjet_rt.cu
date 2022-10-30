@@ -33,6 +33,19 @@ void make_ray(uint3 idx,
 	direction = normalize(d.x * U + d.y * V + W);
 }
 
+// Accumulatoin helper
+__forceinline__ __device__
+void accumulate(float4 &dst, float4 sample)
+{
+	if (parameters.accumulate) {
+		float4 prev = dst;
+		int count = parameters.samples;
+		dst = (prev * count + sample)/(count + 1);
+	} else {
+		dst = sample;
+	}
+}
+
 // Ray generation kernel
 extern "C" __global__ void __raygen__rg()
 {
@@ -79,16 +92,23 @@ extern "C" __global__ void __raygen__rg()
 		
 	// Finally, store the result
 	float4 sample = make_float4(rp.value, 1.0f);
+	float4 normal = make_float4(rp.normal, 0.0f);
+	float4 albedo = make_float4(rp.albedo, 0.0f);
+
 	if (isnan(sample.x) || isnan(sample.y) || isnan(sample.z))
 		sample = make_float4(0.0f, 0.0f, 0.0f, 1.0f);
 
-	if (parameters.accumulate) {
+	/* if (parameters.accumulate) {
 		float4 prev = parameters.color_buffer[index];
 		parameters.color_buffer[index] = (prev * parameters.samples + sample)
 			/(parameters.samples + 1);
 	} else {
 		parameters.color_buffer[index] = sample;
-	}
+	} */
+
+	accumulate(parameters.color_buffer[index], sample);
+	accumulate(parameters.normal_buffer[index], normal);
+	accumulate(parameters.albedo_buffer[index], albedo);
 }
 
 // Closest hit kernel
@@ -102,7 +122,8 @@ extern "C" __global__ void __closesthit__ch()
 	if (hit->material.type == Shading::eEmissive) {
 		rp->value = material.emission;
 		rp->position = x;
-		// rp->missed = false;
+		rp->normal = n;
+		rp->albedo = material.diffuse;
 		return;
 	}
 
@@ -122,7 +143,8 @@ extern "C" __global__ void __closesthit__ch()
 	if (length(f) < 1e-6f) {
 		rp->value = direct;
 		rp->position = x;
-		// rp->missed = false;
+		rp->normal = n;
+		rp->albedo = material.diffuse;
 		return;
 	}
 
@@ -140,9 +162,9 @@ extern "C" __global__ void __closesthit__ch()
 
 	// Update the value
 	rp->value = direct + T * rp->value/pdf;
-	// rp->missed = false;
 	rp->position = x;
 	rp->normal = n;
+	rp->albedo = material.diffuse;
 	rp->wi = wi;
 }
 

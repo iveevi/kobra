@@ -38,6 +38,8 @@ extern "C" __global__ void __closesthit__restir()
 	// TODO: check for light, not just emissive material
 	if (hit->material.type == Shading::eEmissive) {
 		rp->value = material.emission;
+		rp->normal = n;
+		rp->albedo = material.diffuse;
 		return;
 	}
 	
@@ -175,4 +177,8 @@ extern "C" __global__ void __closesthit__restir()
 	rp->value = direct + W * reservoir->sample.value;
 
 #endif
+
+	// Pass through features
+	rp->normal = n;
+	rp->albedo = material.diffuse;
 }

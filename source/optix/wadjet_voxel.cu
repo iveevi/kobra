@@ -708,6 +708,8 @@ extern "C" __global__ void __closesthit__voxel()
 	// Check for emissive objects
 	if (hit->material.type == Shading::eEmissive) {
 		rp->value = material.emission;
+		rp->normal = n;
+		rp->albedo = material.diffuse;
 		return;
 	}
 	
@@ -849,6 +851,10 @@ extern "C" __global__ void __closesthit__voxel()
 
 	// NOTE: implement spatial sampling with current traced sample
 	// + spatial sample like above
+
+	// Pass through features
+	rp->normal = n;
+	rp->albedo = material.diffuse;
 }
 
 #endif

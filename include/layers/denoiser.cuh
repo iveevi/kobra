@@ -29,13 +29,22 @@ struct Denoiser {
 	// Result of the denoiser
 	CUdeviceptr result;
 
+	// Options
+	enum Guides : uint8_t {
+		eNone = 0,
+		eNormal = 1,
+		eAlbedo = 2,
+	} guides;
+
 	// Input for the denoiser
 	struct Input {
-		CUdeviceptr color;
+		CUdeviceptr color = 0;
+		CUdeviceptr normal = 0;
+		CUdeviceptr albedo = 0;
 	};
 
 	// Functions
-	static Denoiser make(const vk::Extent2D &);
+	static Denoiser make(const vk::Extent2D &, uint8_t = eNone);
 };
 
 // Methods

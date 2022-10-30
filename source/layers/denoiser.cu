@@ -7,7 +7,7 @@ namespace kobra {
 namespace layers {
 
 // Create the denoiser layer
-Denoiser Denoiser::make(const vk::Extent2D &extent)
+Denoiser Denoiser::make(const vk::Extent2D &extent, uint8_t guides)
 {
 	// Layer to return
 	Denoiser layer;
@@ -15,16 +15,15 @@ Denoiser Denoiser::make(const vk::Extent2D &extent)
 	// Initialize dimensions
 	layer.width = extent.width;
 	layer.height = extent.height;
+	layer.guides = (Denoiser::Guides) guides;
 
 	// Create an OptiX context
 	layer.context = optix::make_context();
 
 	// Create the denoiser
 	OptixDenoiserOptions denoiser_options = {};
-	
-	// TODO: options for guide layers, etc
-	// denoiser_options.guideAlbedo = 1;
-	// denoiser_options.guideNormal = 1;
+	denoiser_options.guideNormal = (guides & eNormal);
+	denoiser_options.guideAlbedo = (guides & eAlbedo);
 
 	OPTIX_CHECK(optixDenoiserCreate(layer.context,
 		OPTIX_DENOISER_MODEL_KIND_AOV,
@@ -83,6 +82,47 @@ void denoise(Denoiser &layer, const Denoiser::Input &input)
 		.format = OPTIX_PIXEL_FORMAT_FLOAT4
 	};
 
+	OptixImage2D normal_image;
+	OptixImage2D albedo_image;
+
+	if (layer.guides & Denoiser::eNormal) {
+		if (input.normal == 0) {
+			KOBRA_LOG_FUNC(Log::ERROR)
+				<< "Denoiser layer [" << &layer << "]"
+				<< " requires a normal guide, but none was"
+				<< " provided.\n";
+			return;
+		}
+
+		normal_image = {
+			.data = input.normal,
+			.width = layer.width,
+			.height = layer.height,
+			.rowStrideInBytes = row_stride,
+			.pixelStrideInBytes = sizeof(float4),
+			.format = OPTIX_PIXEL_FORMAT_FLOAT4
+		};
+	}
+
+	if (layer.guides & Denoiser::eAlbedo) {
+		if (input.albedo == 0) {
+			KOBRA_LOG_FUNC(Log::ERROR)
+				<< "Denoiser layer [" << &layer << "]"
+				<< " requires an albedo guide, but none was"
+				<< " provided.\n";
+			return;
+		}
+
+		albedo_image = {
+			.data = input.albedo,
+			.width = layer.width,
+			.height = layer.height,
+			.rowStrideInBytes = row_stride,
+			.pixelStrideInBytes = sizeof(float4),
+			.format = OPTIX_PIXEL_FORMAT_FLOAT4
+		};
+	}
+
 	// Output
 	OptixImage2D output {
 		.data = layer.result,
@@ -97,6 +137,8 @@ void denoise(Denoiser &layer, const Denoiser::Input &input)
 	OptixDenoiserParams denoiser_params = {};
 	
 	OptixDenoiserGuideLayer denoiser_guide_layer;
+	denoiser_guide_layer.normal = normal_image;
+	denoiser_guide_layer.albedo = albedo_image;
 	
 	OptixDenoiserLayer denoiser_layer;
 	denoiser_layer.input = color_input;
