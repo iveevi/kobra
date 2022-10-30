@@ -56,21 +56,21 @@ public:
 		// Find codec
 		codec = const_cast <AVCodec *> (avcodec_find_encoder(AV_CODEC_ID_PNG));
 		if (!codec) {
-			Logger::error("[Capture] Failed to find codec");
+			logger("Capture", Log::ERROR) << "Failed to find codec\n";
 			return;
 		}
 
 		// Create codec context
 		codec_ctx = avcodec_alloc_context3(codec);
 		if (!codec_ctx) {
-			Logger::error("[Capture] Failed to allocate codec context");
+			logger("Capture", Log::ERROR) << "Failed to create codec context\n";
 			return;
 		}
 
 		// Allocate frame
 		frame = av_frame_alloc();
 		if (!frame) {
-			Logger::error("[Capture] Failed to allocate frame");
+			logger("Capture", Log::ERROR) << "Failed to allocate frame\n";
 			return;
 		}
 	}
@@ -101,7 +101,7 @@ public:
 
 		// Open codec
 		if (avcodec_open2(codec_ctx, codec, NULL) < 0) {
-			Logger::error("[Capture] Failed to open codec");
+			logger("Capture", Log::ERROR) << "Failed to open codec\n";
 			return;
 		}
 
@@ -151,7 +151,7 @@ public:
 		// Encode frame
 		int ret = avcodec_send_frame(codec_ctx, frame);
 		if (ret < 0) {
-			Logger::error("[Capture] Failed to encode frame");
+			logger("Capture", Log::ERROR) << "Failed to encode frame\n";
 			return;
 		}
 
@@ -162,7 +162,7 @@ public:
 			if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
 				break;
 			else if (ret < 0) {
-				Logger::error("[Capture] Failed to receive packet");
+				logger("Capture", Log::ERROR) << "Failed to receive packet\n";
 				return;
 			}
 

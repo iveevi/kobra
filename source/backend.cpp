@@ -127,30 +127,12 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_logger
 {
 	// Errors
 	if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
-		Logger::error() << "[Vulkan Validation Layer] "
-			<< pCallbackData->pMessage << std::endl;
+		logger("Vulkan", Log::ERROR) << pCallbackData->pMessage << std::endl;
 
 #ifdef KOBRA_THROW_ERROR
 
 		throw std::runtime_error("[Vulkan Validation Layer] "
 			"An error occured in the validation layer");
-
-#elif defined KOBRA_PAUSE_ON_ERROR
-
-		/* Print stack trace
-		// TODO:
-		void *array[10];
-		size_t size;
-
-		// get void*'s for all entries on the stack
-		size = backtrace(array, 10);
-
-		// print out all the frames to stderr
-		fprintf(stderr, "Error:");
-		backtrace_symbols_fd(array, size, stderr); */
-
-		std::cout << "Enter a key to continue..." << std::endl;
-		std::cin.get();
 
 #endif
 
@@ -158,8 +140,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_logger
 
 	// Warnings
 	} else if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
-		Logger::warn() << "[Vulkan Validation Layer] "
-			<< pCallbackData->pMessage << std::endl;
+		logger("Vulkan", Log::WARN) << pCallbackData->pMessage << std::endl;
 
 
 #ifdef KOBRA_THROW_WARNING
@@ -171,9 +152,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_logger
 
 	// Info
 	} else {
-
-		Logger::notify() << "[Vulkan Validation Layer] "
-			<< pCallbackData->pMessage << std::endl;
+		logger("Vulkan", Log::INFO) << pCallbackData->pMessage << std::endl;
 
 #endif
 

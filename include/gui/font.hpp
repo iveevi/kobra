@@ -156,7 +156,7 @@ class Font {
 	// Check FreeType error
 	void check_error(FT_Error error) const {
 		if (error) {
-			Logger::error() << "FreeType error: "
+			KOBRA_LOG_FUNC(Log::ERROR) << "FreeType error: "
 				<< error << std::endl;
 			throw -1;
 		}
@@ -316,7 +316,7 @@ public:
 			const std::string &file) {
 		// Check that the file exists
 		if (!common::file_exists(file)) {
-			Logger::error("Font file not found: " + file);
+			KOBRA_LOG_FUNC(Log::ERROR) << "File " << file << " does not exist";
 			throw -1;
 		}
 

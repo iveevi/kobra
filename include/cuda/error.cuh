@@ -80,7 +80,7 @@ inline void check_error(cudaError_t error, const char *call, const char *file, u
 {
 	if (error != cudaSuccess) {
 		std::string from = "CUDA: " + function_name(call);
-		Logger::error_from(from.c_str()) << cudaGetErrorString(error)
+		logger(from.c_str(), Log::ERROR) << cudaGetErrorString(error)
 			<< " (" << file << ": " << line << ")\n";
 		throw std::runtime_error("CUDA error");
 	}
@@ -92,7 +92,7 @@ inline void sync_check( const char* file, unsigned int line )
 	cudaError_t error = cudaGetLastError();
 	if (error != cudaSuccess) {
 		std::string from = "CUDA: cudaDeviceSynchronize";
-		Logger::error_from(from.c_str()) << cudaGetErrorString(error)
+		logger(from.c_str(), Log::ERROR) << cudaGetErrorString(error)
 			<< " (" << file << ": " << line << ")\n";
 		throw std::runtime_error("CUDA error");
 	}

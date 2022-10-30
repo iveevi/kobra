@@ -882,7 +882,8 @@ std::optional <Mesh> load_mesh(const std::string &path)
 	// Check if the scene was loaded
 	if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE
 			|| !scene->mRootNode) {
-		Logger::error("[Mesh] Could not load scene: " + path);
+		KOBRA_LOG_FUNC(Log::ERROR) << "Assimp error: "
+			<< importer.GetErrorString() << std::endl;
 		return {};
 	}
 
@@ -912,11 +913,8 @@ std::optional <Mesh> load_mesh(const std::string &path)
 
 		// Load the mesh
 		if (!reader.ParseFromFile(path, reader_config)) {
-			// TODO: use macro, not function
-			Logger::error("[Mesh] Could not load mesh: " + path);
-
-			if (!reader.Error().empty())
-				Logger::error(reader.Error());
+			KOBRA_LOG_FUNC(Log::ERROR) << "TinyObjLoader error: "
+				<< reader.Error() << std::endl;
 			return {};
 		}
 
@@ -1132,7 +1130,7 @@ std::optional <Mesh> Mesh::load(const std::string &path)
 	// Check if the file exists
 	std::ifstream file(path);
 	if (!file.is_open()) {
-		Logger::error("[Mesh] Could not open file: " + path);
+		KOBRA_LOG_FUNC(Log::ERROR) << "Could not open file: " << path << std::endl;
 		return {};
 	}
 	
@@ -1153,7 +1151,7 @@ std::optional <Mesh> Mesh::load(const std::string &path)
 		opt = assimp::load_mesh(path);
 	
 	if (!opt.has_value()) {
-		Logger::error("[Mesh] Could not load mesh: " + path);
+		KOBRA_LOG_FUNC(Log::ERROR) << "Could not load mesh: " << path << std::endl;
 		return {};
 	}
 
@@ -1254,7 +1252,8 @@ std::optional <Mesh> Mesh::cache_load(const std::string &path)
 
 		std::ifstream file(path, std::ios::binary);
 		if (!file.is_open()) {
-			Logger::error("[Mesh] Could not open cache file: " + path);
+			KOBRA_LOG_FUNC(Log::ERROR) << "Could not open cache file: "
+				<< path << std::endl;
 			return {};
 		}
 
