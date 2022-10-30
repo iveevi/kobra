@@ -1137,7 +1137,8 @@ std::optional <Mesh> Mesh::load(const std::string &path)
 	}
 	
 	// Check if cached
-	std::string filename = common::get_filename(path) + ".cache";
+	// TODO: central filesystem manager for caching, etc
+	std::string filename = ".kobra/cached/" + common::get_filename(path) + ".cache";
 	if (common::file_exists(filename))
 		return Mesh::cache_load(filename);
 
@@ -1198,6 +1199,7 @@ void Mesh::cache_save(const Mesh &mesh, const std::string &path)
 	}
 
 	for (const Submesh &s : mesh.submeshes) {
+		// TODO: static kernel function...
 		// Write the number of vertices
 		uint32_t num_vertices = s.vertices.size();
 		file.write((char *) &num_vertices, sizeof(uint32_t));
@@ -1281,6 +1283,7 @@ std::optional <Mesh> Mesh::cache_load(const std::string &path)
 
 	std::mutex submeshes_mutex;
 	for (int i = 0; i < num_submeshes; i++) {
+		// TODO: static method kernel...
 		core::Task task = [i, &offsets, &data, &submeshes, &submeshes_mutex]() {
 			// Read the number of vertices
 			uint32_t offset = offsets[i];
