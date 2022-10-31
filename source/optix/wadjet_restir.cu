@@ -151,13 +151,13 @@ extern "C" __global__ void __closesthit__restir()
 
 	trace <eRegular> (x, wi, i0, i1);
 
-	float3 value = f * rp->value * abs(dot(wi, n));
+	float3 value = rp->value;
 
 	PathSample sample {
 		.value = value,
 		.position = rp->position,
 		.source = x,
-		.normal = n,
+		.normal = rp->normal,
 		.direction = wi,
 		.missed = (rp->miss_depth == 1)
 	};
@@ -194,7 +194,7 @@ extern "C" __global__ void __closesthit__restir()
 
 	// TODO: insert current sample at least...?
 
-	const int SPATIAL_SAMPLES = 10;
+	const int SPATIAL_SAMPLES = 3;
 
 	int width = parameters.resolution.x;
 	int height = parameters.resolution.y;
@@ -209,6 +209,7 @@ extern "C" __global__ void __closesthit__restir()
 		// Sample pixel in a radius
 		float3 eta = fract(random3(rp->seed));
 
+		eta = 2.0f * eta - 1.0f;
 		int offx = floorf(eta.x * SAMPLE_RADIUS);
 		int offy = floorf(eta.y * SAMPLE_RADIUS);
 
@@ -233,19 +234,23 @@ extern "C" __global__ void __closesthit__restir()
 			continue;
 		
 		// Get the sample
-		const PathSample &sample = temporal->sample;
-		if (sample.missed)
+		PathSample sample = temporal->sample;
+
+		// Sensible constraints; rays misses or has no contribution
+		if (sample.missed || length(sample.value) < 1e-6f)
 			continue;
 
 		// Geometry constraints
+		float scene_diagonal = length(parameters.voxel.max - parameters.voxel.min);
+
 		float depth_x = length(parameters.camera - x);
 		float depth_y = length(parameters.camera - sample.position);
 
 		float angle = acos(dot(n, sample.normal)) * 180.0f/M_PI;
-		float depth = abs(depth_x - depth_y)/max(depth_x, depth_y);
+		float depth = abs(depth_x - depth_y)/scene_diagonal;
 
-		if (angle > 25.0f || depth > 0.2f)
-			continue;
+		// if (angle > 60.0f) // TODO: depth threshold?
+		//	continue;
 
 		// Check for occlusion
 		float3 L = sample.position - x;
@@ -258,29 +263,39 @@ extern "C" __global__ void __closesthit__restir()
 			continue;
 
 		// Compute weight for the sample for that reservoir
-		float W = temporal->weight/length(temporal->sample.value);
+		float W = temporal->weight/length(sample.value);
 		W /= temporal->count;
+
+		// TODO: why would this happen?
+		// assert(!isnan(W));
 
 		// Compute GRIS weight
 		float w = W * length(temporal->sample.value);
 
 		// Compute jacobian of reconnection shift map
 		// TODO: what if the ray misses? use only cosine term?
-		float cos_theta_x = abs(dot(sample.direction, sample.normal));
-		float cos_theta_y = abs(dot(L, sample.normal));
+		float3 dir = normalize(sample.position - x);
+		float cos_theta_x = abs(dot(dir, sample.normal));
+		float cos_theta_y = abs(dot(sample.direction, sample.normal));
 
-		float dist_x = length(sample.position - sample.source);
-		float dist_y = d;
+		float dist_x = length(sample.position - x);
+		float dist_y = length(sample.position - sample.source);
 
-		float jacobian = (cos_theta_y/cos_theta_x);
-		jacobian *= (dist_x * dist_x)/(dist_y * dist_y);
+		float dist2_x = dist_x * dist_x;
+		float dist2_y = dist_y * dist_y;
 
+		float jacobian = (cos_theta_x/cos_theta_y) * (dist2_y/dist2_x);
+
+		// TODO: jacobian is currently problematic
 		w *= jacobian;
 
 		// TODO: when does this happen?
+		// if (isnan(w))
+		//	assert(isnan(jacobian));
+
 		// assert(!isnan(w));
-		if (isnan(w))
-			continue;
+		// if (isnan(w))
+		//	continue;
 
 		// Insert into spatial reservoir
 		spatial.weight += w;
@@ -291,8 +306,11 @@ extern "C" __global__ void __closesthit__restir()
 			spatial.sample = temporal->sample;
 	}
 
+	// Final sample
+	sample = spatial.sample;
+
 	// Compute final GRIS weight
-	float W = spatial.weight/length(spatial.sample.value);
+	float W = spatial.weight/length(sample.value);
 	W /= spatial.count;
 
 	// assert(!isnan(W));
@@ -302,7 +320,10 @@ extern "C" __global__ void __closesthit__restir()
 		W = 0.0f;
 	}
 
-	rp->value = direct + W * spatial.sample.value;
+	// TODO: what to do about entering?
+	float3 brdf_value = brdf(material, n, sample.direction, wo, entering, out);
+	f = brdf_value * abs(dot(sample.direction, n)) * sample.value;
+	rp->value = direct + W * f;
 
 #endif
 

@@ -844,7 +844,8 @@ extern "C" __global__ void __closesthit__voxel()
 
 	// Compute final indirect
 	f = brdf(material, n, sample.direction, wi, entering, out);
-	float3 indirect = (1 - occluded) * W * sample.value;
+	float3 indirect = (1 - occluded) * sample.value; // TODO: incorporate
+							 // proper W
 
 	// Compute full lighting of reused ray
 	rp->value = direct + f * indirect * abs(dot(wi, n));
