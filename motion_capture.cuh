@@ -188,11 +188,11 @@ struct MotionCapture : public kobra::BaseApp {
 				mode, accumulate
 			);
 
-			kobra::layers::denoise(denoiser, {
+			/* kobra::layers::denoise(denoiser, {
 				.color = kobra::layers::color_buffer(tracer),
 				.normal = kobra::layers::normal_buffer(tracer),
 				.albedo = kobra::layers::albedo_buffer(tracer)
-			});
+			}); */
 
 			compute_time = compute_timer.lap()/1e6;
 		}
@@ -251,7 +251,7 @@ struct MotionCapture : public kobra::BaseApp {
 			int height = tracer.extent.height;
 
 			kobra::cuda::hdr_to_ldr(
-				(float4 *) denoiser.result,
+				(float4 *) kobra::layers::color_buffer(tracer),
 				(uint32_t *) b_traced,
 				width, height,
 				kobra::cuda::eTonemappingACES

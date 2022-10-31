@@ -29,6 +29,11 @@ constexpr const char *str_modes[eCount] = {
 // Reservoir sample for ReSTIR
 struct PathSample {
 	float3 value;
+	float3 position;
+	float3 source;
+	float3 normal;
+	float3 direction;
+	bool missed;
 };
 
 struct VoxelSample {
