@@ -1,5 +1,5 @@
-#ifndef KOBRA_LAYERS_WADJET_H_
-#define KOBRA_LAYERS_WADJET_H_
+#ifndef KOBRA_LAYERS_BASILISK_H_
+#define KOBRA_LAYERS_BASILISK_H_
 
 // Standard headers
 #include <map>
@@ -26,7 +26,7 @@ class Rasterizer;
 namespace layers {
 
 // Regular path tracer
-struct Wadjet {
+struct Basilisk {
 	// Critical Vulkan structures
 	vk::raii::Device *device = nullptr;
 	vk::raii::PhysicalDevice *phdev = nullptr;
@@ -79,7 +79,7 @@ struct Wadjet {
 	} optix_programs;
 
 	// Launch parameters
-	optix::WadjetParameters launch_params;
+	optix::BasiliskParameters launch_params;
 
 	CUdeviceptr launch_params_buffer = 0;
 	CUdeviceptr truncated = 0;
@@ -98,44 +98,40 @@ struct Wadjet {
 	// Timer
 	Timer timer;
 
-	// Output buffer
-	std::vector <uint32_t> color_buffer;
-
 	// Data for rendering
 	ImageData result_image = nullptr;
 	BufferData result_buffer = nullptr;
 	vk::raii::Sampler result_sampler = nullptr;
 
 	// Functions
-	static Wadjet make(const Context &);
+	static Basilisk make(const Context &);
 };
 
 // Proprety methods
-inline size_t size(const Wadjet &layer)
+inline size_t size(const Basilisk &layer)
 {
 	return layer.extent.width * layer.extent.height;
 }
 
-inline CUdeviceptr color_buffer(const Wadjet &layer)
+inline CUdeviceptr color_buffer(const Basilisk &layer)
 {
 	return (CUdeviceptr) layer.launch_params.color_buffer;
 }
 
-inline CUdeviceptr normal_buffer(const Wadjet &layer)
+inline CUdeviceptr normal_buffer(const Basilisk &layer)
 {
 	return (CUdeviceptr) layer.launch_params.normal_buffer;
 }
 
-inline CUdeviceptr albedo_buffer(const Wadjet &layer)
+inline CUdeviceptr albedo_buffer(const Basilisk &layer)
 {
 	return (CUdeviceptr) layer.launch_params.albedo_buffer;
 }
 
 // Other methods
-void set_envmap(Wadjet &, const std::string &);
-void capture(Wadjet &, std::vector <uint8_t> &);
+void set_envmap(Basilisk &, const std::string &);
 
-void compute(Wadjet &, const ECS &, const Camera &, const Transform &,
+void compute(Basilisk &, const ECS &, const Camera &, const Transform &,
 		unsigned int, bool = false);
 
 }

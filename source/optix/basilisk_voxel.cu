@@ -1,4 +1,4 @@
-#include "wadjet_common.cuh"
+#include "basilisk_common.cuh"
 
 // #define VOXEL_SPATIAL_REUSE
 // #define VOXEL_NAIVE_RESERVOIRS

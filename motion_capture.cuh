@@ -23,7 +23,7 @@
 #include "include/layers/framer.hpp"
 #include "include/layers/hybrid_tracer.cuh"
 #include "include/layers/optix_tracer.cuh"
-#include "include/layers/wadjet.cuh"
+#include "include/layers/basilisk.cuh"
 #include "include/optix/options.cuh"
 #include "include/optix/parameters.cuh"
 #include "include/scene.hpp"
@@ -36,7 +36,7 @@ struct MotionCapture : public kobra::BaseApp {
 	kobra::Scene scene;
 
 	// Necessary layers
-	kobra::layers::Wadjet tracer;
+	kobra::layers::Basilisk tracer;
 	kobra::layers::Denoiser denoiser;
 	kobra::layers::Framer framer;
 	kobra::layers::FontRenderer font_renderer;
@@ -80,7 +80,7 @@ struct MotionCapture : public kobra::BaseApp {
 
 		// Setup Wadjet tracer
 		KOBRA_LOG_FILE(kobra::Log::INFO) << "Hybrid tracer setup\n";
-		tracer = kobra::layers::Wadjet::make(get_context());
+		tracer = kobra::layers::Basilisk::make(get_context());
 		kobra::layers::set_envmap(tracer, "resources/skies/background_1.jpg");
 
 		// Create the denoiser layer
@@ -337,8 +337,6 @@ struct MotionCapture : public kobra::BaseApp {
 	void terminate() override {
 		if (tracer.launch_params.samples > max_samples) {
 			// Get data to save
-			std::vector <uint32_t> &data = tracer.color_buffer;
-
 			int width = tracer.extent.width;
 			int height = tracer.extent.height;
 
@@ -346,7 +344,7 @@ struct MotionCapture : public kobra::BaseApp {
 			compute_thread->join();
 
 			stbi_write_png(capture_path.c_str(),
-				width, height, 4, data.data(),
+				width, height, 4, b_traced_cpu.data(),
 				width * 4
 			);
 		

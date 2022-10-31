@@ -1,4 +1,4 @@
-#include "wadjet_common.cuh"
+#include "basilisk_common.cuh"
 
 static KCUDA_INLINE KCUDA_HOST_DEVICE
 void make_ray(uint3 idx,

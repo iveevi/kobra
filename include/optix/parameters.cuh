@@ -172,8 +172,8 @@ struct HT_Parameters {
 	float4 *color_buffer;
 };
 
-// Kernel-common parameters for Wadjet path tracer
-struct WadjetParameters {
+// Kernel-common parameters for Basilisk path tracer
+struct BasiliskParameters {
 	// Image resolution
 	uint2 resolution;
 	uint mode;

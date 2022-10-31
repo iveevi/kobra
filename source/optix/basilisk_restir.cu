@@ -1,4 +1,4 @@
-#include "wadjet_common.cuh"
+#include "basilisk_common.cuh"
 
 // Sample from discrete distribution
 KCUDA_INLINE static __device__
@@ -200,7 +200,7 @@ extern "C" __global__ void __closesthit__restir()
 	int height = parameters.resolution.y;
 	
 	// TODO: adaptive radius
-	const float SAMPLE_RADIUS = min(width, height)/10.0f;
+	const float SAMPLE_RADIUS = 10.0f; // min(width, height)/10.0f;
 
 	int ix = rp->index % width;
 	int iy = rp->index / width;
@@ -248,6 +248,11 @@ extern "C" __global__ void __closesthit__restir()
 
 		float angle = acos(dot(n, sample.normal)) * 180.0f/M_PI;
 		float depth = abs(depth_x - depth_y)/scene_diagonal;
+
+		// TODO: either this or roughness for GGX
+		// NOTE: this depth constraint should depend on the sampling
+		// radius; the larger the radius, the more fluctuations
+		// there will be in the depth
 
 		// if (angle > 60.0f) // TODO: depth threshold?
 		//	continue;

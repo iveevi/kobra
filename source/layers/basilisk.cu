@@ -14,7 +14,7 @@
 #include "../../include/cuda/color.cuh"
 #include "../../include/cuda/interop.cuh"
 #include "../../include/ecs.hpp"
-#include "../../include/layers/wadjet.cuh"
+#include "../../include/layers/basilisk.cuh"
 #include "../../include/optix/core.cuh"
 #include "../../include/texture_manager.hpp"
 #include "../../include/transform.hpp"
@@ -22,9 +22,9 @@
 #include "../../include/profiler.hpp"
 
 // OptiX Source PTX
-#define OPTIX_PTX_FILE "bin/ptx/wadjet_rt.ptx"
-#define OPTIX_RESTIR_PTX_FILE "bin/ptx/wadjet_restir.ptx"
-#define OPTIX_VOXEL_PTX_FILE "bin/ptx/wadjet_voxel.ptx"
+#define OPTIX_PTX_FILE "bin/ptx/basilisk_rt.ptx"
+#define OPTIX_RESTIR_PTX_FILE "bin/ptx/basilisk_restir.ptx"
+#define OPTIX_VOXEL_PTX_FILE "bin/ptx/basilisk_voxel.ptx"
 
 namespace kobra {
 
@@ -36,7 +36,7 @@ using MissRecord = optix::Record <int>;
 using HitRecord = optix::Record <optix::Hit>;
 
 // Static member variables
-const std::vector <DSLB> Wadjet::dsl_bindings = {
+const std::vector <DSLB> Basilisk::dsl_bindings = {
 	DSLB {
 		0, vk::DescriptorType::eCombinedImageSampler,
 		1, vk::ShaderStageFlagBits::eFragment
@@ -202,7 +202,7 @@ static void load_program_groups
 // Load OptiX program groups
 // #define KOBRA_OPTIX_DEBUG
 
-static void load_optix_program_groups(Wadjet &layer)
+static void load_optix_program_groups(Basilisk &layer)
 {
 	static char log[2048];
 	static size_t sizeof_log = sizeof(log);
@@ -376,7 +376,7 @@ static OptixPipeline load_optix_pipeline
 // Setup and load OptiX things
 const int VOXEL_RESOLUTION = 100;
 
-static void initialize_optix(Wadjet &layer)
+static void initialize_optix(Basilisk &layer)
 {
 	// Create the context
 	layer.optix_context = optix::make_context();
@@ -566,7 +566,7 @@ static void initialize_optix(Wadjet &layer)
 
 	// Allocate the parameters buffer
 	layer.launch_params_buffer = cuda::alloc(
-		sizeof(optix::WadjetParameters)
+		sizeof(optix::BasiliskParameters)
 	);
 
 	// Allocate truncated color buffer
@@ -578,10 +578,10 @@ static void initialize_optix(Wadjet &layer)
 
 // Create the layer
 // TOOD: all custom extent...
-Wadjet Wadjet::make(const Context &context)
+Basilisk Basilisk::make(const Context &context)
 {
 	// To return
-	Wadjet layer;
+	Basilisk layer;
 
 	// Extract critical Vulkan structures
 	layer.device = context.device;
@@ -682,7 +682,7 @@ Wadjet Wadjet::make(const Context &context)
 }
 
 // Set the environment map
-void set_envmap(Wadjet &layer, const std::string &path)
+void set_envmap(Basilisk &layer, const std::string &path)
 {
 	// First load the environment map
 	const auto &map = TextureManager::load_texture(
@@ -692,21 +692,8 @@ void set_envmap(Wadjet &layer, const std::string &path)
 	layer.launch_params.envmap = cuda::import_vulkan_texture(*layer.device, map);
 }
 
-// Capture frame data
-void capture(Wadjet &layer, std::vector <uint8_t> &data)
-{
-	int width = layer.extent.width;
-	int height = layer.extent.height;
-
-	// Copy the result image to the staging buffer
-	if (data.size() != width * height * 4)
-		data.resize(width * height * 4);
-
-	std::memcpy(data.data(), layer.color_buffer.data(), data.size());
-}
-
 // Update the light buffers if needed
-static void update_light_buffers(Wadjet &layer,
+static void update_light_buffers(Basilisk &layer,
 		const std::vector <const Light *> &lights,
 		const std::vector <const Transform *> &light_transforms,
 		const std::vector <const Submesh *> &submeshes,
@@ -787,7 +774,7 @@ static void update_light_buffers(Wadjet &layer,
 }
 
 // Build or update acceleration structures for the scene
-static void update_acceleration_structure(Wadjet &layer,
+static void update_acceleration_structure(Basilisk &layer,
 		const std::vector <const Submesh *> &submeshes,
 		const std::vector <const Transform *> &submesh_transforms)
 {
@@ -967,7 +954,7 @@ static void update_acceleration_structure(Wadjet &layer,
 }
 
 // Compute scene bounds
-static void update_scene_bounds(Wadjet &layer,
+static void update_scene_bounds(Basilisk &layer,
 		const std::vector <const Submesh *> &submeshes,
 		const std::vector <const Transform *> &submesh_transforms)
 {
@@ -1070,7 +1057,7 @@ static void generate_submesh_data
 }
 
 // Update the SBT data
-static void update_sbt_data(Wadjet &layer,
+static void update_sbt_data(Basilisk &layer,
 		const std::vector <const Submesh *> &submeshes,
 		const std::vector <const Transform *> &submesh_transforms)
 {
@@ -1195,7 +1182,7 @@ static void update_sbt_data(Wadjet &layer,
 
 // TODO: perform this in a separate command buffer than the main one used to
 // present, etc (and separate queue)
-static void preprocess_scene(Wadjet &layer,
+static void preprocess_scene(Basilisk &layer,
 		const ECS &ecs,
 		const Camera &camera,
 		const Transform &transform)
@@ -1316,7 +1303,7 @@ static __global__ void compute_pixel_values
 }
 
 // Path tracing computation
-void compute(Wadjet &layer,
+void compute(Basilisk &layer,
 		const ECS &ecs,
 		const Camera &camera,
 		const Transform &transform,
@@ -1359,7 +1346,7 @@ void compute(Wadjet &layer,
 				layer.optix_pipeline,
 				layer.optix_stream,
 				layer.launch_params_buffer,
-				sizeof(optix::WadjetParameters),
+				sizeof(optix::BasiliskParameters),
 				&layer.optix_sbt,
 				width, height, 1
 			)

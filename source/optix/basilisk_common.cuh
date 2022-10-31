@@ -18,7 +18,7 @@ using namespace kobra::optix;
 
 extern "C"
 {
-	__constant__ kobra::optix::WadjetParameters parameters;
+	__constant__ kobra::optix::BasiliskParameters parameters;
 }
 
 // TODO: launch parameter for ray depth

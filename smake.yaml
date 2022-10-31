@@ -22,7 +22,7 @@ definitions:
     source/layers/optix_tracer.cu,
     source/layers/raster.cpp,
     source/layers/raytracer.cpp,
-    source/layers/wadjet.cu,
+    source/layers/basilisk.cu,
     source/logger.cpp,
     source/material.cpp,
     source/mesh.cpp,
@@ -80,10 +80,10 @@ builds:
     - idirs: includes
     - flags: '-ptx -O3'
     - options: 'nolink, output_dir=./bin/ptx, output_format={filename}.ptx'
-  - wadjet_ptx_release:
-    - sources: 'source/optix/wadjet_rt.cu,
-      source/optix/wadjet_restir.cu,
-      source/optix/wadjet_voxel.cu'
+  - basilisk_ptx_release:
+    - sources: 'source/optix/basilisk_rt.cu,
+      source/optix/basilisk_restir.cu,
+      source/optix/basilisk_voxel.cu'
     - idirs: includes
     - flags: '-ptx -lineinfo -g --expt-relaxed-constexpr'
     - options: 'nolink, output_dir=./bin/ptx, output_format={filename}.ptx'
@@ -121,7 +121,7 @@ builds:
     - idirs: includes
     - flags: '-O3 -std=c++17'
     - libraries: libs
-    - dependencies: optix_ptx_debug, hybrid_ptx_release, wadjet_ptx_release, glsl_compute, glsl_vertex, glsl_frag
+    - dependencies: optix_ptx_debug, hybrid_ptx_release, basilisk_ptx_release, glsl_compute, glsl_vertex, glsl_frag
   - kobra_debug:
     - sources: main.cu, kobra_source, tinyfd_source, glslang_source
     - idirs: includes
@@ -158,7 +158,7 @@ builds:
     - idirs: includes
     - libraries: libs
     - flags: '-O3'
-    - dependencies: glsl_frag, glsl_vertex, wadjet_ptx_release
+    - dependencies: glsl_frag, glsl_vertex, basilisk_ptx_release
 
 targets:
   - kobra:
