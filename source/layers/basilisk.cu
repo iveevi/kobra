@@ -1356,18 +1356,6 @@ void compute(Basilisk &layer,
 
 		// Increment number of samples
 		layer.launch_params.samples++;
-
-		// Advanced sampling updates
-		auto &advanced = layer.launch_params.advanced;
-
-		cuda::copy(advanced.r_temporal_prev, advanced.r_temporal, width * height);
-		cuda::copy(advanced.r_spatial_prev, advanced.r_spatial, width * height);
-
-		// Copy the reservoirs
-		int instances = layer.launch_params.instances;
-
-		int threads = 256;
-		int blocks = (instances + threads - 1) / threads;
 	}
 
 	// KOBRA_PROFILE_PRINT();

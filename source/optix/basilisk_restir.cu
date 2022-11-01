@@ -55,7 +55,7 @@ extern "C" __global__ void __closesthit__restir()
 	rp->depth++;
 
 	// Resampling Importance Sampling
-	constexpr int M = 5;
+	constexpr int M = 10;
 
 #if 0
 
@@ -95,10 +95,11 @@ extern "C" __global__ void __closesthit__restir()
 #elif 0
 
 	// Reservoir sampling
-	::Reservoir <float3> reservoir {
-		.M = 0,
+	ReSTIR_Reservoir reservoir {
+		.sample = {},
+		.count = 0,
 		.weight = 0.0f,
-		.sample = make_float3(0.0f)
+		.mis = 0.0f
 	};
 
 	for (int i = 0; i < M; i++) {
@@ -114,10 +115,23 @@ extern "C" __global__ void __closesthit__restir()
 		// Get threshold value for current ray
 		trace <eRegular> (x, wi, i0, i1);
 
-		float3 value = f * rp->value * abs(dot(wi, n));
+		// Construct sample
+		float3 value = rp->value;
+	
+		PathSample sample {
+			.value = value,
+			.position = rp->position,
+			.source = x,
+			.normal = rp->normal,
+			.shading = out,
+			.direction = wi,
+			.pdf = pdf,
+			.target = length(value),
+			.missed = (rp->miss_depth == 1)
+		};
 
 		// RIS computations
-		float w = length(value)/(M * pdf);
+		float w = sample.target/pdf;
 
 		reservoir.weight += w;
 
@@ -125,21 +139,54 @@ extern "C" __global__ void __closesthit__restir()
 		float eta = fract(random3(rp->seed)).x;
 
 		if (eta < p || i == 0)
-			reservoir.sample = value;
+			reservoir.sample = sample;
 
-		reservoir.M++;
+		reservoir.count++;
+
+		// reservoir.mis += pdf;
+		reservoir.mis += sample.target;
 	}
 
-	float W = reservoir.weight/length(reservoir.sample);
-	rp->value = direct + W * reservoir.sample;
+	auto sample = reservoir.sample;
+	
+	float W = reservoir.weight/length(sample.value);
 
-#else
+	// TODO: which strategy to use?
+	// W /= reservoir.count;
+	// W *= sample.pdf/reservoir.mis;
+	W *= sample.target/reservoir.mis;
 
-	ReSTIR_Reservoir *reservoir = &parameters.advanced.r_temporal[rp->index];
+	float3 brdf_value = brdf(material, n,
+		sample.direction, wo,
+		entering, sample.shading
+	);
+
+	float geometric = abs(dot(sample.direction, n));
+	float3 f = brdf_value * geometric * sample.value;
+
+	rp->value = direct + W * f;
+
+#elif 0
+
+	auto &advanced = parameters.advanced;
+
+	ReSTIR_Reservoir *reservoir = &advanced.r_temporal[rp->index];
+	// if (parameters.samples % 2 == 0)
+	//	reservoir = &advanced.r_temporal_prev[rp->index];
+
 	if (parameters.samples == 0) {
+		// NOTE: we must reset both reservoirs
+		auto *reservoir = &advanced.r_temporal[rp->index];
 		reservoir->sample = PathSample {};
 		reservoir->weight = 0.0f;
 		reservoir->count = 0;
+		reservoir->mis = 0.0f;
+
+		/* reservoir = &advanced.r_temporal_prev[rp->index];
+		reservoir->sample = PathSample {};
+		reservoir->weight = 0.0f;
+		reservoir->count = 0;
+		reservoir->mis = 0.0f; */
 	}
 
 	// Temporal RIS
@@ -158,17 +205,19 @@ extern "C" __global__ void __closesthit__restir()
 		.position = rp->position,
 		.source = x,
 		.normal = rp->normal,
+		.shading = out,
 		.direction = wi,
+		.pdf = pdf,
+		.target = length(value),
 		.missed = (rp->miss_depth == 1)
 	};
 
 	// TODO: figure out how to do M-capping properly
 	// reservoir->count = min(reservoir->count + 1, 20);
 	reservoir->count++;
+	reservoir->mis += sample.pdf;
 
-	float target = length(value);
-
-	float w = target/(pdf + 1e-6f);
+	float w = sample.target/sample.pdf;
 	reservoir->weight += w;
 
 	float p = w/reservoir->weight;
@@ -177,11 +226,67 @@ extern "C" __global__ void __closesthit__restir()
 	if (eta < p || reservoir->count == 1)
 		reservoir->sample = sample;
 
-	// float W = reservoir->weight/length(reservoir->sample.value);
-	// W /= reservoir->count;
+	sample = reservoir->sample;
+	float W = reservoir->weight/sample.target;
+	W *= sample.pdf/reservoir->mis;
 
-	// Copy temporal to previous temporal
-	parameters.advanced.r_temporal_prev[rp->index] = *reservoir;
+	float3 brdf_value = brdf(material, n,
+		sample.direction, wo,
+		entering, sample.shading
+	);
+
+	float geometric = abs(dot(sample.direction, n));
+	f = brdf_value * geometric * sample.value;
+
+	rp->value = direct + W * f;
+
+#else
+
+	ReSTIR_Reservoir *reservoir = &parameters.advanced.r_temporal[rp->index];
+	if (parameters.samples == 0) {
+		reservoir->sample = PathSample {};
+		reservoir->weight = 0.0f;
+		reservoir->count = 0;
+		reservoir->mis = 0.0f;
+	}
+
+	// Temporal RIS
+	Shading out;
+	float3 wi;
+	float pdf;
+
+	float3 f = eval(material, n, wo, entering, wi, pdf, out, rp->seed);
+
+	trace <eRegular> (x, wi, i0, i1);
+
+	float3 value = rp->value;
+
+	PathSample sample {
+		.value = value,
+		.position = rp->position,
+		.source = x,
+		.normal = rp->normal,
+		.shading = out,
+		.direction = wi,
+		.pdf = pdf,
+		.target = length(value),
+		.missed = (rp->miss_depth == 1)
+	};
+
+	// TODO: figure out how to do M-capping properly
+	// reservoir->count = min(reservoir->count + 1, 20);
+	reservoir->count++;
+
+	float w = sample.target/sample.pdf;
+	reservoir->weight += w;
+	reservoir->mis += pdf;
+
+	float p = w/reservoir->weight;
+	float eta = fract(random3(rp->seed)).x;
+
+	if (eta < p || reservoir->count == 1)
+		reservoir->sample = sample;
+
 
 	// Spatial RIS
 	// TODO: persistent reservoirs
@@ -329,6 +434,9 @@ extern "C" __global__ void __closesthit__restir()
 	float3 brdf_value = brdf(material, n, sample.direction, wo, entering, out);
 	f = brdf_value * abs(dot(sample.direction, n)) * sample.value;
 	rp->value = direct + W * f;
+	
+	// Copy temporal to previous temporal
+	parameters.advanced.r_temporal_prev[rp->index] = *reservoir;
 
 #endif
 

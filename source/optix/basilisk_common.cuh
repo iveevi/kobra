@@ -252,8 +252,7 @@ __device__ float3 Ld(float3 x, float3 wo, float3 n,
 	// TODO: +1 for envmaps; make more efficient
 	int total_count = quad_count + tri_count;
 
-	random3(seed);
-	unsigned int i = fract(seed.x) * total_count;
+	unsigned int i = fract(random3(seed)).x * total_count;
 
 	if (i < quad_count) {
 		QuadLight light = parameters.lights.quads[i];

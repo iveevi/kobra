@@ -32,7 +32,10 @@ struct PathSample {
 	float3 position;
 	float3 source;
 	float3 normal;
+	Shading shading;
 	float3 direction;
+	float pdf;
+	float target;
 	bool missed;
 };
 
