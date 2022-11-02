@@ -32,20 +32,14 @@ extern "C" __global__ void __closesthit__restir()
 	LOAD_RAYPACKET();
 	LOAD_INTERSECTION_DATA();
 
-	// TODO: check for light, not just emissive material
-	if (hit->material.type == Shading::eEmissive) {
-		rp->value = material.emission;
-		rp->normal = n;
-		rp->albedo = material.diffuse;
-		return;
-	}
-	
 	// Offset by normal
 	// TODO: use more complex shadow bias functions
 	// TODO: an easier check for transmissive objects
 	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
 
-	float3 direct = Ld(x, wo, n, material, entering, rp->seed);
+	float3 direct = Ld <false> (x, wo, n, material, entering, rp->seed);
+	if (material.type == Shading::eEmissive)
+		direct += material.emission;
 
 	// Update ior
 	rp->ior = material.refraction;
@@ -94,7 +88,7 @@ extern "C" __global__ void __closesthit__restir()
 	float geometric = abs(dot(n, direction));
 
 	rp->value = direct;
-	rp->value += geometric * f * sample/pdf;
+	rp->value += W * geometric * f * sample;
 
 #elif 0
 

@@ -142,7 +142,7 @@ extern "C" __global__ void __closesthit__ch()
 	// TODO: an easier check for transmissive objects
 	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
 
-	float3 direct = Ld(x, wo, n, material, entering, rp->seed);
+	float3 direct = Ld <false> (x, wo, n, material, entering, rp->seed);
 	if (material.type == Shading::eEmissive)
 		direct += material.emission;
 
