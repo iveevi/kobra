@@ -348,12 +348,9 @@ float3 eval
 	// TODO: pack ags into struct
 	wi = sample(mat, n, wo, entering, seed, out);
 	if (length(wi) < 1e-6f)
-		return make_float3(0.0f);
+	 	return make_float3(0.0f);
 
 	in_pdf = pdf(mat, n, wi, wo, entering, out);
-	if (in_pdf < 1e-6f)
-		return make_float3(0.0f);
-
 	return brdf(mat, n, wi, wo, entering, out);
 }
 

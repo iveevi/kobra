@@ -523,6 +523,13 @@ static void initialize_optix(Basilisk &layer)
 	// Advanced sampling resources - ReSTIR GI
 	float radius = std::min(width, height)/10.0f;
 
+	optix::LightReservoir r_lights_def {
+		.sample = {},
+		.count = 0,
+		.weight = 0.0f,
+		.mis = 0.0f
+	};
+
 	optix::ReSTIR_Reservoir def {
 		.sample = {},
 		.count = 0,
@@ -530,9 +537,12 @@ static void initialize_optix(Basilisk &layer)
 		.mis = 0.0f
 	};
 
+	std::vector <optix::LightReservoir> r_lights(width * height, r_lights_def);
 	std::vector <optix::ReSTIR_Reservoir> r_temporal(width * height, def);
 	std::vector <optix::ReSTIR_Reservoir> r_spatial(width * height, def);
 	std::vector <float> sampling_radii(width * height, radius);
+
+	params.advanced.r_lights = cuda::make_buffer(r_lights);
 
 	params.advanced.r_temporal = cuda::make_buffer(r_temporal);
 	params.advanced.r_temporal_prev = cuda::make_buffer(r_temporal);

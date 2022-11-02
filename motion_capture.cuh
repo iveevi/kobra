@@ -96,8 +96,15 @@ struct MotionCapture : public kobra::BaseApp {
 
 		std::cout << "Enter capture path: ";
 		std::cin >> capture_path;
-		std::cout << "Enter max samples: ";
-		std::cin >> max_samples;
+
+		if (capture_path.empty()) {
+			// Assume defaults
+			capture_path = "capture.png";
+			max_samples = 100000;
+		} else {
+			std::cout << "Enter max samples: ";
+			std::cin >> max_samples;
+		}
 
 #else
 

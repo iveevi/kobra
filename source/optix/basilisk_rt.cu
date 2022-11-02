@@ -41,7 +41,7 @@ void make_ray(uint3 idx,
 __forceinline__ __device__
 void accumulate(float4 &dst, float4 sample)
 {
-	if (parameters.accumulate && false) {
+	if (parameters.accumulate) {
 		float4 prev = dst;
 		int count = parameters.samples;
 		dst = (prev * count + sample)/(count + 1);
@@ -67,7 +67,6 @@ extern "C" __global__ void __raygen__rg()
 		.ior = 1.0f,
 		.depth = 0,
 		.index = index,
-		.seed = make_float3(idx.x, idx.y, parameters.time)
 	};
 	
 	// Trace ray and generate contribution
@@ -78,6 +77,17 @@ extern "C" __global__ void __raygen__rg()
 	float3 direction;
 
 	make_ray(idx, origin, direction, rp.seed);
+
+	// TODO: seed generatoin method
+	rp.seed = make_float3(
+		sin(idx.x - idx.y),
+		parameters.samples,
+		parameters.time
+	);
+
+	rp.seed.x *= origin.x;
+	rp.seed.y *= origin.y - 1.0f;
+	rp.seed.z *= direction.z;
 
 	// Switch on the ray type
 	switch (parameters.mode) {
@@ -99,8 +109,9 @@ extern "C" __global__ void __raygen__rg()
 	float4 normal = make_float4(rp.normal, 0.0f);
 	float4 albedo = make_float4(rp.albedo, 0.0f);
 
+	// Check for NaNs
 	if (isnan(sample.x) || isnan(sample.y) || isnan(sample.z))
-		sample = make_float4(0.0f, 0.0f, 0.0f, 1.0f);
+		sample = make_float4(1, 0, 0, 1);
 
 	// Accumulate and store
 	accumulate(parameters.color_buffer[index], sample);
@@ -114,15 +125,17 @@ extern "C" __global__ void __closesthit__ch()
 	// Load all necessary data
 	LOAD_RAYPACKET();
 	LOAD_INTERSECTION_DATA();
+
+	bool primary = (rp->depth == 0);
 	
 	// TODO: check for light, not just emissive material
-	if (hit->material.type == Shading::eEmissive) {
+	/* if (hit->material.type == Shading::eEmissive) {
 		rp->value = material.emission;
-		rp->position = x;
-		rp->normal = n;
-		rp->albedo = material.diffuse;
-		return;
-	}
+		// rp->position = x;
+		// rp->normal = n;
+		// rp->albedo = material.diffuse;
+		// return;
+	} */
 
 	// Offset by normal
 	// TODO: use more complex shadow bias functions
@@ -130,6 +143,8 @@ extern "C" __global__ void __closesthit__ch()
 	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
 
 	float3 direct = Ld(x, wo, n, material, entering, rp->seed);
+	if (material.type == Shading::eEmissive)
+		direct += material.emission;
 
 	// Generate new ray
 	Shading out;
@@ -137,16 +152,9 @@ extern "C" __global__ void __closesthit__ch()
 	float pdf;
 
 	float3 f = eval(material, n, wo, entering, wi, pdf, out, rp->seed);
-	if (length(f) < 1e-6f) {
-		rp->value = direct;
-		rp->position = x;
-		rp->normal = n;
-		rp->albedo = material.diffuse;
-		return;
-	}
 
 	// Get threshold value for current ray
-	float3 T = f * abs(dot(wi, n));
+	float3 T = f * abs(dot(wi, n))/pdf;
 
 	// Update for next ray
 	// TODO: boolean member for toggling russian roulette
@@ -155,10 +163,20 @@ extern "C" __global__ void __closesthit__ch()
 	rp->depth++;
 	
 	// Trace the next ray
-	trace <eRegular> (x, wi, i0, i1);
+	float3 indirect = make_float3(0.0f);
+	if (pdf > 0) {
+		trace <eRegular> (x, wi, i0, i1);
+		indirect = rp->value;
+	}
 
 	// Update the value
-	rp->value = direct + T * rp->value/pdf;
+	rp->value = direct;
+	if (pdf > 0)
+		rp->value += T * indirect;
+
+	// if (primary)
+	//	rp->value = indirect;
+
 	rp->position = x;
 	rp->normal = n;
 	rp->albedo = material.diffuse;

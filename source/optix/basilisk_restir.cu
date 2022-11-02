@@ -32,9 +32,6 @@ extern "C" __global__ void __closesthit__restir()
 	LOAD_RAYPACKET();
 	LOAD_INTERSECTION_DATA();
 
-	// Check if primary ray
-	bool primary = (rp->depth == 0);
-	
 	// TODO: check for light, not just emissive material
 	if (hit->material.type == Shading::eEmissive) {
 		rp->value = material.emission;
@@ -57,9 +54,10 @@ extern "C" __global__ void __closesthit__restir()
 	// Resampling Importance Sampling
 	constexpr int M = 10;
 
-#if 0
+#if 1
 
 	float3 samples[M];
+	float3 directions[M];
 	float weights[M];
 	float wsum = 0;
 
@@ -70,17 +68,16 @@ extern "C" __global__ void __closesthit__restir()
 		float pdf;
 
 		float3 f = eval(material, n, wo, entering, wi, pdf, out, rp->seed);
-		if (length(f) < 1e-6f)
-			continue;
 
 		// Get threshold value for current ray
 		trace <eRegular> (x, wi, i0, i1);
 
-		float3 value = f * rp->value * abs(dot(wi, n));
+		float3 value = rp->value;
 
 		// RIS computations
 		samples[i] = value;
-		weights[i] = length(value)/(M * pdf);
+		directions[i] = wi;
+		weights[i] = (pdf > 0) ? length(value)/(M * pdf) : 0;
 		wsum += weights[i];
 	}
 
@@ -89,8 +86,15 @@ extern "C" __global__ void __closesthit__restir()
 	int index = sample_discrete(&weights[0], M, eta);
 
 	float3 sample = samples[index];
+	float3 direction = directions[index];
+
 	float W = wsum/length(sample);
-	rp->value = direct + W * samples[index];
+	float3 f = brdf(material, n, direction, wo, entering, eDiffuse);
+	float pdf = kobra::cuda::pdf(material, n, direction, wo, entering, eDiffuse);
+	float geometric = abs(dot(n, direction));
+
+	rp->value = direct;
+	rp->value += geometric * f * sample/pdf;
 
 #elif 0
 
@@ -138,7 +142,7 @@ extern "C" __global__ void __closesthit__restir()
 		float p = w/reservoir.weight;
 		float eta = fract(random3(rp->seed)).x;
 
-		if (eta < p || i == 0)
+		if (eta < p || reservoir.count == 0)
 			reservoir.sample = sample;
 
 		reservoir.count++;

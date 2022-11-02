@@ -26,7 +26,13 @@ constexpr const char *str_modes[eCount] = {
 	"Voxel"
 };
 
-// Reservoir sample for ReSTIR
+// Reservoir samples for Resampling techniques
+struct LightSample {
+	int type; // 0 - quad, 1 - triangle
+	int index;
+	float3 contribution;
+};
+
 struct PathSample {
 	float3 value;
 	float3 position;
@@ -65,6 +71,7 @@ struct WeightedReservoir {
 	float mis;
 };
 
+using LightReservoir = WeightedReservoir <LightSample>;
 using ReSTIR_Reservoir = WeightedReservoir <PathSample>;
 using Voxel_Reservoir = MultiReservoir <VoxelSample, 10>;
 using TMRIS_Reservoir = WeightedReservoir <TMRIS_Sample>;
@@ -102,7 +109,7 @@ struct Hit {
 	} textures;
 	
 	// Texture mapped reservoir sampling
-	static constexpr int TMRIS_RESOLUTION = 64;
+	static constexpr int TMRIS_RESOLUTION = 1;
 
 	struct {
 		TMRIS_Reservoir	*f_res; //facing forward
@@ -215,6 +222,8 @@ struct BasiliskParameters {
 	// Reservoirs and advanced sampling strategies
 	struct {
 		// ReSTIR
+		LightReservoir *r_lights;
+
 		ReSTIR_Reservoir *r_temporal;
 		ReSTIR_Reservoir *r_temporal_prev;
 		

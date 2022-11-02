@@ -22,7 +22,7 @@ extern "C"
 }
 
 // TODO: launch parameter for ray depth
-#define MAX_DEPTH 3
+#define MAX_DEPTH 1
 
 // Local constants
 static const float eps = 1e-3f;
@@ -218,7 +218,7 @@ float3 Ld_Environment(float3 x, float3 wo, float3 n,
 
 // Trace ray into scene and get relevant information
 __device__ float3 Ld(float3 x, float3 wo, float3 n,
-		Material mat, bool entering, float3 &seed)
+		Material mat, bool entering, float3 &seed, int index = -1)
 {
 	int quad_count = parameters.lights.quad_count;
 	int tri_count = parameters.lights.triangle_count;
@@ -254,17 +254,25 @@ __device__ float3 Ld(float3 x, float3 wo, float3 n,
 
 	unsigned int i = fract(random3(seed)).x * total_count;
 
+	float3 contr = {0.0f};
+	float lpdf = 1.0f/total_count;
+
 	if (i < quad_count) {
 		QuadLight light = parameters.lights.quads[i];
-		return total_count * Ld_light(light, x, wo, n, mat, entering, seed);
+		contr = Ld_light(light, x, wo, n, mat, entering, seed);
+		// lpdf /= light.area();
 	} else if (i < quad_count + tri_count) {
 		int ni = i - quad_count;
 		TriangleLight light = parameters.lights.triangles[ni];
-		return total_count * Ld_light(light, x, wo, n, mat, entering, seed);
+		contr = Ld_light(light, x, wo, n, mat, entering, seed);
+		// lpdf /= light.area();
 	} else {
+		// TODO: fix this...
 		// Environment light
-		return Ld_Environment(x, wo, n, mat, entering, seed);
+		// contr = Ld_Environment(x, wo, n, mat, entering, seed);
 	}
+
+	return contr/lpdf;
 
 #endif
 
@@ -290,8 +298,10 @@ void trace(float3 origin, float3 direction, uint i0, uint i1)
 	unsigned int i0 = optixGetPayload_0();				\
 	unsigned int i1 = optixGetPayload_1();				\
 	rp = unpack_pointer <RayPacket> (i0, i1);			\
-	if (rp->depth > MAX_DEPTH)					\
-		return;
+	if (rp->depth > MAX_DEPTH) {					\
+		rp->value = make_float3(0.0f);				\
+		return;							\
+	}
 
 #define LOAD_INTERSECTION_DATA()					\
 	Hit *hit = reinterpret_cast <Hit *>				\
@@ -312,7 +322,9 @@ void trace(float3 origin, float3 direction, uint i0, uint i1)
 	float3 n = calculate_normal(hit, triangle, bary, uv, entering);	\
 	float3 x = interpolate(hit->vertices, triangle, bary);		\
 									\
-	if (isnan(n.x) || isnan(n.y) || isnan(n.z))			\
-		return;
+	if (isnan(n.x) || isnan(n.y) || isnan(n.z)) {			\
+		rp->value = make_float3(0.0f);				\
+		return;							\
+	}
 
 #endif

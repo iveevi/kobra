@@ -177,8 +177,6 @@ float3 Ld_light(const Light &light, float3 x, float3 wo, float3 n,
 	float pdf_brdf;
 
 	f = cuda::eval(mat, n, wo, entering, wi, pdf_brdf, out, seed) * abs(dot(n, wi));
-	if (length(f) < 1e-6f)
-		return contr_nee;
 
 	float pdf_light = 0.0f;
 

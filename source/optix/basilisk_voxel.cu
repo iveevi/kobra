@@ -866,16 +866,13 @@ extern "C" __global__ void __closesthit__voxel()
 	LOAD_RAYPACKET();
 	LOAD_INTERSECTION_DATA();
 
-	// Check if primary ray
-	bool primary = (rp->depth == 0);
-	
-	// TODO: check for light, not just emissive material
+	/* TODO: check for light, not just emissive material
 	if (hit->material.type == Shading::eEmissive) {
 		rp->value = material.emission;
 		rp->normal = n;
 		rp->albedo = material.diffuse;
 		return;
-	}
+	} */
 	
 	// Offset by normal
 	// TODO: use more complex shadow bias functions
@@ -883,17 +880,19 @@ extern "C" __global__ void __closesthit__voxel()
 	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
 
 	float3 direct = Ld(x, wo, n, material, entering, rp->seed);
+	if (material.type == Shading::eEmissive)
+		direct += material.emission;
 
 	// Update ior
 	rp->ior = material.refraction;
 	rp->depth++;
 
 	// Resampling Importance Sampling
-	constexpr int M = 10;
+	constexpr int M = 5;
 
 	// Reservoir sampling
 	ReSTIR_Reservoir reservoir {
-		.sample = {},
+		.sample = PathSample {},
 		.count = 0,
 		.weight = 0.0f,
 		.mis = 0.0f
@@ -905,9 +904,13 @@ extern "C" __global__ void __closesthit__voxel()
 		float3 wi;
 		float pdf;
 
+		// TODO: skip computing brdf...?
+
 		float3 f = eval(material, n, wo, entering, wi, pdf, out, rp->seed);
-		// if (length(f) < 1e-6f)
-		//	continue;
+		if (pdf <= 0.0f)
+			continue;
+
+		// TODO: skip if null wi
 
 		// Get threshold value for current ray
 		trace <eRegular> (x, wi, i0, i1);
@@ -923,44 +926,43 @@ extern "C" __global__ void __closesthit__voxel()
 			.shading = out,
 			.direction = wi,
 			.pdf = pdf,
-			.target = length(value),
+			.target = 1, // length(f * value * abs(dot(wi, n))),
 			.missed = (rp->miss_depth == 1)
 		};
 
 		// RIS computations
-		float w = sample.target/pdf;
+		float w = 0.0f;
+		if (sample.target > 0)
+			w = sample.target/pdf;
 
 		reservoir.weight += w;
 
 		float p = w/reservoir.weight;
 		float eta = fract(random3(rp->seed)).x;
 
-		if (eta < p || i == 0)
+		if (eta < p || reservoir.count == 0)
 			reservoir.sample = sample;
 
 		reservoir.count++;
-
-		reservoir.mis += pdf;
-		// reservoir.mis += sample.target;
 	}
 
 	PathSample sample = reservoir.sample;
-	float W = reservoir.weight/sample.target;
 
-	// TODO: which strategy to use?
-	// W /= reservoir.count;
-	W *= sample.pdf/reservoir.mis;
-	// W *= sample.target/reservoir.mis;
+	rp->value = make_float3(0);
+	if (reservoir.count > 0 && sample.target > 0) {
+		float denom = sample.target * M;
+		float W = reservoir.weight/denom;
 
-	float3 brdf_value = brdf(material, n,
-		sample.direction, wo,
-		entering, sample.shading
-	);
+		float3 brdf_value = brdf(material, n,
+			sample.direction, wo,
+			entering, sample.shading
+		);
 
-	float geometric = abs(dot(sample.direction, n));
-	float3 f = brdf_value * geometric * sample.value;
+		float geometric = abs(dot(sample.direction, n));
+		float3 f = brdf_value * geometric * sample.value;
 
-	rp->value = direct + W * f;
+		rp->value = sample.value;
+	}
 
 	// Pass through features
 	rp->normal = n;
