@@ -22,7 +22,7 @@ extern "C"
 }
 
 // TODO: launch parameter for ray depth
-#define MAX_DEPTH 10
+#define MAX_DEPTH 1
 
 // Local constants
 static const float eps = 1e-3f;
@@ -253,93 +253,92 @@ __device__ float3 Ld(float3 x, float3 wo, float3 n,
 	// TODO: +1 for envmaps; make more efficient
 	int total_count = quad_count + tri_count;
 
-	if constexpr (Resampling) {
-		const int M = 10;
+	if constexpr (!Resampling) {
+		// Regular direct lighting
+		unsigned int i = fract(random3(seed)).x * total_count;
 
-		LightReservoir reservoir {
-			.sample = LightSample {},
-			.count = 0,
-			.weight = 0.0f,
-			.mis = 0.0f,
-		};
-	
-		for (int k = 0; k < M; k++) {
-			unsigned int i = fract(random3(seed)).x * total_count;
+		float3 contr = {0.0f};
+		float pdf = 1.0f/total_count;
 
-			float3 contr = {0.0f};
-
-			float light_pdf = 0.0f;
-			if (i < quad_count) {
-				QuadLight light = parameters.lights.quads[i];
-				contr = Ld_light(light, x, wo, n,
-					mat, entering,
-					seed, light_pdf
-				);
-			} else if (i < quad_count + tri_count) {
-				int ni = i - quad_count;
-				TriangleLight light = parameters.lights.triangles[ni];
-				contr = Ld_light(light, x, wo, n,
-					mat, entering, 
-					seed, light_pdf
-				);
-			} else {
-				// TODO: fix this...
-				// Environment light
-				// contr = Ld_Environment(x, wo, n, mat, entering, seed);
-			}
-
-			// Insret into reservoir
-			float pdf = light_pdf/float(total_count);
-			float w = (pdf > 0.0f) ? length(contr)/pdf : 0.0f;
-
-			reservoir.weight += w;
-
-			float p = w/reservoir.weight;
-			float eta = fract(random3(seed)).x;
-
-			if (eta < p || reservoir.count == 0) {
-				reservoir.sample = LightSample {
-					.type = -1,
-					.index = -1,
-					.contribution = contr
-				};
-			}
-
-			reservoir.count++;
+		float light_pdf = 0.0f;
+		if (i < quad_count) {
+			QuadLight light = parameters.lights.quads[i];
+			contr = Ld_light(light, x, wo, n, mat, entering, seed, light_pdf);
+		} else if (i < quad_count + tri_count) {
+			int ni = i - quad_count;
+			TriangleLight light = parameters.lights.triangles[ni];
+			contr = Ld_light(light, x, wo, n, mat, entering, seed, light_pdf);
+		} else {
+			// TODO: fix this...
+			// Environment light
+			// contr = Ld_Environment(x, wo, n, mat, entering, seed);
 		}
 
-		// Get final sample and contribution
-		float3 contr = reservoir.sample.contribution;
-		float target = length(contr);
-		float W = (target > 0) ? reservoir.weight/(M * target) : 0.0f;
-
-		return contr * W;
+		pdf *= light_pdf;
+		return contr/pdf;
 	}
 
-	// Regular sampling
-	unsigned int i = fract(random3(seed)).x * total_count;
+	// Resampling direct lighting
+	const int M = 10;
 
-	float3 contr = {0.0f};
-	float pdf = 1.0f/total_count;
+	LightReservoir reservoir {
+		.sample = LightSample {},
+		.count = 0,
+		.weight = 0.0f,
+		.mis = 0.0f,
+	};
 
-	float light_pdf = 0.0f;
-	if (i < quad_count) {
-		QuadLight light = parameters.lights.quads[i];
-		contr = Ld_light(light, x, wo, n, mat, entering, seed, light_pdf);
-		// lpdf /= light.area();
-	} else if (i < quad_count + tri_count) {
-		int ni = i - quad_count;
-		TriangleLight light = parameters.lights.triangles[ni];
-		contr = Ld_light(light, x, wo, n, mat, entering, seed, light_pdf);
-		// lpdf /= light.area();
-	} else {
-		// TODO: fix this...
-		// Environment light
-		// contr = Ld_Environment(x, wo, n, mat, entering, seed);
+	for (int k = 0; k < M; k++) {
+		unsigned int i = fract(random3(seed)).x * total_count;
+
+		float3 contr = {0.0f};
+
+		float light_pdf = 0.0f;
+		if (i < quad_count) {
+			QuadLight light = parameters.lights.quads[i];
+			contr = Ld_light(light, x, wo, n,
+				mat, entering,
+				seed, light_pdf
+			);
+		} else if (i < quad_count + tri_count) {
+			int ni = i - quad_count;
+			TriangleLight light = parameters.lights.triangles[ni];
+			contr = Ld_light(light, x, wo, n,
+				mat, entering, 
+				seed, light_pdf
+			);
+		} else {
+			// TODO: fix this...
+			// Environment light
+			// contr = Ld_Environment(x, wo, n, mat, entering, seed);
+		}
+
+		// Insret into reservoir
+		float pdf = light_pdf/float(total_count);
+		float w = (pdf > 0.0f) ? length(contr)/pdf : 0.0f;
+
+		reservoir.weight += w;
+
+		float p = w/reservoir.weight;
+		float eta = fract(random3(seed)).x;
+
+		if (eta < p || reservoir.count == 0) {
+			reservoir.sample = LightSample {
+				.type = -1,
+				.index = -1,
+				.contribution = contr
+			};
+		}
+
+		reservoir.count++;
 	}
 
-	pdf *= light_pdf;
-	return contr/pdf;
+	// Get final sample and contribution
+	float3 contr = reservoir.sample.contribution;
+	float target = length(contr);
+	float W = (target > 0) ? reservoir.weight/(M * target) : 0.0f;
+
+	return contr * W;
 
 #endif
 

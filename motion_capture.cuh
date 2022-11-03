@@ -132,7 +132,7 @@ struct MotionCapture : public kobra::BaseApp {
 
 		framer = kobra::layers::Framer::make(get_context());
 
-#if 1
+#if 0
 
 		std::cout << "Enter capture path: ";
 		std::cin >> capture_path;
@@ -235,11 +235,11 @@ struct MotionCapture : public kobra::BaseApp {
 				mode, accumulate
 			);
 
-			/* kobra::layers::denoise(denoiser, {
+			kobra::layers::denoise(denoiser, {
 				.color = kobra::layers::color_buffer(tracer),
 				.normal = kobra::layers::normal_buffer(tracer),
 				.albedo = kobra::layers::albedo_buffer(tracer)
-			}); */
+			});
 
 			compute_time = compute_timer.lap()/1e6;
 		}

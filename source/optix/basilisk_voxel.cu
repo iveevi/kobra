@@ -904,7 +904,6 @@ extern "C" __global__ void __closesthit__voxel()
 	rp->normal = n;
 	rp->albedo = material.diffuse;
 	rp->wi = wi;
-
 }
 
 #endif
