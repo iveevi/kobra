@@ -65,6 +65,7 @@ extern "C" __global__ void __closesthit__restir()
 
 		// Get threshold value for current ray
 		trace <eRegular> (x, wi, i0, i1);
+		pdf *= rp->pdf;
 
 		float3 value = rp->value;
 
@@ -82,13 +83,15 @@ extern "C" __global__ void __closesthit__restir()
 	float3 sample = samples[index];
 	float3 direction = directions[index];
 
-	float W = wsum/length(sample);
-	float3 f = brdf(material, n, direction, wo, entering, eDiffuse);
-	float pdf = kobra::cuda::pdf(material, n, direction, wo, entering, eDiffuse);
-	float geometric = abs(dot(n, direction));
-
 	rp->value = direct;
-	rp->value += W * geometric * f * sample;
+	if (length(sample) > 0) {
+		float W = wsum/length(sample);
+		float3 f = brdf(material, n, direction, wo, entering, eDiffuse);
+		float pdf = kobra::cuda::pdf(material, n, direction, wo, entering, eDiffuse);
+		float geometric = abs(dot(n, direction));
+
+		rp->value += W * geometric * f * sample;
+	}
 
 #elif 0
 

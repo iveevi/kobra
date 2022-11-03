@@ -143,7 +143,8 @@ float3 sample_area_light(TriangleLight light, float3 &seed)
 template <class Light>
 KCUDA_HOST_DEVICE
 float3 Ld_light(const Light &light, float3 x, float3 wo, float3 n,
-		cuda::Material mat, bool entering, float3 &seed)
+		cuda::Material mat, bool entering,
+		float3 &seed, float &light_pdf)
 {
 	static const float eps = 0.05f;
 
@@ -152,25 +153,30 @@ float3 Ld_light(const Light &light, float3 x, float3 wo, float3 n,
 
 	// NEE
 	float3 lpos = sample_area_light(light, seed);
+	light_pdf = 1.0f/light.area();
+
 	float3 wi = normalize(lpos - x);
 	float R = length(lpos - x);
 
-	float3 f = cuda::brdf(mat, n, wi, wo, entering, mat.type) * abs(dot(n, wi));
+	float3 f = cuda::brdf(mat, n, wi, wo, entering, mat.type);
 
 	float ldot = abs(dot(light.normal(), wi));
-	if (ldot > 1e-6) {
-		float pdf_light = (R * R)/(light.area() * ldot);
-
-		// TODO: how to decide ray type for this?
-		float pdf_brdf = cuda::pdf(mat, n, wi, wo, entering, mat.type);
+	if (ldot > 0) {
+		float geometric = ldot * abs(dot(n, wi)) / (R * R);
 
 		bool occluded = is_occluded(x, wi, R);
-		if (pdf_light > 1e-9 && !occluded) {
+		if (!occluded) {
+			float pdf_light = (R * R)/(light.area() * ldot);
+			// TODO: how to decide ray type for this?
+			float pdf_brdf = cuda::pdf(mat, n, wi, wo, entering, mat.type);
+
 			float weight = power(pdf_light, pdf_brdf);
-			float3 intensity = light.intensity;
-			contr_nee += weight * f * intensity/pdf_light;
+			contr_nee += weight * f * light.intensity * geometric;
 		}
 	}
+
+	// NOTE: for ris, disable BRDF sampling
+	return contr_nee;
 
 	// BRDF
 	Shading out;

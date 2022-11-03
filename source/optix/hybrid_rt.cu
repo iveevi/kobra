@@ -61,12 +61,13 @@ __device__ float3 Ld(float3 x, float3 wo, float3 n,
 		unsigned int i = seed.x * (quad_count + tri_count);
 		i = min(i, quad_count + tri_count - 1);
 
+		float lpdf;
 		if (i < quad_count) {
 			QuadLight light = ht_params.lights.quads[i];
-			contr += Ld_light(light, x, wo, n, mat, entering, seed);
+			contr += Ld_light(light, x, wo, n, mat, entering, seed, lpdf);
 		} else {
 			TriangleLight light = ht_params.lights.triangles[i - quad_count];
-			contr += Ld_light(light, x, wo, n, mat, entering, seed);
+			contr += Ld_light(light, x, wo, n, mat, entering, seed, lpdf);
 		}
 	}
 

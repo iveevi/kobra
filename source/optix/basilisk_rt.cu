@@ -24,10 +24,6 @@ void make_ray(uint3 idx,
 	float xoffset = fract(seed.x) - 0.5f;
 	float yoffset = fract(seed.y) - 0.5f;
 
-	// TODO: for debugging purposes, turning off anti-aliasing methods
-	xoffset = 0;
-	yoffset = 0;
-
 	float2 d = 2.0f * make_float2(
 		float(idx.x + xoffset)/parameters.resolution.x,
 		float(idx.y + yoffset)/parameters.resolution.y

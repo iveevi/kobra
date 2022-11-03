@@ -144,7 +144,7 @@ bool is_occluded(float3 origin, float3 dir, float R)
 	return vis;
 }
 
-// Get direct lighting for environment map
+/* Get direct lighting for environment map
 KCUDA_HOST_DEVICE
 float3 Ld_Environment(float3 x, float3 wo, float3 n,
 		Material mat, bool entering, float3 &seed)
@@ -214,7 +214,7 @@ float3 Ld_Environment(float3 x, float3 wo, float3 n,
 		contr_brdf += weight * f * Li/pdf_brdf;
 
 	return contr_nee + contr_brdf;
-}
+} */
 
 // Trace ray into scene and get relevant information
 template <bool Resampling>
@@ -253,7 +253,7 @@ __device__ float3 Ld(float3 x, float3 wo, float3 n,
 	// TODO: +1 for envmaps; make more efficient
 	int total_count = quad_count + tri_count;
 
-	if (Resampling) {
+	if constexpr (Resampling) {
 		const int M = 10;
 
 		LightReservoir reservoir {
@@ -267,15 +267,21 @@ __device__ float3 Ld(float3 x, float3 wo, float3 n,
 			unsigned int i = fract(random3(seed)).x * total_count;
 
 			float3 contr = {0.0f};
+
+			float light_pdf = 0.0f;
 			if (i < quad_count) {
 				QuadLight light = parameters.lights.quads[i];
-				contr = Ld_light(light, x, wo, n, mat, entering, seed);
-				// lpdf /= light.area();
+				contr = Ld_light(light, x, wo, n,
+					mat, entering,
+					seed, light_pdf
+				);
 			} else if (i < quad_count + tri_count) {
 				int ni = i - quad_count;
 				TriangleLight light = parameters.lights.triangles[ni];
-				contr = Ld_light(light, x, wo, n, mat, entering, seed);
-				// lpdf /= light.area();
+				contr = Ld_light(light, x, wo, n,
+					mat, entering, 
+					seed, light_pdf
+				);
 			} else {
 				// TODO: fix this...
 				// Environment light
@@ -283,7 +289,7 @@ __device__ float3 Ld(float3 x, float3 wo, float3 n,
 			}
 
 			// Insret into reservoir
-			float pdf = 1.0f/total_count;
+			float pdf = light_pdf/float(total_count);
 			float w = (pdf > 0.0f) ? length(contr)/pdf : 0.0f;
 
 			reservoir.weight += w;
@@ -305,7 +311,7 @@ __device__ float3 Ld(float3 x, float3 wo, float3 n,
 		// Get final sample and contribution
 		float3 contr = reservoir.sample.contribution;
 		float target = length(contr);
-		float W = (target > 0) ? reservoir.weight/(M * length(contr)) : 0.0f;
+		float W = (target > 0) ? reservoir.weight/(M * target) : 0.0f;
 
 		return contr * W;
 	}
@@ -316,14 +322,15 @@ __device__ float3 Ld(float3 x, float3 wo, float3 n,
 	float3 contr = {0.0f};
 	float pdf = 1.0f/total_count;
 
+	float light_pdf = 0.0f;
 	if (i < quad_count) {
 		QuadLight light = parameters.lights.quads[i];
-		contr = Ld_light(light, x, wo, n, mat, entering, seed);
+		contr = Ld_light(light, x, wo, n, mat, entering, seed, light_pdf);
 		// lpdf /= light.area();
 	} else if (i < quad_count + tri_count) {
 		int ni = i - quad_count;
 		TriangleLight light = parameters.lights.triangles[ni];
-		contr = Ld_light(light, x, wo, n, mat, entering, seed);
+		contr = Ld_light(light, x, wo, n, mat, entering, seed, light_pdf);
 		// lpdf /= light.area();
 	} else {
 		// TODO: fix this...
@@ -331,6 +338,7 @@ __device__ float3 Ld(float3 x, float3 wo, float3 n,
 		// contr = Ld_Environment(x, wo, n, mat, entering, seed);
 	}
 
+	pdf *= light_pdf;
 	return contr/pdf;
 
 #endif

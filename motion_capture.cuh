@@ -26,6 +26,7 @@
 #include "include/layers/basilisk.cuh"
 #include "include/optix/options.cuh"
 #include "include/optix/parameters.cuh"
+#include "include/renderer.hpp"
 #include "include/scene.hpp"
 
 // TODO: do base app without inheritance (simple struct..., app and baseapp not
@@ -76,6 +77,45 @@ struct MotionCapture : public kobra::BaseApp {
 			) {
 		// Load scene and camera
 		scene.load(get_device(), scene_path);
+
+		// Add extra lights
+		float width = 10.0f;
+		float height = 10.0f;
+		float depth = 10.0f;
+
+		float stride = 5.0f;
+
+		/* auto lighter = [&](float x, float y, float z) {
+			kobra::Entity light = scene.ecs.make_entity();
+
+			light.get <kobra::Transform> ().position = glm::vec3 {x, y, z};
+			light.get <kobra::Transform> ().scale = glm::vec3 {0.1f};
+
+			// Add emissive box
+			kobra::Mesh box = kobra::Mesh::box({},
+					{1, 1, 1});
+
+			light.add <kobra::Mesh> (box);
+
+			kobra::Mesh *mesh = &light.get <kobra::Mesh> ();
+			mesh->submeshes[0].material.emission = glm::vec3 {100.0f};
+			mesh->submeshes[0].material.diffuse = {0, 0, 0};
+			mesh->submeshes[0].material.type = Shading::eEmissive;
+
+			light.add <kobra::Rasterizer> (get_device(), mesh);
+
+			// TODO: material update method for rasterizers,
+			// adds tasks to a queue or something...?
+			kobra::Rasterizer *rasterizer = &light.get <kobra::Rasterizer> ();
+		};
+
+		for (float x = 0; x <= width; x += stride) {
+			for (float y = 0; y <= height; y += stride) {
+				for (float z = 0; z <= depth; z += stride)
+					lighter(x, y, z);
+			}
+		} */
+
 		camera = scene.ecs.get_entity("Camera");
 
 		// Setup Wadjet tracer
