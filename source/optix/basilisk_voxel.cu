@@ -861,49 +861,91 @@ extern "C" __global__ void __closesthit__voxel()
 
 #elif defined(BACKUP_RIS)
 
+// Sample from discrete distribution
+KCUDA_INLINE static __device__
+int sample_discrete(float *pdfs, int num_pdfs, float eta)
+{
+	float sum = 0.0f;
+	for (int i = 0; i < num_pdfs; ++i)
+		sum += pdfs[i];
+	
+	float cdf = 0.0f;
+	for (int i = 0; i < num_pdfs; ++i) {
+		cdf += pdfs[i] / sum;
+		if (eta < cdf)
+			return i;
+	}
+
+	return num_pdfs - 1;
+}
+
 extern "C" __global__ void __closesthit__voxel()
 {
 	LOAD_RAYPACKET();
 	LOAD_INTERSECTION_DATA();
 
 	// Offset by normal
+	// TODO: use more complex shadow bias functions
+	// TODO: an easier check for transmissive objects
 	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
 
-	float3 direct = Ld <true> (x, wo, n, material, entering, rp->seed);
+	float3 direct = Ld <false> (x, wo, n, material, entering, rp->seed);
 	if (material.type == Shading::eEmissive)
 		direct += material.emission;
-	
-	// Generate new ray
-	Shading out;
-	float3 wi;
-	float pdf;
 
-	float3 f = eval(material, n, wo, entering, wi, pdf, out, rp->seed);
-
-	// Get threshold value for current ray
-	float3 T = f * abs(dot(wi, n))/pdf;
-
-	// Update for next ray
+	// Update ior
 	rp->ior = material.refraction;
-	rp->pdf *= pdf;
 	rp->depth++;
-	
-	// Trace the next ray
-	float3 indirect = make_float3(0.0f);
-	if (pdf > 0) {
+
+	// Resampling Importance Sampling
+	constexpr int M = 10;
+
+	float3 samples[M];
+	float3 directions[M];
+	float weights[M];
+	float wsum = 0;
+
+	for (int i = 0; i < M; i++) {
+		// Generate new ray
+		Shading out;
+		float3 wi;
+		float pdf;
+
+		float3 f = eval(material, n, wo, entering, wi, pdf, out, rp->seed);
+
+		// Get threshold value for current ray
 		trace <eRegular> (x, wi, i0, i1);
-		indirect = rp->value;
+		pdf *= rp->pdf;
+
+		float3 value = rp->value;
+
+		// RIS computations
+		samples[i] = value;
+		directions[i] = wi;
+		weights[i] = (pdf > 0) ? length(value)/(M * pdf) : 0;
+		wsum += weights[i];
 	}
 
-	// Update the value
-	rp->value = direct;
-	if (pdf > 0)
-		rp->value += T * indirect;
+	// Sample from the distribution
+	float eta = fract(random3(rp->seed)).x;
+	int index = sample_discrete(&weights[0], M, eta);
 
-	rp->position = x;
+	float3 sample = samples[index];
+	float3 direction = directions[index];
+
+	rp->value = direct;
+	if (length(sample) > 0) {
+		float W = wsum/length(sample);
+		float3 f = brdf(material, n, direction, wo, entering, eDiffuse);
+		float pdf = kobra::cuda::pdf(material, n, direction, wo, entering, eDiffuse);
+		float geometric = abs(dot(n, direction));
+
+		rp->value += W * geometric * f * sample;
+	}
+
+	// Pass through features
 	rp->normal = n;
 	rp->albedo = material.diffuse;
-	rp->wi = wi;
 }
 
 #endif

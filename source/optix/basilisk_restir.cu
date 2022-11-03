@@ -1,21 +1,49 @@
 #include "basilisk_common.cuh"
 
-// Sample from discrete distribution
-KCUDA_INLINE static __device__
-int sample_discrete(float *pdfs, int num_pdfs, float eta)
+// Get direct lighting using ReSTIR
+__device__
+float3 direct_lighting_ris(const SurfaceHit &sh, Seed seed)
 {
-	float sum = 0.0f;
-	for (int i = 0; i < num_pdfs; ++i)
-		sum += pdfs[i];
-	
-	float cdf = 0.0f;
-	for (int i = 0; i < num_pdfs; ++i) {
-		cdf += pdfs[i] / sum;
-		if (eta < cdf)
-			return i;
+	const int M = 10;
+
+	LightReservoir reservoir {
+		.sample = LightSample {},
+		.count = 0,
+		.weight = 0.0f,
+		.mis = 0.0f,
+	};
+
+	for (int k = 0; k < M; k++) {
+		// Get direct lighting sample
+		DirectLightSample dls = sample_direct(sh, seed);
+
+		float target = length(dls.Li);
+		float pdf = dls.pdf;
+
+		float w = (pdf > 0.0f) ? target/pdf : 0.0f;
+
+		reservoir.weight += w;
+
+		float p = w/reservoir.weight;
+		float eta = rand_uniform(seed);
+
+		if (eta < p || reservoir.count == 0) {
+			reservoir.sample = LightSample {
+				.contribution = dls.Li,
+				.target = target,
+				.type = dls.type,
+				.index = dls.index
+			};
+		}
+
+		reservoir.count++;
 	}
 
-	return num_pdfs - 1;
+	// Get final sample and contribution
+	LightSample sample = reservoir.sample;
+	float W = (sample.target > 0) ? reservoir.weight/(M * sample.target) : 0.0f;
+
+	return W * sample.contribution;
 }
 
 // Closest hit program for ReSTIR
@@ -27,7 +55,16 @@ extern "C" __global__ void __closesthit__restir()
 	// Offset by normal
 	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
 
-	float3 direct = Ld <true> (x, wo, n, material, entering, rp->seed);
+	// Construct SurfaceHit instance for lighting calculations
+	SurfaceHit surface_hit {
+		.x = x,
+		.wo = wo,
+		.n = n,
+		.mat = material,
+		.entering = entering
+	};
+
+	float3 direct = direct_lighting_ris(surface_hit, rp->seed);
 	if (material.type == Shading::eEmissive)
 		direct += material.emission;
 	

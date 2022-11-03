@@ -28,9 +28,10 @@ constexpr const char *str_modes[eCount] = {
 
 // Reservoir samples for Resampling techniques
 struct LightSample {
+	float3 contribution;
+	float target;
 	int type; // 0 - quad, 1 - triangle
 	int index;
-	float3 contribution;
 };
 
 struct PathSample {
