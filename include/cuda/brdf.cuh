@@ -1,14 +1,25 @@
 #ifndef KOBRA_CUDA_BRDF_H_
 #define KOBRA_CUDA_BRDF_H_
 
-#include "math.cuh"
-#include "material.cuh"
-#include "random.cuh"
+// Engine headers
+#include "core.cuh"
 #include "debug.cuh"
+#include "material.cuh"
+#include "math.cuh"
+#include "random.cuh"
 
 namespace kobra {
 
 namespace cuda {
+
+// Surface hit structure for BSDF calculations
+struct SurfaceHit {
+	float3 x;
+	float3 wo;
+	float3 n;
+	Material mat;
+	bool entering;
+};
 
 // Smith shadow-masking function (single)
 KCUDA_INLINE KCUDA_HOST_DEVICE
@@ -43,7 +54,7 @@ float3 shlick_F(float3 wi, float3 h, Material mat)
 
 // Microfacet distribution functions
 struct Microfacets {
-	KCUDA_HOST_DEVICE __forceinline__
+	KCUDA_INLINE KCUDA_HOST_DEVICE
 	static float GGX(float3 n, float3 h, const Material &mat) {
 		float alpha = mat.roughness;
 		float theta = acos(clamp(dot(n, h), 0.0f, 0.999f));
@@ -56,7 +67,7 @@ struct Microfacets {
 
 // True fresnel reflectance
 KCUDA_INLINE KCUDA_HOST_DEVICE
-float FrDielectric(float cosThetaI, float etaI, float etaT)
+float fr_dielectric(float cosThetaI, float etaI, float etaT)
 {
 	cosThetaI = clamp(cosThetaI, -1.0f, 1.0f);
 	// Potentially swap indices of refraction
@@ -84,8 +95,8 @@ float FrDielectric(float cosThetaI, float etaI, float etaT)
 	return (Rparl * Rparl + Rperp * Rperp) / 2;
 }
 
-KCUDA_HOST_DEVICE __forceinline__
-float3 Refract(const float3 &wi, const float3 &n, float eta)
+KCUDA_INLINE KCUDA_HOST_DEVICE
+float3 refract(const float3 &wi, const float3 &n, float eta)
 {
 	float cosThetaI = dot(n, wi);
 	float sin2ThetaI = fmax(float(0), float(1 - cosThetaI * cosThetaI));
@@ -107,15 +118,16 @@ float3 Refract(const float3 &wi, const float3 &n, float eta)
 // Perfect specular reflection
 struct SpecularReflection {
 	// Evaluate the BRDF
-	KCUDA_HOST_DEVICE __forceinline__
+	KCUDA_INLINE KCUDA_HOST_DEVICE
 	static float3 brdf(const Material &mat, float3 n, float3 wi,
-			float3 wo, bool entering, Shading out, bool isrec = false)
+			float3 wo, bool entering,
+			Shading out, bool isrec = false)
 	{
 		return {0, 0, 0};
 	}
 
 	// Evaluate the PDF
-	KCUDA_HOST_DEVICE __forceinline__
+	KCUDA_INLINE KCUDA_HOST_DEVICE
 	static float pdf(const Material &mat, float3 n, float3 wi,
 			float3 wo, bool entering, Shading out)
 	{
@@ -123,7 +135,7 @@ struct SpecularReflection {
 	}
 
 	// Sample the BRDF
-	KCUDA_HOST_DEVICE __forceinline__
+	KCUDA_INLINE KCUDA_HOST_DEVICE
 	static float3 sample(const Material &mat, float3 n, float3 wo,
 			bool entering, float3 &seed, Shading &out)
 	{
@@ -138,7 +150,7 @@ struct SpecularTransmission {
 	// TODO: tr and tf
 
 	// Evaluate the BRDF
-	KCUDA_HOST_DEVICE __forceinline__
+	KCUDA_HOST_DEVICE KCUDA_INLINE
 	static float3 brdf(const Material &mat, float3 n, float3 wi,
 			float3 wo, bool entering, Shading out, bool isrec = false)
 	{
@@ -165,7 +177,7 @@ struct SpecularTransmission {
 		float3 np = dot(wo, n) < 0 ? -n : n;
 
 		// WARNING: can return 0 vector...
-		return Refract(wo, np, eta_i/eta_t);
+		return refract(wo, np, eta_i/eta_t);
 	}
 };
 
@@ -195,17 +207,17 @@ struct FresnelSpecular {
 		float eta_i = entering ? 1 : mat.refraction;
 		float eta_t = entering ? mat.refraction : 1;
 
-		float F = FrDielectric(dot(wo, n), eta_i, eta_t);
+		float F = fr_dielectric(dot(wo, n), eta_i, eta_t);
 
-		seed = random3(seed);
-		if (fract(seed.x) < F) {
+		float eta = rand_uniform(seed);
+		if (eta < F) {
 			out = Shading::eReflection;
 			return {1, 0, 0};
 			return reflect(-wo, n);
 		} else {
 			out = Shading::eTransmission;
 			return {0, 0, 1};
-			return Refract(wo, n, 1/mat.refraction);
+			return refract(wo, n, 1/mat.refraction);
 		}
 	}
 };
@@ -213,7 +225,7 @@ struct FresnelSpecular {
 // Cook-Torrance GGX BRDF
 struct GGX {
 	// Evaluate the BRDF
-	KCUDA_HOST_DEVICE __forceinline__
+	KCUDA_INLINE KCUDA_HOST_DEVICE
 	static float3 brdf(const Material &mat, float3 n, float3 wi,
 			float3 wo, bool entering, Shading out, bool isrec = false)
 	{
@@ -232,7 +244,7 @@ struct GGX {
 	}
 
 	// Evaluate the PDF
-	KCUDA_HOST_DEVICE __forceinline__
+	KCUDA_INLINE KCUDA_HOST_DEVICE
 	static float pdf(const Material &mat, float3 n, float3 wi,
 			float3 wo, bool entering, Shading out)
 	{
@@ -256,7 +268,7 @@ struct GGX {
 	}
 
 	// Sample the BRDF
-	KCUDA_HOST_DEVICE __forceinline__
+	KCUDA_INLINE KCUDA_HOST_DEVICE
 	static float3 sample(const Material &mat, float3 n, float3 wo,
 			bool entering, float3 &seed, Shading &out)
 	{
@@ -269,7 +281,7 @@ struct GGX {
 		if (avg_Kd + avg_Ks > 0.0f)
 			t = fmax(avg_Ks/(avg_Kd + avg_Ks), 0.25f);
 
-		float3 eta = fract(random3(seed));
+		float3 eta = rand_uniform_3f(seed);
 		if (eta.x < t) {
 			// Specular sampling
 			float k = sqrt(eta.y/(1 - eta.y));
@@ -368,12 +380,12 @@ float3 eval <SpecularTransmission>
 		n = -n;
 
 	float eta = eta_i/eta_t;
-	wi = kobra::cuda::Refract(wo, n, eta);
+	wi = refract(wo, n, eta);
 	if (length(wi) < 1e-6f)
 		return make_float3(0);
 	pdf = 1;
 
-	float fr = kobra::cuda::FrDielectric(dot(n, wi), eta_i, eta_t);
+	float fr = fr_dielectric(dot(n, wi), eta_i, eta_t);
 	return make_float3(1 - fr) * (eta * eta)/abs(dot(n, wi));
 }
 
@@ -392,7 +404,7 @@ float3 eval <SpecularReflection>
 	wi = reflect(-wo, n);
 	pdf = 1;
 
-	float fr = kobra::cuda::FrDielectric(dot(n, wi), eta_i, eta_t);
+	float fr = fr_dielectric(dot(n, wi), eta_i, eta_t);
 	return make_float3(fr)/abs(dot(n, wi));
 }
 
@@ -405,23 +417,23 @@ float3 eval <FresnelSpecular>
 	float eta_i = entering ? 1 : mat.refraction;
 	float eta_t = entering ? mat.refraction : 1;
 
-	float F = kobra::cuda::FrDielectric(dot(wo, n), eta_i, eta_t);
+	float F = fr_dielectric(dot(wo, n), eta_i, eta_t);
 
-	seed = random3(seed);
-	if (fract(seed.x) < F) {
+	float eta = rand_uniform(seed);
+	if (eta < F) {
 		wi = reflect(-wo, n);
 		pdf = F;
-		// float fr = kobra::cuda::FrDielectric(dot(n, wi), eta_i, eta_t);
+		// float fr = kobra::cuda::fr_dielectric(dot(n, wi), eta_i, eta_t);
 		return make_float3(F)/abs(dot(n, wi));
 	} else {
 		out = Shading::eTransmission;
 		float eta = eta_i/eta_t;
-		wi = kobra::cuda::Refract(wo, n, eta);
+		wi = refract(wo, n, eta);
 		if (length(wi) < 1e-6f)
 			return make_float3(0);
 
 		pdf = 1 - F;
-		// float fr = kobra::cuda::FrDielectric(dot(n, wi), eta_i, eta_t);
+		// float fr = kobra::cuda::fr_dielectric(dot(n, wi), eta_i, eta_t);
 		return make_float3(1 - F) * (eta * eta)/abs(dot(n, wi));
 	}
 }

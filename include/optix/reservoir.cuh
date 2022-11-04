@@ -50,7 +50,7 @@ struct Reservoir {
 		// this->count++;
 
 		// Randomly select the sample
-		float r = fract(random3(random).x);
+		float r = cuda::rand_uniform(random);
 		float w = weight/(this->weight);
 	
 		bool selected = (r < w + eps);
@@ -111,7 +111,7 @@ struct MultiReservoir {
 		// Randomly select the sample
 		bool selected = false;
 		for (int i = 0; i < size; i++) {
-			float r = fract(random3(random).x);
+			float r = cuda::rand_uniform(random);
 			float w = weight/(this->weight);
 		
 			bool s = (r < w + eps);
@@ -129,7 +129,7 @@ struct MultiReservoir {
 	void merge(const MultiReservoir &reservoir, float target) {
 		float wsum = weight + reservoir.weight;
 
-		float r = fract(random3(random).x);
+		float r = cuda::rand_uniform(random);
 		if (r < reservoir.weight/wsum) {
 			for (int i = 0; i < N; i++)
 				samples[i] = reservoir.samples[i];

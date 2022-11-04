@@ -57,7 +57,7 @@ __device__ float3 Ld(float3 x, float3 wo, float3 n,
 
 	float3 contr = make_float3(0.0f);
 	for (int k = 0; k < LIGHT_SAMPLES; k++) {
-		random3(seed);
+		pcg3f(seed);
 		unsigned int i = seed.x * (quad_count + tri_count);
 		i = min(i, quad_count + tri_count - 1);
 

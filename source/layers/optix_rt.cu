@@ -11,23 +11,10 @@
 #include "../../include/layers/optix_tracer_common.cuh"
 #include "../../include/optix/options.cuh"
 
-using kobra::optix::SamplingStrategies;
-
-using kobra::optix_rt::HitGroupData;
-using kobra::optix_rt::MissData;
-
-using kobra::optix_rt::PathSample;
-using kobra::optix_rt::Reservoir;
-
-using kobra::optix_rt::QuadLight;
-using kobra::optix_rt::TriangleLight;
-
-using kobra::cuda::Material;
-
-using kobra::cuda::GGX;
-using kobra::cuda::SpecularTransmission;
-using kobra::cuda::SpecularReflection;
-using kobra::cuda::FresnelSpecular;
+using namespace kobra;
+using namespace kobra::cuda;
+using namespace kobra::optix_rt;
+using namespace kobra::optix;
 
 extern "C"
 {
@@ -63,8 +50,8 @@ static __forceinline__ __device__ void make_ray
 	const float3 W = params.cam_w;
 	
 	// Jittered halton
-	int xoff = rand(params.image_width, seed);
-	int yoff = rand(params.image_height, seed);
+	int xoff = rand_uniform(params.image_width, seed);
+	int yoff = rand_uniform(params.image_height, seed);
 
 	// Compute ray origin and direction
 	float xoffset = params.xoffset[xoff];
@@ -313,7 +300,7 @@ __device__ float power(float pdf_f, float pdf_g)
 // Area light methods
 __device__ float3 sample_area_light(QuadLight light, float3 &seed)
 {
-	float3 rand = random3(seed);
+	float3 rand = pcg3f(seed);
 	float u = fract(rand.x);
 	float v = fract(rand.y);
 	return light.a + u * light.ab + v * light.ac;
@@ -321,7 +308,7 @@ __device__ float3 sample_area_light(QuadLight light, float3 &seed)
 
 __device__ float3 sample_area_light(TriangleLight light, float3 &seed)
 {
-	float3 rand = random3(seed);
+	float3 rand = pcg3f(seed);
 	float u = fract(rand.x);
 	float v = fract(rand.y);
 	
@@ -450,7 +437,7 @@ __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 			&& hit_data->n_tri_lights == 0)
 		return float3 {0.0f, 0.0f, 0.0f};
 
-	random3(seed);
+	pcg3f(seed);
 	unsigned int i = fract(seed.x) * (hit_data->n_quad_lights + hit_data->n_tri_lights);
 	i = min(i, hit_data->n_quad_lights + hit_data->n_tri_lights - 1);
 
@@ -673,7 +660,7 @@ extern "C" __global__ void __closesthit__radiance()
 		i0, i1
 	);
 
-	// Resampling
+	/* Resampling
 	if (restir_mode) {
 		float &sampling_radius = params.sampling_radius[rp->imgidx];
 
@@ -859,7 +846,7 @@ extern "C" __global__ void __closesthit__radiance()
 		// Double buffering
 		params.prev_reservoirs[rp->imgidx] = temporal;
 		params.prev_spatial_reservoirs[rp->imgidx] = spatial;
-	}
+	} */
 	
 	rp->diffuse = material.diffuse;
 	rp->normal = n;

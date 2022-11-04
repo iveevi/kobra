@@ -28,6 +28,7 @@
 #include "include/optix/parameters.cuh"
 #include "include/renderer.hpp"
 #include "include/scene.hpp"
+#include "include/texture.hpp"
 
 // TODO: do base app without inheritance (simple struct..., app and baseapp not
 // related)
@@ -117,6 +118,14 @@ struct MotionCapture : public kobra::BaseApp {
 		} */
 
 		camera = scene.ecs.get_entity("Camera");
+
+		// DDS loading tests
+		std::string dds_path =
+			"/home/venki/models/ZeroDay_v1/MEASURE_ONE/tex/decal_BaseColor.dds";
+		std::filesystem::path path = dds_path;
+
+		int w, h, c;
+		kobra::load_texture(path, w, h, c);
 
 		// Setup Wadjet tracer
 		KOBRA_LOG_FILE(kobra::Log::INFO) << "Hybrid tracer setup\n";

@@ -64,7 +64,7 @@ extern "C" __global__ void __closesthit__voxel()
 	auto &r_voxel = parameters.voxel.reservoirs[index];
 	int *lock = parameters.voxel.locks[index];
 
-	float e = fract(random3(rp->seed).x);
+	float e = rand_uniform(rp->seed);
 	int count = r_voxel.count;
 
 	
@@ -90,11 +90,11 @@ extern "C" __global__ void __closesthit__voxel()
 			// Generate random 3D offset index
 			// TODO: use spherical mapping instead of rectangular
 			
-			float3 r = fract(random3(rp->seed));
+			float3 r = rand_uniform_3f(rp->seed);
 
 			// NOTE: sqrt of the random variable results in larger
 			// radii
-			float radius = fract(sqrt(random3(r).x)) * max_radius;
+			float radius = fract(sqrt(pcg3f(r).x)) * max_radius;
 
 			// TODO: select between these filters by sampling ~5
 			// from each in the inital stage
@@ -927,7 +927,7 @@ extern "C" __global__ void __closesthit__voxel()
 	}
 
 	// Sample from the distribution
-	float eta = fract(random3(rp->seed)).x;
+	float eta = rand_uniform(rp->seed);
 	int index = sample_discrete(&weights[0], M, eta);
 
 	float3 sample = samples[index];

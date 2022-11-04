@@ -13,6 +13,7 @@
 #include "../../include/optix/lighting.cuh"
 #include "../../include/cuda/matrix.cuh"
 
+using namespace kobra;
 using namespace kobra::cuda;
 using namespace kobra::optix;
 
@@ -216,79 +217,10 @@ float3 Ld_Environment(float3 x, float3 wo, float3 n,
 	return contr_nee + contr_brdf;
 } */
 
-// Surface hit structure
-struct SurfaceHit {
-	float3 x;
-	float3 wo;
-	float3 n;
-	Material mat;
-	bool entering;
-};
-
-// Uniformly sample a single light source
-struct DirectLightSample {
-	float3 Li;
-	float pdf;
-	int type; // 0 - quad, 1 - triangle
-	int index;
-};
-
-using Seed = float3 &;
-
-__device__ __forceinline__
-float rand_uniform(Seed &seed)
-{
-	seed = random3(seed);
-	return fract(seed.x);
-}
-
-__device__ __forceinline__
-DirectLightSample sample_direct(const SurfaceHit &sh, float3 &seed)
-{
-	// TODO: plus envmap
-	int quad_count = parameters.lights.quad_count;
-	int tri_count = parameters.lights.triangle_count;
-
-	unsigned int total_lights = quad_count + tri_count;
-	unsigned int light_index = rand_uniform(seed) * total_lights;
-
-	float3 Li {0.0f};
-	float pdf = 0.0f;
-	int type = -1;
-	int index = -1;
-		
-	if (light_index < quad_count) {
-		QuadLight light = parameters.lights.quads[light_index];
-
-		Li = Ld_light(light,
-			sh.x, sh.wo, sh.n,
-			sh.mat, sh.entering,
-			seed, pdf
-		);
-
-		type = 0;
-		index = light_index;
-	} else if (light_index < quad_count + tri_count) {
-		int ni = light_index - quad_count;
-		TriangleLight light = parameters.lights.triangles[ni];
-
-		Li = Ld_light(light,
-			sh.x, sh.wo, sh.n,
-			sh.mat, sh.entering,
-			seed, pdf
-		);
-
-		type = 1;
-		index = ni;
-	}
-
-	return {Li, pdf/total_lights, type, index};
-}
-
 // Trace ray into scene and get relevant information
 template <bool Resampling>
 __device__ float3 Ld(float3 x, float3 wo, float3 n,
-		Material mat, bool entering, float3 &seed)
+		Material mat, bool entering, Seed seed)
 {
 	int quad_count = parameters.lights.quad_count;
 	int tri_count = parameters.lights.triangle_count;
@@ -324,7 +256,7 @@ __device__ float3 Ld(float3 x, float3 wo, float3 n,
 
 	if constexpr (!Resampling) {
 		// Regular direct lighting
-		unsigned int i = fract(random3(seed)).x * total_count;
+		unsigned int i = rand_uniform(seed) * total_count;
 
 		float3 contr = {0.0f};
 		float pdf = 1.0f/total_count;
@@ -358,7 +290,7 @@ __device__ float3 Ld(float3 x, float3 wo, float3 n,
 	};
 
 	for (int k = 0; k < M; k++) {
-		unsigned int i = fract(random3(seed)).x * total_count;
+		unsigned int i = rand_uniform(seed) * total_count;
 
 		float3 contr = {0.0f};
 
@@ -389,7 +321,7 @@ __device__ float3 Ld(float3 x, float3 wo, float3 n,
 		reservoir.weight += w;
 
 		float p = w/reservoir.weight;
-		float eta = fract(random3(seed)).x;
+		float eta = rand_uniform(seed);
 
 		if (eta < p || reservoir.count == 0) {
 			reservoir.sample = LightSample {

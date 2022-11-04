@@ -45,7 +45,8 @@ definitions:
     thirdparty/stb,
     thirdparty/termcolor/include,
     /usr/include/opencv4,
-    /usr/include/eigen3'
+    /usr/include/eigen3,
+    /usr/include/ImageMagick-7'
   - libs: 'glfw,
     vulkan,
     assimp,
@@ -62,7 +63,10 @@ definitions:
     opencv_core,
     opencv_videoio,
     opencv_imgcodecs,
-    opencv_imgproc'
+    opencv_imgproc,
+    Magick++-7.Q16HDRI,
+    MagickWand-7.Q16HDRI,
+    MagickCore-7.Q16HDRI'
 
 builds:
   - optix_ptx_debug:
@@ -119,7 +123,7 @@ builds:
   - kobra_release:
     - sources: main.cu, kobra_source, tinyfd_source, glslang_source
     - idirs: includes
-    - flags: '-O3 -std=c++17'
+    - flags: '-O3 -std=c++17 -DMAGICKCORE_HDRI_ENABLE=1 -DMAGICKCORE_QUANTUM_DEPTH=16'
     - libraries: libs
     - dependencies: optix_ptx_debug, hybrid_ptx_release, basilisk_ptx_release, glsl_compute, glsl_vertex, glsl_frag
   - kobra_debug:

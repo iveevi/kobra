@@ -5,7 +5,12 @@
 #include "core.cuh"
 #include "math.cuh"
 
-// TODO: namespace
+namespace kobra {
+
+namespace cuda {
+
+using Seed = float3 &;
+
 KCUDA_INLINE KCUDA_HOST_DEVICE
 uint3 pcg3d(uint3 v)
 {
@@ -21,17 +26,7 @@ uint3 pcg3d(uint3 v)
 }
 
 KCUDA_INLINE KCUDA_HOST_DEVICE
-unsigned int rand(unsigned int lim, float3 &seed)
-{
-	uint3 v = *reinterpret_cast <uint3*> (&seed);
-	v = pcg3d(v);
-	unsigned int r = (v.x + v.y - v.z) % lim;
-	*reinterpret_cast <uint3*> (&seed) = v;
-	return r;
-}
-
-KCUDA_INLINE KCUDA_HOST_DEVICE
-float3 random3(float3 &seed)
+float3 pcg3f(Seed seed)
 {
 	uint3 v = *reinterpret_cast <uint3*> (&seed);
 	v = pcg3d(v);
@@ -43,6 +38,26 @@ float3 random3(float3 &seed)
 }
 
 KCUDA_INLINE KCUDA_HOST_DEVICE
+float rand_uniform(Seed seed)
+{
+	seed = pcg3f(seed);
+	return fract(seed.x);
+}
+
+KCUDA_INLINE KCUDA_HOST_DEVICE
+unsigned int rand_uniform(unsigned int lim, Seed seed)
+{
+	return static_cast <unsigned int> (rand_uniform(seed) * lim);
+}
+
+KCUDA_INLINE KCUDA_HOST_DEVICE
+float3 rand_uniform_3f(Seed seed)
+{
+	seed = pcg3f(seed);
+	return fract(seed);
+}
+
+/* KCUDA_INLINE KCUDA_HOST_DEVICE
 float3 random_sphere(float3 &seed)
 {
 	float3 r = random3(seed);
@@ -57,6 +72,10 @@ float3 random_sphere(float3 &seed)
 	float z = u;
 
 	return float3 {x, y, z};
+} */
+
+}
+
 }
 
 #endif

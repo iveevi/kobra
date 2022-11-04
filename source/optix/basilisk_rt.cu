@@ -19,7 +19,7 @@ void make_ray(uint3 idx,
 	float yoffset = parameters.yoffset[yoff];
 	radius = sqrt(xoffset * xoffset + yoffset * yoffset)/sqrt(0.5f); */
 
-	random3(seed);
+	pcg3f(seed);
 	
 	float xoffset = fract(seed.x) - 0.5f;
 	float yoffset = fract(seed.y) - 0.5f;

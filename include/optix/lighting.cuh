@@ -116,18 +116,18 @@ struct TriangleLight {
 // Sampling methods
 // TODO: move else where
 KCUDA_INLINE KCUDA_HOST_DEVICE
-float3 sample_area_light(QuadLight light, float3 &seed)
+float3 sample_area_light(QuadLight light, cuda::Seed seed)
 {
-	float3 rand = random3(seed);
+	float3 rand = cuda::pcg3f(seed);
 	float u = fract(rand.x);
 	float v = fract(rand.y);
 	return light.a + u * light.ab + v * light.ac;
 }
 
 KCUDA_INLINE KCUDA_HOST_DEVICE
-float3 sample_area_light(TriangleLight light, float3 &seed)
+float3 sample_area_light(TriangleLight light, cuda::Seed seed)
 {
-	float3 rand = random3(seed);
+	float3 rand = cuda::pcg3f(seed);
 	float u = fract(rand.x);
 	float v = fract(rand.y);
 	
@@ -146,20 +146,22 @@ float3 Ld_light(const Light &light, float3 x, float3 wo, float3 n,
 		cuda::Material mat, bool entering,
 		float3 &seed, float &light_pdf)
 {
-	float3 lpos = sample_area_light(light, seed);
+	// PDF for sampling point on diffuse light
 	light_pdf = 1.0f/light.area();
+
+	float3 lpos = sample_area_light(light, seed);
 
 	float3 wi = normalize(lpos - x);
 	float R = length(lpos - x);
+
+	bool occluded = is_occluded(x, wi, R);
+	if (occluded)
+		return make_float3(0.0f);
 
 	float3 f = cuda::brdf(mat, n, wi, wo, entering, mat.type);
 
 	float ldot = abs(dot(light.normal(), wi));
 	float geometric = ldot * abs(dot(n, wi)) / (R * R);
-
-	bool occluded = is_occluded(x, wi, R);
-	if (occluded)
-		return make_float3(0.0f);
 
 	return f * light.intensity * geometric;
 }

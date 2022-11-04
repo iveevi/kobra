@@ -25,3 +25,6 @@
 [submodule "thirdparty/libffi"]
 	path = thirdparty/libffi
 	url = https://github.com/libffi/libffi.git
+[submodule "thirdparty/ImageMagick"]
+	path = thirdparty/ImageMagick
+	url = https://github.com/ImageMagick/ImageMagick.git
