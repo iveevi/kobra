@@ -37,7 +37,7 @@ void make_ray(uint3 idx,
 __forceinline__ __device__
 void accumulate(float4 &dst, float4 sample)
 {
-	if (parameters.accumulate && false) {
+	if (parameters.accumulate) {
 		float4 prev = dst;
 		int count = parameters.samples;
 		dst = (prev * count + sample)/(count + 1);

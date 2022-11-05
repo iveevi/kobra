@@ -212,11 +212,11 @@ struct FresnelSpecular {
 		float eta = rand_uniform(seed);
 		if (eta < F) {
 			out = Shading::eReflection;
-			return {1, 0, 0};
+			// return {1, 0, 0};
 			return reflect(-wo, n);
 		} else {
 			out = Shading::eTransmission;
-			return {0, 0, 1};
+			// return {0, 0, 1};
 			return refract(wo, n, 1/mat.refraction);
 		}
 	}

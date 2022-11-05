@@ -62,16 +62,51 @@ FullLightSample sample_direct(Seed seed)
 
 // Compute direct lighting for a given sample
 __device__ __forceinline__
-float3 direct_at(const SurfaceHit &sh, const FullLightSample &fls, float3 D, float d)
+float3 direct_unoccluded(const SurfaceHit &sh, float3 Le, float3 normal, float3 D, float d)
 {
 	// Assume that the light is visible
 	// TODO: evaluate all lobes...
 	float3 rho = cuda::brdf(sh, D, eDiffuse);
 
-	float ldot = abs(dot(fls.normal, D));
+	float ldot = abs(dot(normal, D));
 	float geometric = ldot * abs(dot(sh.n, D))/(d * d);
 
-	return rho * fls.Le * geometric;
+	return rho * Le * geometric;
+}
+
+__device__ __forceinline__
+float3 direct_occluded(const SurfaceHit &sh, float3 Le, float3 normal, float3 D, float d)
+{
+	bool occluded = is_occluded(sh.x, D, d);
+
+	float3 Li = make_float3(0.0f);
+	if (!occluded) {
+		float3 rho = brdf(sh, D, eDiffuse);
+
+		float ldot = abs(dot(normal, D));
+		float geometric = ldot * abs(dot(sh.n, D))/(d * d);
+
+		Li = rho * Le * geometric;
+	}
+
+	return Li;
+}
+
+// Updating a reservoir
+__device__ __forceinline__
+bool reservoir_update(LightReservoir *reservoir, const LightSample &sample, float weight, Seed seed)
+{
+	reservoir->weight += weight;
+
+	float eta = rand_uniform(seed);
+	bool selected = (eta * reservoir->weight) < weight;
+
+	if (selected)
+		reservoir->sample = sample;
+
+	reservoir->count++;
+
+	return selected;
 }
 
 // Get direct lighting using RIS
@@ -92,16 +127,11 @@ float3 direct_lighting_ris(const SurfaceHit &sh, Seed seed)
 		FullLightSample fls = sample_direct(seed);
 
 		// Compute lighting
-		// TODO: method
 		float3 D = fls.point - sh.x;
 		float d = length(D);
 		D /= d;
 
-		bool occluded = is_occluded(sh.x, D, d);
-		
-		float3 Li = make_float3(0.0f);
-		if (!occluded)
-			Li = direct_at(sh, fls, D, d);
+		float3 Li = direct_occluded(sh, fls.Le, fls.normal, D, d);
 
 		// Resampling
 		float target = length(Li);
@@ -109,28 +139,19 @@ float3 direct_lighting_ris(const SurfaceHit &sh, Seed seed)
 
 		float w = (pdf > 0.0f) ? target/pdf : 0.0f;
 
-		reservoir.weight += w;
-
-		float p = w/reservoir.weight;
-		float eta = rand_uniform(seed);
-
-		if (eta < p || reservoir.count == 0) {
-			reservoir.sample = LightSample {
-				.contribution = Li,
-				.target = target,
-				.type = fls.type,
-				.index = fls.index
-			};
-		}
-
-		reservoir.count++;
+		reservoir_update(&reservoir, LightSample {
+			.value = Li,
+			.target = target,
+			.type = fls.type,
+			.index = fls.index
+		}, w, seed);
 	}
 
 	// Get final sample and contribution
 	LightSample sample = reservoir.sample;
 	float W = (sample.target > 0) ? reservoir.weight/(M * sample.target) : 0.0f;
 
-	return W * sample.contribution;
+	return W * sample.value;
 }
 
 // Get direct lighting using Temporal RIS
@@ -146,7 +167,6 @@ float3 direct_lighting_temporal_ris(const SurfaceHit &sh, RayPacket *rp)
 		reservoir->mis = 0.0f;
 	}
 
-	// TODO: reset reservoir if needed
 	// TODO: temporal reprojection?
 
 	// Get direct lighting sample
@@ -157,11 +177,7 @@ float3 direct_lighting_temporal_ris(const SurfaceHit &sh, RayPacket *rp)
 	float d = length(D);
 	D /= d;
 
-	bool occluded = is_occluded(sh.x, D, d);
-
-	float3 Li = make_float3(0.0f);
-	if (!occluded)
-		Li = direct_at(sh, fls, D, d);
+	float3 Li = direct_occluded(sh, fls.Le, fls.normal, D, d);
 
 	// Resampling
 	float target = length(Li);
@@ -169,28 +185,183 @@ float3 direct_lighting_temporal_ris(const SurfaceHit &sh, RayPacket *rp)
 
 	float w = (pdf > 0.0f) ? target/pdf : 0.0f;
 
-	reservoir->weight += w;
-
-	float p = w/reservoir->weight;
-	float eta = rand_uniform(rp->seed);
-
-	if (eta < p || reservoir->count == 0) {
-		reservoir->sample = LightSample {
-			.contribution = Li,
-			.target = target,
-			.type = fls.type,
-			.index = fls.index
-		};
-	}
-
-	reservoir->count++;
+	reservoir_update(reservoir, LightSample {
+		.value = Li,
+		.target = target,
+		.type = fls.type,
+		.index = fls.index
+	}, w, rp->seed);
 
 	// Get final sample and contribution
 	LightSample sample = reservoir->sample;
 	float denominator = reservoir->count * sample.target;
 	float W = (sample.target > 0) ? reservoir->weight/denominator : 0.0f;
 
-	return W * sample.contribution;
+	return W * sample.value;
+}
+
+// Get direct lighting using Spatio-Temporal RIS (ReSTIR)
+__device__
+float3 direct_lighting_restir(const SurfaceHit &sh, RayPacket *rp)
+{
+	// Get the reservoir
+	LightReservoir *temporal = &parameters.advanced.r_lights[rp->index];
+	if (parameters.samples == 0) {
+		temporal->sample = LightSample {};
+		temporal->count = 0;
+		temporal->weight = 0.0f;
+		temporal->mis = 0.0f;
+	}
+
+	// Get direct lighting sample
+	FullLightSample fls = sample_direct(rp->seed);
+
+	// Compute target function (unocculted lighting)
+	float3 D = fls.point - sh.x;
+	float d = length(D);
+	D /= d;
+
+	float3 Li = direct_unoccluded(sh, fls.Le, fls.normal, D, d);
+
+	// Temporal Resampling
+	float target = length(Li);
+	float pdf = fls.pdf;
+
+	float w = (pdf > 0.0f) ? target/pdf : 0.0f;
+
+	reservoir_update(temporal, LightSample {
+		.value = fls.Le,
+		.point = fls.point,
+		.normal = fls.normal,
+		.target = target,
+		.type = fls.type,
+		.index = fls.index
+	}, w, rp->seed);
+
+	// Spatial Resampling
+	LightReservoir spatial {
+		.sample = LightSample {},
+		.count = 0,
+		.weight = 0.0f,
+		.mis = 0.0f,
+	};
+
+	// Add current sample
+	int Z = 0;
+
+	{
+		// Compute unbiased weight
+		LightSample sample = temporal->sample;
+		float denominator = temporal->count * sample.target;
+		float W = (sample.target > 0) ? temporal->weight/denominator : 0.0f;
+
+		// Compute value and target
+		D = sample.point - sh.x;
+		d = length(D);
+		D /= d;
+
+		float3 Li = direct_occluded(sh, sample.value, sample.normal, D, d);
+
+		// Add to the reservoir
+		float target = length(Li);
+
+		float w = target * W * temporal->count;
+
+		spatial.weight += w;
+
+		float p = w/spatial.weight;
+		float eta = rand_uniform(rp->seed);
+
+		if (eta < p || spatial.count == 0) {
+			spatial.sample = LightSample {
+				.value = Li,
+				.target = target,
+				.type = sample.type,
+				.index = sample.index
+			};
+		}
+
+		spatial.count += temporal->count;
+		if (target > 0.0f)
+			Z += temporal->count;
+	}
+
+	// Sample various neighboring reservoirs
+	const int WIDTH = parameters.resolution.x;
+	const int HEIGHT = parameters.resolution.y;
+
+	const int SAMPLES = 0;
+	const float SAMPLING_RADIUS = min(WIDTH, HEIGHT) * 0.1f;
+
+	int ix = rp->index % WIDTH;
+	int iy = rp->index / WIDTH;
+
+	for (int i = 0; i < SAMPLES; i++) {
+		// Get offset
+		float3 eta = rand_uniform_3f(rp->seed);
+
+		float radius = SAMPLING_RADIUS * sqrt(eta.x);
+		float theta = 2.0f * M_PI * eta.y;
+
+		int offx = (int) floorf(radius * cosf(theta));
+		int offy = (int) floorf(radius * sinf(theta));
+
+		int nix = ix + offx;
+		int niy = iy + offy;
+
+		if (niy < 0 || niy >= HEIGHT || nix < 0 || nix >= WIDTH)
+			continue;
+
+		int ni = niy * WIDTH + nix;
+
+		// Get the reservoir
+		LightReservoir *reservoir = &parameters.advanced.r_lights[ni];
+
+		// Get sample and resample
+		LightSample sample = reservoir->sample;
+		float denominator = reservoir->count * sample.target;
+		float W = (sample.target > 0) ? reservoir->weight/denominator : 0.0f;
+
+		// Compute value and target
+		D = sample.point - sh.x;
+		d = length(D);
+		D /= d;
+
+		float3 Li = direct_occluded(sh, sample.value, sample.normal, D, d);
+
+		// Add to the reservoir
+		float target = length(Li);
+
+		float w = target * W * reservoir->count;
+
+		spatial.weight += w;
+
+		float p = w/spatial.weight;
+		if (eta.z < p || spatial.count == 0) {
+			spatial.sample = LightSample {
+				.value = Li,
+				.target = target,
+				.type = sample.type,
+				.index = sample.index
+			};
+		}
+
+		spatial.count += reservoir->count;
+		if (target > 0.0f)
+			Z += reservoir->count;
+	}
+
+	// Get final sample's contribution	
+	LightSample sample = spatial.sample;
+	float denominator = Z * sample.target;
+	float W = (sample.target > 0) ? spatial.weight/denominator : 0.0f;
+
+	// Evaluate the integrand
+	D = sample.point - sh.x;
+	d = length(D);
+	D /= d;
+
+	return W * sample.value;
 }
 
 // Closest hit program for ReSTIR
@@ -212,7 +383,8 @@ extern "C" __global__ void __closesthit__restir()
 	};
 
 	// float3 direct = direct_lighting_ris(surface_hit, rp->seed);
-	float3 direct = direct_lighting_temporal_ris(surface_hit, rp);
+	// float3 direct = direct_lighting_temporal_ris(surface_hit, rp);
+	float3 direct = direct_lighting_restir(surface_hit, rp);
 	if (material.type == Shading::eEmissive)
 		direct += material.emission;
 	
