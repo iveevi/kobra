@@ -137,8 +137,17 @@ extern "C" __global__ void __closesthit__ch()
 	// TODO: use more complex shadow bias functions
 	// TODO: an easier check for transmissive objects
 	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
+	
+	// Construct SurfaceHit instance for lighting calculations
+	SurfaceHit surface_hit {
+		.mat = material,
+		.entering = entering,
+		.n = n,
+		.wo = wo,
+		.x = x,
+	};
 
-	float3 direct = Ld <false> (x, wo, n, material, entering, rp->seed);
+	float3 direct = Ld(surface_hit, rp->seed);
 	if (material.type == Shading::eEmissive)
 		direct += material.emission;
 
@@ -147,7 +156,7 @@ extern "C" __global__ void __closesthit__ch()
 	float3 wi;
 	float pdf;
 
-	float3 f = eval(material, n, wo, entering, wi, pdf, out, rp->seed);
+	float3 f = eval(surface_hit, wi, pdf, out, rp->seed);
 
 	// Get threshold value for current ray
 	float3 T = f * abs(dot(wi, n))/pdf;

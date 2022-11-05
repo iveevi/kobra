@@ -420,8 +420,6 @@ struct MotionCapture : public kobra::BaseApp {
 		static float px = 0.0f;
 		static float py = 0.0f;
 
-		static glm::vec2 previous_dir {0.0f, 0.0f};
-
 		static float yaw = 0.0f;
 		static float pitch = 0.0f;
 
@@ -431,7 +429,6 @@ struct MotionCapture : public kobra::BaseApp {
 		// Deltas and directions
 		float dx = event.xpos - px;
 		float dy = event.ypos - py;
-		glm::vec2 dir {dx, dy};
 		
 		// Check if panning
 		static bool dragging = false;
@@ -450,7 +447,7 @@ struct MotionCapture : public kobra::BaseApp {
 			alt_dragging = false;
 
 		// Pan only when dragging
-		if (dragging || alt_dragging) {
+		if (dragging | alt_dragging) {
 			yaw -= dx * sensitivity;
 			pitch -= dy * sensitivity;
 
@@ -471,8 +468,6 @@ struct MotionCapture : public kobra::BaseApp {
 		// Update previous position
 		px = event.xpos;
 		py = event.ypos;
-
-		previous_dir = dir;
 	}
 	
 	// Keyboard callback

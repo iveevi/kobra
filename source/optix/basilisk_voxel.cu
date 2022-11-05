@@ -888,8 +888,17 @@ extern "C" __global__ void __closesthit__voxel()
 	// TODO: use more complex shadow bias functions
 	// TODO: an easier check for transmissive objects
 	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
+	
+	// Construct SurfaceHit instance for lighting calculations
+	SurfaceHit surface_hit {
+		.mat = material,
+		.entering = entering,
+		.n = n,
+		.wo = wo,
+		.x = x,
+	};
 
-	float3 direct = Ld <false> (x, wo, n, material, entering, rp->seed);
+	float3 direct = Ld(surface_hit, rp->seed);
 	if (material.type == Shading::eEmissive)
 		direct += material.emission;
 
@@ -911,7 +920,7 @@ extern "C" __global__ void __closesthit__voxel()
 		float3 wi;
 		float pdf;
 
-		float3 f = eval(material, n, wo, entering, wi, pdf, out, rp->seed);
+		float3 f = eval(surface_hit, wi, pdf, out, rp->seed);
 
 		// Get threshold value for current ray
 		trace <eRegular> (x, wi, i0, i1);
@@ -936,8 +945,8 @@ extern "C" __global__ void __closesthit__voxel()
 	rp->value = direct;
 	if (length(sample) > 0) {
 		float W = wsum/length(sample);
-		float3 f = brdf(material, n, direction, wo, entering, eDiffuse);
-		float pdf = kobra::cuda::pdf(material, n, direction, wo, entering, eDiffuse);
+		float3 f = brdf(surface_hit, direction, eDiffuse);
+		float pdf = kobra::cuda::pdf(surface_hit, direction, eDiffuse);
 		float geometric = abs(dot(n, direction));
 
 		rp->value += W * geometric * f * sample;

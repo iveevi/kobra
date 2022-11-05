@@ -142,26 +142,25 @@ float3 sample_area_light(TriangleLight light, cuda::Seed seed)
 // Direct lighting for Next Event Estimation
 template <class Light>
 KCUDA_HOST_DEVICE
-float3 Ld_light(const Light &light, float3 x, float3 wo, float3 n,
-		cuda::Material mat, bool entering,
-		float3 &seed, float &light_pdf)
+float3 Ld_light(const Light &light, const cuda::SurfaceHit &sh, float &light_pdf, cuda::Seed seed)
 {
 	// PDF for sampling point on diffuse light
 	light_pdf = 1.0f/light.area();
 
 	float3 lpos = sample_area_light(light, seed);
 
-	float3 wi = normalize(lpos - x);
-	float R = length(lpos - x);
+	float3 wi = normalize(lpos - sh.x);
+	float R = length(lpos - sh.x);
 
-	bool occluded = is_occluded(x, wi, R);
+	bool occluded = is_occluded(sh.x, wi, R);
 	if (occluded)
 		return make_float3(0.0f);
 
-	float3 f = cuda::brdf(mat, n, wi, wo, entering, mat.type);
+	// TODO: brdf should evaluate all lobes...
+	float3 f = cuda::brdf(sh, wi, eDiffuse);
 
 	float ldot = abs(dot(light.normal(), wi));
-	float geometric = ldot * abs(dot(n, wi)) / (R * R);
+	float geometric = ldot * abs(dot(sh.n, wi)) / (R * R);
 
 	return f * light.intensity * geometric;
 }

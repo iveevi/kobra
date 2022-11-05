@@ -44,8 +44,7 @@ bool shadow_visibility(float3 origin, float3 dir, float R)
 }
 
 // Trace ray into scene and get relevant information
-__device__ float3 Ld(float3 x, float3 wo, float3 n,
-		Material mat, bool entering, float3 &seed)
+__device__ float3 Ld(const SurfaceHit &sh, Seed seed)
 {
 	int quad_count = ht_params.lights.quad_count;
 	int tri_count = ht_params.lights.triangle_count;
@@ -64,10 +63,10 @@ __device__ float3 Ld(float3 x, float3 wo, float3 n,
 		float lpdf;
 		if (i < quad_count) {
 			QuadLight light = ht_params.lights.quads[i];
-			contr += Ld_light(light, x, wo, n, mat, entering, seed, lpdf);
+			contr += Ld_light(light, sh, lpdf, seed);
 		} else {
 			TriangleLight light = ht_params.lights.triangles[i - quad_count];
-			contr += Ld_light(light, x, wo, n, mat, entering, seed, lpdf);
+			contr += Ld_light(light, sh, lpdf, seed);
 		}
 	}
 
@@ -88,16 +87,28 @@ struct RayPacket {
 __device__
 float3 compute_radiance(uint3 idx, float3 x, float3 n, float3 wo, const Material &mat)
 {
+	// Offset by normal
+	x += (mat.type == Shading::eTransmission ? -1 : 1) * n * eps;
+
+	// Construct SurfaceHit instance for lighting calculations
+	SurfaceHit surface_hit {
+		.mat = mat,
+		.entering = false, // FIXME: Need to pass this in
+		.n = n,
+		.wo = wo,
+		.x = x,
+	};
+
 	// Store color
 	float3 seed {float(idx.x), float(idx.y), ht_params.time};
-	float3 direct = Ld(x, wo, n, mat, true, seed);
+	float3 direct = Ld(surface_hit, seed);
 
 	// Generate new ray
 	Shading out;
 	float3 wi;
 	float pdf;
 
-	float3 f = eval(mat, n, wo, true, wi, pdf, out, seed);
+	float3 f = eval(surface_hit, wi, pdf, out, seed);
 
 	// Store the result
 	RayPacket rp {
@@ -397,8 +408,19 @@ extern "C" __global__ void __closesthit__ch()
 	float3 wo = -optixGetWorldRayDirection();
 	float3 n = calculate_normal(hit, triangle, bary, uv, entering);
 	float3 x = interpolate(hit->vertices, triangle, bary);
+	
+	// Offset by normal
+	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
+	
+	SurfaceHit surface_hit {
+		.mat = material,
+		.entering = entering,
+		.n = n,
+		.wo = wo,
+		.x = x,
+	};
 
-	float3 direct = Ld(x, wo, n, material, entering, rp->seed);
+	float3 direct = Ld(surface_hit, rp->seed);
 	rp->value += rp->throughput * direct;
 
 	// Generate new ray
@@ -406,7 +428,7 @@ extern "C" __global__ void __closesthit__ch()
 	float3 wi;
 	float pdf;
 
-	float3 f = eval(material, n, wo, entering, wi, pdf, out, rp->seed);
+	float3 f = eval(surface_hit, wi, pdf, out, rp->seed);
 	if (length(f) < 1e-6f)
 		return;
 	

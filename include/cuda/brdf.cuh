@@ -14,11 +14,11 @@ namespace cuda {
 
 // Surface hit structure for BSDF calculations
 struct SurfaceHit {
-	float3 x;
-	float3 wo;
-	float3 n;
-	Material mat;
-	bool entering;
+	Material	mat;
+	bool		entering;
+	float3		n;
+	float3		wo;
+	float3		x;
 };
 
 // Smith shadow-masking function (single)
@@ -318,72 +318,72 @@ struct GGX {
 
 // Evaluate BRDF of material
 KCUDA_INLINE KCUDA_HOST_DEVICE
-float3 brdf(const Material &mat, float3 n, float3 wi,
-		float3 wo, bool entering, Shading out)
+float3 brdf(const SurfaceHit &sh, float3 wi, Shading out)
 {
 	// TODO: diffuse should be in conjunction with the material
+	// TODO: plus specular lobe in either case...
 	if (out & Shading::eTransmission)
-		return SpecularTransmission::brdf(mat, n, wi, wo, entering, out);
+		return SpecularTransmission::brdf(sh.mat, sh.n, wi, sh.wo, sh.entering, out);
 	
-	return mat.diffuse/M_PI + GGX::brdf(mat, n, wi, wo, entering, out);
+	return sh.mat.diffuse/M_PI + GGX::brdf(sh.mat, sh.n, wi, sh.wo, sh.entering, out);
 }
 
 // Evaluate PDF of BRDF
 KCUDA_INLINE KCUDA_HOST_DEVICE
-float pdf(const Material &mat, float3 n, float3 wi,
-		float3 wo, bool entering, Shading out)
+float pdf(const SurfaceHit &sh, float3 wi, Shading out)
 {
 	if (out & Shading::eTransmission)
-		return SpecularTransmission::pdf(mat, n, wi, wo, entering, out);
+		return SpecularTransmission::pdf(sh.mat, sh.n, wi, sh.wo, sh.entering, out);
 	
-	return GGX::pdf(mat, n, wi, wo, entering, out);
+	return GGX::pdf(sh.mat, sh.n, wi, sh.wo, sh.entering, out);
 }
 
 // Sample BRDF
 KCUDA_INLINE KCUDA_HOST_DEVICE
-float3 sample(const Material &mat, float3 n, float3 wo,
-		bool entering, float3 &seed, Shading &out)
+float3 sample(const SurfaceHit &sh, Shading &out, Seed seed)
 {
-	if (mat.type & Shading::eTransmission)
-		return SpecularTransmission::sample(mat, n, wo, entering, seed, out);
+	if (sh.mat.type & Shading::eTransmission)
+		return SpecularTransmission::sample(sh.mat, sh.n, sh.wo, sh.entering, seed, out);
 
-	return GGX::sample(mat, n, wo, entering, seed, out);
+	return GGX::sample(sh.mat, sh.n, sh.wo, sh.entering, seed, out);
 }
 
 // Evaluate BRDF: sample, brdf, pdf
 template <class BxDF>
 KCUDA_HOST_DEVICE __forceinline__
-float3 eval
-(const Material &mat, float3 n, float3 wo, bool entering,
-		float3 &wi, float &in_pdf, Shading &out, float3 &seed)
+float3 eval(const SurfaceHit &sh, float3 &wi, float &in_pdf, Shading &out, Seed seed)
 {
 	// TODO: pack ags into struct
-	wi = sample(mat, n, wo, entering, seed, out);
+	wi = sample(sh, out, seed);
+	// wi = sample(mat, n, wo, entering, seed, out);
 	if (length(wi) < 1e-6f)
 	 	return make_float3(0.0f);
 
-	in_pdf = pdf(mat, n, wi, wo, entering, out);
-	return brdf(mat, n, wi, wo, entering, out);
+	in_pdf = pdf(sh, wi, out);
+	return brdf(sh, wi, out);
+
+	// in_pdf = pdf(mat, n, wi, wo, entering, out);
+	// return brdf(mat, n, wi, wo, entering, out);
 }
 
 template <>
 KCUDA_HOST_DEVICE __forceinline__
 float3 eval <SpecularTransmission>
-(const Material &mat, float3 n, float3 wo, bool entering,
-		float3 &wi, float &pdf, Shading &out, float3 &seed)
+(const SurfaceHit &sh, float3 &wi, float &in_pdf, Shading &out, Seed seed)
 {
 	out = Shading::eTransmission;
-	float eta_i = entering ? 1 : mat.refraction;
-	float eta_t = entering ? mat.refraction : 1;
+	float eta_i = sh.entering ? 1 : sh.mat.refraction;
+	float eta_t = sh.entering ? sh.mat.refraction : 1;
 
-	if (dot(n, wo) < 0)
+	float3 n = sh.n;
+	if (dot(n, sh.wo) < 0)
 		n = -n;
 
 	float eta = eta_i/eta_t;
-	wi = refract(wo, n, eta);
+	wi = refract(sh.wo, n, eta);
 	if (length(wi) < 1e-6f)
 		return make_float3(0);
-	pdf = 1;
+	in_pdf = 1;
 
 	float fr = fr_dielectric(dot(n, wi), eta_i, eta_t);
 	return make_float3(1 - fr) * (eta * eta)/abs(dot(n, wi));
@@ -392,17 +392,17 @@ float3 eval <SpecularTransmission>
 template <>
 KCUDA_HOST_DEVICE __forceinline__
 float3 eval <SpecularReflection>
-(const Material &mat, float3 n, float3 wo, bool entering,
-		float3 &wi, float &pdf, Shading &out, float3 &seed)
+(const SurfaceHit &sh, float3 &wi, float &in_pdf, Shading &out, Seed seed)
 {
-	float eta_i = entering ? 1 : mat.refraction;
-	float eta_t = entering ? mat.refraction : 1;
+	float eta_i = sh.entering ? 1 : sh.mat.refraction;
+	float eta_t = sh.entering ? sh.mat.refraction : 1;
 
-	if (dot(n, wo) < 0)
+	float3 n = sh.n;
+	if (dot(n, sh.wo) < 0)
 		n = -n;
 
-	wi = reflect(-wo, n);
-	pdf = 1;
+	wi = reflect(-sh.wo, n);
+	in_pdf = 1;
 
 	float fr = fr_dielectric(dot(n, wi), eta_i, eta_t);
 	return make_float3(fr)/abs(dot(n, wi));
@@ -411,43 +411,41 @@ float3 eval <SpecularReflection>
 template <>
 KCUDA_HOST_DEVICE __forceinline__
 float3 eval <FresnelSpecular>
-(const Material &mat, float3 n, float3 wo, bool entering,
-		float3 &wi, float &pdf, Shading &out, float3 &seed)
+(const SurfaceHit &sh, float3 &wi, float &in_pdf, Shading &out, Seed seed)
 {
-	float eta_i = entering ? 1 : mat.refraction;
-	float eta_t = entering ? mat.refraction : 1;
+	float eta_i = sh.entering ? 1 : sh.mat.refraction;
+	float eta_t = sh.entering ? sh.mat.refraction : 1;
 
-	float F = fr_dielectric(dot(wo, n), eta_i, eta_t);
+	float F = fr_dielectric(dot(sh.wo, sh.n), eta_i, eta_t);
 
 	float eta = rand_uniform(seed);
 	if (eta < F) {
-		wi = reflect(-wo, n);
-		pdf = F;
+		wi = reflect(-sh.wo, sh.n);
+		in_pdf = F;
 		// float fr = kobra::cuda::fr_dielectric(dot(n, wi), eta_i, eta_t);
-		return make_float3(F)/abs(dot(n, wi));
+		return make_float3(F)/abs(dot(sh.n, wi));
 	} else {
 		out = Shading::eTransmission;
 		float eta = eta_i/eta_t;
-		wi = refract(wo, n, eta);
+		wi = refract(sh.wo, sh.n, eta);
 		if (length(wi) < 1e-6f)
 			return make_float3(0);
 
-		pdf = 1 - F;
+		in_pdf = 1 - F;
 		// float fr = kobra::cuda::fr_dielectric(dot(n, wi), eta_i, eta_t);
-		return make_float3(1 - F) * (eta * eta)/abs(dot(n, wi));
+		return make_float3(1 - F) * (eta * eta)/abs(dot(sh.n, wi));
 	}
 }
 
 // TOdo: union in material for different shading models
 KCUDA_HOST_DEVICE __forceinline__
-float3 eval(const Material &mat, float3 n, float3 wo, bool entering,
-		float3 &wi, float &pdf, Shading &out, float3 &seed)
+float3 eval(const SurfaceHit &sh, float3 &wi, float &in_pdf, Shading &out, Seed seed)
 {
-	if (mat.type & Shading::eTransmission)
-		return eval <SpecularTransmission> (mat, n, wo, entering, wi, pdf, out, seed);
+	if (sh.mat.type & Shading::eTransmission)
+		return eval <SpecularTransmission> (sh, wi, in_pdf, out, seed);
 
 	// Fallback to GGX
-	return eval <GGX> (mat, n, wo, entering, wi, pdf, out, seed);
+	return eval <GGX> (sh, wi, in_pdf, out, seed);
 }
 
 }

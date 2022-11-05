@@ -224,6 +224,9 @@ struct BasiliskParameters {
 	struct {
 		// ReSTIR
 		LightReservoir *r_lights;
+		LightReservoir *r_lights_prev;
+
+		LightReservoir *r_lights_spatial;
 
 		ReSTIR_Reservoir *r_temporal;
 		ReSTIR_Reservoir *r_temporal_prev;

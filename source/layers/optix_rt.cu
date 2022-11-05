@@ -344,27 +344,27 @@ __device__ bool shadow_visibility(float3 origin, float3 dir, float R)
 
 // Direct lighting for specific types of lights
 template <class Light>
-__device__ float3 Ld_light(const Light &light, HitGroupData *hit_data, float3 x, float3 wo, float3 n,
-		Material mat, bool entering, float3 &seed)
+__device__ float3 Ld_light(const Light &light, const SurfaceHit &sh, Seed seed)
 {
 	float3 contr_nee {0.0f};
 	float3 contr_brdf {0.0f};
 
 	// NEE
 	float3 lpos = sample_area_light(light, seed);
-	float3 wi = normalize(lpos - x);
-	float R = length(lpos - x);
+	float3 wi = normalize(lpos - sh.x);
+	float R = length(lpos - sh.x);
 
-	float3 f = brdf(mat, n, wi, wo, entering, mat.type) * abs(dot(n, wi));
+	float3 f = brdf(sh, wi, eDiffuse)
+		* abs(dot(sh.n, wi));
 
 	float ldot = abs(dot(light.normal(), wi));
 	if (ldot > 1e-6) {
 		float pdf_light = (R * R)/(light.area() * ldot);
 
 		// TODO: how to decide ray type for this?
-		float pdf_brdf = pdf(mat, n, wi, wo, entering, mat.type);
+		float pdf_brdf = pdf(sh, wi, eDiffuse);
 
-		bool vis = shadow_visibility(x, wi, R);
+		bool vis = shadow_visibility(sh.x, wi, R);
 		if (pdf_light > 1e-9 && vis) {
 			float weight = power(pdf_light, pdf_brdf);
 			float3 intensity = light.intensity;
@@ -376,7 +376,7 @@ __device__ float3 Ld_light(const Light &light, HitGroupData *hit_data, float3 x,
 	Shading out;
 	float pdf_brdf;
 
-	f = eval(mat, n, wo, entering, wi, pdf_brdf, out, seed) * abs(dot(n, wi));
+	f = eval(sh, wi, pdf_brdf, out, seed) * abs(dot(sh.n, wi));
 	if (length(f) < 1e-6f)
 		return contr_nee;
 
@@ -384,7 +384,7 @@ __device__ float3 Ld_light(const Light &light, HitGroupData *hit_data, float3 x,
 
 	// TODO: need to check intersection for lights specifically (and
 	// arbitrary ones too?)
-	float ltime = light.intersects(x, wi);
+	float ltime = light.intersects(sh.x, wi);
 	if (ltime <= 0.0f)
 		return contr_nee;
 	
@@ -408,8 +408,7 @@ __device__ float3 Ld_light(const Light &light, HitGroupData *hit_data, float3 x,
 }
 
 // Trace ray into scene and get relevant information
-__device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
-		Material mat, bool entering, float3 &seed)
+__device__ float3 Ld(HitGroupData *hit_data, const SurfaceHit &sh, Seed seed)
 {
 
 // #define GROUND_TRUTH
@@ -443,11 +442,11 @@ __device__ float3 Ld(HitGroupData *hit_data, float3 x, float3 wo, float3 n,
 
 	if (i < hit_data->n_quad_lights) {
 		QuadLight light = hit_data->quad_lights[i];
-		return Ld_light(light, hit_data, x, wo, n, mat, entering, seed);
+		return Ld_light(light, sh, seed);
 	}
 
 	TriangleLight light = hit_data->tri_lights[i - hit_data->n_quad_lights];
-	return Ld_light(light, hit_data, x, wo, n, mat, entering, seed);
+	return Ld_light(light, sh, seed);
 
 #endif
 
@@ -585,7 +584,15 @@ extern "C" __global__ void __closesthit__radiance()
 	float3 n = calculate_normal(hit_data, triangle, bary, entering);
 	float3 x = interpolate(hit_data->vertices, triangle, bary);
 
-	float3 direct = Ld(hit_data, x + 1e-3f * n, wo, n, material, entering, rp->seed);
+	SurfaceHit surface_hit {
+		.mat = material,
+		.entering = entering,
+		.n = n,
+		.wo = wo,
+		.x = x + 1e-3f * n,
+	};
+
+	float3 direct = Ld(hit_data, surface_hit, rp->seed);
 
 	// Transfer to payload
 	bool primary = (rp->depth == 0);
@@ -612,7 +619,7 @@ extern "C" __global__ void __closesthit__radiance()
 	float3 wi;
 	float pdf;
 
-	float3 f = eval(material, n, wo, entering, wi, pdf, out, rp->seed);
+	float3 f = eval(surface_hit, wi, pdf, out, rp->seed);
 	if (length(f) < 1e-6f)
 		return;
 

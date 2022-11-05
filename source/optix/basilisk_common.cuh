@@ -218,9 +218,8 @@ float3 Ld_Environment(float3 x, float3 wo, float3 n,
 } */
 
 // Trace ray into scene and get relevant information
-template <bool Resampling>
-__device__ float3 Ld(float3 x, float3 wo, float3 n,
-		Material mat, bool entering, Seed seed)
+__device__
+float3 Ld(const SurfaceHit &sh, Seed seed)
 {
 	int quad_count = parameters.lights.quad_count;
 	int tri_count = parameters.lights.triangle_count;
@@ -254,92 +253,28 @@ __device__ float3 Ld(float3 x, float3 wo, float3 n,
 	// TODO: +1 for envmaps; make more efficient
 	int total_count = quad_count + tri_count;
 
-	if constexpr (!Resampling) {
-		// Regular direct lighting
-		unsigned int i = rand_uniform(seed) * total_count;
+	// Regular direct lighting
+	unsigned int i = rand_uniform(seed) * total_count;
 
-		float3 contr = {0.0f};
-		float pdf = 1.0f/total_count;
+	float3 contr = {0.0f};
+	float pdf = 1.0f/total_count;
 
-		float light_pdf = 0.0f;
-		if (i < quad_count) {
-			QuadLight light = parameters.lights.quads[i];
-			contr = Ld_light(light, x, wo, n, mat, entering, seed, light_pdf);
-		} else if (i < quad_count + tri_count) {
-			int ni = i - quad_count;
-			TriangleLight light = parameters.lights.triangles[ni];
-			contr = Ld_light(light, x, wo, n, mat, entering, seed, light_pdf);
-		} else {
-			// TODO: fix this...
-			// Environment light
-			// contr = Ld_Environment(x, wo, n, mat, entering, seed);
-		}
-
-		pdf *= light_pdf;
-		return contr/pdf;
+	float light_pdf = 0.0f;
+	if (i < quad_count) {
+		QuadLight light = parameters.lights.quads[i];
+		contr = Ld_light(light, sh, light_pdf, seed);
+	} else if (i < quad_count + tri_count) {
+		int ni = i - quad_count;
+		TriangleLight light = parameters.lights.triangles[ni];
+		contr = Ld_light(light, sh, light_pdf, seed);
+	} else {
+		// TODO: fix this...
+		// Environment light
+		// contr = Ld_Environment(x, wo, n, mat, entering, seed);
 	}
 
-	// Resampling direct lighting
-	const int M = 10;
-
-	LightReservoir reservoir {
-		.sample = LightSample {},
-		.count = 0,
-		.weight = 0.0f,
-		.mis = 0.0f,
-	};
-
-	for (int k = 0; k < M; k++) {
-		unsigned int i = rand_uniform(seed) * total_count;
-
-		float3 contr = {0.0f};
-
-		float light_pdf = 0.0f;
-		if (i < quad_count) {
-			QuadLight light = parameters.lights.quads[i];
-			contr = Ld_light(light, x, wo, n,
-				mat, entering,
-				seed, light_pdf
-			);
-		} else if (i < quad_count + tri_count) {
-			int ni = i - quad_count;
-			TriangleLight light = parameters.lights.triangles[ni];
-			contr = Ld_light(light, x, wo, n,
-				mat, entering, 
-				seed, light_pdf
-			);
-		} else {
-			// TODO: fix this...
-			// Environment light
-			// contr = Ld_Environment(x, wo, n, mat, entering, seed);
-		}
-
-		// Insret into reservoir
-		float pdf = light_pdf/float(total_count);
-		float w = (pdf > 0.0f) ? length(contr)/pdf : 0.0f;
-
-		reservoir.weight += w;
-
-		float p = w/reservoir.weight;
-		float eta = rand_uniform(seed);
-
-		if (eta < p || reservoir.count == 0) {
-			reservoir.sample = LightSample {
-				.contribution = contr,
-				.type = -1,
-				.index = -1,
-			};
-		}
-
-		reservoir.count++;
-	}
-
-	// Get final sample and contribution
-	float3 contr = reservoir.sample.contribution;
-	float target = length(contr);
-	float W = (target > 0) ? reservoir.weight/(M * target) : 0.0f;
-
-	return contr * W;
+	pdf *= light_pdf;
+	return contr/pdf;
 
 #endif
 

@@ -543,6 +543,8 @@ static void initialize_optix(Basilisk &layer)
 	std::vector <float> sampling_radii(width * height, radius);
 
 	params.advanced.r_lights = cuda::make_buffer(r_lights);
+	params.advanced.r_lights_prev = cuda::make_buffer(r_lights);
+	params.advanced.r_lights_spatial = cuda::make_buffer(r_lights);
 
 	params.advanced.r_temporal = cuda::make_buffer(r_temporal);
 	params.advanced.r_temporal_prev = cuda::make_buffer(r_temporal);

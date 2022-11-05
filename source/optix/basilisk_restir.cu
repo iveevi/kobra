@@ -65,10 +65,8 @@ __device__ __forceinline__
 float3 direct_at(const SurfaceHit &sh, const FullLightSample &fls, float3 D, float d)
 {
 	// Assume that the light is visible
-	float3 rho = cuda::brdf(sh.mat,
-		sh.n, D, sh.wo,
-		sh.entering, sh.mat.type
-	);
+	// TODO: evaluate all lobes...
+	float3 rho = cuda::brdf(sh, D, eDiffuse);
 
 	float ldot = abs(dot(fls.normal, D));
 	float geometric = ldot * abs(dot(sh.n, D))/(d * d);
@@ -206,11 +204,11 @@ extern "C" __global__ void __closesthit__restir()
 
 	// Construct SurfaceHit instance for lighting calculations
 	SurfaceHit surface_hit {
-		.x = x,
-		.wo = wo,
-		.n = n,
 		.mat = material,
-		.entering = entering
+		.entering = entering,
+		.n = n,
+		.wo = wo,
+		.x = x,
 	};
 
 	// float3 direct = direct_lighting_ris(surface_hit, rp->seed);
@@ -223,7 +221,7 @@ extern "C" __global__ void __closesthit__restir()
 	float3 wi;
 	float pdf;
 
-	float3 f = eval(material, n, wo, entering, wi, pdf, out, rp->seed);
+	float3 f = eval(surface_hit, wi, pdf, out, rp->seed);
 
 	// Get threshold value for current ray
 	float3 T = f * abs(dot(wi, n))/pdf;
