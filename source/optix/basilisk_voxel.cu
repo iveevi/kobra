@@ -2,8 +2,8 @@
 
 // #define VOXEL_SPATIAL_REUSE
 // #define VOXEL_NAIVE_RESERVOIRS
-// #define TEXTURE_MAPPED_RESERVOIRS
-#define BACKUP_RIS
+#define TEXTURE_MAPPED_RESERVOIRS
+// #define BACKUP_RIS
 
 #if defined(VOXEL_SPATIAL_REUSE)
 
@@ -530,9 +530,9 @@ bool update_reservoir(WeightedReservoir <T> *res, const T &sample,
 	// res->count++;
 
 	float q = weight/res->weight;
-	float e = fract(random3(seed)).x;
+	float eta = rand_uniform(seed);
 
-	bool selected = e < q;
+	bool selected = eta < q;
 	if (selected)
 		res->sample = sample;
 
@@ -554,8 +554,8 @@ void merge_reservoir(WeightedReservoir <T> *a, WeightedReservoir <T> *b,
 	a->count = min(a->count + b->count, 20);
 
 	float q = weight/a->weight;
-	float e = fract(random3(seed)).x;
-	if (e < q)
+	float eta = rand_uniform(seed);
+	if (eta < q)
 		a->sample = b->sample;
 }
 
@@ -626,11 +626,11 @@ extern "C" __global__ void __closesthit__voxel()
 	LOAD_INTERSECTION_DATA();
 
 	// Compute projection onto optimal plane
-	float3 xvec = (x - hit->centroid);
+	float3 xvec = (x - hit->centroid) + 0.01 * n;
 	float3 nvec = hit->opt_normal;
-	bool forward = dot(nvec, n) > 0;
 
-// #define USE_CUBE_SPHERE_MAPPING
+	bool forward = dot(nvec, xvec) > 0;
+
 #define USE_PCA_MAPPING
 
 #if defined(USE_SPHERICAL_MAPPING)
@@ -647,6 +647,9 @@ extern "C" __global__ void __closesthit__voxel()
 #elif defined(USE_PCA_MAPPING)
 
 	float3 xproj = xvec - dot(xvec, nvec) * nvec;
+
+	float3 axis0 = hit->opt_tangent;
+	float3 axis1 = hit->opt_bitangent;
 	
 	float u = dot(xproj, hit->opt_tangent);
 	float v = dot(xproj, hit->opt_bitangent);
@@ -657,8 +660,6 @@ extern "C" __global__ void __closesthit__voxel()
 
 	u = (u - u_extent.x)/(u_extent.y - u_extent.x);
 	v = (v - v_extent.x)/(v_extent.y - v_extent.x);
-
-	u = 0.5 * (u + forward);
 
 #elif defined(USE_CUBE_SPHERE_MAPPING)
 
@@ -695,189 +696,63 @@ extern "C" __global__ void __closesthit__voxel()
 	rp->value = make_float3(
 		ix/float(res),
 		iy/float(res),
-		0
+		forward
 	);
-
-	// int mod = (ix + iy) % 2;
-	// rp->value = entering * make_float3(mod, mod, face_index/6.0f);
-	// rp->value = make_float3(mod);
-	// rp->value = make_float3(u,v,0);
+	
 	return;
 
 #endif
 
-	// Check for emissive objects
-	if (hit->material.type == Shading::eEmissive) {
-		rp->value = material.emission;
-		rp->normal = n;
-		rp->albedo = material.diffuse;
-		return;
-	}
-	
-	// Offset by normal
-	// TODO: use more complex shadow bias functions
-	// TODO: an easier check for transmissive objects
-	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
+	// Spatial sampling test for "more continuous" mapping
+	const int SAMPLES = 10;
+	const float SAMPLE_RADIUS = res * 0.1f;
 
-	float3 direct = Ld(x, wo, n, material, entering, rp->seed);
+	float sum_u = 0;
+	float sum_v = 0;
+	float sum_w = 0;
 
-	// Generate new ray
-	Shading out;
-	float3 wi;
-	float pdf;
+	int over_count = 0;
 
-	float3 f = eval(material, n, wo, entering, wi, pdf, out, rp->seed);
-	if (length(wi) + 0.01 < 1) {// TODO: caveat must "return" pos and n
-		// rp->value = direct;
-		rp->value = make_float3(1, 0, 1);
-		return;
-	}
+	for (int i = 0; i < SAMPLES; i++) {
+		float3 eta = rand_uniform_3f(rp->seed);
 
-	// Get threshold value for current ray
-	float3 T = f * abs(dot(wi, n))/pdf;
+		float r = SAMPLE_RADIUS * sqrt(eta.x);
+		float theta = 2.0 * M_PI * eta.y;
 
-	// Update ior
-	rp->ior = material.refraction;
-	rp->depth++;
+		int offx = r * cos(theta);
+		int offy = r * sin(theta);
 
-	// TMRIS
+		int nix = ix + offx;
+		int niy = iy + offy;
 
-	// Get reservoir and lock
-	TMRIS_Reservoir *reservoir = &hit->tmris.f_res[index];
+		bool f = forward;
 
-	int *lock = hit->tmris.f_locks[index];
+		bool over_x = nix < 0 || nix >= res;
+		bool over_y = niy < 0 || niy >= res;
 
-	// NOTE: this dual buffering apparently does a lot... use it more effectively
-	// TODO: capture the effects of this...
-	if (!forward) {
-		reservoir = &hit->tmris.b_res[index];
-		lock = hit->tmris.b_locks[index];
+		if (over_x || over_y) {
+			// Flip
+			if (over_x)
+				nix = ix - offx;
+			if (over_y)
+				niy = iy - offy;
+			f = !f;
+
+			over_count++;
+		}
+
+		// assert(nix >= 0 && nix < res);
+		// assert(niy >= 0 && niy < res);
+
+		sum_u += nix/float(res);
+		sum_v += niy/float(res);
+		sum_w += f;
 	}
 
-	// TODO: check if complete reuse is possible...
-
-	trace <eRegular> (x, wi, i0, i1);
-
-	// TODO: skip reservoir reuse for specular objects for now...
-	float3 value = rp->value;
-	float target = length(value);
-	float weight = target/pdf;
-
-	while (atomicCAS(lock, 0, 1) == 0);
-
-	reservoir->count++;
-	reservoir->weight += weight;
-
-	float p = weight/reservoir->weight;
-	float3 eta = fract(random3(rp->seed));
-
-	if (eta.x < p || reservoir->count == 1) {
-		TMRIS_Sample sample {
-			.value = value,
-			.position = rp->position,
-			.source = x,
-			.normal = n,
-			.direction = wi,
-			.missed = (rp->miss_depth == 1)
-		};
-
-		reservoir->sample = sample;
-	}
-
-	atomicExch(lock, 0);
-
-	// TODO: additional reservoir for this step (in here...)
-
-	// Get a random reservoir on the texture
-	const float SAMPLING_RADIUS = 20.0f;
-
-	eta = fract(random3(rp->seed));
-	float radius = SAMPLING_RADIUS * sqrt(eta.x);
-	float angle = 2.0f * M_PI * eta.y;
-
-	int offx = radius * cos(angle);
-	int offy = radius * sin(angle);
-
-	int nix = ix + offx;
-	int niy = iy + offy;
-
-	// TODO: how efficient/valid is wraparound sampling?
-	nix = (nix + res) % res;
-	niy = (niy + res) % res;
-
-	// Get reservoir and lock
-	reservoir = &hit->tmris.f_res[nix + niy * res];
-	lock = hit->tmris.f_locks[nix + niy * res];
-
-	if (!forward) {
-		reservoir = &hit->tmris.b_res[nix + niy * res];
-		lock = hit->tmris.b_locks[nix + niy * res];
-	}
-
-	while (atomicCAS(lock, 0, 1) == 0);
-	TMRIS_Sample sample = reservoir->sample;
-	float W = reservoir->weight/length(sample.value);
-	W /= reservoir->count;
-	atomicExch(lock, 0);
-
-	// TODO: compute jacobian of shift mapping and mis weights...
-
-	// TODO: account for complete misses...
-	bool occluded = true;
-
-	float3 L = sample.position - x;
-	float dist = length(L);
-	L /= dist;
-
-	occluded &= is_occluded(x, L, dist);
-
-	// Compute Jacobian of reconnection shift mapping
-	float cos_theta_x = abs(dot(sample.direction, sample.normal));
-	float cos_theta_y = abs(dot(L, sample.normal));
-
-	float dist_x = length(sample.position - sample.source);
-	float dist_y = dist;
-
-	float jacobian = (cos_theta_y/cos_theta_x);
-	jacobian *= (dist_x * dist_x)/(dist_y * dist_y);
-
-	W *= jacobian;
-
-	// Compute final indirect
-	f = brdf(material, n, sample.direction, wi, entering, out);
-	float3 indirect = (1 - occluded) * sample.value; // TODO: incorporate
-							 // proper W
-
-	// Compute full lighting of reused ray
-	rp->value = direct + f * indirect * abs(dot(wi, n));
-
-	// NOTE: implement spatial sampling with current traced sample
-	// + spatial sample like above
-
-	// Pass through features
-	rp->normal = n;
-	rp->albedo = material.diffuse;
+	rp->value = make_float3(sum_u, sum_v, sum_w)/float(SAMPLES);
 }
 
 #elif defined(BACKUP_RIS)
-
-// Sample from discrete distribution
-KCUDA_INLINE static __device__
-int sample_discrete(float *pdfs, int num_pdfs, float eta)
-{
-	float sum = 0.0f;
-	for (int i = 0; i < num_pdfs; ++i)
-		sum += pdfs[i];
-	
-	float cdf = 0.0f;
-	for (int i = 0; i < num_pdfs; ++i) {
-		cdf += pdfs[i] / sum;
-		if (eta < cdf)
-			return i;
-	}
-
-	return num_pdfs - 1;
-}
 
 extern "C" __global__ void __closesthit__voxel()
 {
@@ -885,8 +760,6 @@ extern "C" __global__ void __closesthit__voxel()
 	LOAD_INTERSECTION_DATA();
 
 	// Offset by normal
-	// TODO: use more complex shadow bias functions
-	// TODO: an easier check for transmissive objects
 	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
 	
 	// Construct SurfaceHit instance for lighting calculations
@@ -909,48 +782,53 @@ extern "C" __global__ void __closesthit__voxel()
 	// Resampling Importance Sampling
 	constexpr int M = 10;
 
-	float3 samples[M];
-	float3 directions[M];
-	float weights[M];
-	float wsum = 0;
+	WeightedReservoir <PathSample> reservoir {
+		.sample = {},
+		.count = 0,
+		.weight = 0.0f,
+	};
 
+	int Z = 0;
 	for (int i = 0; i < M; i++) {
 		// Generate new ray
 		Shading out;
 		float3 wi;
 		float pdf;
 
+		// TODO: cosine hemisphere sampling
 		float3 f = eval(surface_hit, wi, pdf, out, rp->seed);
 
-		// Get threshold value for current ray
+		// Get indirect lighting
 		trace <eRegular> (x, wi, i0, i1);
-		pdf *= rp->pdf;
 
-		float3 value = rp->value;
+		// Resampling
+		float3 indirect = f * abs(dot(wi, n)) * rp->value;
+		float target = length(indirect);
 
-		// RIS computations
-		samples[i] = value;
-		directions[i] = wi;
-		weights[i] = (pdf > 0) ? length(value)/(M * pdf) : 0;
-		wsum += weights[i];
+		float w = (pdf > 0.0f) ? target/pdf : 0.0f;
+
+		reservoir.weight += w;
+
+		float eta2 = rand_uniform(rp->seed);
+		bool selected = (eta2 * reservoir.weight < w);
+
+		PathSample sample {
+			.value = indirect,
+			.pdf = pdf * rp->pdf,
+			.target = target
+		};
+
+		if (selected)
+			reservoir.sample = sample;
+
+		reservoir.count++;
+		Z++;
 	}
 
-	// Sample from the distribution
-	float eta = rand_uniform(rp->seed);
-	int index = sample_discrete(&weights[0], M, eta);
-
-	float3 sample = samples[index];
-	float3 direction = directions[index];
-
-	rp->value = direct;
-	if (length(sample) > 0) {
-		float W = wsum/length(sample);
-		float3 f = brdf(surface_hit, direction, eDiffuse);
-		float pdf = kobra::cuda::pdf(surface_hit, direction, eDiffuse);
-		float geometric = abs(dot(n, direction));
-
-		rp->value += W * geometric * f * sample;
-	}
+	PathSample sample = reservoir.sample;
+	float denom = M * sample.target;
+	float W = (denom > 0.0f) ? reservoir.weight/denom : 0.0f;
+	rp->value = direct + W * sample.value;
 
 	// Pass through features
 	rp->normal = n;

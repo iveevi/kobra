@@ -141,7 +141,7 @@ struct MotionCapture : public kobra::BaseApp {
 
 		framer = kobra::layers::Framer::make(get_context());
 
-#if 1
+#if 0
 
 		std::cout << "Enter capture path: ";
 		std::cin >> capture_path;

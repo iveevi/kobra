@@ -80,19 +80,21 @@ float fr_dielectric(float cosThetaI, float etaI, float etaT)
 	}
 
 	// Compute _cosThetaT_ using Snell's law
-	float sinThetaI = sqrt(fmax((float)0, 1 - cosThetaI * cosThetaI));
+	float sinThetaI = sqrt(fmax((float) 0, 1 - cosThetaI * cosThetaI));
 	float sinThetaT = etaI / etaT * sinThetaI;
 
 	// Handle total internal reflection
 	if (sinThetaT >= 1)
 		return 1;
 
-	float cosThetaT = sqrt(fmax((float)0, 1 - sinThetaT * sinThetaT));
+	float cosThetaT = sqrt(fmax((float) 0, 1 - sinThetaT * sinThetaT));
+
 	float Rparl = ((etaT * cosThetaI) - (etaI * cosThetaT)) /
 		((etaT * cosThetaI) + (etaI * cosThetaT));
 	float Rperp = ((etaI * cosThetaI) - (etaT * cosThetaT)) /
 		((etaI * cosThetaI) + (etaT * cosThetaT));
-	return (Rparl * Rparl + Rperp * Rperp) / 2;
+
+	return (Rparl * Rparl + Rperp * Rperp)/2;
 }
 
 KCUDA_INLINE KCUDA_HOST_DEVICE
@@ -103,6 +105,7 @@ float3 refract(const float3 &wi, const float3 &n, float eta)
 	float sin2ThetaT = eta * eta * sin2ThetaI;
 
 	// Handle total internal reflection for transmission
+	// TODO: which way is correct?
 	if (sin2ThetaT >= 1)
 		return reflect(wi, n);
 		// return float3 {0, 0, 0};
@@ -249,6 +252,8 @@ struct GGX {
 			float3 wo, bool entering, Shading out)
 	{
 		if (dot(wo, n) <= 0.0f) n = -n;
+		if (dot(wi, n) <= 0.0f)
+			return 0.0f;
 
 		float3 h = normalize(wi + wo);
 
@@ -256,15 +261,19 @@ struct GGX {
 		float avg_Ks = (mat.specular.x + mat.specular.y + mat.specular.z) / 3.0f;
 
 		float t = 1.0f;
+		// if (avg_Kd + avg_Ks > 0.0f)
+		//	t = fmax(avg_Ks/(avg_Kd + avg_Ks), 0.25f);
 		if (avg_Kd + avg_Ks > 0.0f)
-			t = fmax(avg_Ks/(avg_Kd + avg_Ks), 0.25f);
+			t = avg_Ks/(avg_Kd + avg_Ks);
 
 		float term1 = dot(n, wi)/M_PI;
 		float term2 = Microfacets::GGX(n, h, mat) * G(n, wi, wo, mat)
 			* dot(wo, h) / (4 * dot(wi, h) * dot(wo, n));
+
 		// float term2 = Microfacets::GGX(n, h, mat) * dot(n, h)/(4.0f * dot(wi, h));
 
-		return (1 - t) * term1 + t * term2;
+		float pdf = (1 - t) * term1 + t * term2;
+		return pdf;
 	}
 
 	// Sample the BRDF
@@ -278,8 +287,10 @@ struct GGX {
 		float avg_Ks = (mat.specular.x + mat.specular.y + mat.specular.z) / 3.0f;
 
 		float t = 1.0f;
+		// if (avg_Kd + avg_Ks > 0.0f)
+		//	t = fmax(avg_Ks/(avg_Kd + avg_Ks), 0.25f);
 		if (avg_Kd + avg_Ks > 0.0f)
-			t = fmax(avg_Ks/(avg_Kd + avg_Ks), 0.25f);
+			t = avg_Ks/(avg_Kd + avg_Ks);
 
 		float3 eta = rand_uniform_3f(seed);
 		if (eta.x < t) {
@@ -298,7 +309,8 @@ struct GGX {
 
 			// TODO: change this:
 			out = Shading::eDiffuse;
-			return reflect(-wo, h);
+			float3 wi = reflect(-wo, h);
+			return wi;
 		}
 
 		// Diffuse sampling
@@ -437,7 +449,7 @@ float3 eval <FresnelSpecular>
 	}
 }
 
-// TOdo: union in material for different shading models
+// TODO: union in material for different shading models
 KCUDA_HOST_DEVICE __forceinline__
 float3 eval(const SurfaceHit &sh, float3 &wi, float &in_pdf, Shading &out, Seed seed)
 {

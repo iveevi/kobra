@@ -63,25 +63,28 @@ static void orthonormal_basis(const Submesh &submesh,
 	centroid = make_float3(gcentroid.x, gcentroid.y, gcentroid.z);
 
 	// First do PCA to find axis where the
-	//	surface normals are most spread out
+	//	position-centroid vectors are most spread out
 	Eigen::Matrix3f covariance = Eigen::Matrix3f::Zero();
 
+	Eigen::Vector3f ecentroid(gcentroid.x, gcentroid.y, gcentroid.z);
 	for (int i = 0; i < submesh.indices.size(); i += 3) {
-		glm::vec3 gn0 = submesh.vertices[submesh.indices[i]].normal;
-		glm::vec3 gn1 = submesh.vertices[submesh.indices[i + 1]].normal;
-		glm::vec3 gn2 = submesh.vertices[submesh.indices[i + 2]].normal;
+		glm::vec3 gx0 = submesh.vertices[submesh.indices[i]].position;
+		glm::vec3 gx1 = submesh.vertices[submesh.indices[i + 1]].position;
+		glm::vec3 gx2 = submesh.vertices[submesh.indices[i + 2]].position;
 
-		gn0 = glm::normalize(transform.apply_vector(gn0));
-		gn1 = glm::normalize(transform.apply_vector(gn1));
-		gn2 = glm::normalize(transform.apply_vector(gn2));
+		gx0 = transform.apply(gx0);
+		gx1 = transform.apply(gx1);
+		gx2 = transform.apply(gx2);
 
-		Eigen::Vector3f n0(gn0.x, gn0.y, gn0.z);
-		Eigen::Vector3f n1(gn1.x, gn1.y, gn1.z);
-		Eigen::Vector3f n2(gn2.x, gn2.y, gn2.z);
+		Eigen::Vector3f x0(gx0.x, gx0.y, gx0.z);
+		Eigen::Vector3f x1(gx1.x, gx1.y, gx1.z);
+		Eigen::Vector3f x2(gx2.x, gx2.y, gx2.z);
 
-		Eigen::Vector3f n = (n0 + n1 + n2) / 3.0f;
+		Eigen::Vector3f x = (x0 + x1 + x2) / 3.0f;
+		Eigen::Vector3f xc = x - ecentroid;
+		xc.normalize();
 
-		covariance += n * n.transpose();
+		covariance += xc * xc.transpose();
 	}
 
 	Eigen::SelfAdjointEigenSolver <Eigen::Matrix3f> solver(covariance);
@@ -96,7 +99,7 @@ static void orthonormal_basis(const Submesh &submesh,
 	float max_value = -std::numeric_limits <float>::infinity();
 	float min_value = std::numeric_limits <float>::infinity();
 
-#define MAX_VARIANCE
+// #define MAX_VARIANCE
 
 	for (int i = 0; i < 3; i++) {
 		float e = eigenvalues[i];
@@ -105,22 +108,26 @@ static void orthonormal_basis(const Submesh &submesh,
 
 		bool select = e > max_value;
 
-#else
-
-		bool select = e < min_value;
-
-#endif
-
 		if (e > 0 && select) {
 			max_value = eigenvalues[i];
 			index = i;
 		}
+
+#else
+
+		bool select = e < min_value;
+
+		if (e > 0 && select) {
+			min_value = eigenvalues[i];
+			index = i;
+		}
+
+#endif
+
 	}
 
 	Eigen::Vector3f axis = eigenvectors.col(index);
 	
-	// std::cout << "Axis: " << axis << std::endl;
-
 	// Generte orthonormal basis
 	Eigen::Vector3f e1 { 1.0f, 0.0f, 0.0f };
 
@@ -131,9 +138,18 @@ static void orthonormal_basis(const Submesh &submesh,
 	Eigen::Vector3f bv = bu.cross(e1).normalized();
 	Eigen::Vector3f bw = bu.cross(bv).normalized();
 
-	/* std::cout << "\tu: " << bu << std::endl;
-	std::cout << "\tv: " << bv << std::endl;
-	std::cout << "\tw: " << bw << std::endl; */
+	// If any component is small, set to zero
+	if (std::abs(bu.x()) < 1e-6f) bu.x() = 0.0f;
+	if (std::abs(bu.y()) < 1e-6f) bu.y() = 0.0f;
+	if (std::abs(bu.z()) < 1e-6f) bu.z() = 0.0f;
+
+	if (std::abs(bv.x()) < 1e-6f) bv.x() = 0.0f;
+	if (std::abs(bv.y()) < 1e-6f) bv.y() = 0.0f;
+	if (std::abs(bv.z()) < 1e-6f) bv.z() = 0.0f;
+
+	if (std::abs(bw.x()) < 1e-6f) bw.x() = 0.0f;
+	if (std::abs(bw.y()) < 1e-6f) bw.y() = 0.0f;
+	if (std::abs(bw.z()) < 1e-6f) bw.z() = 0.0f;
 
 	u = make_float3(bu.x(), bu.y(), bu.z());
 	v = make_float3(bv.x(), bv.y(), bv.z());
@@ -146,6 +162,7 @@ static void orthonormal_basis(const Submesh &submesh,
 	float min_bte = std::numeric_limits <float>::infinity();
 	float max_bte = -std::numeric_limits <float>::infinity();
 
+	// TODO: compute earlier
 	for (auto &vertex : submesh.vertices) {
 		glm::vec3 gpos = transform.apply(vertex.position);
 		gpos -= gcentroid;
@@ -164,6 +181,12 @@ static void orthonormal_basis(const Submesh &submesh,
 
 	extent_v = make_float2(min_te, max_te);
 	extent_w = make_float2(min_bte, max_bte);
+
+	// Log the axes
+	KOBRA_LOG_FUNC(Log::INFO) << "Generated orthonormal basis for mesh, axes are:\n"
+		<< "\tu = " << u.x << ", " << u.y << ", " << u.z << "\n"
+		<< "\tv = " << v.x << ", " << v.y << ", " << v.z << "\n"
+		<< "\tw = " << w.x << ", " << w.y << ", " << w.z << "\n";
 }
 
 static OptixProgramGroup load_program_group

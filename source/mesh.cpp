@@ -875,12 +875,12 @@ std::optional <Mesh> load_mesh(const std::string &path)
 	// Read scene
 	const aiScene *scene = importer.ReadFile(
 		path, aiProcess_Triangulate
-			| aiProcess_GenSmoothNormals
+			| aiProcess_GenNormals
 			| aiProcess_FlipUVs
 	);
 
 	// Check if the scene was loaded
-	if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE
+	if (!scene | scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE
 			|| !scene->mRootNode) {
 		KOBRA_LOG_FUNC(Log::ERROR) << "Assimp error: "
 			<< importer.GetErrorString() << std::endl;
@@ -1141,11 +1141,13 @@ std::optional <Mesh> Mesh::load(const std::string &path)
 		return Mesh::cache_load(filename);
 
 	// Load the mesh
+	// TODO: use filesystem C++
 	std::string ext = common::file_extension(path);
 	std::cout << "Loading mesh: " << path << " - " << ext << std::endl;
 
+	// TODO: sphere primitives...
 	std::optional <Mesh> opt;
-	if (ext == "obj")
+	if (ext == "obj") // TODO: fix this for smooth normals (option...)
 		opt = tinyobjloader::load_mesh(path);
 	else
 		opt = assimp::load_mesh(path);

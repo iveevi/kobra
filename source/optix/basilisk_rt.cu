@@ -107,7 +107,7 @@ extern "C" __global__ void __raygen__rg()
 
 	// Check for NaNs
 	if (isnan(sample.x) || isnan(sample.y) || isnan(sample.z))
-		sample = make_float4(1, 0, 0, 1);
+		sample = make_float4(1, 1, 0, 1);
 
 	// Accumulate and store
 	accumulate(parameters.color_buffer[index], sample);
@@ -123,7 +123,7 @@ extern "C" __global__ void __closesthit__ch()
 	LOAD_INTERSECTION_DATA();
 
 	bool primary = (rp->depth == 0);
-	
+
 	// TODO: check for light, not just emissive material
 	/* if (hit->material.type == Shading::eEmissive) {
 		rp->value = material.emission;
@@ -157,6 +157,10 @@ extern "C" __global__ void __closesthit__ch()
 	float pdf;
 
 	float3 f = eval(surface_hit, wi, pdf, out, rp->seed);
+	/* if (pdf <= 0) {
+		rp->value = make_float3(1, 0, 0);
+		return;
+	} */
 
 	// Get threshold value for current ray
 	float3 T = f * abs(dot(wi, n))/pdf;
