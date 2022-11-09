@@ -188,6 +188,7 @@ public:
 #define CONCAT(a, b) CONCAT_INNER(a, b)
 #define CONCAT_INNER(a, b) a ## b
 
+// TODO: pass string, to make more consistent...
 #define KOBRA_PROFILE_TASK(name) \
 	kobra::Profiler::ScopedFrame CONCAT(sf_, CONCAT(__LINE__, __COUNTER__)) \
 		= kobra::Profiler::one().scoped_frame(#name);
@@ -206,6 +207,10 @@ public:
 		std::cout << kobra::Profiler::pretty(frame); \
 	}
 
+#define KOBRA_PROFILE_RESET() \
+	while (kobra::Profiler::one().size()) \
+		kobra::Profiler::one().pop();
+
 #else
 
 #warning "Profiling disabled"
@@ -214,6 +219,7 @@ public:
 #define KOBRA_PROFILE_FUNCTION()
 #define KOBRA_PROFILE_AUTO()
 #define KOBRA_PROFILE_PRINT()
+#define KOBRA_PROFILE_RESET()
 
 #endif
 

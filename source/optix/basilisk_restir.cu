@@ -415,7 +415,7 @@ extern "C" __global__ void __closesthit__restir()
 	if (pdf > 0)
 		rp->value += T * indirect;
 
-	rp->position = x;
+	rp->position = make_float4(x, 1);
 	rp->normal = n;
 	rp->albedo = material.diffuse;
 	rp->wi = wi;

@@ -11,6 +11,7 @@
 
 // Engine headers
 #include "../backend.hpp"
+#include "../core/kd.cuh"
 #include "../optix/parameters.cuh"
 #include "../timer.hpp"
 #include "../vertex.hpp"
@@ -26,6 +27,8 @@ class Rasterizer;
 namespace layers {
 
 // Regular path tracer
+// TODO: base struct for OptiX layers, so that dev time can become independent
+// for each...
 struct Basilisk {
 	// Critical Vulkan structures
 	vk::raii::Device *device = nullptr;
@@ -85,6 +88,7 @@ struct Basilisk {
 	CUdeviceptr truncated = 0;
 
 	// Host buffer analogues
+	// TODO: common algorithm for BVH construction...
 	struct {
 		std::vector <optix::QuadLight> quad_lights;
 		std::vector <optix::TriangleLight> tri_lights;
@@ -103,8 +107,12 @@ struct Basilisk {
 	BufferData result_buffer = nullptr;
 	vk::raii::Sampler result_sampler = nullptr;
 
+	// Others
+	float4 *positions = nullptr;
+	bool initial_kd_tree = false;
+
 	// Functions
-	static Basilisk make(const Context &);
+	static Basilisk make(const Context &, const vk::Extent2D &);
 };
 
 // Proprety methods
@@ -113,6 +121,7 @@ inline size_t size(const Basilisk &layer)
 	return layer.extent.width * layer.extent.height;
 }
 
+// Buffer accessors
 inline CUdeviceptr color_buffer(const Basilisk &layer)
 {
 	return (CUdeviceptr) layer.launch_params.color_buffer;
@@ -126,6 +135,11 @@ inline CUdeviceptr normal_buffer(const Basilisk &layer)
 inline CUdeviceptr albedo_buffer(const Basilisk &layer)
 {
 	return (CUdeviceptr) layer.launch_params.albedo_buffer;
+}
+
+inline CUdeviceptr position_buffer(const Basilisk &layer)
+{
+	return (CUdeviceptr) layer.launch_params.position_buffer;
 }
 
 // Other methods

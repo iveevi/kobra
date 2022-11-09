@@ -123,7 +123,7 @@ builds:
   - kobra_release:
     - sources: main.cu, kobra_source, tinyfd_source, glslang_source
     - idirs: includes
-    - flags: '-O3 -std=c++17 -DMAGICKCORE_HDRI_ENABLE=1 -DMAGICKCORE_QUANTUM_DEPTH=16'
+    - flags: '-O3 -std=c++17 --expt-relaxed-constexpr -DMAGICKCORE_HDRI_ENABLE=1 -DMAGICKCORE_QUANTUM_DEPTH=16'
     - libraries: libs
     - dependencies: optix_ptx_debug, hybrid_ptx_release, basilisk_ptx_release, glsl_compute, glsl_vertex, glsl_frag
   - kobra_debug:

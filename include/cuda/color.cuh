@@ -10,8 +10,8 @@ namespace kobra {
 namespace cuda {
 
 // HDR to SDR color conversion
-__forceinline__ __host__ __device__
-float3 srgb(const float3& c)
+KCUDA_INLINE KCUDA_HOST_DEVICE
+float3 srgb(const float3 &c)
 {
 	float inv_gamma = 1.0f/2.4f;
 	float3 powed = make_float3(
@@ -30,15 +30,15 @@ float3 srgb(const float3& c)
 }
 
 // HDR to LDR with ACES tonemapping
-__forceinline__ __host__ __device__
-float3 aces(const float3& c)
+KCUDA_INLINE KCUDA_HOST_DEVICE
+float3 aces(const float3 &c)
 {
 	float3 a = c * (2.51f * c + 0.03f);
 	float3 b = c * (2.43f * c + 0.59f) + 0.14f;
 	return clamp(a/b, 0.0f, 1.0f);
 }
 
-__forceinline__ __host__ __device__
+KCUDA_INLINE KCUDA_HOST_DEVICE
 unsigned char quantize_unsigned_8_bits(float x)
 {
 	x = clamp(x, 0.0f, 1.0f);
@@ -47,10 +47,13 @@ unsigned char quantize_unsigned_8_bits(float x)
 		Np1 = (1 << 8)
 	};
 
-	return (unsigned char) min((unsigned int) (x * (float) Np1), (unsigned int) N);
+	return (unsigned char) min(
+		(unsigned int) (x * (float) Np1),
+		(unsigned int) N
+	);
 }
 
-__forceinline__ __host__ __device__
+KCUDA_INLINE KCUDA_HOST_DEVICE
 uchar4 make_color(const float3 &c, int tonemapping = 0)
 {
 	float3 s = (tonemapping == 0) ? aces(c) : srgb(c);
@@ -62,8 +65,9 @@ uchar4 make_color(const float3 &c, int tonemapping = 0)
 	);
 }
 
-__forceinline__ __host__ __device__
-uchar4 make_color(const float4 &c, int tonemapping = 0)
+template <typename FloatX>
+KCUDA_INLINE KCUDA_HOST_DEVICE
+uchar4 make_color(const FloatX &c, int tonemapping = 0)
 {
 	return make_color(make_float3(c.x, c.y, c.z), tonemapping);
 }
@@ -75,9 +79,10 @@ enum {
 };
 
 // CUDA kernel
+template <typename FloatX>
 inline __global__
 void hdr_to_ldr_kernel
-		(float4 *pixels, uint32_t *target,
+		(FloatX *pixels, uint32_t *target,
 		int width, int height,
 		int tonemapping = eTonemappingACES)
 {
@@ -90,14 +95,15 @@ void hdr_to_ldr_kernel
 	int in_idx = y * width + x;
 	int out_idx = (height - y - 1) * width + x;
 
-	float4 pixel = pixels[in_idx];
+	FloatX pixel = pixels[in_idx];
 	uchar4 color = cuda::make_color(pixel, tonemapping);
 
 	target[out_idx] = cuda::to_ui32(color);
 }
 
 // C++ wrapper function
-inline void hdr_to_ldr(float4 *pixels, uint32_t *target,
+template <typename FloatX>
+inline void hdr_to_ldr(FloatX *pixels, uint32_t *target,
 		int width, int height,
 		int tonemapping = eTonemappingACES)
 {

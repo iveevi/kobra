@@ -2,7 +2,8 @@
 
 // #define VOXEL_SPATIAL_REUSE
 // #define VOXEL_NAIVE_RESERVOIRS
-#define TEXTURE_MAPPED_RESERVOIRS
+// #define TEXTURE_MAPPED_RESERVOIRS
+#define KD_TREE_RESERVOIRS
 // #define BACKUP_RIS
 
 #if defined(VOXEL_SPATIAL_REUSE)
@@ -513,203 +514,45 @@ extern "C" __global__ void __closesthit__voxel()
 
 #elif defined(TEXTURE_MAPPED_RESERVOIRS)
 
-template <class T>
-__forceinline__ __device__
-bool update_reservoir(WeightedReservoir <T> *res, const T &sample,
-		float pdf_hat, float pdf, float3 &seed)
-{
-	res->mis += pdf + 1e-4;
-
-	float mis = pdf/res->mis;
-	float mis_confidence = 1.0f/float(res->count + 1);
-	// float mis_confidence = res->count/float(res->count + 1);
-	float weight = mis * mis_confidence * pdf_hat/pdf;
-	
-	res->weight += weight;
-	res->count = min(res->count + 1, 20);
-	// res->count++;
-
-	float q = weight/res->weight;
-	float eta = rand_uniform(seed);
-
-	bool selected = eta < q;
-	if (selected)
-		res->sample = sample;
-
-	return selected;
-}
-
-template <class T>
-__forceinline__ __device__
-void merge_reservoir(WeightedReservoir <T> *a, WeightedReservoir <T> *b,
-		float pdf_hat, float3 &seed)
-{
-	a->mis += b->mis;
-
-	float mis = b->mis/a->mis;
-	float mis_confidence = b->count/float(a->count + b->count);
-	float weight = mis * mis_confidence * pdf_hat/b->mis;
-
-	a->weight += weight;
-	a->count = min(a->count + b->count, 20);
-
-	float q = weight/a->weight;
-	float eta = rand_uniform(seed);
-	if (eta < q)
-		a->sample = b->sample;
-}
-
-const float isqrt2 = 0.70710676908493042;
-
-__device__
-float2 cubify(float3 s)
-{
-	float xx2 = s.x * s.x * 2.0;
-	float yy2 = s.y * s.y * 2.0;
-
-	float2 v {xx2 - yy2, yy2 - xx2};
-
-	float ii = v.y - 3.0;
-	ii *= ii;
-
-	float isqrt = -sqrt(ii - 12.0 * xx2) + 3.0;
-
-	v += {isqrt, isqrt};
-	v = make_float2(sqrt(v.x), sqrt(v.y));
-	v *= isqrt2;
-
-	return v;
-
-	// return sign(s) * make_float3(v, 1.0);
-}
-
-__device__
-float2 sphere2cube(float3 sphere, int &face_index)
-{
-	float3 f = abs(sphere);
-
-	bool a = f.y >= f.x && f.y >= f.z;
-	bool b = f.x >= f.z;
-
-	/* float3 s = a ? make_float3(sphere.y, sphere.z, sphere.x) :
-		(b ? make_float3(sphere.x, sphere.z, sphere.y) :
-		make_float3(sphere.x, sphere.y, sphere.z)); */
-
-	// return a ? cubify(sphere.xzy).xzy : b ? cubify(sphere.yzx).zxy : cubify(sphere);
-	float3 s;
-	if (a) {
-		s = make_float3(sphere.x, sphere.z, sphere.y);
-		face_index = 0;
-	} else {
-		if (b) {
-			s = make_float3(sphere.y, sphere.z, sphere.x);
-			face_index = 1;
-		} else{ 
-			s = sphere;
-			face_index = 2;
-		}
-	}
-
-	if (s.z < 0.0) {
-		s = -s;
-		face_index += 3;
-	}
-
-	return cubify(s);
-}
-
 // TMRIS
 // TODO: move to separate file and kernel
 extern "C" __global__ void __closesthit__voxel()
 {
+	// TODO: resolution based on mesh size/complexity (mostly size)
+	constexpr int res = Hit::TMRIS_RESOLUTION;
+
 	LOAD_RAYPACKET();
 	LOAD_INTERSECTION_DATA();
 
-	// Compute projection onto optimal plane
-	float3 xvec = (x - hit->centroid) + 0.01 * n;
-	float3 nvec = hit->opt_normal;
+	BoundingBox bbox = hit->bbox;
 
-	bool forward = dot(nvec, xvec) > 0;
+	glm::vec3 gcentroid = (bbox.min + bbox.max)/2.0f;
 
-#define USE_PCA_MAPPING
+	float3 centroid {gcentroid.x, gcentroid.y, gcentroid.z};
+	float extent_z = bbox.max.z - bbox.min.z;
+	float extent_x = bbox.max.x - bbox.min.x;
+	float extent_y = bbox.max.y - bbox.min.y;
 
-#if defined(USE_SPHERICAL_MAPPING)
+	// TODO: projected axis must be computed... assume z for now
+	float3 dx = x - centroid;
 
-	float3 d = normalize(xvec + 0.5 * n);
+	float u = (dx.x + extent_x/2.0f)/extent_x;
+	float v = (dx.y + extent_y/2.0f)/extent_y;
 
-	float u = atan2(d.x, d.z)/(2.0f * M_PI) + 0.5f;
-	float v = asin(d.y)/M_PI + 0.5f;
-	
-	// TODO: dual textures?
-
-	u = 0.5 * (u + forward);
-
-#elif defined(USE_PCA_MAPPING)
-
-	float3 xproj = xvec - dot(xvec, nvec) * nvec;
-
-	float3 axis0 = hit->opt_tangent;
-	float3 axis1 = hit->opt_bitangent;
-	
-	float u = dot(xproj, hit->opt_tangent);
-	float v = dot(xproj, hit->opt_bitangent);
-	
-	// Normalize
-	float2 u_extent = hit->extent_tangent;
-	float2 v_extent = hit->extent_bitangent;
-
-	u = (u - u_extent.x)/(u_extent.y - u_extent.x);
-	v = (v - v_extent.x)/(v_extent.y - v_extent.x);
-
-#elif defined(USE_CUBE_SPHERE_MAPPING)
-
-	// Project to sphere, then to cube
-	float3 d = normalize(xvec + 2 * n);
-
-	int face_index;
-	float2 t_uv = sphere2cube(d, face_index);
-	float u = t_uv.x;
-	float v = t_uv.y;
-
-	// Split into 6 faces
-	u = 0.5 * (u + int(face_index/3));
-	v = (v + face_index % 3)/3.0f;
-
-#else
-
-	float u = uv.x;
-	float v = uv.y;
-
-#endif
-	
-	// TODO: reolution based on mesh size/complexity (mostly size)
-	constexpr int res = Hit::TMRIS_RESOLUTION;
+	bool forward = dx.z > 0;
 
 	int ix = u * res;
 	int iy = v * res;
 
-	int index = ix + iy * res;
-	index = clamp(index, 0, res * res - 1);
+	int mod = (ix + iy) % 2;
+	rp->value = make_float3(mod);
 
-#if 0
-
-	rp->value = make_float3(
-		ix/float(res),
-		iy/float(res),
-		forward
-	);
-	
-	return;
-
-#endif
-
-	// Spatial sampling test for "more continuous" mapping
+	/* Spatial sampling test for "more continuous" mapping
 	const int SAMPLES = 10;
-	const float SAMPLE_RADIUS = res * 0.1f;
+	const float SAMPLE_RADIUS = res * 0.0f;
 
 	float sum_u = 0;
 	float sum_v = 0;
-	float sum_w = 0;
 
 	int over_count = 0;
 
@@ -725,8 +568,6 @@ extern "C" __global__ void __closesthit__voxel()
 		int nix = ix + offx;
 		int niy = iy + offy;
 
-		bool f = forward;
-
 		bool over_x = nix < 0 || nix >= res;
 		bool over_y = niy < 0 || niy >= res;
 
@@ -736,7 +577,6 @@ extern "C" __global__ void __closesthit__voxel()
 				nix = ix - offx;
 			if (over_y)
 				niy = iy - offy;
-			f = !f;
 
 			over_count++;
 		}
@@ -746,10 +586,66 @@ extern "C" __global__ void __closesthit__voxel()
 
 		sum_u += nix/float(res);
 		sum_v += niy/float(res);
-		sum_w += f;
 	}
 
-	rp->value = make_float3(sum_u, sum_v, sum_w)/float(SAMPLES);
+	rp->value = make_float3(sum_u, sum_v, 0)/float(SAMPLES); */
+}
+
+#elif defined(KD_TREE_RESERVOIRS)
+
+// TODO: move to separate file and kernel
+__forceinline__ __device__
+float get(float3 a, int axis)
+{
+	if (axis == 0) return a.x;
+	if (axis == 1) return a.y;
+	if (axis == 2) return a.z;
+}
+
+extern "C" __global__ void __closesthit__voxel()
+{
+	LOAD_RAYPACKET();
+	LOAD_INTERSECTION_DATA();
+
+	// TODO: first pass of rays is proxy for initialization?
+	// TODO: extra buffer for direct lighting only, so that we can continue
+	// with full lighting and show actual results?
+
+	// Offset by normal
+	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
+
+	rp->value = make_float3(0);
+	if (parameters.kd_tree) {
+		int root = 0;
+		int depth = 0;
+
+		int lefts = 0;
+		int rights = 0;
+
+		while (root != -2) {
+			const auto &node = parameters.kd_tree[root];
+			if (node.left == -1 && node.right == -1)
+				break;
+
+			float split = node.split;
+			int axis = node.axis;
+
+			if (get(x, axis) < split) {
+				root = node.left;
+				lefts++;
+			} else {
+				root = node.right;
+				rights++;
+			}
+
+			depth++;
+		}
+
+		rp->value = make_float3(lefts, rights, 0)/float(depth);
+	}
+
+	rp->position = make_float4(x, 1);
+	return;
 }
 
 #elif defined(BACKUP_RIS)

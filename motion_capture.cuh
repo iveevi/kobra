@@ -129,7 +129,10 @@ struct MotionCapture : public kobra::BaseApp {
 
 		// Setup Wadjet tracer
 		KOBRA_LOG_FILE(kobra::Log::INFO) << "Hybrid tracer setup\n";
-		tracer = kobra::layers::Basilisk::make(get_context());
+
+		// TODO: test lower resolution...
+		tracer = kobra::layers::Basilisk::make(get_context(), {1000, 1000});
+		
 		kobra::layers::set_envmap(tracer, "resources/skies/background_1.jpg");
 
 		// Create the denoiser layer
@@ -312,7 +315,6 @@ struct MotionCapture : public kobra::BaseApp {
 				width, height,
 				kobra::cuda::eTonemappingACES
 			);
-			
 
 			kobra::cuda::copy(b_traced_cpu, b_traced, width * height);
 			kobra::layers::render(framer, b_traced_cpu, cmd, framebuffer);

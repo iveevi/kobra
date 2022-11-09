@@ -32,7 +32,7 @@ static const float eps = 1e-3f;
 struct RayPacket {
 	float3	value;
 
-	float3	position;
+	float4	position;
 	float3	normal;
 	float3	albedo;
 

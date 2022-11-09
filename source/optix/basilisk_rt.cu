@@ -58,6 +58,7 @@ extern "C" __global__ void __raygen__rg()
 	// Prepare the ray packet
 	RayPacket rp {
 		.value = make_float3(0.0f),
+		.position = make_float4(0),
 		.pdf = 1.0f,
 		.miss_depth = -1,
 		.ior = 1.0f,
@@ -109,10 +110,13 @@ extern "C" __global__ void __raygen__rg()
 	if (isnan(sample.x) || isnan(sample.y) || isnan(sample.z))
 		sample = make_float4(1, 1, 0, 1);
 
-	// Accumulate and store
+	// Accumulate necessary data
 	accumulate(parameters.color_buffer[index], sample);
 	accumulate(parameters.normal_buffer[index], normal);
 	accumulate(parameters.albedo_buffer[index], albedo);
+
+	// Stor data
+	parameters.position_buffer[index] = rp.position;
 }
 
 // Closest hit kernel
@@ -186,7 +190,7 @@ extern "C" __global__ void __closesthit__ch()
 	// if (primary)
 	//	rp->value = indirect;
 
-	rp->position = x;
+	rp->position = make_float4(x, 1);
 	rp->normal = n;
 	rp->albedo = material.diffuse;
 	rp->wi = wi;

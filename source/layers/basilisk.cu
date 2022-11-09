@@ -43,152 +43,6 @@ const std::vector <DSLB> Basilisk::dsl_bindings = {
 	}
 };
 
-// Perform PCA on submesh normals
-// TODO: this is only one method of uv generation...
-// TODO: first make a low poly mesh, then unwrap that, since local geometry is
-// similar enough
-static void orthonormal_basis(const Submesh &submesh,
-		const Transform &transform,
-		float3 &u, float3 &v, float3 &w,
-		float2 &extent_v, float2 &extent_w,
-		float3 &centroid)
-{
-	// Compute the centroid of the submesh
-	// TODO: we really need a generic vector type to cast to all these other types
-	glm::vec3 gcentroid = glm::vec3(0.0f);
-	for (const auto &vertex : submesh.vertices)
-		gcentroid += transform.apply(vertex.position);
-	gcentroid /= submesh.vertices.size();
-
-	centroid = make_float3(gcentroid.x, gcentroid.y, gcentroid.z);
-
-	// First do PCA to find axis where the
-	//	position-centroid vectors are most spread out
-	Eigen::Matrix3f covariance = Eigen::Matrix3f::Zero();
-
-	Eigen::Vector3f ecentroid(gcentroid.x, gcentroid.y, gcentroid.z);
-	for (int i = 0; i < submesh.indices.size(); i += 3) {
-		glm::vec3 gx0 = submesh.vertices[submesh.indices[i]].position;
-		glm::vec3 gx1 = submesh.vertices[submesh.indices[i + 1]].position;
-		glm::vec3 gx2 = submesh.vertices[submesh.indices[i + 2]].position;
-
-		gx0 = transform.apply(gx0);
-		gx1 = transform.apply(gx1);
-		gx2 = transform.apply(gx2);
-
-		Eigen::Vector3f x0(gx0.x, gx0.y, gx0.z);
-		Eigen::Vector3f x1(gx1.x, gx1.y, gx1.z);
-		Eigen::Vector3f x2(gx2.x, gx2.y, gx2.z);
-
-		Eigen::Vector3f x = (x0 + x1 + x2) / 3.0f;
-		Eigen::Vector3f xc = x - ecentroid;
-		xc.normalize();
-
-		covariance += xc * xc.transpose();
-	}
-
-	Eigen::SelfAdjointEigenSolver <Eigen::Matrix3f> solver(covariance);
-	
-	Eigen::Vector3f eigenvalues = solver.eigenvalues();
-	Eigen::Matrix3f eigenvectors = solver.eigenvectors();
-
-	// Collect eigenvalues with non-zero eigenvalues
-	// Get the eigenvector with the largest eigenvalue
-	int index = -1;
-
-	float max_value = -std::numeric_limits <float>::infinity();
-	float min_value = std::numeric_limits <float>::infinity();
-
-// #define MAX_VARIANCE
-
-	for (int i = 0; i < 3; i++) {
-		float e = eigenvalues[i];
-
-#ifdef MAX_VARIANCE
-
-		bool select = e > max_value;
-
-		if (e > 0 && select) {
-			max_value = eigenvalues[i];
-			index = i;
-		}
-
-#else
-
-		bool select = e < min_value;
-
-		if (e > 0 && select) {
-			min_value = eigenvalues[i];
-			index = i;
-		}
-
-#endif
-
-	}
-
-	Eigen::Vector3f axis = eigenvectors.col(index);
-	
-	// Generte orthonormal basis
-	Eigen::Vector3f e1 { 1.0f, 0.0f, 0.0f };
-
-	Eigen::Vector3f bu = axis.normalized();
-	if (bu.dot(e1) > 0.999f)
-		e1 = Eigen::Vector3f { 0.0f, 1.0f, 0.0f };
-
-	Eigen::Vector3f bv = bu.cross(e1).normalized();
-	Eigen::Vector3f bw = bu.cross(bv).normalized();
-
-	// If any component is small, set to zero
-	if (std::abs(bu.x()) < 1e-6f) bu.x() = 0.0f;
-	if (std::abs(bu.y()) < 1e-6f) bu.y() = 0.0f;
-	if (std::abs(bu.z()) < 1e-6f) bu.z() = 0.0f;
-
-	if (std::abs(bv.x()) < 1e-6f) bv.x() = 0.0f;
-	if (std::abs(bv.y()) < 1e-6f) bv.y() = 0.0f;
-	if (std::abs(bv.z()) < 1e-6f) bv.z() = 0.0f;
-
-	if (std::abs(bw.x()) < 1e-6f) bw.x() = 0.0f;
-	if (std::abs(bw.y()) < 1e-6f) bw.y() = 0.0f;
-	if (std::abs(bw.z()) < 1e-6f) bw.z() = 0.0f;
-
-	u = make_float3(bu.x(), bu.y(), bu.z());
-	v = make_float3(bv.x(), bv.y(), bv.z());
-	w = make_float3(bw.x(), bw.y(), bw.z());
-
-	// Compute extent of the submesh wrt to non-normal basis
-	float min_te = std::numeric_limits <float>::infinity();
-	float max_te = -std::numeric_limits <float>::infinity();
-
-	float min_bte = std::numeric_limits <float>::infinity();
-	float max_bte = -std::numeric_limits <float>::infinity();
-
-	// TODO: compute earlier
-	for (auto &vertex : submesh.vertices) {
-		glm::vec3 gpos = transform.apply(vertex.position);
-		gpos -= gcentroid;
-
-		Eigen::Vector3f pos(gpos.x, gpos.y, gpos.z);
-
-		float te = bv.dot(pos);
-		float bte = bw.dot(pos);
-
-		min_te = std::min(min_te, te);
-		max_te = std::max(max_te, te);
-
-		min_bte = std::min(min_bte, bte);
-		max_bte = std::max(max_bte, bte);
-	}
-
-	extent_v = make_float2(min_te, max_te);
-	extent_w = make_float2(min_bte, max_bte);
-
-	// Log the axes
-	KOBRA_LOG_FUNC(Log::INFO) << "Generated orthonormal basis for mesh, axes are:\n"
-		<< "\tu = " << u.x << ", " << u.y << ", " << u.z << "\n"
-		<< "\tv = " << v.x << ", " << v.y << ", " << v.z << "\n"
-		<< "\tw = " << w.x << ", " << w.y << ", " << w.z << "\n";
-}
-
 static OptixProgramGroup load_program_group
 		(const OptixDeviceContext &optix_context,
 		 const OptixProgramGroupDesc &desc,
@@ -598,6 +452,11 @@ static void initialize_optix(Basilisk &layer)
 	layer.launch_params.color_buffer = (float4 *) cuda::alloc(bytes);
 	layer.launch_params.normal_buffer = (float4 *) cuda::alloc(bytes);
 	layer.launch_params.albedo_buffer = (float4 *) cuda::alloc(bytes);
+	layer.launch_params.position_buffer = (float4 *) cuda::alloc(bytes);
+
+	// Plus others
+	layer.launch_params.kd_tree = nullptr;
+	layer.launch_params.kd_nodes = 0;
 
 	// Allocate the parameters buffer
 	layer.launch_params_buffer = cuda::alloc(
@@ -613,7 +472,7 @@ static void initialize_optix(Basilisk &layer)
 
 // Create the layer
 // TOOD: all custom extent...
-Basilisk Basilisk::make(const Context &context)
+Basilisk Basilisk::make(const Context &context, const vk::Extent2D &extent)
 {
 	// To return
 	Basilisk layer;
@@ -622,7 +481,7 @@ Basilisk Basilisk::make(const Context &context)
 	layer.device = context.device;
 	layer.phdev = context.phdev;
 	layer.descriptor_pool = context.descriptor_pool;
-	layer.extent = context.extent;
+	layer.extent = extent;
 
 	// Initialize OptiX
 	initialize_optix(layer);
@@ -678,7 +537,7 @@ Basilisk Basilisk::make(const Context &context)
 	layer.result_image = ImageData(
 		*context.phdev, *context.device,
 		vk::Format::eR8G8B8A8Unorm,
-		context.extent,
+		extent,
 		vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eSampled
 			| vk::ImageUsageFlagBits::eTransferDst,
@@ -690,8 +549,8 @@ Basilisk Basilisk::make(const Context &context)
 	layer.result_sampler = make_sampler(*context.device, layer.result_image);
 
 	// Allocate staging buffer
-	vk::DeviceSize stage_size = context.extent.width
-		* context.extent.height
+	vk::DeviceSize stage_size = extent.width
+		* extent.height
 		* sizeof(uint32_t);
 
 	auto usage = vk::BufferUsageFlagBits::eStorageBuffer;
@@ -703,6 +562,9 @@ Basilisk Basilisk::make(const Context &context)
 		*context.phdev, *context.device, stage_size,
 		usage | vk::BufferUsageFlagBits::eTransferSrc, mem_props
 	);
+
+	// Others (experimental)...
+	layer.positions = new float4[extent.width * extent.height];
 
 	// Bind image sampler to the present descriptor set
 	//	immediately, since it will not change
@@ -1153,15 +1015,8 @@ static void update_sbt_data(Basilisk &layer,
 		}
 
 		// TMRIS resoures
-		orthonormal_basis(
-			*submesh, *submesh_transforms[i],
-			hit_record.data.opt_normal,
-			hit_record.data.opt_tangent,
-			hit_record.data.opt_bitangent,
-			hit_record.data.extent_tangent,
-			hit_record.data.extent_bitangent,
-			hit_record.data.centroid
-		);
+		auto transform = *submesh_transforms[i];
+		hit_record.data.bbox = submesh->bbox(transform);
 
 		int res = optix::Hit::TMRIS_RESOLUTION;
 		
@@ -1319,7 +1174,8 @@ static void preprocess_scene(Basilisk &layer,
 
 // Tone maps: 0 for sRGB, 1 for ACES
 // TODO: kernel.cuh
-static __global__ void compute_pixel_values
+// TODO: delete?
+/* static __global__ void compute_pixel_values
 		(float4 *pixels, uint32_t *target,
 		int width, int height, int tonemapping = 0)
 {
@@ -1335,6 +1191,85 @@ static __global__ void compute_pixel_values
 	float4 pixel = pixels[in_idx];
 	uchar4 color = cuda::make_color(pixel, tonemapping);
 	target[out_idx] = cuda::to_ui32(color);
+} */
+
+// CPU side construction algorithm
+inline float get(float3 a, int axis)
+{
+	if (axis == 0) return a.x;
+	if (axis == 1) return a.y;
+	if (axis == 2) return a.z;
+}
+
+int build_kd_tree_recursive
+		(std::vector <float3> &points, int depth,
+		std::vector <core::KdNode> &nodes, int &node_idx)
+{
+	if (points.size() == 0)
+		return -1;
+
+	// Curent axis
+	int axis = depth % 3;
+
+	// Find the median
+	std::sort(points.begin(), points.end(),
+		[axis](float3 a, float3 b) {
+			return get(a, axis) < get(b, axis);
+		}
+	);
+
+	int median = points.size() / 2;
+
+	// Create the node
+	core::KdNode node {
+		.axis = axis,
+		.split = get(points[median], axis),
+	};
+
+	int index = node_idx++;
+
+	// Recurse
+	if (points.size() > 1) {
+		std::vector <float3> left(points.begin(), points.begin() + median);
+		std::vector <float3> right(points.begin() + median + 1, points.end());
+
+		node.left = build_kd_tree_recursive(left, depth + 1, nodes, node_idx);
+		node.right = build_kd_tree_recursive(right, depth + 1, nodes, node_idx);
+	} else {
+		node.left = -1;
+		node.right = -1;
+	}
+
+	nodes[index] = node;
+	return index;
+}
+
+void build_kd_tree(Basilisk &layer, float4 *point_array, int size)
+{
+	KOBRA_PROFILE_TASK(Build K-d tree);
+
+	// Gather all valid points
+	std::vector <float3> points;
+	for (int i = 0; i < size; i++) {
+		float4 point = point_array[i];
+		if (point.w > 0.0f)
+			points.push_back(make_float3(point));
+	}
+
+	// Build the tree
+	std::vector <core::KdNode> nodes(points.size());
+	int node_idx = 0;
+
+	build_kd_tree_recursive(points, 0, nodes, node_idx);
+
+	std::cout << "root node split: " << nodes[0].split << std::endl;
+	std::cout << "\tleft = " << nodes[0].left << std::endl;
+	std::cout << "\tright = " << nodes[0].right << std::endl;
+	std::cout << "# of nodes = " << node_idx << std::endl;
+
+	// Copy the tree to the GPU
+	layer.launch_params.kd_tree = cuda::make_buffer(nodes);
+	layer.launch_params.kd_nodes = nodes.size();
 }
 
 // Path tracing computation
@@ -1388,6 +1323,39 @@ void compute(Basilisk &layer,
 		);
 		
 		CUDA_SYNC_CHECK();
+
+		// TODO: async tasks...
+		// TODO: templatize by transfer type cudamemcpytype
+		// cuda::copy(layer.positions, layer.launch_params.position_buffer);
+		if (mode == optix::eVoxel && !layer.initial_kd_tree) {
+			// TODO: update vs rebuild of k-d tree
+			cudaMemcpy(
+				layer.positions,
+				layer.launch_params.position_buffer,
+				width * height * sizeof(float4),
+				cudaMemcpyDeviceToHost
+			);
+
+			build_kd_tree(
+				layer,
+				layer.positions,
+				width * height
+			);
+
+			layer.initial_kd_tree = true;
+		}
+
+		/* TODO: construct k-d tree for reservoirs...
+		dim3 block(32, 32);
+		dim3 grid(
+			(width + block.x - 1) / block.x,
+			(height + block.y - 1) / block.y
+		);
+
+		kd_construction <<<grid, block>>> (
+			layer.launch_params.position_buffer,
+			width, height
+		); */
 
 		// Increment number of samples
 		layer.launch_params.samples++;

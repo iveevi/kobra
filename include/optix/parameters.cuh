@@ -2,6 +2,8 @@
 #define KOBRA_OPTIX_PARAMETERS_H_
 
 // Engine headers
+#include "../bbox.hpp"
+#include "../core/kd.cuh"
 #include "../cuda/material.cuh"
 #include "../cuda/math.cuh"
 #include "../cuda/random.cuh"
@@ -89,12 +91,7 @@ struct Hit {
 	float3			*bitangents;
 
 	// Auto UV mapping parameters
-	float3			opt_normal;
-	float3			opt_tangent;
-	float3			opt_bitangent;
-	float2			extent_tangent;
-	float2			extent_bitangent;
-	float3			centroid;
+	BoundingBox		bbox;
 
 	// Material and textures
 	cuda::Material		material;
@@ -185,9 +182,12 @@ struct HT_Parameters {
 
 // Kernel-common parameters for Basilisk path tracer
 struct BasiliskParameters {
+	// Mode, indicates various flags...
+	// TODO: create an abstractoin for integrators
+	uint mode;
+
 	// Image resolution
 	uint2 resolution;
-	uint mode;
 
 	// Camera position
 	float3 camera;
@@ -247,10 +247,15 @@ struct BasiliskParameters {
 		float3 max;
 	} voxel;
 
-	// Output buffers
+	// Output buffers (color + AOV)
 	float4 *color_buffer;
 	float4 *normal_buffer;
 	float4 *albedo_buffer;
+	
+	float4 *position_buffer;
+
+	core::KdNode *kd_tree;
+	int kd_nodes;
 };
 
 }
