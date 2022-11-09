@@ -9,7 +9,9 @@ template <class T>
 struct KdNode {
 	int		axis;
 	float		split;
+	float3		point;
 
+	int		parent;
 	int		left;
 	int		right;
 

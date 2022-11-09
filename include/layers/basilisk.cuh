@@ -11,6 +11,7 @@
 
 // Engine headers
 #include "../backend.hpp"
+#include "../core/async.hpp"
 #include "../core/kd.cuh"
 #include "../optix/parameters.cuh"
 #include "../timer.hpp"
@@ -110,6 +111,7 @@ struct Basilisk {
 	// Others
 	float4 *positions = nullptr;
 	bool initial_kd_tree = false;
+	core::AsyncTask *async_task = nullptr;
 
 	// Functions
 	static Basilisk make(const Context &, const vk::Extent2D &);

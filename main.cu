@@ -243,7 +243,7 @@ aq				: ecs(ecs_), fr(fr_), mouse_events(mouse_events_) {
 			shape_renderer(get_context(), render_pass),
 			scene_graph(scene.ecs, font_renderer, io.mouse_events) {
 		{
-			KOBRA_PROFILE_TASK(Application constructor)
+			KOBRA_PROFILE_TASK(Application constructor);
 
 			scene.load(get_device(), "X");
 

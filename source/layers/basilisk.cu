@@ -1203,7 +1203,8 @@ inline float get(float3 a, int axis)
 
 int build_kd_tree_recursive
 		(std::vector <float3> &points, int depth,
-		std::vector <core::KdNode <optix::LightReservoir>> &nodes, int &node_idx)
+		std::vector <core::KdNode <optix::LightReservoir>> &nodes,
+		int &node_idx, int parent = -1)
 {
 	if (points.size() == 0)
 		return -1;
@@ -1224,6 +1225,8 @@ int build_kd_tree_recursive
 	core::KdNode <optix::LightReservoir> node {
 		.axis = axis,
 		.split = get(points[median], axis),
+		.point = points[median],
+		.parent = parent,
 	};
 
 	int index = node_idx++;
@@ -1233,8 +1236,8 @@ int build_kd_tree_recursive
 		std::vector <float3> left(points.begin(), points.begin() + median);
 		std::vector <float3> right(points.begin() + median + 1, points.end());
 
-		node.left = build_kd_tree_recursive(left, depth + 1, nodes, node_idx);
-		node.right = build_kd_tree_recursive(right, depth + 1, nodes, node_idx);
+		node.left = build_kd_tree_recursive(left, depth + 1, nodes, node_idx, index);
+		node.right = build_kd_tree_recursive(right, depth + 1, nodes, node_idx, index);
 	} else {
 		node.left = -1;
 		node.right = -1;
@@ -1350,11 +1353,17 @@ void compute(Basilisk &layer,
 				cudaMemcpyDeviceToHost
 			);
 
-			build_kd_tree(
-				layer,
-				layer.positions,
-				width * height
-			);
+			auto task = [&]() {
+				build_kd_tree(
+					layer,
+					layer.positions,
+					width * height
+				);
+			};
+
+			// layer.async_task = new core::AsyncTask(task);
+			// layer.async_task->wait();
+			task();
 
 			layer.initial_kd_tree = true;
 		}

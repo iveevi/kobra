@@ -18,7 +18,16 @@ enable_language(CUDA)
 
 add_compile_options(-fdiagnostics-color=always)
 
-message(STATUS "CMAKE_CXX_COMPILER_ID: ${CMAKE_CXX_COMPILER_ID}")
+# Build mode
+if (NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_compile_options(-O0 -g)
+elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_compile_options(-O3 -DNDEBUG)
+endif()
 
 set(KOBRA_SOURCE
         source/app.cpp

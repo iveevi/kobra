@@ -623,23 +623,63 @@ extern "C" __global__ void __closesthit__voxel()
 		.x = x,
 	};
 
-	/* float3 direct = Ld(surface_hit, rp->seed);
-	if (material.type == Shading::eEmissive)
-		direct += material.emission; */
+	// Reservoir for spatial sampling
+	LightReservoir spatial {
+		.sample = LightSample {},
+		.count = 0,
+		.weight = 0.0f,
+	};
+
+	// TODO: combine with vanilla ReSTIR
+
+	// Obtain direct lighting sample
+	// NOTE: decorrelating samples places into local and world space
+	// reservoirs by using different samples for each
+	// TODO: observe whether this is actually beneficial
+	FullLightSample fls = sample_direct(rp->seed);
+
+	// Compute target function (unocculted lighting)
+	float3 D = fls.point - surface_hit.x;
+	float d = length(D);
+	D /= d;
+
+	float3 Li = direct_occluded(surface_hit, fls.Le, fls.normal, D, d);
+		
+	// Contribution and weight
+	float target = Li.x + Li.y + Li.z; // Luminance
+	float pdf = fls.pdf;
+	
+	float w = (pdf > 0.0f) ? target/pdf : 0.0f;
+		
+	// Update reservoir
+	// TODO: initialize sample to use
+	reservoir_update(&spatial, LightSample {
+		.value = Li,
+		.target = target,
+		.type = fls.type,
+		.index = fls.index
+	}, w, rp->seed);
 
 	// World space resampling
 	float3 direct = make_float3(0);
 
 	if (parameters.kd_tree) {
-		// Sample direct lighting
 		FullLightSample fls = sample_direct(rp->seed);
-	
+
 		// Compute target function (unocculted lighting)
 		float3 D = fls.point - surface_hit.x;
 		float d = length(D);
 		D /= d;
 
 		float3 Li = direct_unoccluded(surface_hit, fls.Le, fls.normal, D, d);
+			
+		// Contribution and weight
+		float target = Li.x + Li.y + Li.z; // Luminance
+		float pdf = fls.pdf;
+		
+		float w = (pdf > 0.0f) ? target/pdf : 0.0f;
+
+		// TODO: skip traversal if w is zero?
 
 		// Traverse the kd-tree
 		auto *kd_node = &parameters.kd_tree[0];
@@ -672,12 +712,10 @@ extern "C" __global__ void __closesthit__voxel()
 			depth++;
 		}
 
-		// Lock and update the reservoir
-		float target = Li.x + Li.y + Li.z; // Luminance
-		float pdf = fls.pdf;
-		
-		float w = (pdf > 0.0f) ? target/pdf : 0.0f;
+		// rp->value = make_float3(length(x - kd_node->point));
+		// return;
 
+		// Lock and update the reservoir
 		// TODO: similar scoped lock as std::lock_guard, in cuda/sync.h
 		while (atomicCAS(lock, 0, 1) == 0);	// Lock
 
@@ -712,14 +750,136 @@ extern "C" __global__ void __closesthit__voxel()
 
 		float W = (denom > 0.0f) ? w_sum/denom : 0.0f;
 
-		direct = Li * W;
+		// Insert into spatial reservoir
+		target = Li.x + Li.y + Li.z; // Luminance
+		w = target * W * count; // TODO: compute without doing repeated work
+
+		reservoir_update(&spatial, LightSample {
+			.value = Li,
+			.target = target,
+			.type = ls.type,
+			.index = ls.index
+		}, w, rp->seed);
+
+		spatial.count = 1;
+		if (target > 0.0f)
+			spatial.count += count;
+
+		// Choose a root node a few level up and randomly
+		// traverse the tree to obtain a sample
+		const int LEVELS = 5;
+
+		int levels = min(depth, LEVELS);
+		while (levels--) {
+			kd_node = &parameters.kd_tree[root];
+			lock = parameters.kd_locks[root];
+
+			// TODO: this should never yield -1, since we check
+			// for depth
+			root = kd_node->parent;
+		}
+
+		const int SPATIAL_SAMPLES = 3;
+
+		int successes = 0;
+		for (int i = 0; i < SPATIAL_SAMPLES; i++) {
+			int node = root;
+
+			kd_node = &parameters.kd_tree[node];
+			lock = parameters.kd_locks[node];
+
+			while (kd_node->left != -1 && kd_node->right != -1) {
+				float split = kd_node->split;
+				int axis = kd_node->axis;
+
+				float eta = rand_uniform(rp->seed);
+
+				// TODO: what is the chance we end up choosing a longer
+				// path than the one we are currently on?
+				if (eta < 0.5f) {
+					node = kd_node->left;
+				} else {
+					node = kd_node->right;
+				}
+
+				kd_node = &parameters.kd_tree[node];
+				lock = parameters.kd_locks[node];
+			}
+
+			// Get necessary data
+			// TODO: maybe lock?
+			reservoir = &kd_node->data;
+			sample = &reservoir->sample;
+
+			// Compute value and target
+			D = sample->point - surface_hit.x;
+			d = length(D);
+			D /= d;
+
+			Li = direct_occluded(surface_hit, sample->value, sample->normal, D, d);
+			denom = reservoir->count * sample->target;
+
+			W = (denom > 0.0f) ? reservoir->weight/denom : 0.0f;
+
+			// Insert into spatial reservoir
+			target = Li.x + Li.y + Li.z; // Luminance
+			w = target * W * reservoir->count; // TODO: compute without doing repeated work
+
+			int pcount = spatial.count;
+			reservoir_update(&spatial, LightSample {
+				.value = Li,
+				.target = target,
+				.type = sample->type,
+				.index = sample->index
+			}, w, rp->seed);
+
+			spatial.count = pcount + (target > 0.0f ? reservoir->count : 0);
+			successes += (target > 0.0f);
+		}
+
+		// rp->value = make_float3(successes);
+		// return;
+
+		// direct = Li * W;
 	}
+
+	// Final direct lighting result
+	float denom = spatial.count * spatial.sample.target;
+	float W = (denom > 0) ? spatial.weight/denom : 0.0f;
+
+	direct = spatial.sample.value * W;
 	
 	// Add emission as well
 	if (material.type == Shading::eEmissive)
 		direct += material.emission;
 
+	// Also compute indirect lighting
+	Shading out;
+	float3 wi;
+	// float pdf;
+
+	float3 f = eval(surface_hit, wi, pdf, out, rp->seed);
+
+	// Get threshold value for current ray
+	float3 T = f * abs(dot(wi, n))/pdf;
+
+	// Update for next ray
+	rp->ior = material.refraction;
+	rp->pdf *= pdf;
+	rp->depth++;
+	
+	// Trace the next ray
+	float3 indirect = make_float3(0.0f);
+	if (pdf > 0) {
+		trace <eRegular> (x, wi, i0, i1);
+		indirect = rp->value;
+	}
+
+	// Update the value
 	rp->value = direct;
+	if (pdf > 0)
+		rp->value += T * indirect;
+
 	rp->position = make_float4(x, 1);
 }
 

@@ -230,7 +230,7 @@ struct ECS::_ref <Transform> {
 			return *ecs->Array[i];			\
 		}						\
 								\
-		static const T &get(const ECS *ecs, int i) {	\	
+		static const T &get(const ECS *ecs, int i) {	\
 			return *ecs->Array[i];			\
 		}						\
 		static bool exists(const ECS *ecs, int i) {	\
