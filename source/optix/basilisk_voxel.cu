@@ -613,39 +613,114 @@ extern "C" __global__ void __closesthit__voxel()
 
 	// Offset by normal
 	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
+	
+	// Construct SurfaceHit instance for lighting calculations
+	SurfaceHit surface_hit {
+		.mat = material,
+		.entering = entering,
+		.n = n,
+		.wo = wo,
+		.x = x,
+	};
 
-	rp->value = make_float3(0);
+	/* float3 direct = Ld(surface_hit, rp->seed);
+	if (material.type == Shading::eEmissive)
+		direct += material.emission; */
+
+	// World space resampling
+	float3 direct = make_float3(0);
+
 	if (parameters.kd_tree) {
+		// Sample direct lighting
+		FullLightSample fls = sample_direct(rp->seed);
+	
+		// Compute target function (unocculted lighting)
+		float3 D = fls.point - surface_hit.x;
+		float d = length(D);
+		D /= d;
+
+		float3 Li = direct_unoccluded(surface_hit, fls.Le, fls.normal, D, d);
+
+		// Traverse the kd-tree
+		auto *kd_node = &parameters.kd_tree[0];
+		int *lock = parameters.kd_locks[0];
+
 		int root = 0;
 		int depth = 0;
 
 		int lefts = 0;
 		int rights = 0;
 
-		while (root != -2) {
-			const auto &node = parameters.kd_tree[root];
-			if (node.left == -1 && node.right == -1)
+		while (root >= 0) {
+			kd_node = &parameters.kd_tree[root];
+			lock = parameters.kd_locks[root];
+			
+			if (kd_node->left == -1 && kd_node->right == -1)
 				break;
 
-			float split = node.split;
-			int axis = node.axis;
+			float split = kd_node->split;
+			int axis = kd_node->axis;
 
 			if (get(x, axis) < split) {
-				root = node.left;
+				root = kd_node->left;
 				lefts++;
 			} else {
-				root = node.right;
+				root = kd_node->right;
 				rights++;
 			}
 
 			depth++;
 		}
 
-		rp->value = make_float3(lefts, rights, 0)/float(depth);
-	}
+		// Lock and update the reservoir
+		float target = Li.x + Li.y + Li.z; // Luminance
+		float pdf = fls.pdf;
+		
+		float w = (pdf > 0.0f) ? target/pdf : 0.0f;
 
+		// TODO: similar scoped lock as std::lock_guard, in cuda/sync.h
+		while (atomicCAS(lock, 0, 1) == 0);	// Lock
+
+		auto *reservoir = &kd_node->data;
+		auto *sample = &reservoir->sample;
+
+		reservoir_update(reservoir, LightSample {
+			.value = fls.Le,
+			.point = fls.point,
+			.normal = fls.normal,
+			.target = target,
+			.type = fls.type,
+			.index = fls.index
+		}, w, rp->seed);
+
+		LightSample ls = *sample;
+		float w_sum = reservoir->weight;
+		int count = reservoir->count;
+
+		atomicExch(lock, 0);			// Unlock
+
+		// Compute lighting again
+		// TODO: spatial reservoir and sampling...
+		
+		// Compute value and target
+		D = ls.point - surface_hit.x;
+		d = length(D);
+		D /= d;
+
+		Li = direct_occluded(surface_hit, ls.value, ls.normal, D, d);
+		float denom = count * ls.target;
+
+		float W = (denom > 0.0f) ? w_sum/denom : 0.0f;
+
+		direct = Li * W;
+	}
+	
+	// Add emission as well
+	if (material.type == Shading::eEmissive)
+		direct += material.emission;
+
+	rp->value = direct;
 	rp->position = make_float4(x, 1);
-	return;
 }
 
 #elif defined(BACKUP_RIS)

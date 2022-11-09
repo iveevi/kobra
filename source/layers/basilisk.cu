@@ -1203,7 +1203,7 @@ inline float get(float3 a, int axis)
 
 int build_kd_tree_recursive
 		(std::vector <float3> &points, int depth,
-		std::vector <core::KdNode> &nodes, int &node_idx)
+		std::vector <core::KdNode <optix::LightReservoir>> &nodes, int &node_idx)
 {
 	if (points.size() == 0)
 		return -1;
@@ -1221,7 +1221,7 @@ int build_kd_tree_recursive
 	int median = points.size() / 2;
 
 	// Create the node
-	core::KdNode node {
+	core::KdNode <optix::LightReservoir> node {
 		.axis = axis,
 		.split = get(points[median], axis),
 	};
@@ -1257,7 +1257,7 @@ void build_kd_tree(Basilisk &layer, float4 *point_array, int size)
 	}
 
 	// Build the tree
-	std::vector <core::KdNode> nodes(points.size());
+	std::vector <core::KdNode <optix::LightReservoir>> nodes(points.size());
 	int node_idx = 0;
 
 	build_kd_tree_recursive(points, 0, nodes, node_idx);
@@ -1266,10 +1266,24 @@ void build_kd_tree(Basilisk &layer, float4 *point_array, int size)
 	std::cout << "\tleft = " << nodes[0].left << std::endl;
 	std::cout << "\tright = " << nodes[0].right << std::endl;
 	std::cout << "# of nodes = " << node_idx << std::endl;
+	std::cout << "Size of reservoir" << sizeof(optix::LightReservoir) << std::endl;
+	std::cout << "Size of node" << sizeof(core::KdNode <optix::LightReservoir>) << std::endl;
+	std::cout << "# of bytes to allocate = "
+		<< node_idx * sizeof(core::KdNode <optix::LightReservoir>) << std::endl;
 
-	// Copy the tree to the GPU
+	// Allocate corresponding resources
+	size = node_idx;
+
+	std::vector <int> lock_data(size);
+	std::vector <int *> lock_ptrs(size);
+
+	CUdeviceptr d_lock_data = cuda::make_buffer_ptr(lock_data);
+	for (int i = 0; i < size; i++)
+		lock_ptrs[i] = (int *) (d_lock_data + i * sizeof(int));
+
 	layer.launch_params.kd_tree = cuda::make_buffer(nodes);
-	layer.launch_params.kd_nodes = nodes.size();
+	layer.launch_params.kd_locks = cuda::make_buffer(lock_ptrs);
+	layer.launch_params.kd_nodes = size;
 }
 
 // Path tracing computation

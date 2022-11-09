@@ -1,114 +1,5 @@
 #include "basilisk_common.cuh"
 
-// Uniformly sample a single light source
-struct FullLightSample {
-	// Sample information
-	float3 Le;
-	float3 normal;
-	float3 point;
-	float pdf;
-
-	// Light information
-	int type; // 0 - quad, 1 - triangle
-	int index;
-};
-
-__device__ __forceinline__
-FullLightSample sample_direct(Seed seed)
-{
-	// TODO: plus envmap
-	int quad_count = parameters.lights.quad_count;
-	int tri_count = parameters.lights.triangle_count;
-
-	unsigned int total_lights = quad_count + tri_count;
-	unsigned int light_index = rand_uniform(seed) * total_lights;
-
-	FullLightSample sample;
-	if (light_index < quad_count) {
-		// Get quad light
-		QuadLight light = parameters.lights.quads[light_index];
-
-		// Sample point
-		float3 point = sample_area_light(light, seed);
-
-		// Copy information
-		sample.Le = light.intensity;
-		sample.normal = light.normal();
-		sample.point = point;
-		sample.pdf = 1.0f/(light.area() * total_lights);
-
-		sample.type = 0;
-		sample.index = light_index;
-	} else if (light_index < quad_count + tri_count) {
-		// Get triangle light
-		int ni = light_index - quad_count;
-		TriangleLight light = parameters.lights.triangles[ni];
-
-		// Sample point
-		float3 point = sample_area_light(light, seed);
-
-		// Copy information
-		sample.Le = light.intensity;
-		sample.normal = light.normal();
-		sample.point = point;
-		sample.pdf = 1.0f/(light.area() * total_lights);
-
-		sample.type = 1;
-		sample.index = ni;
-	}
-
-	return sample;
-}
-
-// Compute direct lighting for a given sample
-__device__ __forceinline__
-float3 direct_unoccluded(const SurfaceHit &sh, float3 Le, float3 normal, float3 D, float d)
-{
-	// Assume that the light is visible
-	// TODO: evaluate all lobes...
-	float3 rho = cuda::brdf(sh, D, eDiffuse);
-
-	float ldot = abs(dot(normal, D));
-	float geometric = ldot * abs(dot(sh.n, D))/(d * d);
-
-	return rho * Le * geometric;
-}
-
-__device__ __forceinline__
-float3 direct_occluded(const SurfaceHit &sh, float3 Le, float3 normal, float3 D, float d)
-{
-	bool occluded = is_occluded(sh.x, D, d);
-
-	float3 Li = make_float3(0.0f);
-	if (!occluded) {
-		float3 rho = brdf(sh, D, eDiffuse);
-
-		float ldot = abs(dot(normal, D));
-		float geometric = ldot * abs(dot(sh.n, D))/(d * d);
-
-		Li = rho * Le * geometric;
-	}
-
-	return Li;
-}
-
-// Updating a reservoir
-__device__ __forceinline__
-bool reservoir_update(LightReservoir *reservoir, const LightSample &sample, float weight, Seed seed)
-{
-	reservoir->weight += weight;
-
-	float eta = rand_uniform(seed);
-	bool selected = (eta * reservoir->weight) < weight;
-
-	if (selected)
-		reservoir->sample = sample;
-
-	reservoir->count++;
-
-	return selected;
-}
-
 // Get direct lighting using RIS
 __device__
 float3 direct_lighting_ris(const SurfaceHit &sh, Seed seed)
@@ -357,10 +248,6 @@ float3 direct_lighting_restir(const SurfaceHit &sh, RayPacket *rp)
 	float W = (sample.target > 0) ? spatial.weight/denominator : 0.0f;
 
 	// Evaluate the integrand
-	D = sample.point - sh.x;
-	d = length(D);
-	D /= d;
-
 	return W * sample.value;
 }
 

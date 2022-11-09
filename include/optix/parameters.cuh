@@ -254,7 +254,8 @@ struct BasiliskParameters {
 	
 	float4 *position_buffer;
 
-	core::KdNode *kd_tree;
+	core::KdNode <LightReservoir> *kd_tree;
+	int **kd_locks;
 	int kd_nodes;
 };
 

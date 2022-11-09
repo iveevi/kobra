@@ -21,7 +21,7 @@
 #include "../include/profiler.hpp"
 
 // Global operators
-namespace std {
+namespace tinyobj {
 
 inline bool operator<(const tinyobj::index_t &a, const tinyobj::index_t &b)
 {
@@ -35,6 +35,10 @@ inline bool operator==(const tinyobj::index_t &a, const tinyobj::index_t &b)
 		== std::tie(b.vertex_index, b.normal_index, b.texcoord_index);
 }
 
+}
+
+namespace std {
+
 template <>
 struct hash <tinyobj::index_t>
 {
@@ -45,13 +49,6 @@ struct hash <tinyobj::index_t>
 			^ (hash<int>()(k.texcoord_index) << 1);
 	}
 };
-
-inline bool operator==(const kobra::Vertex &a, const kobra::Vertex &b)
-{
-	return a.position == b.position
-		&& a.normal == b.normal
-		&& a.tex_coords == b.tex_coords;
-}
 
 // TODO: please make a common vector type
 template <>
@@ -83,10 +80,16 @@ struct hash <kobra::Vertex> {
 	}
 };
 
-
 }
 
 namespace kobra {
+
+inline bool operator==(const kobra::Vertex &a, const kobra::Vertex &b)
+{
+	return a.position == b.position
+		&& a.normal == b.normal
+		&& a.tex_coords == b.tex_coords;
+}
 
 // Generate bounding box for submesh
 BoundingBox Submesh::bbox(const Transform &transform) const
