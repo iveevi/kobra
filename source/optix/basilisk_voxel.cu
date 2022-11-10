@@ -691,6 +691,8 @@ extern "C" __global__ void __closesthit__voxel()
 		int lefts = 0;
 		int rights = 0;
 
+		float3 pos = surface_hit.x;
+		
 		while (root >= 0) {
 			depth++;
 			kd_node = &parameters.kd_tree[root];
@@ -720,7 +722,7 @@ extern "C" __global__ void __closesthit__voxel()
 			float split = kd_node->split;
 			int axis = kd_node->axis;
 
-			if (get(x, axis) < split) {
+			if (get(pos, axis) < split) {
 				root = left;
 				lefts++;
 			} else {
@@ -757,7 +759,7 @@ extern "C" __global__ void __closesthit__voxel()
 		// Compute lighting again
 		// TODO: spatial reservoir and sampling...
 		
-		// Compute value and target
+		/* Compute value and target
 		D = ls.point - surface_hit.x;
 		d = length(D);
 		D /= d;
@@ -780,7 +782,7 @@ extern "C" __global__ void __closesthit__voxel()
 
 		spatial.count = 1;
 		if (target > 0.0f)
-			spatial.count += count;
+			spatial.count += count; */
 
 		// TODO: two strategies
 		//	hierarchical: go up a few levels and then traverse down
@@ -852,9 +854,9 @@ extern "C" __global__ void __closesthit__voxel()
 			D /= d;
 
 			Li = direct_occluded(surface_hit, sample->value, sample->normal, D, d);
-			denom = reservoir->count * sample->target;
 
-			W = (denom > 0.0f) ? reservoir->weight/denom : 0.0f;
+			float denom = reservoir->count * sample->target;
+			float W = (denom > 0.0f) ? reservoir->weight/denom : 0.0f;
 
 			// Insert into spatial reservoir
 			target = Li.x + Li.y + Li.z; // Luminance
