@@ -22,7 +22,7 @@ float3 direct_lighting_ris(const SurfaceHit &sh, Seed seed)
 		float d = length(D);
 		D /= d;
 
-		float3 Li = direct_occluded(sh, fls.Le, fls.normal, D, d);
+		float3 Li = direct_occluded(sh, fls.Le, fls.normal, fls.type, D, d);
 
 		// Resampling
 		float target = length(Li);
@@ -68,7 +68,7 @@ float3 direct_lighting_temporal_ris(const SurfaceHit &sh, RayPacket *rp)
 	float d = length(D);
 	D /= d;
 
-	float3 Li = direct_occluded(sh, fls.Le, fls.normal, D, d);
+	float3 Li = direct_occluded(sh, fls.Le, fls.normal, fls.type, D, d);
 
 	// Resampling
 	float target = length(Li);
@@ -112,7 +112,7 @@ float3 direct_lighting_restir(const SurfaceHit &sh, RayPacket *rp)
 	float d = length(D);
 	D /= d;
 
-	float3 Li = direct_unoccluded(sh, fls.Le, fls.normal, D, d);
+	float3 Li = direct_unoccluded(sh, fls.Le, fls.normal, fls.type, D, d);
 
 	// Temporal Resampling
 	float target = length(Li);
@@ -151,7 +151,7 @@ float3 direct_lighting_restir(const SurfaceHit &sh, RayPacket *rp)
 		d = length(D);
 		D /= d;
 
-		float3 Li = direct_occluded(sh, sample.value, sample.normal, D, d);
+		float3 Li = direct_occluded(sh, sample.value, sample.normal, sample.type, D, d);
 
 		// Add to the reservoir
 		float target = length(Li);
@@ -218,7 +218,7 @@ float3 direct_lighting_restir(const SurfaceHit &sh, RayPacket *rp)
 		d = length(D);
 		D /= d;
 
-		float3 Li = direct_occluded(sh, sample.value, sample.normal, D, d);
+		float3 Li = direct_occluded(sh, sample.value, sample.normal, sample.type, D, d);
 
 		// Add to the reservoir
 		float target = length(Li);

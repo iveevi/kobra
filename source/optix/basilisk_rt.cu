@@ -214,7 +214,7 @@ extern "C" __global__ void __miss__ms()
 		c = tex2D <float4> (parameters.envmap, u, v);
 
 	// NOTE: env maps are turned off for now
-	rp->value = make_float3(0);
+	rp->value = make_float3(c);
 	rp->wi = ray_direction;
 	// rp->missed = true;
 	rp->miss_depth = rp->depth;

@@ -24,7 +24,7 @@ extern "C"
 
 // TODO: launch parameter for ray depth
 // TODO: rename to MAX_BOUNCES
-#define MAX_DEPTH 0
+#define MAX_DEPTH 2
 
 // Local constants
 static const float eps = 1e-3f;
@@ -146,18 +146,14 @@ bool is_occluded(float3 origin, float3 dir, float R)
 	return vis;
 }
 
-/* Get direct lighting for environment map
-KCUDA_HOST_DEVICE
-float3 Ld_Environment(float3 x, float3 wo, float3 n,
-		Material mat, bool entering, float3 &seed)
+// Get direct lighting for environment map
+KCUDA_DEVICE
+float3 Ld_Environment(const SurfaceHit &sh, float &pdf, Seed seed)
 {
-	static const float eps = 0.05f;
-
-	float3 contr_nee {0.0f};
-	float3 contr_brdf {0.0f};
+	static const float WORLD_RADIUS = 1000.0f;
 
 	// Sample random direction
-	seed = random3(seed);
+	seed = rand_uniform_3f(seed);
 	float theta = acosf(sqrtf(1.0f - fract(seed.x)));
 	float phi = 2.0f * M_PI * fract(seed.y);
 
@@ -173,50 +169,19 @@ float3 Ld_Environment(float3 x, float3 wo, float3 n,
 	float4 sample = tex2D <float4> (parameters.envmap, u, v);
 	float3 Li = make_float3(sample);
 
-	// NEE
-	float R = 1000; // TODO: world radius...
+	pdf = 1.0f / (4.0f * M_PI * WORLD_RADIUS * WORLD_RADIUS);
 
-	float3 f = brdf(mat, n, wi, wo, entering, mat.type) * abs(dot(n, wi));
+	// NEE
+	bool occluded = is_occluded(sh.x, wi, WORLD_RADIUS);
+	if (occluded)
+		return make_float3(0.0f);
+
+	// TODO: method for abs dot in surface hit
+	float3 f = brdf(sh, wi, eDiffuse) * abs(dot(sh.n, wi));
 
 	// TODO: how to decide ray type for this?
-	float pdf_light = 1.0f / (4.0f * M_PI * R * R);
-	float pdf_brdf = pdf(mat, n, wi, wo, entering, mat.type);
-
-	bool occluded = is_occluded(x, wi, R);
-	if (!occluded) {
-		float weight = power(pdf_light, pdf_brdf);
-		contr_nee += weight * f * Li/pdf_light;
-	}
-
-	// BRDF
-	Shading out;
-
-	f = eval(mat, n, wo, entering, wi, pdf_brdf, out, seed) * abs(dot(n, wi));
-	if (length(f) < 1e-6f)
-		return contr_nee;
-
-	occluded = is_occluded(x, wi, R);
-	if (occluded)
-		return contr_nee;
-
-	u = atan2(wi.x, wi.z)/(2.0f * M_PI) + 0.5f;
-	v = asin(wi.y)/M_PI + 0.5f;
-
-	sample = tex2D <float4> (parameters.envmap, u, v);
-	Li = make_float3(sample);
-	
-	float weight = 1.0f;
-	if (out & eTransmission) // TODO: why this?
-		return contr_nee;
-
-	weight = power(pdf_brdf, pdf_light);
-
-	// TODO: shoot shadow ray up to R
-	if (pdf_light > 1e-9 && pdf_brdf > 1e-9)
-		contr_brdf += weight * f * Li/pdf_brdf;
-
-	return contr_nee + contr_brdf;
-} */
+	return f * Li;
+}
 
 // Trace ray into scene and get relevant information
 __device__
@@ -225,34 +190,8 @@ float3 Ld(const SurfaceHit &sh, Seed seed)
 	int quad_count = parameters.lights.quad_count;
 	int tri_count = parameters.lights.triangle_count;
 
-	// TODO: launch parameter to control single light-single sample or
-	// multiple light-single sample
-
-// #define GROUND_TRUTH
-
-#ifdef GROUND_TRUTH
-	
-	float3 contr = {0.0f};
-
-	for (int i = 0; i < quad_count; i++) {
-		QuadLight light = parameters.lights.quads[i];
-		contr += Ld_light(light, x, wo, n, mat, entering, seed);
-	}
-
-	for (int i = 0; i < tri_count; i++) {
-		TriangleLight light = parameters.lights.triangles[i];
-		contr += Ld_light(light, x, wo, n, mat, entering, seed);
-	}
-
-	return contr;
-
-#else
-
-	// if (quad_count == 0 && tri_count == 0)
-	//	return make_float3(0.0f);
-
-	// TODO: +1 for envmaps; make more efficient
-	int total_count = quad_count + tri_count;
+	// TODO: parameter for if envmap is used
+	int total_count = quad_count + tri_count + 1;
 
 	// Regular direct lighting
 	unsigned int i = rand_uniform(seed) * total_count;
@@ -269,16 +208,13 @@ float3 Ld(const SurfaceHit &sh, Seed seed)
 		TriangleLight light = parameters.lights.triangles[ni];
 		contr = Ld_light(light, sh, light_pdf, seed);
 	} else {
-		// TODO: fix this...
 		// Environment light
-		// contr = Ld_Environment(x, wo, n, mat, entering, seed);
+		// TODO: imlpement PBRT's better importance sampling
+		contr = Ld_Environment(sh, light_pdf, seed);
 	}
 
 	pdf *= light_pdf;
 	return contr/pdf;
-
-#endif
-
 }
 
 // Uniformly sample a single light source
@@ -301,7 +237,7 @@ FullLightSample sample_direct(Seed seed)
 	int quad_count = parameters.lights.quad_count;
 	int tri_count = parameters.lights.triangle_count;
 
-	unsigned int total_lights = quad_count + tri_count;
+	unsigned int total_lights = quad_count + tri_count + 1;
 	unsigned int light_index = rand_uniform(seed) * total_lights;
 
 	FullLightSample sample;
@@ -336,6 +272,37 @@ FullLightSample sample_direct(Seed seed)
 
 		sample.type = 1;
 		sample.index = ni;
+	} else {
+		// Sample environment light
+		seed = rand_uniform_3f(seed);
+
+		float theta = acosf(sqrtf(1.0f - fract(seed.x)));
+		float phi = 2.0f * M_PI * fract(seed.y);
+
+		float3 wi = make_float3(
+			sinf(theta) * cosf(phi),
+			sinf(theta) * sinf(phi),
+			cosf(theta)
+		);
+
+		// TODO: world radius in parameters
+		float3 point = wi * 1000.0f;
+
+		float u = atan2(wi.x, wi.z)/(2.0f * M_PI) + 0.5f;
+		float v = asin(wi.y)/M_PI + 0.5f;
+
+		float4 env = tex2D <float4> (parameters.envmap, u, v);
+
+		float pdf = 1.0f/(4.0f * M_PI * 1000.0f * 1000.0f * total_lights);
+		
+		// Copy information
+		sample.Le = make_float3(env);
+		sample.normal = make_float3(0.0f);
+		sample.point = point;
+		sample.pdf = pdf;
+
+		sample.type = 2;
+		sample.index = -1;
 	}
 
 	return sample;
@@ -343,20 +310,25 @@ FullLightSample sample_direct(Seed seed)
 
 // Compute direct lighting for a given sample
 __device__ __forceinline__
-float3 direct_unoccluded(const SurfaceHit &sh, float3 Le, float3 normal, float3 D, float d)
+float3 direct_unoccluded(const SurfaceHit &sh, float3 Le, float3 normal, int type, float3 D, float d)
 {
 	// Assume that the light is visible
 	// TODO: evaluate all lobes...
 	float3 rho = cuda::brdf(sh, D, eDiffuse);
 
-	float ldot = abs(dot(normal, D));
-	float geometric = ldot * abs(dot(sh.n, D))/(d * d);
+	float geometric = abs(dot(sh.n, D))/(d * d);
+
+	// TODO: enums
+	if (type != 2) {
+		float ldot = abs(dot(normal, D));
+		geometric *= ldot;
+	}
 
 	return rho * Le * geometric;
 }
 
 __device__ __forceinline__
-float3 direct_occluded(const SurfaceHit &sh, float3 Le, float3 normal, float3 D, float d)
+float3 direct_occluded(const SurfaceHit &sh, float3 Le, float3 normal, int type, float3 D, float d)
 {
 	bool occluded = is_occluded(sh.x, D, d);
 
@@ -364,8 +336,11 @@ float3 direct_occluded(const SurfaceHit &sh, float3 Le, float3 normal, float3 D,
 	if (!occluded) {
 		float3 rho = brdf(sh, D, eDiffuse);
 
-		float ldot = abs(dot(normal, D));
-		float geometric = ldot * abs(dot(sh.n, D))/(d * d);
+		float geometric = abs(dot(sh.n, D))/(d * d);
+		if (type != 2) {
+			float ldot = abs(dot(normal, D));
+			geometric *= ldot;
+		}
 
 		Li = rho * Le * geometric;
 	}

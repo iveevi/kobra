@@ -643,7 +643,7 @@ extern "C" __global__ void __closesthit__voxel()
 	float d = length(D);
 	D /= d;
 
-	float3 Li = direct_occluded(surface_hit, fls.Le, fls.normal, D, d);
+	float3 Li = direct_occluded(surface_hit, fls.Le, fls.normal, fls.type, D, d);
 		
 	// Contribution and weight
 	float target = Li.x + Li.y + Li.z; // Luminance
@@ -671,7 +671,7 @@ extern "C" __global__ void __closesthit__voxel()
 		float d = length(D);
 		D /= d;
 
-		float3 Li = direct_unoccluded(surface_hit, fls.Le, fls.normal, D, d);
+		float3 Li = direct_unoccluded(surface_hit, fls.Le, fls.normal, fls.type, D, d);
 			
 		// Contribution and weight
 		float target = Li.x + Li.y + Li.z; // Luminance
@@ -853,7 +853,7 @@ extern "C" __global__ void __closesthit__voxel()
 			d = length(D);
 			D /= d;
 
-			Li = direct_occluded(surface_hit, sample->value, sample->normal, D, d);
+			Li = direct_occluded(surface_hit, sample->value, sample->normal, sample->type, D, d);
 
 			float denom = reservoir->count * sample->target;
 			float W = (denom > 0.0f) ? reservoir->weight/denom : 0.0f;
