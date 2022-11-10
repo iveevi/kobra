@@ -24,7 +24,7 @@ extern "C"
 
 // TODO: launch parameter for ray depth
 // TODO: rename to MAX_BOUNCES
-#define MAX_DEPTH 2
+#define MAX_DEPTH 10
 
 // Local constants
 static const float eps = 1e-3f;
@@ -191,7 +191,7 @@ float3 Ld(const SurfaceHit &sh, Seed seed)
 	int tri_count = parameters.lights.triangle_count;
 
 	// TODO: parameter for if envmap is used
-	int total_count = quad_count + tri_count + 1;
+	int total_count = quad_count + tri_count + parameters.has_envmap;
 
 	// Regular direct lighting
 	unsigned int i = rand_uniform(seed) * total_count;
@@ -237,7 +237,7 @@ FullLightSample sample_direct(Seed seed)
 	int quad_count = parameters.lights.quad_count;
 	int tri_count = parameters.lights.triangle_count;
 
-	unsigned int total_lights = quad_count + tri_count + 1;
+	unsigned int total_lights = quad_count + tri_count + parameters.has_envmap;
 	unsigned int light_index = rand_uniform(seed) * total_lights;
 
 	FullLightSample sample;

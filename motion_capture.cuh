@@ -133,7 +133,7 @@ struct MotionCapture : public kobra::BaseApp {
 		// TODO: test lower resolution...
 		tracer = kobra::layers::Basilisk::make(get_context(), {1000, 1000});
 		
-		kobra::layers::set_envmap(tracer, "resources/skies/background_1.jpg");
+		// kobra::layers::set_envmap(tracer, "resources/skies/background_1.jpg");
 
 		// Create the denoiser layer
 		denoiser = kobra::layers::Denoiser::make(

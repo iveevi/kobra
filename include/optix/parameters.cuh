@@ -210,6 +210,7 @@ struct BasiliskParameters {
 
 	// Textures
 	cudaTextureObject_t envmap;
+	bool has_envmap;
 
 	// Lights
 	struct {

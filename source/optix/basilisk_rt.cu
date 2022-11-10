@@ -37,7 +37,7 @@ void make_ray(uint3 idx,
 __forceinline__ __device__
 void accumulate(float4 &dst, float4 sample)
 {
-	if (parameters.accumulate && false) {
+	if (parameters.accumulate) {
 		float4 prev = dst;
 		int count = parameters.samples;
 		dst = (prev * count + sample)/(count + 1);
@@ -213,10 +213,8 @@ extern "C" __global__ void __miss__ms()
 	if (parameters.envmap != 0)
 		c = tex2D <float4> (parameters.envmap, u, v);
 
-	// NOTE: env maps are turned off for now
 	rp->value = make_float3(c);
 	rp->wi = ray_direction;
-	// rp->missed = true;
 	rp->miss_depth = rp->depth;
 }
 

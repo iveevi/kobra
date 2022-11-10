@@ -388,6 +388,7 @@ static void initialize_optix(Basilisk &layer)
 	};
 
 	params.envmap = 0;
+	params.has_envmap = false;
 	params.samples = 0;
 
 	// Lights (set to null, etc)
@@ -587,6 +588,7 @@ void set_envmap(Basilisk &layer, const std::string &path)
 	);
 
 	layer.launch_params.envmap = cuda::import_vulkan_texture(*layer.device, map);
+	layer.launch_params.has_envmap = true;
 }
 
 // Update the light buffers if needed
