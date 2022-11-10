@@ -682,8 +682,8 @@ extern "C" __global__ void __closesthit__voxel()
 		// TODO: skip traversal if w is zero?
 
 		// Traverse the kd-tree
-		auto *kd_node = &parameters.kd_tree[0];
-		int *lock = parameters.kd_locks[0];
+		core::KdNode <LightReservoir> *kd_node = nullptr; // &parameters.kd_tree[0];
+		int *lock = nullptr; // parameters.kd_locks[0];
 
 		int root = 0;
 		int depth = 0;
@@ -692,24 +692,41 @@ extern "C" __global__ void __closesthit__voxel()
 		int rights = 0;
 
 		while (root >= 0) {
+			depth++;
 			kd_node = &parameters.kd_tree[root];
 			lock = parameters.kd_locks[root];
 			
-			if (kd_node->left == -1 && kd_node->right == -1)
+			// If no valid branches, exit
+			int left = kd_node->left;
+			int right = kd_node->right;
+
+			if (left == -1 && right == -1)
 				break;
 
+			// If only one valid branch, traverse it
+			if (left == -1) {
+				root = right;
+				rights++;
+				continue;
+			}
+
+			if (right == -1) {
+				root = left;
+				lefts++;
+				continue;
+			}
+
+			// Otherwise, choose the branch according to the split
 			float split = kd_node->split;
 			int axis = kd_node->axis;
 
 			if (get(x, axis) < split) {
-				root = kd_node->left;
+				root = left;
 				lefts++;
 			} else {
-				root = kd_node->right;
+				root = right;
 				rights++;
 			}
-
-			depth++;
 		}
 
 		// rp->value = make_float3(length(x - kd_node->point));
@@ -765,45 +782,63 @@ extern "C" __global__ void __closesthit__voxel()
 		if (target > 0.0f)
 			spatial.count += count;
 
+		// TODO: two strategies
+		//	hierarchical: go up a few levels and then traverse down
+		//	pick a random node and traverse down
+		const int SPATIAL_SAMPLES = 1;
+
 		// Choose a root node a few level up and randomly
 		// traverse the tree to obtain a sample
-		const int LEVELS = 5;
+		const int LEVELS = 10;
 
+		// TODO: try selecting random indices in the tree instead?
 		int levels = min(depth, LEVELS);
 		while (levels--) {
 			kd_node = &parameters.kd_tree[root];
 			lock = parameters.kd_locks[root];
 
-			// TODO: this should never yield -1, since we check
-			// for depth
+			if (kd_node->parent == -1)
+				break;
+
 			root = kd_node->parent;
 		}
-
-		const int SPATIAL_SAMPLES = 3;
 
 		int successes = 0;
 		for (int i = 0; i < SPATIAL_SAMPLES; i++) {
 			int node = root;
 
-			kd_node = &parameters.kd_tree[node];
-			lock = parameters.kd_locks[node];
+			while (true) {
+				kd_node = &parameters.kd_tree[node];
+				lock = parameters.kd_locks[node];
 
-			while (kd_node->left != -1 && kd_node->right != -1) {
 				float split = kd_node->split;
 				int axis = kd_node->axis;
 
-				float eta = rand_uniform(rp->seed);
+				// If no valid branches, exit
+				int left = kd_node->left;
+				int right = kd_node->right;
 
-				// TODO: what is the chance we end up choosing a longer
-				// path than the one we are currently on?
-				if (eta < 0.5f) {
-					node = kd_node->left;
-				} else {
-					node = kd_node->right;
+				if (left == -1 && right == -1)
+					break;
+
+				// If only one valid branch, go there
+				if (left == -1) {
+					node = right;
+					continue;
 				}
 
-				kd_node = &parameters.kd_tree[node];
-				lock = parameters.kd_locks[node];
+				if (right == -1) {
+					node = left;
+					continue;
+				}
+
+				// Otherwise, choose a random branch
+				float eta = rand_uniform(rp->seed);
+
+				if (eta < 0.5f)
+					node = left;
+				else
+					node = right;
 			}
 
 			// Get necessary data
@@ -836,11 +871,6 @@ extern "C" __global__ void __closesthit__voxel()
 			spatial.count = pcount + (target > 0.0f ? reservoir->count : 0);
 			successes += (target > 0.0f);
 		}
-
-		// rp->value = make_float3(successes);
-		// return;
-
-		// direct = Li * W;
 	}
 
 	// Final direct lighting result

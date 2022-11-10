@@ -144,7 +144,7 @@ struct MotionCapture : public kobra::BaseApp {
 
 		framer = kobra::layers::Framer::make(get_context());
 
-#if 0
+#if 1
 
 		std::cout << "Enter capture path: ";
 		std::cin >> capture_path;
@@ -311,6 +311,7 @@ struct MotionCapture : public kobra::BaseApp {
 
 			kobra::cuda::hdr_to_ldr(
 				(float4 *) kobra::layers::color_buffer(tracer),
+				// (float4 *) denoiser.result,
 				(uint32_t *) b_traced,
 				width, height,
 				kobra::cuda::eTonemappingACES
