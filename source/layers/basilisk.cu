@@ -1205,8 +1205,8 @@ inline float get(float3 a, int axis)
 
 int build_kd_tree_recursive
 		(std::vector <float3> &points, int depth,
-		std::vector <core::KdNode <optix::LightReservoir>> &nodes,
-		int &node_idx, int parent = -1)
+		std::vector <optix::WorldNode> &nodes,
+		int &node_idx, int &res_idx, int parent = -1)
 {
 	if (points.size() == 0)
 		return -1;
@@ -1224,7 +1224,7 @@ int build_kd_tree_recursive
 	int median = points.size() / 2;
 
 	// Create the node
-	core::KdNode <optix::LightReservoir> node {
+	optix::WorldNode node {
 		.axis = axis,
 		.split = get(points[median], axis),
 		.point = points[median],
@@ -1238,11 +1238,19 @@ int build_kd_tree_recursive
 		std::vector <float3> left(points.begin(), points.begin() + median);
 		std::vector <float3> right(points.begin() + median + 1, points.end());
 
-		node.left = build_kd_tree_recursive(left, depth + 1, nodes, node_idx, index);
-		node.right = build_kd_tree_recursive(right, depth + 1, nodes, node_idx, index);
+		node.left = build_kd_tree_recursive(
+			left, depth + 1, nodes,
+			node_idx, res_idx, index
+		);
+
+		node.right = build_kd_tree_recursive(
+			right, depth + 1, nodes,
+			node_idx, res_idx, index
+		);
 	} else {
 		node.left = -1;
 		node.right = -1;
+		node.data = res_idx++;
 	}
 
 	nodes[index] = node;
@@ -1262,22 +1270,29 @@ void build_kd_tree(Basilisk &layer, float4 *point_array, int size)
 	}
 
 	// Build the tree
-	std::vector <core::KdNode <optix::LightReservoir>> nodes(points.size());
-	int node_idx = 0;
+	std::vector <optix::WorldNode> nodes(points.size());
 
-	build_kd_tree_recursive(points, 0, nodes, node_idx);
+	int node_idx = 0;
+	int res_idx = 0;
+
+	build_kd_tree_recursive(points, 0, nodes, node_idx, res_idx);
 
 	std::cout << "root node split: " << nodes[0].split << std::endl;
 	std::cout << "\tleft = " << nodes[0].left << std::endl;
 	std::cout << "\tright = " << nodes[0].right << std::endl;
 	std::cout << "# of nodes = " << node_idx << std::endl;
 	std::cout << "Size of reservoir" << sizeof(optix::LightReservoir) << std::endl;
-	std::cout << "Size of node" << sizeof(core::KdNode <optix::LightReservoir>) << std::endl;
+	std::cout << "Size of node" << sizeof(optix::WorldNode) << std::endl;
 	std::cout << "# of bytes to allocate = "
-		<< node_idx * sizeof(core::KdNode <optix::LightReservoir>) << std::endl;
+		<< node_idx * sizeof(optix::WorldNode) << std::endl;
 
 	// Allocate corresponding resources
+	int leaves = res_idx;
 	size = node_idx;
+
+	std::vector <optix::LightReservoir> reservoir_data(leaves);
+
+	optix::LightReservoir *d_reservoirs = cuda::make_buffer(reservoir_data);
 
 	std::vector <int> lock_data(size);
 	std::vector <int *> lock_ptrs(size);
@@ -1287,6 +1302,7 @@ void build_kd_tree(Basilisk &layer, float4 *point_array, int size)
 		lock_ptrs[i] = (int *) (d_lock_data + i * sizeof(int));
 
 	layer.launch_params.kd_tree = cuda::make_buffer(nodes);
+	layer.launch_params.kd_reservoirs = d_reservoirs;
 	layer.launch_params.kd_locks = cuda::make_buffer(lock_ptrs);
 	layer.launch_params.kd_nodes = size;
 }

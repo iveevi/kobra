@@ -78,6 +78,7 @@ using LightReservoir = WeightedReservoir <LightSample>;
 using ReSTIR_Reservoir = WeightedReservoir <PathSample>;
 using Voxel_Reservoir = MultiReservoir <VoxelSample, 10>;
 using TMRIS_Reservoir = WeightedReservoir <TMRIS_Sample>;
+using WorldNode = core::KdNode <int>;
 
 // Hit data record
 struct Hit {
@@ -255,7 +256,8 @@ struct BasiliskParameters {
 	
 	float4 *position_buffer;
 
-	core::KdNode <LightReservoir> *kd_tree;
+	WorldNode *kd_tree;
+	LightReservoir *kd_reservoirs;
 	int **kd_locks;
 	int kd_nodes;
 };

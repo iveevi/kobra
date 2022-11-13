@@ -682,8 +682,8 @@ extern "C" __global__ void __closesthit__voxel()
 		// TODO: skip traversal if w is zero?
 
 		// Traverse the kd-tree
-		core::KdNode <LightReservoir> *kd_node = nullptr; // &parameters.kd_tree[0];
-		int *lock = nullptr; // parameters.kd_locks[0];
+		WorldNode *kd_node = nullptr;
+		int *lock = nullptr;
 
 		int root = 0;
 		int depth = 0;
@@ -738,7 +738,8 @@ extern "C" __global__ void __closesthit__voxel()
 		// TODO: similar scoped lock as std::lock_guard, in cuda/sync.h
 		while (atomicCAS(lock, 0, 1) == 0);	// Lock
 
-		auto *reservoir = &kd_node->data;
+		int res_idx = kd_node->data;
+		auto *reservoir = &parameters.kd_reservoirs[res_idx];
 		auto *sample = &reservoir->sample;
 
 		reservoir_update(reservoir, LightSample {
@@ -845,7 +846,8 @@ extern "C" __global__ void __closesthit__voxel()
 
 			// Get necessary data
 			// TODO: maybe lock?
-			reservoir = &kd_node->data;
+			res_idx = kd_node->data;
+			reservoir = &parameters.kd_reservoirs[res_idx];
 			sample = &reservoir->sample;
 
 			// Compute value and target
