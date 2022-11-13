@@ -42,7 +42,6 @@ struct MotionCapture : public kobra::BaseApp {
 	kobra::layers::Denoiser denoiser;
 	kobra::layers::Framer framer;
 	kobra::layers::FontRenderer font_renderer;
-	// TODO: denoising layer which takes CUDA buffer as input
 
 	// Buffers
 	CUdeviceptr b_traced;
@@ -137,9 +136,10 @@ struct MotionCapture : public kobra::BaseApp {
 
 		// Create the denoiser layer
 		denoiser = kobra::layers::Denoiser::make(
-			extent,
+			extent
+			/*,
 			kobra::layers::Denoiser::eNormal
-				| kobra::layers::Denoiser::eAlbedo
+				| kobra::layers::Denoiser::eAlbedo */
 		);
 
 		framer = kobra::layers::Framer::make(get_context());
@@ -503,6 +503,22 @@ struct MotionCapture : public kobra::BaseApp {
 			std::cout << "Camera transform:\n";
 			std::cout << "\tPosition: " << transform.position.x << ", " << transform.position.y << ", " << transform.position.z << "\n";
 			std::cout << "\tRotation: " << transform.rotation.x << ", " << transform.rotation.y << ", " << transform.rotation.z << "\n";
+		}
+
+		// C for capture
+		if (event.key == GLFW_KEY_C && event.action == GLFW_PRESS) {
+			// Get data to save
+			int width = app.tracer.extent.width;
+			int height = app.tracer.extent.height;
+
+			std::string capture_path = "capture.png";
+			stbi_write_png(capture_path.c_str(),
+				width, height, 4, app.b_traced_cpu.data(),
+				width * 4
+			);
+		
+			KOBRA_LOG_FILE(kobra::Log::INFO) << "Captured image to "
+				<< capture_path << "\n";
 		}
 	}
 
