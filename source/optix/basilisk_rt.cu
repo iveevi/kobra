@@ -21,8 +21,8 @@ void make_ray(uint3 idx,
 
 	pcg3f(seed);
 	
-	float xoffset = fract(seed.x) - 0.5f;
-	float yoffset = fract(seed.y) - 0.5f;
+	float xoffset = (fract(seed.x) - 0.5f) * 0.8f;
+	float yoffset = (fract(seed.y) - 0.5f) * 0.8f;
 
 	float2 d = 2.0f * make_float2(
 		float(idx.x + xoffset)/parameters.resolution.x,
@@ -37,7 +37,8 @@ void make_ray(uint3 idx,
 __forceinline__ __device__
 void accumulate(float4 &dst, float4 sample)
 {
-	if (parameters.accumulate && false) {
+	bool disable_accumulation = parameters.options.disable_accumulation;
+	if (parameters.accumulate && !disable_accumulation) {
 		float4 prev = dst;
 		int count = parameters.samples;
 		dst = (prev * count + sample)/(count + 1);
@@ -100,7 +101,7 @@ extern "C" __global__ void __raygen__rg()
 	default:
 		break;
 	}
-		
+
 	// Finally, store the result
 	float4 sample = make_float4(rp.value, 1.0f);
 	float4 normal = make_float4(rp.normal, 0.0f);
@@ -128,15 +129,6 @@ extern "C" __global__ void __closesthit__ch()
 
 	bool primary = (rp->depth == 0);
 
-	// TODO: check for light, not just emissive material
-	/* if (hit->material.type == Shading::eEmissive) {
-		rp->value = material.emission;
-		// rp->position = x;
-		// rp->normal = n;
-		// rp->albedo = material.diffuse;
-		// return;
-	} */
-
 	// Offset by normal
 	// TODO: use more complex shadow bias functions
 	// TODO: an easier check for transmissive objects
@@ -161,10 +153,6 @@ extern "C" __global__ void __closesthit__ch()
 	float pdf;
 
 	float3 f = eval(surface_hit, wi, pdf, out, rp->seed);
-	/* if (pdf <= 0) {
-		rp->value = make_float3(1, 0, 0);
-		return;
-	} */
 
 	// Get threshold value for current ray
 	float3 T = f * abs(dot(wi, n))/pdf;
@@ -183,12 +171,12 @@ extern "C" __global__ void __closesthit__ch()
 	}
 
 	// Update the value
-	rp->value = direct;
+	bool skip_direct = (primary && parameters.options.indirect_only);
+	if (!skip_direct)
+		rp->value = direct;
+
 	if (pdf > 0)
 		rp->value += T * indirect;
-
-	// if (primary)
-	//	rp->value = indirect;
 
 	rp->position = make_float4(x, 1);
 	rp->normal = n;

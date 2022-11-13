@@ -22,12 +22,6 @@ enum : unsigned int {
 	eCount
 };
 
-constexpr const char *str_modes[eCount] = {
-	"Regular",
-	"ReSTIR",
-	"Voxel"
-};
-
 // Reservoir samples for Resampling techniques
 struct LightSample {
 	float3 value;
@@ -182,10 +176,20 @@ struct HT_Parameters {
 };
 
 // Kernel-common parameters for Basilisk path tracer
+struct BasiliskOptions {
+	bool disable_accumulation;
+	bool indirect_only;
+	bool recursive_wsris;
+	bool reprojected_reuse;
+};
+
 struct BasiliskParameters {
 	// Mode, indicates various flags...
 	// TODO: create an abstractoin for integrators
-	uint mode;
+	uint mode; // TODO: move to options
+
+	// Additional options
+	BasiliskOptions options;
 
 	// Image resolution
 	uint2 resolution;

@@ -398,6 +398,10 @@ static void initialize_optix(Basilisk &layer)
 	// Accumulatoin on by default
 	layer.launch_params.accumulate = true;
 
+	// Options (set all to false/0)
+	optix::BasiliskOptions &options = layer.launch_params.options;
+	memset(&options, 0, sizeof(options));
+
 	// Advanced sampling resources - ReSTIR GI
 	float radius = std::min(width, height)/10.0f;
 

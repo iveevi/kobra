@@ -2,6 +2,8 @@
 #define MOTION_CAPTURE_H_
 
 // Standard headers
+#include <set>
+#include <string>
 #include <thread>
 
 // GLM headers
@@ -258,7 +260,58 @@ struct MotionCapture : public kobra::BaseApp {
 	}
 
 	float time = 0.0f;
+
 	unsigned int mode = kobra::optix::eRegular;
+
+	std::string mode_description = "Regular";
+
+	std::set <std::string> additional_descriptions;
+
+	// Mode map for Basilisk
+	// TODO: turn into keybindings
+	const std::unordered_map <int, std::function <void ()>> mode_map {
+		{1, [&]() {
+			mode = kobra::optix::eRegular;
+			mode_description = "Regular";
+		}},
+
+		{2, [&]() {
+			mode = kobra::optix::eReSTIR;
+			tracer.launch_params.options.reprojected_reuse = false;
+			mode_description = "ReSTIR";
+		}},
+
+		{3, [&]() {
+			mode = kobra::optix::eReSTIR;
+			tracer.launch_params.options.reprojected_reuse = true;
+			mode_description = "ReSTIR Reprojected";
+		}},
+
+		{4, [&]() {
+			mode = kobra::optix::eVoxel;
+			mode_description = "Voxel";
+		}},
+
+		{5, [&]() {
+			bool &b = tracer.launch_params.options.indirect_only;
+			b = !b;
+
+			if (b)
+				additional_descriptions.insert("Indirect Only");
+			else
+				additional_descriptions.erase("Indirect Only");
+		}},
+
+		{6, [&]() {
+			bool &b = tracer.launch_params.options.disable_accumulation;
+			b = !b;
+
+			if (b)
+				additional_descriptions.insert("No Accumulation");
+			else
+				additional_descriptions.erase("No Accumulation");
+		}}
+	};
 
 	void record(const vk::raii::CommandBuffer &cmd,
 			const vk::raii::Framebuffer &framebuffer) override {
@@ -333,9 +386,27 @@ struct MotionCapture : public kobra::BaseApp {
 				{0, 5}, glm::vec3 {1, 0.6, 0.6}, 0.7f
 			);
 
+			std::string mode_str = "Mode: " + mode_description;
+			std::string additional_str = "";
+
+			for (auto it = additional_descriptions.begin();
+					it != additional_descriptions.end(); it++) {
+				additional_str += *it;
+				if (std::next(it) != additional_descriptions.end())
+					additional_str += ", ";
+			}
+
+			if (additional_str != "")
+				additional_str = "(" + additional_str + ")";
+
 			kobra::ui::Text t_mode(
-				kobra::common::sprintf("Mode: %s", kobra::optix::str_modes[mode]),
+				mode_str,
 				{5, 45}, glm::vec3 {1, 0.6, 0.6}, 0.5f
+			);
+
+			kobra::ui::Text t_additional(
+				additional_str,
+				{5, 75}, glm::vec3 {1, 0.6, 0.6}, 0.4f
 			);
 
 			glm::vec2 size = font_renderer.size(t_samples);
@@ -370,7 +441,10 @@ struct MotionCapture : public kobra::BaseApp {
 				vk::SubpassContents::eInline
 			);
 
-			font_renderer.render(cmd, {t_fps, t_samples, t_mode});
+			font_renderer.render(cmd, {
+				t_fps, t_samples,
+				t_mode, t_additional
+			});
 
 			cmd.endRenderPass();
 		cmd.end();
@@ -488,14 +562,21 @@ struct MotionCapture : public kobra::BaseApp {
 			app.events_mutex.unlock();
 		}
 
-		// Numbers 1-3 for the same function
-		if (event.key >= GLFW_KEY_1 && event.key <= GLFW_KEY_3 && event.action == GLFW_PRESS) {
-			app.mode = event.key - GLFW_KEY_1;
+		if (event.key >= GLFW_KEY_0 && event.key <= GLFW_KEY_9 && event.action == GLFW_PRESS) {
+			int key = event.key - GLFW_KEY_0;
+
+			// Execute mode map function
+			if (app.mode_map.count(key) > 0) {
+				app.mode_map.at(key)();
 			
-			// Add to event queue
-			app.events_mutex.lock();
-			app.events.push(true);
-			app.events_mutex.unlock();
+				// Add to event queue
+				app.events_mutex.lock();
+				app.events.push(true);
+				app.events_mutex.unlock();
+			} else {
+				KOBRA_LOG_FILE(kobra::Log::WARN) << "No mode map for key "
+					<< key << "\n";
+			}
 		}
 
 		// I for info

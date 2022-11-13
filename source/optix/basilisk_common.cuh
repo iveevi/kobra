@@ -24,7 +24,7 @@ extern "C"
 
 // TODO: launch parameter for ray depth
 // TODO: rename to MAX_BOUNCES
-#define MAX_DEPTH 0
+#define MAX_DEPTH 3
 
 // Local constants
 static const float eps = 1e-3f;
@@ -150,7 +150,7 @@ bool is_occluded(float3 origin, float3 dir, float R)
 KCUDA_DEVICE
 float3 Ld_Environment(const SurfaceHit &sh, float &pdf, Seed seed)
 {
-	static const float WORLD_RADIUS = 1000.0f;
+	static const float WORLD_RADIUS = 10000.0f;
 
 	// Sample random direction
 	seed = rand_uniform_3f(seed);
@@ -286,7 +286,7 @@ FullLightSample sample_direct(Seed seed)
 		);
 
 		// TODO: world radius in parameters
-		float3 point = wi * 1000.0f;
+		float3 point = wi * 10000.0f;
 
 		float u = atan2(wi.x, wi.z)/(2.0f * M_PI) + 0.5f;
 		float v = asin(wi.y)/M_PI + 0.5f;

@@ -607,6 +607,9 @@ extern "C" __global__ void __closesthit__voxel()
 	LOAD_RAYPACKET();
 	LOAD_INTERSECTION_DATA();
 
+	// Check if primary ray
+	bool primary = (rp->depth == 0);
+
 	// TODO: first pass of rays is proxy for initialization?
 	// TODO: extra buffer for direct lighting only, so that we can continue
 	// with full lighting and show actual results?
@@ -731,9 +734,6 @@ extern "C" __global__ void __closesthit__voxel()
 			}
 		}
 
-		// rp->value = make_float3(length(x - kd_node->point));
-		// return;
-
 		// Lock and update the reservoir
 		// TODO: similar scoped lock as std::lock_guard, in cuda/sync.h
 		while (atomicCAS(lock, 0, 1) == 0);	// Lock
@@ -756,34 +756,6 @@ extern "C" __global__ void __closesthit__voxel()
 		int count = reservoir->count;
 
 		atomicExch(lock, 0);			// Unlock
-
-		// Compute lighting again
-		// TODO: spatial reservoir and sampling...
-		
-		/* Compute value and target
-		D = ls.point - surface_hit.x;
-		d = length(D);
-		D /= d;
-
-		Li = direct_occluded(surface_hit, ls.value, ls.normal, D, d);
-		float denom = count * ls.target;
-
-		float W = (denom > 0.0f) ? w_sum/denom : 0.0f;
-
-		// Insert into spatial reservoir
-		target = Li.x + Li.y + Li.z; // Luminance
-		w = target * W * count; // TODO: compute without doing repeated work
-
-		reservoir_update(&spatial, LightSample {
-			.value = Li,
-			.target = target,
-			.type = ls.type,
-			.index = ls.index
-		}, w, rp->seed);
-
-		spatial.count = 1;
-		if (target > 0.0f)
-			spatial.count += count; */
 
 		// TODO: two strategies
 		//	hierarchical: go up a few levels and then traverse down
@@ -890,7 +862,6 @@ extern "C" __global__ void __closesthit__voxel()
 	// Also compute indirect lighting
 	Shading out;
 	float3 wi;
-	// float pdf;
 
 	float3 f = eval(surface_hit, wi, pdf, out, rp->seed);
 
@@ -910,7 +881,10 @@ extern "C" __global__ void __closesthit__voxel()
 	}
 
 	// Update the value
-	rp->value = direct;
+	bool skip_direct = (primary && parameters.options.indirect_only);
+	if (!skip_direct)
+		rp->value = direct;
+
 	if (pdf > 0)
 		rp->value += T * indirect;
 

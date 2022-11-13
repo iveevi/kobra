@@ -93,10 +93,13 @@ float3 direct_lighting_temporal_ris(const SurfaceHit &sh, RayPacket *rp)
 
 // Get direct lighting using Spatio-Temporal RIS (ReSTIR)
 __device__
-float3 direct_lighting_restir(const SurfaceHit &sh, RayPacket *rp)
+float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed)
 {
 	// Get the reservoir
-	LightReservoir *temporal = &parameters.advanced.r_lights[rp->index];
+	// TODO: option to copy resrvoir and update locally rather than
+	//       updating the global reservoir
+	// TODO: do we actually need to worry about empty reservoirs?
+	LightReservoir *temporal = &parameters.advanced.r_lights[index];
 	if (parameters.samples == 0) {
 		temporal->sample = LightSample {};
 		temporal->count = 0;
@@ -105,7 +108,7 @@ float3 direct_lighting_restir(const SurfaceHit &sh, RayPacket *rp)
 	}
 
 	// Get direct lighting sample
-	FullLightSample fls = sample_direct(rp->seed);
+	FullLightSample fls = sample_direct(seed);
 
 	// Compute target function (unocculted lighting)
 	float3 D = fls.point - sh.x;
@@ -127,7 +130,7 @@ float3 direct_lighting_restir(const SurfaceHit &sh, RayPacket *rp)
 		.target = target,
 		.type = fls.type,
 		.index = fls.index
-	}, w, rp->seed);
+	}, w, seed);
 
 	// Spatial Resampling
 	LightReservoir spatial {
@@ -161,7 +164,7 @@ float3 direct_lighting_restir(const SurfaceHit &sh, RayPacket *rp)
 		spatial.weight += w;
 
 		float p = w/spatial.weight;
-		float eta = rand_uniform(rp->seed);
+		float eta = rand_uniform(seed);
 
 		if (eta < p || spatial.count == 0) {
 			spatial.sample = LightSample {
@@ -184,12 +187,12 @@ float3 direct_lighting_restir(const SurfaceHit &sh, RayPacket *rp)
 	const int SAMPLES = 0;
 	const float SAMPLING_RADIUS = min(WIDTH, HEIGHT) * 0.1f;
 
-	int ix = rp->index % WIDTH;
-	int iy = rp->index / WIDTH;
+	int ix = index % WIDTH;
+	int iy = index / WIDTH;
 
 	for (int i = 0; i < SAMPLES; i++) {
 		// Get offset
-		float3 eta = rand_uniform_3f(rp->seed);
+		float3 eta = rand_uniform_3f(seed);
 
 		float radius = SAMPLING_RADIUS * sqrt(eta.x);
 		float theta = 2.0f * M_PI * eta.y;
@@ -245,10 +248,49 @@ float3 direct_lighting_restir(const SurfaceHit &sh, RayPacket *rp)
 	// Get final sample's contribution	
 	LightSample sample = spatial.sample;
 	float denominator = Z * sample.target;
-	float W = (sample.target > 0) ? spatial.weight/denominator : 0.0f;
+	float W = (denominator > 0) ? spatial.weight/denominator : 0.0f;
 
 	// Evaluate the integrand
 	return W * sample.value;
+}
+
+// Direct lighting for indirect rays, possible reuse
+__device__
+float3 direct_indirect(const SurfaceHit &surface_hit, Seed seed)
+{
+	if (!parameters.options.reprojected_reuse)
+		return Ld(surface_hit, seed);
+
+	// TODO: method
+	const float3 U = parameters.cam_u;
+	const float3 V = parameters.cam_v;
+	const float3 W = parameters.cam_w;
+
+	float3 D = surface_hit.x - parameters.camera;
+	float d = length(D);
+	D /= d;
+
+	float D_W = dot(D, W);
+	float u = dot(D, U)/(dot(D, W) * dot(U, U));
+	float v = dot(D, V)/(dot(D, W) * dot(V, V));
+
+	bool in_u_bounds = (u >= -1.0f && u <= 1.0f);
+	bool in_v_bounds = (v >= -1.0f && v <= 1.0f);
+
+	// TODO: how much does checking for occlusion matter?
+	if (in_u_bounds && in_v_bounds) {
+		u = (u + 1.0f) * 0.5f;
+		v = (v + 1.0f) * 0.5f;
+
+		int ix = (int) floorf(u * parameters.resolution.x);
+		int iy = (int) floorf(v * parameters.resolution.y);
+
+		int index = iy * parameters.resolution.x + ix;
+
+		return direct_lighting_restir(surface_hit, index, seed);
+	}
+	
+	return Ld(surface_hit, seed);
 }
 
 // Closest hit program for ReSTIR
@@ -256,6 +298,9 @@ extern "C" __global__ void __closesthit__restir()
 {
 	LOAD_RAYPACKET();
 	LOAD_INTERSECTION_DATA();
+
+	// Check if primary ray
+	bool primary = (rp->depth == 0);
 
 	// Offset by normal
 	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
@@ -269,9 +314,17 @@ extern "C" __global__ void __closesthit__restir()
 		.x = x,
 	};
 
-	// float3 direct = direct_lighting_ris(surface_hit, rp->seed);
-	// float3 direct = direct_lighting_temporal_ris(surface_hit, rp);
-	float3 direct = direct_lighting_restir(surface_hit, rp);
+	// Compute direct ligting
+	float3 direct = make_float3(0.0f);
+
+	if (primary) {
+		// float3 direct = direct_lighting_ris(surface_hit, rp->seed);
+		// float3 direct = direct_lighting_temporal_ris(surface_hit, rp);
+		direct = direct_lighting_restir(surface_hit, rp->index, rp->seed);
+	} else {
+		direct = direct_indirect(surface_hit, rp->seed);
+	}
+
 	if (material.type == Shading::eEmissive)
 		direct += material.emission;
 	
@@ -293,12 +346,16 @@ extern "C" __global__ void __closesthit__restir()
 	// Trace the next ray
 	float3 indirect = make_float3(0.0f);
 	if (pdf > 0) {
-		trace <eRegular> (x, wi, i0, i1);
+		// trace <eRegular> (x, wi, i0, i1);
+		trace <eReSTIR> (x, wi, i0, i1);
 		indirect = rp->value;
 	}
 
 	// Update the value
-	rp->value = direct;
+	bool skip_direct = (primary && parameters.options.indirect_only);
+	if (!skip_direct)
+		rp->value = direct;
+
 	if (pdf > 0)
 		rp->value += T * indirect;
 
