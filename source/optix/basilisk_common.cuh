@@ -234,7 +234,7 @@ struct FullLightSample {
 };
 
 KCUDA_INLINE KCUDA_DEVICE
-FullLightSample sample_direct(Seed seed)
+FullLightSample sample_direct(const SurfaceHit &sh, Seed seed)
 {
 	// TODO: plus envmap
 	int quad_count = parameters.lights.quad_count;
@@ -289,18 +289,18 @@ FullLightSample sample_direct(Seed seed)
 		);
 
 		// TODO: world radius in parameters
-		float3 point = wi * 10000.0f;
+		float3 point = sh.x + wi * 10.0f;
 
 		float u = atan2(wi.x, wi.z)/(2.0f * M_PI) + 0.5f;
 		float v = asin(wi.y)/M_PI + 0.5f;
 
 		float4 env = tex2D <float4> (parameters.envmap, u, v);
 
-		float pdf = 1.0f/(4.0f * M_PI * 1000.0f * 1000.0f * total_lights);
+		float pdf = 1.0f/(4.0f * M_PI * total_lights);
 		
 		// Copy information
 		sample.Le = make_float3(env);
-		sample.normal = make_float3(0.0f);
+		sample.normal = -wi;
 		sample.point = point;
 		sample.pdf = pdf;
 
@@ -319,12 +319,12 @@ float3 direct_unoccluded(const SurfaceHit &sh, float3 Le, float3 normal, int typ
 	// TODO: evaluate all lobes...
 	float3 rho = cuda::brdf(sh, D, eDiffuse);
 
-	float geometric = abs(dot(sh.n, D))/(d * d);
+	float geometric = abs(dot(sh.n, D));
 
 	// TODO: enums
 	if (type != 2) {
 		float ldot = abs(dot(normal, D));
-		geometric *= ldot;
+		geometric *= ldot/(d * d);
 	}
 
 	return rho * Le * geometric;
@@ -339,10 +339,10 @@ float3 direct_occluded(const SurfaceHit &sh, float3 Le, float3 normal, int type,
 	if (!occluded) {
 		float3 rho = brdf(sh, D, eDiffuse);
 
-		float geometric = abs(dot(sh.n, D))/(d * d);
+		float geometric = abs(dot(sh.n, D));
 		if (type != 2) {
 			float ldot = abs(dot(normal, D));
-			geometric *= ldot;
+			geometric *= ldot/(d * d);
 		}
 
 		Li = rho * Le * geometric;

@@ -15,7 +15,9 @@ float3 direct_lighting_ris(const SurfaceHit &sh, Seed seed)
 
 	for (int k = 0; k < M; k++) {
 		// Get direct lighting sample
-		FullLightSample fls = sample_direct(seed);
+		FullLightSample fls = sample_direct(sh, seed);
+		if (fls.type != 2)
+			continue;
 
 		// Compute lighting
 		float3 D = fls.point - sh.x;
@@ -25,6 +27,7 @@ float3 direct_lighting_ris(const SurfaceHit &sh, Seed seed)
 		float3 Li = direct_occluded(sh, fls.Le, fls.normal, fls.type, D, d);
 
 		// Resampling
+		// TODO: common target function...
 		float target = length(Li);
 		float pdf = fls.pdf;
 
@@ -61,7 +64,7 @@ float3 direct_lighting_temporal_ris(const SurfaceHit &sh, RayPacket *rp)
 	// TODO: temporal reprojection?
 
 	// Get direct lighting sample
-	FullLightSample fls = sample_direct(rp->seed);
+	FullLightSample fls = sample_direct(sh, rp->seed);
 
 	// Compute lighting
 	float3 D = fls.point - sh.x;
@@ -108,7 +111,7 @@ float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed)
 	}
 
 	// Get direct lighting sample
-	FullLightSample fls = sample_direct(seed);
+	FullLightSample fls = sample_direct(sh, seed);
 
 	// Compute target function (unocculted lighting)
 	float3 D = fls.point - sh.x;
@@ -318,8 +321,8 @@ extern "C" __global__ void __closesthit__restir()
 	float3 direct = make_float3(0.0f);
 
 	if (primary) {
-		// float3 direct = direct_lighting_ris(surface_hit, rp->seed);
-		// float3 direct = direct_lighting_temporal_ris(surface_hit, rp);
+		// direct = direct_lighting_ris(surface_hit, rp->seed);
+		// direct = direct_lighting_temporal_ris(surface_hit, rp);
 		direct = direct_lighting_restir(surface_hit, rp->index, rp->seed);
 	} else {
 		direct = direct_indirect(surface_hit, rp->seed);

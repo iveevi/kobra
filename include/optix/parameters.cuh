@@ -183,6 +183,9 @@ struct BasiliskOptions {
 	bool reprojected_reuse;
 };
 
+// Enable hashing with World Space RIS
+#define WSRIS_HASH_RESOLUION 13
+
 struct BasiliskParameters {
 	// Mode, indicates various flags...
 	// TODO: create an abstractoin for integrators

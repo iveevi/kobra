@@ -160,7 +160,7 @@ float3 Ld_light(const Light &light, const cuda::SurfaceHit &sh, float &light_pdf
 	float3 f = cuda::brdf(sh, wi, eDiffuse);
 
 	float ldot = abs(dot(light.normal(), wi));
-	float geometric = ldot * abs(dot(sh.n, wi)) / (R * R);
+	float geometric = ldot * abs(dot(sh.n, wi))/(R * R);
 
 	return f * light.intensity * geometric;
 }
