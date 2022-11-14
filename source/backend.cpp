@@ -3,12 +3,10 @@
 #include <vulkan/vulkan_core.h>
 #include <vulkan/vulkan_format_traits.hpp>
 
-// STBI headrs
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb/stb_image.h>
-
+// Engine headers
 #include "../include/backend.hpp"
 #include "../include/core.hpp"
+#include "../include/texture.hpp"
 
 namespace kobra {
 
@@ -908,24 +906,14 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 	int height;
 	int channels;
 
-	stbi_set_flip_vertically_on_load(true);
+	/* stbi_set_flip_vertically_on_load(true);
 	byte *data = stbi_load(filename.c_str(), &width, &height, &channels, 4);
-	KOBRA_ASSERT(data, "Failed to load texture image");
+	KOBRA_ASSERT(data, "Failed to load texture image"); */
+
+	byte *data = load_texture(filename, width, height, channels);
 
 	KOBRA_LOG_FUNC(Log::INFO) << "Loaded image: " << filename << ": width="
 			<< width << ", height=" << height << ", channels=" << channels << "\n";
-
-	/* uint32_t *pixels = (uint32_t *)data;
-	std::cout << "Image dump: " << filename << std::endl;
-	uint32_t r = 0, g = 0, b = 0, a = 0;
-	for (int i = 0; i < 20; i++) {
-		uint32_t v = pixels[i];
-		r = (v >> 24) & 0xff;
-		g = (v >> 16) & 0xff;
-		b = (v >> 8) & 0xff;
-		a = v & 0xff;
-		std::cout << "(" << r << ", " << g << ", " << b << ", " << a << ")\n";
-	} */
 
 	// Create the image
 	vk::Extent2D extent {
@@ -933,9 +921,12 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 		static_cast <uint32_t> (height)
 	};
 
+	// Get appropriate format
 	ImageData img = ImageData(
 		phdev, device,
-		vk::Format::eR8G8B8A8Unorm,
+		vk::Format::eR8G8B8A8Unorm, // TODO: what about other formats?
+					    // generate list and compare for
+					    // best match?
 		extent,
 		tiling,
 		usage,
@@ -1022,12 +1013,6 @@ vk::raii::Pipeline make_graphics_pipeline(const GraphicsPipelineInfo &info)
 			info.fragment_specialization
 		}
 	};
-
-	/* std::cout << "Vertex attribute formats:" << info.vertex_attributes.size() << std::endl;
-	for (const auto &attr : info.vertex_attributes) {
-		std::cout << "\t" << attr.binding << " " << attr.location << " "
-			<< vk::to_string(attr.format) << " " << attr.offset << std::endl;
-	} */
 
 	// Vertex input state
 	vk::PipelineVertexInputStateCreateInfo vertex_input_info {

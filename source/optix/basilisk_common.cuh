@@ -24,7 +24,7 @@ extern "C"
 
 // TODO: launch parameter for ray depth
 // TODO: rename to MAX_BOUNCES
-#define MAX_DEPTH 3
+#define MAX_DEPTH 1
 
 // Local constants
 static const float eps = 1e-3f;
@@ -150,6 +150,7 @@ bool is_occluded(float3 origin, float3 dir, float R)
 KCUDA_DEVICE
 float3 Ld_Environment(const SurfaceHit &sh, float &pdf, Seed seed)
 {
+	// TODO: sample in UV space instead of direction...
 	static const float WORLD_RADIUS = 10000.0f;
 
 	// Sample random direction
@@ -169,7 +170,9 @@ float3 Ld_Environment(const SurfaceHit &sh, float &pdf, Seed seed)
 	float4 sample = tex2D <float4> (parameters.envmap, u, v);
 	float3 Li = make_float3(sample);
 
-	pdf = 1.0f / (4.0f * M_PI * WORLD_RADIUS * WORLD_RADIUS);
+	// pdf = 1.0f / (4.0f * M_PI * WORLD_RADIUS * WORLD_RADIUS);
+
+	pdf = 1.0f/(4.0f * M_PI);
 
 	// NEE
 	bool occluded = is_occluded(sh.x, wi, WORLD_RADIUS);

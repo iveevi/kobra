@@ -12,6 +12,7 @@ definitions:
     source/ecs.cpp,
     source/extensions.cpp,
     source/formats.cpp,
+    source/texture.cpp,
     source/io/event.cpp,
     source/layers/denoiser.cu,
     source/layers/forward_renderer.cpp,
