@@ -24,7 +24,7 @@ extern "C"
 
 // TODO: launch parameter for ray depth
 // TODO: rename to MAX_BOUNCES
-#define MAX_DEPTH 2
+#define MAX_DEPTH 0
 
 // Local constants
 static const float eps = 1e-3f;

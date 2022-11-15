@@ -1,5 +1,12 @@
 #include "basilisk_common.cuh"
 
+// Target function
+KCUDA_INLINE KCUDA_DEVICE
+float target_function(float3 Li)
+{
+	return Li.x + Li.y + Li.z;
+}
+
 // Get direct lighting using RIS
 __device__
 float3 direct_lighting_ris(const SurfaceHit &sh, Seed seed)
@@ -28,7 +35,7 @@ float3 direct_lighting_ris(const SurfaceHit &sh, Seed seed)
 
 		// Resampling
 		// TODO: common target function...
-		float target = length(Li);
+		float target = target_function(Li);
 		float pdf = fls.pdf;
 
 		float w = (pdf > 0.0f) ? target/pdf : 0.0f;
@@ -74,7 +81,7 @@ float3 direct_lighting_temporal_ris(const SurfaceHit &sh, RayPacket *rp)
 	float3 Li = direct_occluded(sh, fls.Le, fls.normal, fls.type, D, d);
 
 	// Resampling
-	float target = length(Li);
+	float target = target_function(Li);
 	float pdf = fls.pdf;
 
 	float w = (pdf > 0.0f) ? target/pdf : 0.0f;
@@ -121,7 +128,7 @@ float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed, int sp
 	float3 Li = direct_unoccluded(sh, fls.Le, fls.normal, fls.type, D, d);
 
 	// Temporal Resampling
-	float target = length(Li);
+	float target = target_function(Li);
 	float pdf = fls.pdf;
 
 	float w = (pdf > 0.0f) ? target/pdf : 0.0f;
@@ -160,7 +167,7 @@ float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed, int sp
 		float3 Li = direct_occluded(sh, sample.value, sample.normal, sample.type, D, d);
 
 		// Add to the reservoir
-		float target = length(Li);
+		float target = target_function(Li);
 
 		float w = target * W * temporal->count;
 
@@ -226,7 +233,8 @@ float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed, int sp
 		float3 Li = direct_occluded(sh, sample.value, sample.normal, sample.type, D, d);
 
 		// Add to the reservoir
-		float target = length(Li);
+		// TODO: luminance as target?
+		float target = target_function(Li);
 
 		float w = target * W * reservoir->count;
 
@@ -249,7 +257,7 @@ float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed, int sp
 
 	// Get final sample's contribution	
 	LightSample sample = spatial.sample;
-	float denominator = Z * sample.target;
+	float denominator = spatial.count * sample.target;
 	float W = (denominator > 0) ? spatial.weight/denominator : 0.0f;
 
 	// Evaluate the integrand
@@ -327,7 +335,11 @@ extern "C" __global__ void __closesthit__restir()
 		if (parameters.options.reprojected_reuse)
 			spatial_samples = 3;
 
-		direct = direct_lighting_restir(surface_hit, rp->index, rp->seed, spatial_samples);
+		direct = direct_lighting_restir(
+			surface_hit,
+			rp->index, rp->seed,
+			spatial_samples
+		);
 	} else {
 		direct = direct_indirect(surface_hit, rp->seed);
 	}

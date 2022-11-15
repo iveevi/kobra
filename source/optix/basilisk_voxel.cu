@@ -140,9 +140,6 @@ extern "C" __global__ void __closesthit__voxel()
 			}
 		}
 
-		// rp->value = make_float3(lefts, rights, 0)/float(depth);
-		// return;
-
 		// Lock and update the reservoir
 		// TODO: similar scoped lock as std::lock_guard, in cuda/sync.h
 		// while (atomicCAS(lock, 0, 1) == 0);	// Lock
@@ -150,7 +147,21 @@ extern "C" __global__ void __closesthit__voxel()
 #ifdef WSRIS_HASH_RESOLUION
 
 		int base_idx = kd_node->data * WSRIS_HASH_RESOLUION;
-		int res_idx = base_idx/WSRIS_HASH_RESOLUION;
+		int res_idx = base_idx;
+
+		// Hash position to get index in cell
+		uint3 hash = pcg3d(*((uint3 *) &x));
+		int cell_idx = (hash.x + hash.y + hash.z) % WSRIS_HASH_RESOLUION;
+
+		res_idx += cell_idx;
+
+		/* rp->value = make_float3(
+			lefts/(float) depth,
+			rights/(float) depth,
+			cell_idx/(float) WSRIS_HASH_RESOLUION
+		);
+
+		return; */
 
 #else
 
@@ -237,7 +248,22 @@ extern "C" __global__ void __closesthit__voxel()
 
 			// Get necessary data
 			// TODO: maybe lock?
+
+#ifdef WSRIS_HASH_RESOLUION
+
+			int base_idx = kd_node->data * WSRIS_HASH_RESOLUION;
+			res_idx = base_idx;
+
+			// Randomly select a cell
+			int cell_idx = rand_uniform(WSRIS_HASH_RESOLUION, rp->seed);
+			res_idx += cell_idx;
+
+#else
+
 			res_idx = kd_node->data;
+
+#endif
+
 			reservoir = &parameters.kd_reservoirs[res_idx];
 			sample = &reservoir->sample;
 
@@ -263,7 +289,8 @@ extern "C" __global__ void __closesthit__voxel()
 				.index = sample->index
 			}, w, rp->seed);
 
-			spatial.count = pcount + (target > 0.0f ? reservoir->count : 0);
+			// spatial.count = pcount + (target > 0.0f ? reservoir->count : 0);
+			spatial.count = pcount + reservoir->count;
 			successes += (target > 0.0f);
 		}
 	}

@@ -185,7 +185,7 @@ struct BasiliskOptions {
 };
 
 // Enable hashing with World Space RIS
-#define WSRIS_HASH_RESOLUION 13
+// #define WSRIS_HASH_RESOLUION 10
 
 struct BasiliskParameters {
 	// Mode, indicates various flags...
