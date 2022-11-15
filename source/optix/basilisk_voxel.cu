@@ -142,7 +142,7 @@ extern "C" __global__ void __closesthit__voxel()
 
 		// Lock and update the reservoir
 		// TODO: similar scoped lock as std::lock_guard, in cuda/sync.h
-		while (atomicCAS(lock, 0, 1) == 0);	// Lock
+		// while (atomicCAS(lock, 0, 1) == 0);	// Lock
 
 		int res_idx = kd_node->data;
 		auto *reservoir = &parameters.kd_reservoirs[res_idx];
@@ -161,7 +161,7 @@ extern "C" __global__ void __closesthit__voxel()
 		float w_sum = reservoir->weight;
 		int count = reservoir->count;
 
-		atomicExch(lock, 0);			// Unlock
+		// atomicExch(lock, 0);			// Unlock
 
 		// TODO: two strategies
 		//	hierarchical: go up a few levels and then traverse down

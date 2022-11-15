@@ -187,7 +187,7 @@ float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed)
 	const int WIDTH = parameters.resolution.x;
 	const int HEIGHT = parameters.resolution.y;
 
-	const int SAMPLES = 0;
+	const int SAMPLES = 10;
 	const float SAMPLING_RADIUS = min(WIDTH, HEIGHT) * 0.1f;
 
 	int ix = index % WIDTH;
