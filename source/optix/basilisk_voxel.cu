@@ -140,11 +140,24 @@ extern "C" __global__ void __closesthit__voxel()
 			}
 		}
 
+		// rp->value = make_float3(lefts, rights, 0)/float(depth);
+		// return;
+
 		// Lock and update the reservoir
 		// TODO: similar scoped lock as std::lock_guard, in cuda/sync.h
 		// while (atomicCAS(lock, 0, 1) == 0);	// Lock
 
+#ifdef WSRIS_HASH_RESOLUION
+
+		int base_idx = kd_node->data * WSRIS_HASH_RESOLUION;
+		int res_idx = base_idx/WSRIS_HASH_RESOLUION;
+
+#else
+
 		int res_idx = kd_node->data;
+
+#endif
+
 		auto *reservoir = &parameters.kd_reservoirs[res_idx];
 		auto *sample = &reservoir->sample;
 
@@ -282,7 +295,8 @@ extern "C" __global__ void __closesthit__voxel()
 	// Trace the next ray
 	float3 indirect = make_float3(0.0f);
 	if (pdf > 0) {
-		trace <eRegular> (x, wi, i0, i1);
+		// trace <eRegular> (x, wi, i0, i1);
+		trace <eVoxel> (x, wi, i0, i1);
 		indirect = rp->value;
 	}
 

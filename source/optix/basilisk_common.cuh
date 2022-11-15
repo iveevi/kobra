@@ -24,7 +24,7 @@ extern "C"
 
 // TODO: launch parameter for ray depth
 // TODO: rename to MAX_BOUNCES
-#define MAX_DEPTH 10
+#define MAX_DEPTH 2
 
 // Local constants
 static const float eps = 1e-3f;
@@ -289,7 +289,7 @@ FullLightSample sample_direct(const SurfaceHit &sh, Seed seed)
 		);
 
 		// TODO: world radius in parameters
-		float3 point = sh.x + wi * 10.0f;
+		float3 point = sh.x + wi * 10000.0f;
 
 		float u = atan2(wi.x, wi.z)/(2.0f * M_PI) + 0.5f;
 		float v = asin(wi.y)/M_PI + 0.5f;

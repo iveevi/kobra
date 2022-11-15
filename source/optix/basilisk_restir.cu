@@ -96,7 +96,7 @@ float3 direct_lighting_temporal_ris(const SurfaceHit &sh, RayPacket *rp)
 
 // Get direct lighting using Spatio-Temporal RIS (ReSTIR)
 __device__
-float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed)
+float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed, int spatial_samples)
 {
 	// Get the reservoir
 	// TODO: option to copy resrvoir and update locally rather than
@@ -187,13 +187,12 @@ float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed)
 	const int WIDTH = parameters.resolution.x;
 	const int HEIGHT = parameters.resolution.y;
 
-	const int SAMPLES = 10;
 	const float SAMPLING_RADIUS = min(WIDTH, HEIGHT) * 0.1f;
 
 	int ix = index % WIDTH;
 	int iy = index / WIDTH;
 
-	for (int i = 0; i < SAMPLES; i++) {
+	for (int i = 0; i < spatial_samples; i++) {
 		// Get offset
 		float3 eta = rand_uniform_3f(seed);
 
@@ -290,7 +289,7 @@ float3 direct_indirect(const SurfaceHit &surface_hit, Seed seed)
 
 		int index = iy * parameters.resolution.x + ix;
 
-		return direct_lighting_restir(surface_hit, index, seed);
+		return direct_lighting_restir(surface_hit, index, seed, 3);
 	}
 	
 	return Ld(surface_hit, seed);
@@ -323,7 +322,12 @@ extern "C" __global__ void __closesthit__restir()
 	if (primary) {
 		// direct = direct_lighting_ris(surface_hit, rp->seed);
 		// direct = direct_lighting_temporal_ris(surface_hit, rp);
-		direct = direct_lighting_restir(surface_hit, rp->index, rp->seed);
+
+		int spatial_samples = 10;
+		if (parameters.options.reprojected_reuse)
+			spatial_samples = 3;
+
+		direct = direct_lighting_restir(surface_hit, rp->index, rp->seed, spatial_samples);
 	} else {
 		direct = direct_indirect(surface_hit, rp->seed);
 	}

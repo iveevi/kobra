@@ -1293,8 +1293,16 @@ void build_kd_tree(Basilisk &layer, float4 *point_array, int size)
 	// Allocate corresponding resources
 	int leaves = res_idx;
 	size = node_idx;
+	
+	int total_reservoirs = leaves;
 
-	std::vector <optix::LightReservoir> reservoir_data(leaves);
+#ifdef WSRIS_HASH_RESOLUION
+
+	total_reservoirs *= WSRIS_HASH_RESOLUION;
+
+#endif
+	
+	std::vector <optix::LightReservoir> reservoir_data(total_reservoirs);
 
 	optix::LightReservoir *d_reservoirs = cuda::make_buffer(reservoir_data);
 

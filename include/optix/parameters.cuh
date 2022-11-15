@@ -180,6 +180,7 @@ struct BasiliskOptions {
 	bool disable_accumulation;
 	bool indirect_only;
 	bool recursive_wsris;
+	bool wsris_visualize;
 	bool reprojected_reuse;
 };
 
