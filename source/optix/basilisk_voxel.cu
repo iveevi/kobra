@@ -92,7 +92,6 @@ extern "C" __global__ void __closesthit__voxel()
 
 		// Traverse the kd-tree
 		WorldNode *kd_node = nullptr;
-		int *lock = nullptr;
 
 		int root = 0;
 		int depth = 0;
@@ -105,7 +104,6 @@ extern "C" __global__ void __closesthit__voxel()
 		while (root >= 0) {
 			depth++;
 			kd_node = &parameters.kd_tree[root];
-			lock = parameters.kd_locks[root];
 			
 			// If no valid branches, exit
 			int left = kd_node->left;
@@ -142,7 +140,6 @@ extern "C" __global__ void __closesthit__voxel()
 
 		// Lock and update the reservoir
 		// TODO: similar scoped lock as std::lock_guard, in cuda/sync.h
-		// while (atomicCAS(lock, 0, 1) == 0);	// Lock
 
 #ifdef WSRIS_HASH_RESOLUION
 
@@ -168,6 +165,10 @@ extern "C" __global__ void __closesthit__voxel()
 		int res_idx = kd_node->data;
 
 #endif
+		
+		int *lock = parameters.kd_locks[res_idx];
+
+		// while (atomicCAS(lock, 0, 1) == 0); // Lock
 
 		auto *reservoir = &parameters.kd_reservoirs[res_idx];
 		auto *sample = &reservoir->sample;
@@ -200,7 +201,6 @@ extern "C" __global__ void __closesthit__voxel()
 		int levels = min(depth, LEVELS);
 		while (levels--) {
 			kd_node = &parameters.kd_tree[root];
-			lock = parameters.kd_locks[root];
 
 			if (kd_node->parent == -1)
 				break;
@@ -214,7 +214,6 @@ extern "C" __global__ void __closesthit__voxel()
 
 			while (true) {
 				kd_node = &parameters.kd_tree[node];
-				lock = parameters.kd_locks[node];
 
 				float split = kd_node->split;
 				int axis = kd_node->axis;
@@ -264,40 +263,74 @@ extern "C" __global__ void __closesthit__voxel()
 
 #endif
 
-			reservoir = &parameters.kd_reservoirs[res_idx];
-			sample = &reservoir->sample;
+			// TODO: syncronized pipeline, this one is copied
+			// because no lock is used
+			LightReservoir rsampled = parameters.kd_reservoirs_prev[res_idx];
+			LightSample sample = rsampled.sample;
 
 			// Compute value and target
-			D = sample->point - surface_hit.x;
+			D = sample.point - surface_hit.x;
 			d = length(D);
 			D /= d;
 
-			Li = direct_occluded(surface_hit, sample->value, sample->normal, sample->type, D, d);
+			Li = direct_occluded(surface_hit, sample.value,
+					sample.normal, sample.type, D, d);
 
-			float denom = reservoir->count * sample->target;
-			float W = (denom > 0.0f) ? reservoir->weight/denom : 0.0f;
+			float denom = rsampled.count * sample.target;
+			float W = (denom > 0.0f) ? rsampled.weight/denom : 0.0f;
 
 			// Insert into spatial reservoir
 			target = Li.x + Li.y + Li.z; // Luminance
-			w = target * W * reservoir->count; // TODO: compute without doing repeated work
+			w = target * W * rsampled.count; // TODO: compute without doing repeated work
 
 			int pcount = spatial.count;
 			reservoir_update(&spatial, LightSample {
 				.value = Li,
 				.target = target,
-				.type = sample->type,
-				.index = sample->index
+				.type = sample.type,
+				.index = sample.index
 			}, w, rp->seed);
 
 			// spatial.count = pcount + (target > 0.0f ? reservoir->count : 0);
-			spatial.count = pcount + reservoir->count;
+			spatial.count = pcount + rsampled.count;
 			successes += (target > 0.0f);
+
+			/* Also insert into temporal reservoir
+			Li = direct_unoccluded(surface_hit, sample.value, sample.normal, sample.type, D, d);
+
+			target = Li.x + Li.y + Li.z; // Luminance
+			denom = rsampled.count * target;
+			W = (denom > 0.0f) ? rsampled.weight/denom : 0.0f;
+			// assert(!isnan(W));
+
+			w = target * W * rsampled.count;
+			// assert(!isnan(w));
+
+			reservoir->weight += w;
+			// assert(!isnan(reservoir->weight));
+
+			float p = w/reservoir->weight;
+			float eta = rand_uniform(rp->seed);
+
+			if (eta < p) {
+				reservoir->sample = LightSample {
+					.value = Li,
+					.point = sample.point,
+					.normal = sample.normal,
+					.target = target,
+					.type = sample.type,
+					.index = sample.index
+				};
+			}
+
+			reservoir->count += rsampled.count; */
 		}
 	}
 
 	// Final direct lighting result
 	float denom = spatial.count * spatial.sample.target;
 	float W = (denom > 0) ? spatial.weight/denom : 0.0f;
+	// assert(!isnan(W));
 
 	direct = spatial.sample.value * W;
 	

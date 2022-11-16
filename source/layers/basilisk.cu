@@ -426,15 +426,8 @@ static void initialize_optix(Basilisk &layer)
 
 	params.advanced.r_lights = cuda::make_buffer(r_lights);
 	params.advanced.r_lights_prev = cuda::make_buffer(r_lights);
-	params.advanced.r_lights_spatial = cuda::make_buffer(r_lights);
-
-	params.advanced.r_temporal = cuda::make_buffer(r_temporal);
-	params.advanced.r_temporal_prev = cuda::make_buffer(r_temporal);
-	
-	params.advanced.r_spatial = cuda::make_buffer(r_spatial);
-	params.advanced.r_spatial_prev = cuda::make_buffer(r_spatial);
-
-	params.advanced.sampling_radii = cuda::make_buffer(sampling_radii);
+	params.advanced.r_spatial = cuda::make_buffer(r_lights);
+	params.advanced.r_spatial_prev = cuda::make_buffer(r_lights);
 
 	// Advanced sampling resources - Voxel
 	int voxel_count = VOXEL_RESOLUTION * VOXEL_RESOLUTION * VOXEL_RESOLUTION;
@@ -1305,6 +1298,7 @@ void build_kd_tree(Basilisk &layer, float4 *point_array, int size)
 	std::vector <optix::LightReservoir> reservoir_data(total_reservoirs);
 
 	optix::LightReservoir *d_reservoirs = cuda::make_buffer(reservoir_data);
+	optix::LightReservoir *d_reservoirs_prev = cuda::make_buffer(reservoir_data);
 
 	std::vector <int> lock_data(size);
 	std::vector <int *> lock_ptrs(size);
@@ -1315,8 +1309,10 @@ void build_kd_tree(Basilisk &layer, float4 *point_array, int size)
 
 	layer.launch_params.kd_tree = cuda::make_buffer(nodes);
 	layer.launch_params.kd_reservoirs = d_reservoirs;
+	layer.launch_params.kd_reservoirs_prev = d_reservoirs_prev;
 	layer.launch_params.kd_locks = cuda::make_buffer(lock_ptrs);
 	layer.launch_params.kd_nodes = size;
+	layer.launch_params.kd_leaves = leaves;
 }
 
 // Path tracing computation
@@ -1371,6 +1367,30 @@ void compute(Basilisk &layer,
 		
 		CUDA_SYNC_CHECK();
 
+		auto &advanced = layer.launch_params.advanced;
+		int reservoir_size = sizeof(optix::LightReservoir) * width * height;
+
+		// TODO: only copy during corresponding modes...
+		// TODO: async??
+		CUDA_CHECK(
+			cudaMemcpy(
+				advanced.r_lights_prev,
+				advanced.r_lights,
+				reservoir_size,
+				cudaMemcpyDeviceToDevice
+			)
+		);
+
+		/* TODO: Nan errors here...
+		CUDA_CHECK(
+			cudaMemcpy(
+				advanced.r_spatial_prev,
+				advanced.r_spatial,
+				reservoir_size,
+				cudaMemcpyDeviceToDevice
+			)
+		); */
+
 		// TODO: async tasks...
 		// TODO: templatize by transfer type cudamemcpytype
 		// cuda::copy(layer.positions, layer.launch_params.position_buffer);
@@ -1396,6 +1416,20 @@ void compute(Basilisk &layer,
 			task();
 
 			layer.initial_kd_tree = true;
+		}
+
+		if (mode == optix::eVoxel && layer.initial_kd_tree) {
+			auto &params = layer.launch_params;
+			reservoir_size = sizeof(optix::LightReservoir) * params.kd_leaves;
+
+			CUDA_CHECK(
+				cudaMemcpy(
+					params.kd_reservoirs_prev,
+					params.kd_reservoirs,
+					reservoir_size,
+					cudaMemcpyDeviceToDevice
+				)
+			);
 		}
 
 		/* TODO: construct k-d tree for reservoirs...

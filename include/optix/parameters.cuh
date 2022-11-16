@@ -236,20 +236,14 @@ struct BasiliskParameters {
 		LightReservoir *r_lights;
 		LightReservoir *r_lights_prev;
 
-		LightReservoir *r_lights_spatial;
-
-		ReSTIR_Reservoir *r_temporal;
-		ReSTIR_Reservoir *r_temporal_prev;
-		
-		ReSTIR_Reservoir *r_spatial;
-		ReSTIR_Reservoir *r_spatial_prev;
-
-		float *sampling_radii;
+		LightReservoir *r_spatial;
+		LightReservoir *r_spatial_prev;
 	} advanced;
 
 	// Voxel reservoirs sampling
 	struct {
 		Voxel_Reservoir *reservoirs;
+
 		int **locks;
 		int resolution;
 
@@ -266,8 +260,10 @@ struct BasiliskParameters {
 
 	WorldNode *kd_tree;
 	LightReservoir *kd_reservoirs;
+	LightReservoir *kd_reservoirs_prev;
 	int **kd_locks;
 	int kd_nodes;
+	int kd_leaves;
 };
 
 }

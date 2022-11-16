@@ -109,7 +109,7 @@ extern "C" __global__ void __raygen__rg()
 
 	// Check for NaNs
 	if (isnan(sample.x) || isnan(sample.y) || isnan(sample.z))
-		sample = make_float4(1, 1, 0, 1);
+		sample = make_float4(1, 0, 1, 1);
 
 	// Accumulate necessary data
 	accumulate(parameters.color_buffer[index], sample);

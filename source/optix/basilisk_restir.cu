@@ -110,11 +110,18 @@ float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed, int sp
 	//       updating the global reservoir
 	// TODO: do we actually need to worry about empty reservoirs?
 	LightReservoir *temporal = &parameters.advanced.r_lights[index];
+	LightReservoir *spatial = &parameters.advanced.r_spatial[index];
+
 	if (parameters.samples == 0) {
 		temporal->sample = LightSample {};
 		temporal->count = 0;
 		temporal->weight = 0.0f;
 		temporal->mis = 0.0f;
+
+		spatial->sample = LightSample {};
+		spatial->count = 0;
+		spatial->weight = 0.0f;
+		spatial->mis = 0.0f;
 	}
 
 	// Get direct lighting sample
@@ -142,14 +149,6 @@ float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed, int sp
 		.index = fls.index
 	}, w, seed);
 
-	// Spatial Resampling
-	LightReservoir spatial {
-		.sample = LightSample {},
-		.count = 0,
-		.weight = 0.0f,
-		.mis = 0.0f,
-	};
-
 	// Add current sample
 	int Z = 0;
 
@@ -157,7 +156,7 @@ float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed, int sp
 		// Compute unbiased weight
 		LightSample sample = temporal->sample;
 		float denominator = temporal->count * sample.target;
-		float W = (sample.target > 0) ? temporal->weight/denominator : 0.0f;
+		float W = (denominator > 0) ? temporal->weight/denominator : 0.0f;
 
 		// Compute value and target
 		D = sample.point - sh.x;
@@ -168,24 +167,25 @@ float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed, int sp
 
 		// Add to the reservoir
 		float target = target_function(Li);
-
 		float w = target * W * temporal->count;
 
-		spatial.weight += w;
+		spatial->weight += w;
 
-		float p = w/spatial.weight;
+		float p = w/spatial->weight;
 		float eta = rand_uniform(seed);
 
-		if (eta < p || spatial.count == 0) {
-			spatial.sample = LightSample {
+		if (eta < p) {
+			spatial->sample = LightSample {
 				.value = Li,
+				.point = sample.point,
+				.normal = sample.normal,
 				.target = target,
 				.type = sample.type,
 				.index = sample.index
 			};
 		}
 
-		spatial.count += temporal->count;
+		spatial->count += temporal->count;
 		if (target > 0.0f)
 			Z += temporal->count;
 	}
@@ -218,12 +218,20 @@ float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed, int sp
 		int ni = niy * WIDTH + nix;
 
 		// Get the reservoir
-		LightReservoir *reservoir = &parameters.advanced.r_lights[ni];
+		// NOTE: one side effect of dual buffering is
+		// that we retain some of the old samlpes even
+		// we move around
+		// TODO: alternate sampling method following the papers exact
+		// strategy -- occluded weight for the reservoirs, etc
+		// Also add W to the reservoirs...
+		LightReservoir *reservoir = &parameters.advanced.r_lights_prev[ni];
 
 		// Get sample and resample
 		LightSample sample = reservoir->sample;
 		float denominator = reservoir->count * sample.target;
-		float W = (sample.target > 0) ? reservoir->weight/denominator : 0.0f;
+		float W = (denominator > 0) ? reservoir->weight/denominator : 0.0f;
+		assert(!isnan(reservoir->weight));
+		assert(!isnan(W));
 
 		// Compute value and target
 		D = sample.point - sh.x;
@@ -233,35 +241,39 @@ float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed, int sp
 		float3 Li = direct_occluded(sh, sample.value, sample.normal, sample.type, D, d);
 
 		// Add to the reservoir
-		// TODO: luminance as target?
 		float target = target_function(Li);
-
 		float w = target * W * reservoir->count;
+		assert(!isnan(w));
 
-		spatial.weight += w;
+		spatial->weight += w;
 
-		float p = w/spatial.weight;
-		if (eta.z < p || spatial.count == 0) {
-			spatial.sample = LightSample {
+		float p = w/spatial->weight;
+		if (eta.z < p) {
+			spatial->sample = LightSample {
 				.value = Li,
+				.point = sample.point,
+				.normal = sample.normal,
 				.target = target,
 				.type = sample.type,
 				.index = sample.index
 			};
 		}
 
-		spatial.count += reservoir->count;
+		spatial->count += reservoir->count;
 		if (target > 0.0f)
 			Z += reservoir->count;
 	}
 
 	// Get final sample's contribution	
-	LightSample sample = spatial.sample;
-	float denominator = spatial.count * sample.target;
-	float W = (denominator > 0) ? spatial.weight/denominator : 0.0f;
+	LightSample sample = spatial->sample;
+	float denominator = spatial->count * sample.target;
+	float W = (denominator > 0) ? spatial->weight/denominator : 0.0f;
+	assert(!isnan(W));
 
 	// Evaluate the integrand
-	return W * sample.value;
+	// return W * sample.value;
+
+	return make_float3(W);
 }
 
 // Direct lighting for indirect rays, possible reuse
