@@ -3,13 +3,9 @@
 #include "../../include/capture.hpp"
 #include "../../include/core/interpolation.hpp"
 #include "../../include/layers/font_renderer.hpp"
-#include "../../include/layers/hybrid_tracer.cuh"
-#include "../../include/layers/optix_tracer.cuh"
 #include "../../include/layers/forward_renderer.hpp"
-#include "../../include/layers/wadjet.cuh"
-#include "../../include/optix/options.cuh"
-#include "../../include/optix/parameters.cuh"
 #include "../../include/scene.hpp"
+#include "../../include/common.hpp"
 
 // TODO: do base app without inheritance (simple struct..., app and baseapp not
 // related)
@@ -18,7 +14,6 @@ struct MotionCapture : public kobra::BaseApp {
 	kobra::Entity camera;
 	kobra::Scene scene;
 
-	kobra::layers::Wadjet tracer;
 	kobra::layers::FontRenderer font_renderer;
 	kobra::layers::ForwardRenderer forward_renderer;
 	
@@ -31,16 +26,11 @@ struct MotionCapture : public kobra::BaseApp {
 			),
 			font_renderer(get_context(),
 				render_pass,
-				"resources/fonts/noto_sans.ttf"
+				KOBRA_DIR "/resources/fonts/noto_sans.ttf"
 			) {
 		// Load scene and camera
 		scene.load(get_device(), scene_path);
 		camera = scene.ecs.get_entity("Camera");
-
-		// Setup Wadjet tracer
-		KOBRA_LOG_FILE(kobra::Log::INFO) << "Hybrid tracer setup\n";
-		tracer = kobra::layers::Wadjet::make(get_context());
-		kobra::layers::set_envmap(tracer, "resources/skies/background_1.jpg");
 
 		// Setup forward renderer
 		forward_renderer = kobra::layers::ForwardRenderer::make(get_context());
@@ -51,7 +41,6 @@ struct MotionCapture : public kobra::BaseApp {
 	}
 
 	float time = 0.0f;
-	unsigned int mode = kobra::optix::eRegular;
 
 	std::queue <bool> events;
 	std::mutex events_mutex;
@@ -111,16 +100,6 @@ struct MotionCapture : public kobra::BaseApp {
 
 		// Now trace and render
 		cmd.begin({});
-			/* kobra::layers::compute(tracer,
-				scene.ecs,
-				camera.get <kobra::Camera> (),
-				camera.get <kobra::Transform> (),
-				mode, accumulate
-			);
-
-			kobra::layers::render(tracer, cmd, framebuffer);
-			// kobra::layers::capture(tracer, frame); */
-			
 			kobra::layers::render(forward_renderer,
 				scene.ecs,
 				camera.get <kobra::Camera> (),
@@ -135,19 +114,6 @@ struct MotionCapture : public kobra::BaseApp {
 				{5, 5}, glm::vec3 {1, 0.6, 0.6}, 0.7f
 			);
 
-			kobra::ui::Text t_samples(
-				kobra::common::sprintf("%d samples", tracer.launch_params.samples),
-				{0, 5}, glm::vec3 {1, 0.6, 0.6}, 0.7f
-			);
-
-			kobra::ui::Text t_mode(
-				kobra::common::sprintf("Mode: %s", kobra::optix::str_modes[mode]),
-				{5, 45}, glm::vec3 {1, 0.6, 0.6}, 0.5f
-			);
-
-			glm::vec2 size = font_renderer.size(t_samples);
-			t_samples.anchor.x = 1000 - size.x - 5;
-		
 			// Start render pass
 			// TODO: Make this a function
 			std::array <vk::ClearValue, 2> clear_values = {
@@ -268,26 +234,6 @@ struct MotionCapture : public kobra::BaseApp {
 	static void keyboard_callback(void *us, const kobra::io::KeyboardEvent &event) {
 		auto &app = *static_cast <MotionCapture *> (us);
 		auto &transform = app.camera.get <kobra::Transform> ();
-
-		// M to switch between modes
-		if (event.key == GLFW_KEY_M && event.action == GLFW_PRESS) {
-			app.mode = (app.mode + 1) % kobra::optix::eCount;
-			
-			// Add to event queue
-			app.events_mutex.lock();
-			app.events.push(true);
-			app.events_mutex.unlock();
-		}
-
-		// Numbers 1-3 for the same function
-		if (event.key >= GLFW_KEY_1 && event.key <= GLFW_KEY_3 && event.action == GLFW_PRESS) {
-			app.mode = event.key - GLFW_KEY_1;
-			
-			// Add to event queue
-			app.events_mutex.lock();
-			app.events.push(true);
-			app.events_mutex.unlock();
-		}
 
 		// I for info
 		if (event.key == GLFW_KEY_I && event.action == GLFW_PRESS) {

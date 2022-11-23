@@ -80,7 +80,7 @@ enum {
 
 // CUDA kernel
 template <typename FloatX>
-inline __global__
+__global__
 void hdr_to_ldr_kernel
 		(FloatX *pixels, uint32_t *target,
 		int width, int height,

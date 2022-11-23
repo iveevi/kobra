@@ -18,6 +18,7 @@ namespace optix {
 enum : unsigned int {
 	eRegular = 0,
 	eReSTIR,
+	eReSTIRPT,
 	eVoxel,
 	eCount
 };

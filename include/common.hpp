@@ -1,6 +1,15 @@
 #ifndef COMMON_H_
 #define COMMON_H_
 
+// Path macros
+#ifndef KOBRA_DIR
+
+#define KOBRA_DIR "."
+
+#endif
+
+#define KOBRA_SHADERS_DIR KOBRA_DIR "/shaders"
+
 // Standard headers
 #include <fstream>
 #include <iostream>
@@ -8,11 +17,9 @@
 #include <string>
 #include <vector>
 
-// GLM header
-#include <glm/glm.hpp>
-
 // Engine headers
 #include "logger.hpp"
+#include "vec.hpp"
 
 namespace kobra {
 

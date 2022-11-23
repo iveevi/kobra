@@ -47,7 +47,6 @@ struct ECSApp : public BaseApp {
 	Entity camera;
 
 	// TODO: Gaps are managed by layout manager
-
 	static constexpr glm::vec2 window_size {1900, 1100};
 	static constexpr float scene_graph_width = 400;
 	static constexpr float component_panel_width = 400;

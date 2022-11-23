@@ -88,12 +88,16 @@ extern "C" __global__ void __raygen__rg()
 	rp.seed.z *= direction.z;
 
 	// Switch on the ray type
+	// TODO: skip the templates, just pass the mode on...
 	switch (parameters.mode) {
 	case eRegular:
 		trace <eRegular> (origin, direction, i0, i1);
 		break;
 	case eReSTIR:
 		trace <eReSTIR> (origin, direction, i0, i1);
+		break;
+	case eReSTIRPT:
+		trace <eReSTIRPT> (origin, direction, i0, i1);
 		break;
 	case eVoxel:
 		trace <eVoxel> (origin, direction, i0, i1);

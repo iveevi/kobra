@@ -72,8 +72,8 @@ ForwardRenderer ForwardRenderer::make(const Context &context)
 	auto shaders = make_shader_modules(
 		*layer.device,
 		{
-			"shaders/bin/raster/vertex.spv",
-			"shaders/bin/raster/color_frag.spv"
+			KOBRA_SHADERS_DIR "/bin/raster/vertex.spv",
+			KOBRA_SHADERS_DIR "/bin/raster/color_frag.spv"
 		}
 	);
 

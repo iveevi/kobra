@@ -1,0 +1,115 @@
+import copy
+
+# TODO: try to make this possible
+# from .files import *
+
+smake_import('files.py')
+
+kobra = target('kobra')
+
+build_default = kobra.new_build('default')
+
+# TODO: auto set of compilers for c, cpp, cuda, etc
+build_default.set_compiler('nvcc')
+
+flags = ' -std=c++17 -O3 -Xcompiler -fdiagnostics-color=always'
+flags += suppress_nvcc_warnings()
+
+build_default.set_flags(flags)
+
+build_default.define({
+	'MAGICKCORE_QUANTUM_DEPTH': 16,
+	'MAGICKCORE_HDRI_ENABLE': 1,
+    'KOBRA_DIR': kobra_dir
+})
+
+# TODO: require method for dependencies
+build_default.add_sources('main.cu', kobra_sources)
+
+# TODO: find system
+build_default.add_includes(kobra_includes)
+
+build_default.add_libraries(
+	'glfw',
+	'vulkan',
+	'assimp',
+    'pthread',
+	'freetype',
+	'opencv_core',
+	'opencv_videoio',
+	'opencv_imgcodecs',
+	'opencv_imgproc',
+	'Magick++-7.Q16HDRI', # TODO: find header and libraries...
+	'MagickWand-7.Q16HDRI',
+	'MagickCore-7.Q16HDRI'
+)
+
+# Postbuild
+kobra.set_post_builds('${SMAKE_TARGET}')
+
+# TODO: dependencies in another smake file, then
+# force smake to delay references
+# until after everything has been parsed...
+
+# OptiX dependencies
+optix_ir = proxy_build('optix_ir')
+optix_ir.set_compiler('nvcc')
+
+optix_ir.add_sources(
+    'source/optix/basilisk_rt.cu',
+    'source/optix/basilisk_restir.cu',
+    'source/optix/basilisk_voxel.cu'
+)
+
+optix_ir.add_includes(kobra_includes)
+optix_ir.set_flags(flags + ' -ptx --expt-relaxed-constexpr')
+optix_ir.config({
+    'linking': False,
+    'object_format': '${BASENAME}.ptx',
+    'object_dir': 'bin/ptx'
+})
+
+# GLSL vertex shader dependencies
+glsl_vertex = proxy_build('glsl_vertex')
+glsl_vertex.set_compiler('glslc')
+glsl_vertex.set_flags('-fshader-stage=vertex')
+
+glsl_vertex.add_sources(
+    'shaders/postproc/spit.vert',
+    'shaders/raster/skybox.vert',
+    'shaders/raster/objectifier.vert',
+    'shaders/raster/gizmo.vert',
+    'shaders/raster/hybrid/hybrid_deferred.vert'
+)
+
+glsl_vertex.config({
+    'linking': False,
+    'object_format': '${BASENAME}_vert.spv',
+    'object_dir': 'bin/spv'
+})
+
+# GLSL fragment shader dependencies
+glsl_frag = proxy_build('glsl_frag')
+glsl_frag.set_compiler('glslc')
+glsl_frag.set_flags('-fshader-stage=fragment')
+
+glsl_frag.add_sources(
+    'shaders/postproc/spit.frag',
+    'shaders/raster/skybox.frag',
+    'shaders/raster/objectifier.frag',
+    'shaders/raster/gizmo.frag',
+    'shaders/raster/hybrid/hybrid_deferred.frag'
+)
+
+glsl_frag.config({
+    'linking': False,
+    'object_format': '${BASENAME}_frag.spv',
+    'object_dir': 'bin/spv'
+})
+
+# Add these dependencies to the builds
+build_default.require(
+    optix_ir,
+    glsl_vertex,
+    glsl_frag
+)

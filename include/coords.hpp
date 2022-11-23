@@ -1,8 +1,8 @@
 #ifndef COORDS_H_
 #define COORDS_H_
 
-// GLM headers
-#include <glm/glm.hpp>
+// Engine headers
+#include "vec.hpp"
 
 namespace kobra {
 

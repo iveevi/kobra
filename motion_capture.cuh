@@ -31,9 +31,9 @@
 #include "include/renderer.hpp"
 #include "include/scene.hpp"
 #include "include/texture.hpp"
+#include "include/asmodeus/backend.cuh"
 
-// TODO: do base app without inheritance (simple struct..., app and baseapp not
-// related)
+// TODO: do base app without inheritance (simple struct..., app and baseapp not related)
 struct MotionCapture : public kobra::BaseApp {
 	// TODO: let the scene run on any virtual device?
 	kobra::Entity camera;
@@ -44,6 +44,8 @@ struct MotionCapture : public kobra::BaseApp {
 	kobra::layers::Denoiser denoiser;
 	kobra::layers::Framer framer;
 	kobra::layers::FontRenderer font_renderer;
+
+	kobra::asmodeus::Backend backend;
 
 	// Buffers
 	CUdeviceptr b_traced;
@@ -134,7 +136,7 @@ struct MotionCapture : public kobra::BaseApp {
 		// TODO: test lower resolution...
 		tracer = kobra::layers::Basilisk::make(get_context(), {1000, 1000});
 		
-		// kobra::layers::set_envmap(tracer, "resources/skies/background_1.jpg");
+		kobra::layers::set_envmap(tracer, "resources/skies/background_1.jpg");
 
 		// Create the denoiser layer
 		denoiser = kobra::layers::Denoiser::make(
@@ -145,6 +147,12 @@ struct MotionCapture : public kobra::BaseApp {
 		);
 
 		framer = kobra::layers::Framer::make(get_context());
+
+		// Create Asmodeus backend
+		backend = kobra::asmodeus::Backend::make(
+			get_context(),
+			kobra::asmodeus::Backend::BackendType::eOptiX
+		);
 
 #if 0
 
@@ -215,7 +223,7 @@ struct MotionCapture : public kobra::BaseApp {
 		b_traced = kobra::cuda::alloc(size * sizeof(uint32_t));
 		b_traced_cpu.resize(size);
 
-		mode_map.at(2)();
+		mode_map.at(5)();
 	}
 
 	// Destructor
@@ -295,6 +303,11 @@ struct MotionCapture : public kobra::BaseApp {
 		}},
 
 		{5, [&]() {
+			mode = kobra::optix::eReSTIRPT;
+			mode_description = "ReSTIR PT";
+		}},
+
+		{6, [&]() {
 			bool &b = tracer.launch_params.options.indirect_only;
 			b = !b;
 
@@ -304,7 +317,7 @@ struct MotionCapture : public kobra::BaseApp {
 				additional_descriptions.erase("Indirect Only");
 		}},
 
-		{6, [&]() {
+		{7, [&]() {
 			bool &b = tracer.launch_params.options.disable_accumulation;
 			b = !b;
 
@@ -326,6 +339,8 @@ struct MotionCapture : public kobra::BaseApp {
 
 		transform.position = pos;
 		transform.rotation = rot; */
+
+		kobra::asmodeus::update(backend, scene.ecs);
 
 		float speed = 20.0f * frame_time;
 		

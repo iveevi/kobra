@@ -14,6 +14,7 @@ definitions:
     source/formats.cpp,
     source/texture.cpp,
     source/io/event.cpp,
+    source/asmodeus/backend.cu,
     source/layers/denoiser.cu,
     source/layers/forward_renderer.cpp,
     source/layers/framer.cpp,

@@ -6,11 +6,8 @@
 #include <iostream>
 #include <optional>
 
-// GLM headers
-#define GLM_PERSPECTIVE_ZERO_TO_ONE
-#include <glm/glm.hpp>
-#include <glm/gtc/quaternion.hpp>
-#include <glm/gtx/string_cast.hpp>
+// Engine headers
+#include "vec.hpp"
 
 namespace kobra {
 
@@ -33,12 +30,9 @@ struct Transform {
 
 	// Calculate the model matrix
 	glm::mat4 matrix() const {
-		glm::mat4 model = glm::mat4(1.0f);
-
 		glm::mat4 pmat = glm::translate(glm::mat4(1.0f), position);
 		glm::mat4 rmat = glm::mat4_cast(glm::quat(glm::radians(rotation)));
 		glm::mat4 smat = glm::scale(glm::mat4(1.0f), scale);
-
 		return pmat * rmat * smat;
 	}
 
@@ -96,43 +90,6 @@ struct Transform {
 	bool operator!=(const Transform &t) const {
 		return !(*this == t);
 	}
-
-	/* Save to file
-	void save(std::ofstream &file) const {
-		file << "[TRANSFORM]" << std::endl;
-		file << "position=" << position.x << " " << position.y
-			<< " " << position.z << std::endl;
-		file << "rotation=" << rotation.x << " " << rotation.y
-			<< " " << rotation.z << std::endl;
-		file << "scale=" << scale.x << " " << scale.y << " "
-			<< scale.z << std::endl;
-	}
-
-	// Read from file
-	static std::optional <Transform> from_file(std::istream &file) {
-		std::string line;
-
-		// Read position
-		glm::vec3 position;
-		std::getline(file, line);
-		std::sscanf(line.c_str(), "position=%f %f %f",
-			&position.x, &position.y, &position.z);
-
-		// Read rotation
-		glm::vec3 rotation;
-		std::getline(file, line);
-		std::sscanf(line.c_str(), "rotation=%f %f %f",
-			&rotation.x, &rotation.y, &rotation.z);
-
-		// Read scale
-		glm::vec3 scale;
-		std::getline(file, line);
-		std::sscanf(line.c_str(), "scale=%f %f %f",
-			&scale.x, &scale.y, &scale.z);
-
-		// Construct and return transform
-		return Transform(position, rotation, scale);
-	} */
 };
 
 inline std::ostream &operator<<(std::ostream &os, const Transform &t)

@@ -1,8 +1,8 @@
 #ifndef BOUNDING_BOX_H_
 #define BOUNDING_BOX_H_
 
-// GLM headers
-#include <glm/glm.hpp>
+// Engine headers
+#include "vec.hpp"
 
 namespace kobra {
 

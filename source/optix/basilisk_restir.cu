@@ -230,8 +230,6 @@ float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed, int sp
 		LightSample sample = reservoir->sample;
 		float denominator = reservoir->count * sample.target;
 		float W = (denominator > 0) ? reservoir->weight/denominator : 0.0f;
-		assert(!isnan(reservoir->weight));
-		assert(!isnan(W));
 
 		// Compute value and target
 		D = sample.point - sh.x;
@@ -243,7 +241,6 @@ float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed, int sp
 		// Add to the reservoir
 		float target = target_function(Li);
 		float w = target * W * reservoir->count;
-		assert(!isnan(w));
 
 		spatial->weight += w;
 
@@ -268,12 +265,9 @@ float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed, int sp
 	LightSample sample = spatial->sample;
 	float denominator = spatial->count * sample.target;
 	float W = (denominator > 0) ? spatial->weight/denominator : 0.0f;
-	assert(!isnan(W));
 
 	// Evaluate the integrand
-	// return W * sample.value;
-
-	return make_float3(W);
+	return W * sample.value;
 }
 
 // Direct lighting for indirect rays, possible reuse
@@ -384,6 +378,65 @@ extern "C" __global__ void __closesthit__restir()
 
 	// Update the value
 	bool skip_direct = (primary && parameters.options.indirect_only);
+	if (!skip_direct)
+		rp->value = direct;
+
+	if (pdf > 0)
+		rp->value += T * indirect;
+
+	rp->position = make_float4(x, 1);
+	rp->normal = n;
+	rp->albedo = material.diffuse;
+	rp->wi = wi;
+}
+
+// Closest hit program for ReSTIR PT
+extern "C" __global__ void __closesthit__restir_pt()
+{
+	LOAD_RAYPACKET();
+	LOAD_INTERSECTION_DATA();
+
+	// Offset by normal
+	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
+
+	// Construct SurfaceHit instance for lighting calculations
+	SurfaceHit surface_hit {
+		.mat = material,
+		.entering = entering,
+		.n = n,
+		.wo = wo,
+		.x = x,
+	};
+
+	// Compute direct ligting
+	float3 direct = Ld(surface_hit, rp->seed);
+	if (material.type == Shading::eEmissive)
+		direct += material.emission;
+	
+	// Generate new ray
+	Shading out;
+	float3 wi;
+	float pdf;
+
+	float3 f = eval(surface_hit, wi, pdf, out, rp->seed);
+
+	// Get threshold value for current ray
+	float3 T = f * abs(dot(wi, n))/pdf;
+
+	// Update for next ray
+	rp->ior = material.refraction;
+	rp->pdf *= pdf;
+	rp->depth++;
+	
+	// Trace the next ray
+	float3 indirect = make_float3(0.0f);
+	if (pdf > 0) {
+		trace <eRegular> (x, wi, i0, i1);
+		indirect = rp->value;
+	}
+
+	// Update the value
+	bool skip_direct = (parameters.options.indirect_only);
 	if (!skip_direct)
 		rp->value = direct;
 

@@ -40,21 +40,7 @@ struct Basilisk {
 	CUstream optix_stream = 0;
 
 	// Vulkan structures
-	RenderPass render_pass = nullptr;
-
-	Pipeline pipeline = nullptr;
-	PipelineLayout ppl = nullptr;
-
 	vk::Extent2D extent = { 0, 0 };
-
-	// Descriptor set bindings
-	static const std::vector <DSLB> dsl_bindings;
-
-	// Descriptor set layout
-	vk::raii::DescriptorSetLayout dsl = nullptr;
-
-	// Descriptor sets
-	vk::raii::DescriptorSet dset = nullptr;
 
 	// Optix structures
 	OptixDeviceContext optix_context = nullptr;
@@ -76,6 +62,7 @@ struct Basilisk {
 		OptixProgramGroup miss = nullptr;
 		OptixProgramGroup hit = nullptr;
 		OptixProgramGroup hit_restir = nullptr;
+		OptixProgramGroup hit_restir_pt = nullptr;
 		OptixProgramGroup hit_voxel = nullptr;
 
 		OptixProgramGroup shadow_miss = nullptr;
@@ -102,11 +89,6 @@ struct Basilisk {
 
 	// Timer
 	Timer timer;
-
-	// Data for rendering
-	ImageData result_image = nullptr;
-	BufferData result_buffer = nullptr;
-	vk::raii::Sampler result_sampler = nullptr;
 
 	// Others
 	float4 *positions = nullptr;

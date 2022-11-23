@@ -151,8 +151,8 @@ public:
 
 		// Pipeline
 		auto shaders = make_shader_modules(*_ctx.device, {
-			"shaders/bin/ui/glyph_vert.spv",
-			"shaders/bin/ui/bitmap_frag.spv"
+			KOBRA_SHADERS_DIR "/bin/ui/glyph_vert.spv",
+			KOBRA_SHADERS_DIR "/bin/ui/bitmap_frag.spv"
 		});
 
 		auto pipeline_cache = vk::raii::PipelineCache {*_ctx.device, {}};

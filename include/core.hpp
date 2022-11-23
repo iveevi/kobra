@@ -1,11 +1,13 @@
 #ifndef CORE_H_
 #define CORE_H_
 
+// TODO: move/split this file...
+
 // Standard headers
 #include <vector>
 
-// GLM headers
-#include <glm/glm.hpp>
+// Engine headers
+#include "vec.hpp"
 
 // Aligned structures
 struct alignas(16) aligned_vec4 {

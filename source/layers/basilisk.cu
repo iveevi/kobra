@@ -3,10 +3,6 @@
 #include <optix_host.h>
 #include <optix_stack_size.h>
 
-// Eigen headers
-#include <Eigen/Core>
-#include <Eigen/Eigenvalues>
-
 // Engine headers
 #include "../../include/camera.hpp"
 #include "../../include/cuda/alloc.cuh"
@@ -34,14 +30,6 @@ namespace layers {
 using RaygenRecord = optix::Record <int>;
 using MissRecord = optix::Record <int>;
 using HitRecord = optix::Record <optix::Hit>;
-
-// Static member variables
-const std::vector <DSLB> Basilisk::dsl_bindings = {
-	DSLB {
-		0, vk::DescriptorType::eCombinedImageSampler,
-		1, vk::ShaderStageFlagBits::eFragment
-	}
-};
 
 static OptixProgramGroup load_program_group
 		(const OptixDeviceContext &optix_context,
@@ -77,13 +65,10 @@ static void load_program_groups
 }
 
 // Load OptiX program groups
-// #define KOBRA_OPTIX_DEBUG
+#define KOBRA_OPTIX_DEBUG
 
 static void load_optix_program_groups(Basilisk &layer)
 {
-	static char log[2048];
-	static size_t sizeof_log = sizeof(log);
-
 	// Load programs
 	OptixProgramGroupOptions program_options = {};
 
@@ -112,6 +97,14 @@ static void load_optix_program_groups(Basilisk &layer)
 			.hitgroup = {
 				.moduleCH = layer.optix_restir_module,
 				.entryFunctionNameCH = "__closesthit__restir"
+			}
+		},
+		
+		OptixProgramGroupDesc {
+			.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
+			.hitgroup = {
+				.moduleCH = layer.optix_restir_module,
+				.entryFunctionNameCH = "__closesthit__restir_pt"
 			}
 		},
 		
@@ -155,6 +148,7 @@ static void load_optix_program_groups(Basilisk &layer)
 		&layer.optix_programs.raygen,
 		&layer.optix_programs.hit,
 		&layer.optix_programs.hit_restir,
+		&layer.optix_programs.hit_restir_pt,
 		&layer.optix_programs.hit_voxel,
 		&layer.optix_programs.shadow_hit,
 		&layer.optix_programs.miss,
@@ -484,93 +478,8 @@ Basilisk Basilisk::make(const Context &context, const vk::Extent2D &extent)
 	// Initialize OptiX
 	initialize_optix(layer);
 
-	// Create the present render pass
-	layer.render_pass = make_render_pass(*context.device,
-		{context.swapchain_format},
-		{vk::AttachmentLoadOp::eClear},
-		context.depth_format,
-		vk::AttachmentLoadOp::eClear
-	);
-
-	// Descriptor set layout
-	layer.dsl = make_descriptor_set_layout(*context.device, dsl_bindings);
-
-	// Allocate present descriptor set
-	auto dsets = vk::raii::DescriptorSets {
-		*context.device,
-		{**context.descriptor_pool, *layer.dsl}
-	};
-
-	layer.dset = std::move(dsets.front());
-
-	// Push constants and pipeline layout
-	layer.ppl = PipelineLayout {
-		*context.device,
-		{{}, *layer.dsl, {}}
-	};
-
-	// Create the present pipeline
-	auto shaders = make_shader_modules(*context.device, {
-		"bin/spv/spit_vert.spv",
-		"bin/spv/spit_frag.spv"
-	});
-	
-	GraphicsPipelineInfo present_grp_info {
-		*context.device, layer.render_pass,
-		std::move(shaders[0]), nullptr,
-		std::move(shaders[1]), nullptr,
-		{}, {},
-		layer.ppl
-	};
-
-	present_grp_info.no_bindings = true;
-	present_grp_info.depth_test = false;
-	present_grp_info.depth_write = false;
-
-	layer.pipeline = make_graphics_pipeline(present_grp_info);
-
-	// Allocate resources for rendering results
-
-	// TODO: shared resource as a CUDA texture?
-	layer.result_image = ImageData(
-		*context.phdev, *context.device,
-		vk::Format::eR8G8B8A8Unorm,
-		extent,
-		vk::ImageTiling::eOptimal,
-		vk::ImageUsageFlagBits::eSampled
-			| vk::ImageUsageFlagBits::eTransferDst,
-		vk::ImageLayout::eUndefined,
-		vk::MemoryPropertyFlagBits::eDeviceLocal,
-		vk::ImageAspectFlagBits::eColor
-	);
-
-	layer.result_sampler = make_sampler(*context.device, layer.result_image);
-
-	// Allocate staging buffer
-	vk::DeviceSize stage_size = extent.width
-		* extent.height
-		* sizeof(uint32_t);
-
-	auto usage = vk::BufferUsageFlagBits::eStorageBuffer;
-	auto mem_props = vk::MemoryPropertyFlagBits::eDeviceLocal
-		| vk::MemoryPropertyFlagBits::eHostCoherent
-		| vk::MemoryPropertyFlagBits::eHostVisible;
-
-	layer.result_buffer = BufferData(
-		*context.phdev, *context.device, stage_size,
-		usage | vk::BufferUsageFlagBits::eTransferSrc, mem_props
-	);
-
 	// Others (experimental)...
 	layer.positions = new float4[extent.width * extent.height];
-
-	// Bind image sampler to the present descriptor set
-	//	immediately, since it will not change
-	bind_ds(*context.device,
-		layer.dset,
-		layer.result_sampler,
-		layer.result_image, 0
-	);
 
 	// Return
 	return layer;
@@ -1013,7 +922,7 @@ static void update_sbt_data(Basilisk &layer,
 			hit_record.data.textures.has_roughness = true;
 		}
 
-		// TMRIS resoures
+		/* TMRIS resoures
 		auto transform = *submesh_transforms[i];
 		hit_record.data.bbox = submesh->bbox(transform);
 
@@ -1041,7 +950,7 @@ static void update_sbt_data(Basilisk &layer,
 		}
 
 		hit_record.data.tmris.f_locks = cuda::make_buffer(f_locks);
-		hit_record.data.tmris.b_locks = cuda::make_buffer(b_locks);
+		hit_record.data.tmris.b_locks = cuda::make_buffer(b_locks); */
 	
 		// Push back
 		optix::pack_header(layer.optix_programs.hit, hit_record);
@@ -1050,6 +959,9 @@ static void update_sbt_data(Basilisk &layer,
 		optix::pack_header(layer.optix_programs.hit_restir, hit_record);
 		hit_records.push_back(hit_record);
 
+		optix::pack_header(layer.optix_programs.hit_restir_pt, hit_record);
+		hit_records.push_back(hit_record);
+	
 		optix::pack_header(layer.optix_programs.hit_voxel, hit_record);
 		hit_records.push_back(hit_record);
 	}
@@ -1198,6 +1110,7 @@ inline float get(float3 a, int axis)
 	if (axis == 0) return a.x;
 	if (axis == 1) return a.y;
 	if (axis == 2) return a.z;
+	return 0.0f;
 }
 
 int build_kd_tree_recursive
