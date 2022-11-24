@@ -12,10 +12,10 @@ build_default = kobra.new_build('default')
 # TODO: auto set of compilers for c, cpp, cuda, etc
 build_default.set_compiler('nvcc')
 
-flags = ' -std=c++17 -O3 -Xcompiler -fdiagnostics-color=always'
+flags = ' -std=c++17 -Xcompiler -fdiagnostics-color=always'
 flags += suppress_nvcc_warnings()
 
-build_default.set_flags(flags)
+build_default.set_flags(' -O3 ' + flags)
 
 build_default.define({
 	'MAGICKCORE_QUANTUM_DEPTH': 16,
@@ -44,26 +44,24 @@ build_default.add_libraries(
 	'MagickCore-7.Q16HDRI'
 )
 
-# Postbuild
-kobra.set_post_builds('${SMAKE_TARGET}')
-
 # TODO: dependencies in another smake file, then
 # force smake to delay references
 # until after everything has been parsed...
 
 # OptiX dependencies
-optix_ir = proxy_build('optix_ir')
-optix_ir.set_compiler('nvcc')
+kobra_ptx = proxy_build('kobra_ptx')
+kobra_ptx.set_compiler('nvcc')
 
-optix_ir.add_sources(
+kobra_ptx.add_sources(
     'source/optix/basilisk_rt.cu',
     'source/optix/basilisk_restir.cu',
-    'source/optix/basilisk_voxel.cu'
+    'source/optix/basilisk_voxel.cu',
+    'source/optix/wsris_kd.cu'
 )
 
-optix_ir.add_includes(kobra_includes)
-optix_ir.set_flags(flags + ' -ptx --expt-relaxed-constexpr')
-optix_ir.config({
+kobra_ptx.add_includes(kobra_includes)
+kobra_ptx.set_flags(flags + ' -ptx --expt-relaxed-constexpr')
+kobra_ptx.config({
     'linking': False,
     'object_format': '${BASENAME}.ptx',
     'object_dir': 'bin/ptx'
@@ -109,7 +107,22 @@ glsl_frag.config({
 
 # Add these dependencies to the builds
 build_default.require(
-    optix_ir,
+    kobra_ptx,
     glsl_vertex,
     glsl_frag
+)
+
+# Debug builds
+build_gdb = kobra.new_build('gdb')
+build_gdb.copy(build_default)
+build_gdb.set_flags(' -g ' + flags)
+
+build_sanitizer = kobra.new_build('sanitizer')
+build_sanitizer.copy(build_gdb)
+
+# Postbuilds
+kobra.set_post_builds(
+    '${SMAKE_TARGET}',
+    ('gdb', 'gdb ${SMAKE_TARGET}'),
+    ('sanitizer', 'compute-sanitizer --tool=memcheck ${SMAKE_TARGET}')
 )

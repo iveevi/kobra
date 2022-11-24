@@ -28,8 +28,6 @@ class Rasterizer;
 namespace layers {
 
 // Regular path tracer
-// TODO: base struct for OptiX layers, so that dev time can become independent
-// for each...
 struct Basilisk {
 	// Critical Vulkan structures
 	vk::raii::Device *device = nullptr;
@@ -73,7 +71,6 @@ struct Basilisk {
 	optix::BasiliskParameters launch_params;
 
 	CUdeviceptr launch_params_buffer = 0;
-	CUdeviceptr truncated = 0;
 
 	// Host buffer analogues
 	// TODO: common algorithm for BVH construction...

@@ -744,8 +744,8 @@ void OptixTracer::_initialize_optix()
 // Allocate CUDA resources
 void OptixTracer::_allocate_cuda_resources()
 {
-	optix_rt::Reservoir temporal(30);
-	optix_rt::Reservoir spatial(500);
+	optix_rt::Reservoir temporal;
+	optix_rt::Reservoir spatial;
 
 	std::vector <optix_rt::Reservoir> temporal_reservoirs(width * height, temporal);
 	std::vector <optix_rt::Reservoir> spatial_reservoirs(width * height, spatial);

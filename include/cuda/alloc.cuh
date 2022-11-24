@@ -16,6 +16,8 @@ namespace cuda {
 template <class T>
 inline T *alloc(size_t size)
 {
+	KOBRA_ASSERT(size > 0, "Size must be greater than 0");
+
 	T *ptr;
 	cudaError_t err = cudaMalloc((void **) &ptr, size * sizeof(T));
 	CUDA_CHECK(err);
@@ -24,6 +26,8 @@ inline T *alloc(size_t size)
 
 inline CUdeviceptr alloc(size_t size)
 {
+	KOBRA_ASSERT(size > 0, "Size must be greater than 0");
+
 	CUdeviceptr ptr;
 	cudaError_t err = cudaMalloc((void **) &ptr, size);
 	CUDA_CHECK(err);
@@ -75,7 +79,7 @@ inline void copy(std::vector <T> &dst, CUdeviceptr src, size_t elements, cudaMem
 template <class T>
 inline T *make_buffer(const std::vector <T> &src)
 {
-	T *dst = alloc<T>(src.size());
+	T *dst = alloc <T> (src.size());
 	copy(dst, src);
 	return dst;
 }

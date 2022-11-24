@@ -58,20 +58,8 @@ struct TMRIS_Sample {
 	float target;
 };
 
-// using ReSTIR_Reservoir = Reservoir <PathSample>;
-template <class T>
-struct WeightedReservoir {
-	T sample;
-
-	unsigned int count;
-
-	float weight;
-	float mis;
-};
-
 using LightReservoir = WeightedReservoir <LightSample>;
 using ReSTIR_Reservoir = WeightedReservoir <PathSample>;
-using Voxel_Reservoir = MultiReservoir <VoxelSample, 10>;
 using TMRIS_Reservoir = WeightedReservoir <TMRIS_Sample>;
 using WorldNode = core::KdNode <int>;
 
@@ -240,17 +228,6 @@ struct BasiliskParameters {
 		LightReservoir *r_spatial;
 		LightReservoir *r_spatial_prev;
 	} advanced;
-
-	// Voxel reservoirs sampling
-	struct {
-		Voxel_Reservoir *reservoirs;
-
-		int **locks;
-		int resolution;
-
-		float3 min;
-		float3 max;
-	} voxel;
 
 	// Output buffers (color + AOV)
 	float4 *color_buffer;

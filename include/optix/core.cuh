@@ -2,8 +2,9 @@
 #define KOBRA_OPTIX_CORE_H_
 
 // Standard headers
-#include <sstream>
 #include <iomanip>
+#include <sstream>
+#include <vector>
 
 // OptiX headers
 #include <optix.h>
@@ -27,14 +28,15 @@ struct Record {
 };
 
 // Pack header
+inline void pack_header(const OptixProgramGroup &program, void *r)
+{
+	OPTIX_CHECK(optixSbtRecordPackHeader(program, &r));
+}
+
 template <class T>
 void pack_header(const OptixProgramGroup &program, Record <T> &r)
 {
-	OPTIX_CHECK(
-		optixSbtRecordPackHeader(
-			program, &r
-		)
-	);
+	OPTIX_CHECK(optixSbtRecordPackHeader(program, &r));
 }
 
 // Packing pointers for 32-bit registers
@@ -91,6 +93,79 @@ inline OptixDeviceContext make_context()
 
 	return context;
 }
+
+// Optix program description macros
+#define OPTIX_DESC_RAYGEN(_module, name)			\
+	OptixProgramGroupDesc {					\
+		.kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,	\
+		.raygen = {					\
+			.module = _module,			\
+			.entryFunctionName = name		\
+		}						\
+	}
+
+#define OPTIX_DESC_MISS(_module, name)				\
+	OptixProgramGroupDesc {					\
+		.kind = OPTIX_PROGRAM_GROUP_KIND_MISS,		\
+		.miss = {					\
+			.module = _module,			\
+			.entryFunctionName = name		\
+		}						\
+	}
+
+#define OPTIX_DESC_HIT(module, name)				\
+	OptixProgramGroupDesc {					\
+		.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,	\
+		.hitgroup = {					\
+			.moduleCH = module,			\
+			.entryFunctionNameCH = name		\
+		}						\
+	}
+
+// Load Optix programs from a module
+inline OptixProgramGroup load_program_group
+		(const OptixDeviceContext &optix_context,
+		 const OptixProgramGroupDesc &desc,
+		 const OptixProgramGroupOptions &options)
+{
+	static char log[2048];
+	static size_t sizeof_log = sizeof(log);
+
+	OptixProgramGroup group;
+	OPTIX_CHECK_LOG(
+		optixProgramGroupCreate(
+			optix_context,
+			&desc, 1,
+			&options,
+			log, &sizeof_log,
+			&group
+		)
+	);
+
+	return group;
+}
+
+inline void load_program_groups
+		(const OptixDeviceContext &optix_context,
+		 const std::vector <OptixProgramGroupDesc> &descs,
+		 const OptixProgramGroupOptions &options,
+		 const std::vector <OptixProgramGroup *> &groups)
+{
+	KOBRA_ASSERT(
+		descs.size() == groups.size(),
+		"Number of program group descriptions must match number of groups"
+	);
+
+	for (int i = 0; i < descs.size(); i++)
+		*groups[i] = load_program_group(optix_context, descs[i], options);
+}
+
+// Create and configure OptiX pipeline
+OptixPipeline link_optix_pipeline
+	(const OptixDeviceContext &,
+	 const std::vector <OptixProgramGroup> &,
+	 const OptixPipelineCompileOptions &,
+	 const OptixPipelineLinkOptions &);
 
 }
 

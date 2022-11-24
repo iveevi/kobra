@@ -30,7 +30,7 @@ struct PathSample {
 	float depth;
 };
 
-using Reservoir = optix::Reservoir <PathSample> ;
+using Reservoir = optix::WeightedReservoir <PathSample> ;
 
 struct Params
 {

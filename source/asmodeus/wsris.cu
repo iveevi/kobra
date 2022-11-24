@@ -4,27 +4,25 @@
 #include <optix_stack_size.h>
 
 // Engine headers
+#include "../../include/asmodeus/wsris.cuh"
 #include "../../include/camera.hpp"
 #include "../../include/cuda/alloc.cuh"
 #include "../../include/cuda/cast.cuh"
 #include "../../include/cuda/color.cuh"
 #include "../../include/cuda/interop.cuh"
 #include "../../include/ecs.hpp"
-#include "../../include/layers/basilisk.cuh"
 #include "../../include/optix/core.cuh"
+#include "../../include/profiler.hpp"
 #include "../../include/texture_manager.hpp"
 #include "../../include/transform.hpp"
 #include "../../shaders/raster/bindings.h"
-#include "../../include/profiler.hpp"
 
 // OptiX Source PTX
-#define OPTIX_PTX_FILE "bin/ptx/basilisk_rt.ptx"
-#define OPTIX_RESTIR_PTX_FILE "bin/ptx/basilisk_restir.ptx"
-#define OPTIX_VOXEL_PTX_FILE "bin/ptx/basilisk_voxel.ptx"
+#define OPTIX_PTX_FILE "bin/ptx/wsris_kd.ptx"
 
 namespace kobra {
 
-namespace layers {
+namespace asmodeus {
 
 // SBT record types
 using RaygenRecord = optix::Record <int>;
@@ -34,7 +32,7 @@ using HitRecord = optix::Record <optix::Hit>;
 // Load OptiX program groups
 // #define KOBRA_OPTIX_DEBUG
 
-static void load_optix_program_groups(Basilisk &layer)
+static void load_optix_program_groups(WorldSpaceKdReservoirs &layer)
 {
 	// Load programs
 	OptixProgramGroupOptions program_options = {};
@@ -43,9 +41,6 @@ static void load_optix_program_groups(Basilisk &layer)
 	std::vector <OptixProgramGroupDesc> program_descs = {
 		OPTIX_DESC_RAYGEN(layer.optix_module, "__raygen__rg"),
 		OPTIX_DESC_HIT(layer.optix_module, "__closesthit__ch"),
-		OPTIX_DESC_HIT(layer.optix_restir_module, "__closesthit__restir"),
-		OPTIX_DESC_HIT(layer.optix_restir_module, "__closesthit__restir_pt"),
-		OPTIX_DESC_HIT(layer.optix_voxel_module, "__closesthit__voxel"),
 		OPTIX_DESC_HIT(layer.optix_module, "__closesthit__shadow"),
 		OPTIX_DESC_MISS(layer.optix_module, "__miss__ms"),
 		OPTIX_DESC_MISS(layer.optix_module, "__miss__shadow")
@@ -55,9 +50,6 @@ static void load_optix_program_groups(Basilisk &layer)
 	std::vector <OptixProgramGroup *> program_groups = {
 		&layer.optix_programs.raygen,
 		&layer.optix_programs.hit,
-		&layer.optix_programs.hit_restir,
-		&layer.optix_programs.hit_restir_pt,
-		&layer.optix_programs.hit_voxel,
 		&layer.optix_programs.shadow_hit,
 		&layer.optix_programs.miss,
 		&layer.optix_programs.shadow_miss
@@ -74,7 +66,7 @@ static void load_optix_program_groups(Basilisk &layer)
 // Setup and load OptiX things
 const int VOXEL_RESOLUTION = 100;
 
-static void initialize_optix(Basilisk &layer)
+static void initialize_optix(WorldSpaceKdReservoirs &layer)
 {
 	// Create the context
 	layer.optix_context = optix::make_context();
@@ -139,28 +131,6 @@ static void initialize_optix(Basilisk &layer)
 			&layer.optix_module
 		)
 	);
-	
-	std::string restir_file = common::read_file(OPTIX_RESTIR_PTX_FILE);
-	OPTIX_CHECK_LOG(
-		optixModuleCreateFromPTX(
-			layer.optix_context,
-			&module_options, &ppl_compile_options,
-			restir_file.c_str(), restir_file.size(),
-			log, &sizeof_log,
-			&layer.optix_restir_module
-		)
-	);
-	
-	std::string voxel_file = common::read_file(OPTIX_VOXEL_PTX_FILE);
-	OPTIX_CHECK_LOG(
-		optixModuleCreateFromPTX(
-			layer.optix_context,
-			&module_options, &ppl_compile_options,
-			voxel_file.c_str(), voxel_file.size(),
-			log, &sizeof_log,
-			&layer.optix_voxel_module
-		)
-	);
 
 	// Load programs
 	load_optix_program_groups(layer);
@@ -187,8 +157,6 @@ static void initialize_optix(Basilisk &layer)
 			layer.optix_programs.miss,
 			layer.optix_programs.shadow_miss,
 			layer.optix_programs.hit,
-			layer.optix_programs.hit_restir,
-			layer.optix_programs.hit_voxel,
 		},
 		ppl_compile_options,
 		ppl_link_options
@@ -288,10 +256,10 @@ static void initialize_optix(Basilisk &layer)
 
 // Create the layer
 // TOOD: all custom extent...
-Basilisk Basilisk::make(const Context &context, const vk::Extent2D &extent)
+WorldSpaceKdReservoirs WorldSpaceKdReservoirs::make(const Context &context, const vk::Extent2D &extent)
 {
 	// To return
-	Basilisk layer;
+	WorldSpaceKdReservoirs layer;
 
 	// Extract critical Vulkan structures
 	layer.device = context.device;
@@ -310,7 +278,7 @@ Basilisk Basilisk::make(const Context &context, const vk::Extent2D &extent)
 }
 
 // Set the environment map
-void set_envmap(Basilisk &layer, const std::string &path)
+void set_envmap(WorldSpaceKdReservoirs &layer, const std::string &path)
 {
 	// First load the environment map
 	const auto &map = TextureManager::load_texture(
@@ -322,7 +290,7 @@ void set_envmap(Basilisk &layer, const std::string &path)
 }
 
 // Update the light buffers if needed
-static void update_light_buffers(Basilisk &layer,
+static void update_light_buffers(WorldSpaceKdReservoirs &layer,
 		const std::vector <const Light *> &lights,
 		const std::vector <const Transform *> &light_transforms,
 		const std::vector <const Submesh *> &submeshes,
@@ -403,7 +371,7 @@ static void update_light_buffers(Basilisk &layer,
 }
 
 // Build or update acceleration structures for the scene
-static void update_acceleration_structure(Basilisk &layer,
+static void update_acceleration_structure(WorldSpaceKdReservoirs &layer,
 		const std::vector <const Submesh *> &submeshes,
 		const std::vector <const Transform *> &submesh_transforms)
 {
@@ -526,7 +494,7 @@ static void update_acceleration_structure(Basilisk &layer,
 		// Set the instance handle
 		instance.traversableHandle = instance_gas[i];
 		instance.visibilityMask = 0b1;
-		instance.sbtOffset = optix::eCount * i;
+		instance.sbtOffset = i;
 		instance.instanceId = i;
 
 		instances.push_back(instance);
@@ -583,7 +551,7 @@ static void update_acceleration_structure(Basilisk &layer,
 }
 
 // Compute scene bounds
-static void update_scene_bounds(Basilisk &layer,
+static void update_scene_bounds(WorldSpaceKdReservoirs &layer,
 		const std::vector <const Submesh *> &submeshes,
 		const std::vector <const Transform *> &submesh_transforms)
 {
@@ -683,7 +651,7 @@ static void generate_submesh_data
 }
 
 // Update the SBT data
-static void update_sbt_data(Basilisk &layer,
+static void update_sbt_data(WorldSpaceKdReservoirs &layer,
 		const std::vector <const Submesh *> &submeshes,
 		const std::vector <const Transform *> &submesh_transforms)
 {
@@ -742,18 +710,9 @@ static void update_sbt_data(Basilisk &layer,
 				= cuda::import_vulkan_texture(*layer.device, roughness);
 			hit_record.data.textures.has_roughness = true;
 		}
-	
+
 		// Push back
 		optix::pack_header(layer.optix_programs.hit, hit_record);
-		hit_records.push_back(hit_record);
-		
-		optix::pack_header(layer.optix_programs.hit_restir, hit_record);
-		hit_records.push_back(hit_record);
-
-		optix::pack_header(layer.optix_programs.hit_restir_pt, hit_record);
-		hit_records.push_back(hit_record);
-	
-		optix::pack_header(layer.optix_programs.hit_voxel, hit_record);
 		hit_records.push_back(hit_record);
 	}
 
@@ -774,7 +733,7 @@ static void update_sbt_data(Basilisk &layer,
 
 // TODO: perform this in a separate command buffer than the main one used to
 // present, etc (and separate queue)
-static void preprocess_scene(Basilisk &layer,
+static void preprocess_scene(WorldSpaceKdReservoirs &layer,
 		const ECS &ecs,
 		const Camera &camera,
 		const Transform &transform)
@@ -937,7 +896,7 @@ int build_kd_tree_recursive
 	return index;
 }
 
-void build_kd_tree(Basilisk &layer, float4 *point_array, int size)
+void build_kd_tree(WorldSpaceKdReservoirs &layer, float4 *point_array, int size)
 {
 	KOBRA_PROFILE_TASK(Build K-d tree);
 
@@ -971,12 +930,6 @@ void build_kd_tree(Basilisk &layer, float4 *point_array, int size)
 	size = node_idx;
 	
 	int total_reservoirs = leaves;
-
-#ifdef WSRIS_HASH_RESOLUION
-
-	total_reservoirs *= WSRIS_HASH_RESOLUION;
-
-#endif
 	
 	std::vector <optix::LightReservoir> reservoir_data(total_reservoirs);
 
@@ -999,24 +952,19 @@ void build_kd_tree(Basilisk &layer, float4 *point_array, int size)
 }
 
 // Path tracing computation
-void compute(Basilisk &layer,
+void render(WorldSpaceKdReservoirs &layer,
 		const ECS &ecs,
 		const Camera &camera,
 		const Transform &transform,
 		unsigned int mode,
 		bool accumulate)
 {
-	KOBRA_PROFILE_TASK(HyrbidTracer compute path tracing);
-
 	// Preprocess the scene
 	{
 		KOBRA_PROFILE_TASK(Update data);
 
 		preprocess_scene(layer, ecs, camera, transform);
 	}
-
-	// Set rendering mode
-	layer.launch_params.mode = mode;
 
 	// Reset the accumulation state if needed
 	if (!accumulate)
@@ -1050,34 +998,8 @@ void compute(Basilisk &layer,
 		
 		CUDA_SYNC_CHECK();
 
-		auto &advanced = layer.launch_params.advanced;
-		int reservoir_size = sizeof(optix::LightReservoir) * width * height;
-
-		// TODO: only copy during corresponding modes...
-		// TODO: async??
-		CUDA_CHECK(
-			cudaMemcpy(
-				advanced.r_lights_prev,
-				advanced.r_lights,
-				reservoir_size,
-				cudaMemcpyDeviceToDevice
-			)
-		);
-
-		/* TODO: Nan errors here...
-		CUDA_CHECK(
-			cudaMemcpy(
-				advanced.r_spatial_prev,
-				advanced.r_spatial,
-				reservoir_size,
-				cudaMemcpyDeviceToDevice
-			)
-		); */
-
 		// TODO: async tasks...
-		// TODO: templatize by transfer type cudamemcpytype
-		// cuda::copy(layer.positions, layer.launch_params.position_buffer);
-		if (mode == optix::eVoxel && !layer.initial_kd_tree) {
+		if (!layer.initial_kd_tree) {
 			// TODO: update vs rebuild of k-d tree
 			cudaMemcpy(
 				layer.positions,
@@ -1101,9 +1023,9 @@ void compute(Basilisk &layer,
 			layer.initial_kd_tree = true;
 		}
 
-		if (mode == optix::eVoxel && layer.initial_kd_tree) {
+		if (layer.initial_kd_tree) {
 			auto &params = layer.launch_params;
-			reservoir_size = sizeof(optix::LightReservoir) * params.kd_leaves;
+			int reservoir_size = sizeof(optix::LightReservoir) * params.kd_leaves;
 
 			CUDA_CHECK(
 				cudaMemcpy(
@@ -1115,23 +1037,9 @@ void compute(Basilisk &layer,
 			);
 		}
 
-		/* TODO: construct k-d tree for reservoirs...
-		dim3 block(32, 32);
-		dim3 grid(
-			(width + block.x - 1) / block.x,
-			(height + block.y - 1) / block.y
-		);
-
-		kd_construction <<<grid, block>>> (
-			layer.launch_params.position_buffer,
-			width, height
-		); */
-
 		// Increment number of samples
 		layer.launch_params.samples++;
 	}
-
-	// KOBRA_PROFILE_PRINT();
 }
 
 }

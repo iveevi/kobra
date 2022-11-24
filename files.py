@@ -8,8 +8,9 @@ kobra_sources = [
 	'source/layers/basilisk.cu',
 	'source/layers/denoiser.cu',
 	'source/layers/optix_tracer.cu',
-	'source/asmodeus/backend.cu',
-	'source/arbok/*'
+	'source/asmodeus/*',
+	'source/arbok/*',
+    'source/optix/core.cu'
 ]
 	
 kobra_includes = [

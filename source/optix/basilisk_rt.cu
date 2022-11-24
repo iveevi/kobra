@@ -21,8 +21,8 @@ void make_ray(uint3 idx,
 
 	pcg3f(seed);
 	
-	float xoffset = (fract(seed.x) - 0.5f) * 0.8f;
-	float yoffset = (fract(seed.y) - 0.5f) * 0.8f;
+	float xoffset = (fract(seed.x) - 0.5f);
+	float yoffset = (fract(seed.y) - 0.5f);
 
 	float2 d = 2.0f * make_float2(
 		float(idx.x + xoffset)/parameters.resolution.x,

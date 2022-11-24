@@ -32,8 +32,10 @@
 #include "include/scene.hpp"
 #include "include/texture.hpp"
 #include "include/asmodeus/backend.cuh"
+#include "include/asmodeus/wsris.cuh"
 
 // TODO: do base app without inheritance (simple struct..., app and baseapp not related)
+// TODO: and then insert layers with .attach() method
 struct MotionCapture : public kobra::BaseApp {
 	// TODO: let the scene run on any virtual device?
 	kobra::Entity camera;
@@ -46,6 +48,7 @@ struct MotionCapture : public kobra::BaseApp {
 	kobra::layers::FontRenderer font_renderer;
 
 	kobra::asmodeus::Backend backend;
+	kobra::asmodeus::WorldSpaceKdReservoirs wskdr;
 
 	// Buffers
 	CUdeviceptr b_traced;
@@ -154,6 +157,10 @@ struct MotionCapture : public kobra::BaseApp {
 			kobra::asmodeus::Backend::BackendType::eOptiX
 		);
 
+		wskdr = kobra::asmodeus::WorldSpaceKdReservoirs::make(
+			get_context(), {1000, 1000}
+		);
+
 #if 0
 
 		std::cout << "Enter capture path: ";
@@ -238,6 +245,8 @@ struct MotionCapture : public kobra::BaseApp {
 	}
 
 	// Path tracing kernel
+	int integrator = 0;
+
 	void path_trace_kernel() {
 		compute_timer.start();
 		while (!kill) {
@@ -252,18 +261,26 @@ struct MotionCapture : public kobra::BaseApp {
 			events = std::queue <bool> (); // Clear events
 			events_mutex.unlock();
 
-			kobra::layers::compute(tracer,
-				scene.ecs,
-				camera.get <kobra::Camera> (),
-				camera.get <kobra::Transform> (),
-				mode, accumulate
-			);
-
-			kobra::layers::denoise(denoiser, {
+			if (integrator == 0) {
+				kobra::layers::compute(tracer,
+					scene.ecs,
+					camera.get <kobra::Camera> (),
+					camera.get <kobra::Transform> (),
+					mode, accumulate
+				);
+			} else {
+				render(wskdr, scene.ecs,
+					camera.get <kobra::Camera> (),
+					camera.get <kobra::Transform> (),
+					mode, accumulate
+				);
+			}
+			
+			/* kobra::layers::denoise(denoiser, {
 				.color = kobra::layers::color_buffer(tracer),
 				.normal = kobra::layers::normal_buffer(tracer),
 				.albedo = kobra::layers::albedo_buffer(tracer)
-			});
+			}); */
 
 			compute_time = compute_timer.lap()/1e6;
 		}
@@ -325,6 +342,15 @@ struct MotionCapture : public kobra::BaseApp {
 				additional_descriptions.insert("No Accumulation");
 			else
 				additional_descriptions.erase("No Accumulation");
+		}},
+
+		{8, [&]() {
+			integrator = 1 - integrator;
+			if (integrator == 1) {
+				mode_description = "WSRIS-KD";
+			} else {
+				mode_description = "Basilisk";
+			}
 		}}
 	};
 
@@ -340,7 +366,7 @@ struct MotionCapture : public kobra::BaseApp {
 		transform.position = pos;
 		transform.rotation = rot; */
 
-		kobra::asmodeus::update(backend, scene.ecs);
+		// kobra::asmodeus::update(backend, scene.ecs);
 
 		float speed = 20.0f * frame_time;
 		
@@ -379,15 +405,25 @@ struct MotionCapture : public kobra::BaseApp {
 			int width = tracer.extent.width;
 			int height = tracer.extent.height;
 
+			float4 *d_output = 0;
+			if (integrator == 0) {
+				d_output = (float4 *) kobra::layers::color_buffer(tracer);
+			} else {
+				d_output = (float4 *) kobra::asmodeus::color_buffer(wskdr);
+			}
+
+			// TODO: denoise here?
+
 			kobra::cuda::hdr_to_ldr(
-				(float4 *) kobra::layers::color_buffer(tracer),
-				// (float4 *) denoiser.result,
+				d_output,
 				(uint32_t *) b_traced,
 				width, height,
 				kobra::cuda::eTonemappingACES
 			);
 
 			kobra::cuda::copy(b_traced_cpu, b_traced, width * height);
+
+			// TODO: import CUDA to Vulkan and render straight to the image
 			kobra::layers::render(framer, b_traced_cpu, cmd, framebuffer);
 
 			// kobra::layers::capture(tracer, frame);

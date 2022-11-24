@@ -57,10 +57,10 @@ float3 direct_lighting_ris(const SurfaceHit &sh, Seed seed)
 
 // Get direct lighting using Temporal RIS
 __device__
-float3 direct_lighting_temporal_ris(const SurfaceHit &sh, RayPacket *rp)
+float3 direct_lighting_temporal_ris(const SurfaceHit &sh, int index, Seed seed)
 {
 	// Get the reservoir
-	LightReservoir *reservoir = &parameters.advanced.r_lights[rp->index];
+	LightReservoir *reservoir = &parameters.advanced.r_lights[index];
 	if (parameters.samples == 0) {
 		reservoir->sample = LightSample {};
 		reservoir->count = 0;
@@ -71,7 +71,7 @@ float3 direct_lighting_temporal_ris(const SurfaceHit &sh, RayPacket *rp)
 	// TODO: temporal reprojection?
 
 	// Get direct lighting sample
-	FullLightSample fls = sample_direct(sh, rp->seed);
+	FullLightSample fls = sample_direct(sh, seed);
 
 	// Compute lighting
 	float3 D = fls.point - sh.x;
@@ -91,7 +91,7 @@ float3 direct_lighting_temporal_ris(const SurfaceHit &sh, RayPacket *rp)
 		.target = target,
 		.type = fls.type,
 		.index = fls.index
-	}, w, rp->seed);
+	}, w, seed);
 
 	// Get final sample and contribution
 	LightSample sample = reservoir->sample;
@@ -103,7 +103,7 @@ float3 direct_lighting_temporal_ris(const SurfaceHit &sh, RayPacket *rp)
 
 // Get direct lighting using Spatio-Temporal RIS (ReSTIR)
 __device__
-float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed, int spatial_samples)
+float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed, int spatial_samples, bool copy = false)
 {
 	// Get the reservoir
 	// TODO: option to copy resrvoir and update locally rather than
@@ -111,6 +111,14 @@ float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed, int sp
 	// TODO: do we actually need to worry about empty reservoirs?
 	LightReservoir *temporal = &parameters.advanced.r_lights[index];
 	LightReservoir *spatial = &parameters.advanced.r_spatial[index];
+	
+	LightReservoir copy_temporal = *temporal;
+	LightReservoir copy_spatial = *spatial;
+
+	if (copy) {
+		temporal = &copy_temporal;
+		spatial = &copy_spatial;
+	}
 
 	if (parameters.samples == 0) {
 		temporal->sample = LightSample {};
@@ -303,7 +311,7 @@ float3 direct_indirect(const SurfaceHit &surface_hit, Seed seed)
 
 		int index = iy * parameters.resolution.x + ix;
 
-		return direct_lighting_restir(surface_hit, index, seed, 3);
+		return direct_lighting_restir(surface_hit, index, seed, 3, true);
 	}
 	
 	return Ld(surface_hit, seed);

@@ -351,25 +351,8 @@ float3 direct_occluded(const SurfaceHit &sh, float3 Le, float3 normal, int type,
 	return Li;
 }
 
-// Updating a reservoir
-__device__ __forceinline__
-bool reservoir_update(LightReservoir *reservoir, const LightSample &sample, float weight, Seed seed)
-{
-	reservoir->weight += weight;
-
-	float eta = rand_uniform(seed);
-	bool selected = (eta * reservoir->weight) < weight;
-
-	if (selected)
-		reservoir->sample = sample;
-
-	reservoir->count++;
-
-	return selected;
-}
-
 // Kernel helpers/code blocks
-template <unsigned int Mode>
+template <unsigned int Mode = 0>
 KCUDA_INLINE __device__
 void trace(float3 origin, float3 direction, uint i0, uint i1)
 {
