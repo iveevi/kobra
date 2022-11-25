@@ -1,4 +1,10 @@
-#include "basilisk_common.cuh"
+#include "../../include/optix/parameters.cuh"
+#include "common.cuh"
+
+extern "C"
+{
+	__constant__ kobra::optix::BasiliskParameters parameters;
+}
 
 // Target function
 KCUDA_INLINE KCUDA_DEVICE
@@ -9,7 +15,7 @@ float target_function(float3 Li)
 
 // Get direct lighting using RIS
 __device__
-float3 direct_lighting_ris(const SurfaceHit &sh, Seed seed)
+float3 direct_lighting_ris(OptixTraversableHandle handle, const LightingContext &lc, const SurfaceHit &sh, Seed seed)
 {
 	const int M = 10;
 
@@ -22,7 +28,7 @@ float3 direct_lighting_ris(const SurfaceHit &sh, Seed seed)
 
 	for (int k = 0; k < M; k++) {
 		// Get direct lighting sample
-		FullLightSample fls = sample_direct(sh, seed);
+		FullLightSample fls = sample_direct(lc, sh, seed);
 		if (fls.type != 2)
 			continue;
 
@@ -31,7 +37,7 @@ float3 direct_lighting_ris(const SurfaceHit &sh, Seed seed)
 		float d = length(D);
 		D /= d;
 
-		float3 Li = direct_occluded(sh, fls.Le, fls.normal, fls.type, D, d);
+		float3 Li = direct_occluded(handle, sh, fls.Le, fls.normal, fls.type, D, d);
 
 		// Resampling
 		// TODO: common target function...
@@ -57,7 +63,9 @@ float3 direct_lighting_ris(const SurfaceHit &sh, Seed seed)
 
 // Get direct lighting using Temporal RIS
 __device__
-float3 direct_lighting_temporal_ris(const SurfaceHit &sh, int index, Seed seed)
+float3 direct_lighting_temporal_ris(OptixTraversableHandle handle,
+		const LightingContext &lc,
+		const SurfaceHit &sh, int index, Seed seed)
 {
 	// Get the reservoir
 	LightReservoir *reservoir = &parameters.advanced.r_lights[index];
@@ -71,14 +79,14 @@ float3 direct_lighting_temporal_ris(const SurfaceHit &sh, int index, Seed seed)
 	// TODO: temporal reprojection?
 
 	// Get direct lighting sample
-	FullLightSample fls = sample_direct(sh, seed);
+	FullLightSample fls = sample_direct(lc, sh, seed);
 
 	// Compute lighting
 	float3 D = fls.point - sh.x;
 	float d = length(D);
 	D /= d;
 
-	float3 Li = direct_occluded(sh, fls.Le, fls.normal, fls.type, D, d);
+	float3 Li = direct_occluded(handle, sh, fls.Le, fls.normal, fls.type, D, d);
 
 	// Resampling
 	float target = target_function(Li);
@@ -103,7 +111,9 @@ float3 direct_lighting_temporal_ris(const SurfaceHit &sh, int index, Seed seed)
 
 // Get direct lighting using Spatio-Temporal RIS (ReSTIR)
 __device__
-float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed, int spatial_samples, bool copy = false)
+float3 direct_lighting_restir(OptixTraversableHandle handle,
+		const LightingContext &lc,
+		const SurfaceHit &sh, int index, Seed seed, int spatial_samples, bool copy = false)
 {
 	// Get the reservoir
 	// TODO: option to copy resrvoir and update locally rather than
@@ -133,7 +143,7 @@ float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed, int sp
 	}
 
 	// Get direct lighting sample
-	FullLightSample fls = sample_direct(sh, seed);
+	FullLightSample fls = sample_direct(lc, sh, seed);
 
 	// Compute target function (unocculted lighting)
 	float3 D = fls.point - sh.x;
@@ -171,7 +181,7 @@ float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed, int sp
 		d = length(D);
 		D /= d;
 
-		float3 Li = direct_occluded(sh, sample.value, sample.normal, sample.type, D, d);
+		float3 Li = direct_occluded(handle, sh, sample.value, sample.normal, sample.type, D, d);
 
 		// Add to the reservoir
 		float target = target_function(Li);
@@ -244,7 +254,7 @@ float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed, int sp
 		d = length(D);
 		D /= d;
 
-		float3 Li = direct_occluded(sh, sample.value, sample.normal, sample.type, D, d);
+		float3 Li = direct_occluded(handle, sh, sample.value, sample.normal, sample.type, D, d);
 
 		// Add to the reservoir
 		float target = target_function(Li);
@@ -280,10 +290,10 @@ float3 direct_lighting_restir(const SurfaceHit &sh, int index, Seed seed, int sp
 
 // Direct lighting for indirect rays, possible reuse
 __device__
-float3 direct_indirect(const SurfaceHit &surface_hit, Seed seed)
+float3 direct_indirect(OptixTraversableHandle handle, const LightingContext &lc, const SurfaceHit &surface_hit, Seed seed)
 {
 	if (!parameters.options.reprojected_reuse)
-		return Ld(surface_hit, seed);
+		return Ld(handle, lc, surface_hit, seed);
 
 	// TODO: method
 	const float3 U = parameters.cam_u;
@@ -311,10 +321,10 @@ float3 direct_indirect(const SurfaceHit &surface_hit, Seed seed)
 
 		int index = iy * parameters.resolution.x + ix;
 
-		return direct_lighting_restir(surface_hit, index, seed, 3, true);
+		return direct_lighting_restir(handle, lc, surface_hit, index, seed, 3, true);
 	}
 	
-	return Ld(surface_hit, seed);
+	return Ld(handle, lc, surface_hit, seed);
 }
 
 // Closest hit program for ReSTIR
@@ -337,6 +347,15 @@ extern "C" __global__ void __closesthit__restir()
 		.wo = wo,
 		.x = x,
 	};
+	
+	LightingContext lc {
+		.quads = parameters.lights.quads,
+		.triangles = parameters.lights.triangles,
+		.quad_count = parameters.lights.quad_count,
+		.triangle_count = parameters.lights.triangle_count,
+		.has_envmap = parameters.has_envmap,
+		.envmap = parameters.envmap,
+	};
 
 	// Compute direct ligting
 	float3 direct = make_float3(0.0f);
@@ -350,12 +369,16 @@ extern "C" __global__ void __closesthit__restir()
 			spatial_samples = 3;
 
 		direct = direct_lighting_restir(
+			parameters.traversable, lc,
 			surface_hit,
 			rp->index, rp->seed,
 			spatial_samples
 		);
 	} else {
-		direct = direct_indirect(surface_hit, rp->seed);
+		direct = direct_indirect(
+			parameters.traversable, lc,
+			surface_hit, rp->seed
+		);
 	}
 
 	if (material.type == Shading::eEmissive)
@@ -380,7 +403,11 @@ extern "C" __global__ void __closesthit__restir()
 	float3 indirect = make_float3(0.0f);
 	if (pdf > 0) {
 		// trace <eRegular> (x, wi, i0, i1);
-		trace <eReSTIR> (x, wi, i0, i1);
+		trace <eReSTIR> (
+			parameters.traversable,
+			x, wi, i0, i1
+		);
+
 		indirect = rp->value;
 	}
 
@@ -415,9 +442,18 @@ extern "C" __global__ void __closesthit__restir_pt()
 		.wo = wo,
 		.x = x,
 	};
+	
+	LightingContext lc {
+		.quads = parameters.lights.quads,
+		.triangles = parameters.lights.triangles,
+		.quad_count = parameters.lights.quad_count,
+		.triangle_count = parameters.lights.triangle_count,
+		.has_envmap = parameters.has_envmap,
+		.envmap = parameters.envmap,
+	};
 
 	// Compute direct ligting
-	float3 direct = Ld(surface_hit, rp->seed);
+	float3 direct = Ld(parameters.traversable, lc, surface_hit, rp->seed);
 	if (material.type == Shading::eEmissive)
 		direct += material.emission;
 	
@@ -439,7 +475,11 @@ extern "C" __global__ void __closesthit__restir_pt()
 	// Trace the next ray
 	float3 indirect = make_float3(0.0f);
 	if (pdf > 0) {
-		trace <eRegular> (x, wi, i0, i1);
+		trace <eRegular> (
+			parameters.traversable,
+			x, wi, i0, i1
+		);
+
 		indirect = rp->value;
 	}
 

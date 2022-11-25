@@ -1,4 +1,10 @@
-#include "basilisk_common.cuh"
+#include "../../include/optix/parameters.cuh"
+#include "common.cuh"
+
+extern "C"
+{
+	__constant__ kobra::optix::BasiliskParameters parameters;
+}
 
 __forceinline__ __device__
 float get(float3 a, int axis)
@@ -31,6 +37,15 @@ extern "C" __global__ void __closesthit__voxel()
 		.wo = wo,
 		.x = x,
 	};
+	
+	LightingContext lc {
+		.quads = parameters.lights.quads,
+		.triangles = parameters.lights.triangles,
+		.quad_count = parameters.lights.quad_count,
+		.triangle_count = parameters.lights.triangle_count,
+		.has_envmap = parameters.has_envmap,
+		.envmap = parameters.envmap,
+	};
 
 	// Reservoir for spatial sampling
 	LightReservoir spatial {
@@ -45,14 +60,14 @@ extern "C" __global__ void __closesthit__voxel()
 	// NOTE: decorrelating samples places into local and world space
 	// reservoirs by using different samples for each
 	// TODO: observe whether this is actually beneficial
-	FullLightSample fls = sample_direct(surface_hit, rp->seed);
+	FullLightSample fls = sample_direct(lc, surface_hit, rp->seed);
 
 	// Compute target function (unocculted lighting)
 	float3 D = fls.point - surface_hit.x;
 	float d = length(D);
 	D /= d;
 
-	float3 Li = direct_occluded(surface_hit, fls.Le, fls.normal, fls.type, D, d);
+	float3 Li = direct_occluded(parameters.traversable, surface_hit, fls.Le, fls.normal, fls.type, D, d);
 		
 	// Contribution and weight
 	float target = Li.x + Li.y + Li.z; // Luminance
@@ -73,7 +88,7 @@ extern "C" __global__ void __closesthit__voxel()
 	float3 direct = make_float3(0);
 
 	if (parameters.kd_tree) {
-		FullLightSample fls = sample_direct(surface_hit, rp->seed);
+		FullLightSample fls = sample_direct(lc, surface_hit, rp->seed);
 
 		// Compute target function (unocculted lighting)
 		float3 D = fls.point - surface_hit.x;
@@ -273,8 +288,10 @@ extern "C" __global__ void __closesthit__voxel()
 			d = length(D);
 			D /= d;
 
-			Li = direct_occluded(surface_hit, sample.value,
-					sample.normal, sample.type, D, d);
+			Li = direct_occluded(parameters.traversable,
+				surface_hit, sample.value,
+				sample.normal, sample.type, D, d
+			);
 
 			float denom = rsampled.count * sample.target;
 			float W = (denom > 0.0f) ? rsampled.weight/denom : 0.0f;
@@ -356,7 +373,11 @@ extern "C" __global__ void __closesthit__voxel()
 	float3 indirect = make_float3(0.0f);
 	if (pdf > 0) {
 		// trace <eRegular> (x, wi, i0, i1);
-		trace <eVoxel> (x, wi, i0, i1);
+		trace <eVoxel> (
+			parameters.traversable,
+			x, wi, i0, i1
+		);
+
 		indirect = rp->value;
 	}
 

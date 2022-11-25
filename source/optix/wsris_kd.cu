@@ -1,4 +1,10 @@
-#include "basilisk_common.cuh"
+#include "../../include/asmodeus/wsris_kd_parameters.cuh"
+#include "common.cuh"
+
+extern "C"
+{
+	__constant__ kobra::optix::WorldSpaceKdReservoirsParameters parameters;
+}
 
 static KCUDA_INLINE KCUDA_HOST_DEVICE
 void make_ray(uint3 idx,
@@ -37,8 +43,7 @@ void make_ray(uint3 idx,
 __forceinline__ __device__
 void accumulate(float4 &dst, float4 sample)
 {
-	bool disable_accumulation = parameters.options.disable_accumulation;
-	if (parameters.accumulate && !disable_accumulation) {
+	if (parameters.accumulate && false) {
 		float4 prev = dst;
 		int count = parameters.samples;
 		dst = (prev * count + sample)/(count + 1);
@@ -89,7 +94,10 @@ extern "C" __global__ void __raygen__rg()
 
 	// Switch on the ray type
 	// TODO: skip the templates, just pass the mode on...
-	trace <eRegular> (origin, direction, i0, i1);
+	trace <eRegular> (
+		parameters.traversable,
+		origin, direction, i0, i1
+	);
 
 	// Finally, store the result
 	float4 sample = make_float4(rp.value, 1.0f);
@@ -142,6 +150,15 @@ extern "C" __global__ void __closesthit__ch()
 		.wo = wo,
 		.x = x,
 	};
+	
+	LightingContext lc {
+		.quads = parameters.lights.quads,
+		.triangles = parameters.lights.triangles,
+		.quad_count = parameters.lights.quad_count,
+		.triangle_count = parameters.lights.triangle_count,
+		.has_envmap = parameters.has_envmap,
+		.envmap = parameters.envmap,
+	};
 
 	// Reservoir for spatial sampling
 	LightReservoir spatial {
@@ -156,14 +173,17 @@ extern "C" __global__ void __closesthit__ch()
 	// NOTE: decorrelating samples places into local and world space
 	// reservoirs by using different samples for each
 	// TODO: observe whether this is actually beneficial
-	FullLightSample fls = sample_direct(surface_hit, rp->seed);
+	FullLightSample fls = sample_direct(lc, surface_hit, rp->seed);
 
 	// Compute target function (unocculted lighting)
 	float3 D = fls.point - surface_hit.x;
 	float d = length(D);
 	D /= d;
 
-	float3 Li = direct_occluded(surface_hit, fls.Le, fls.normal, fls.type, D, d);
+	float3 Li = direct_occluded(
+		parameters.traversable,
+		surface_hit, fls.Le, fls.normal, fls.type, D, d
+	);
 		
 	// Contribution and weight
 	float target = Li.x + Li.y + Li.z; // Luminance
@@ -184,7 +204,7 @@ extern "C" __global__ void __closesthit__ch()
 	float3 direct = make_float3(0);
 
 	if (parameters.kd_tree) {
-		FullLightSample fls = sample_direct(surface_hit, rp->seed);
+		FullLightSample fls = sample_direct(lc, surface_hit, rp->seed);
 
 		// Compute target function (unocculted lighting)
 		float3 D = fls.point - surface_hit.x;
@@ -345,7 +365,7 @@ extern "C" __global__ void __closesthit__ch()
 			d = length(D);
 			D /= d;
 
-			Li = direct_occluded(surface_hit, sample.value,
+			Li = direct_occluded(parameters.traversable, surface_hit, sample.value,
 					sample.normal, sample.type, D, d);
 
 			float denom = rsampled.count * sample.target;
@@ -427,15 +447,12 @@ extern "C" __global__ void __closesthit__ch()
 	// Trace the next ray
 	float3 indirect = make_float3(0.0f);
 	if (pdf > 0) {
-		trace(x, wi, i0, i1);
+		trace(parameters.traversable, x, wi, i0, i1);
 		indirect = rp->value;
 	}
 
 	// Update the value
-	bool skip_direct = (primary && parameters.options.indirect_only);
-	if (!skip_direct)
-		rp->value = direct;
-
+	rp->value = direct;
 	if (pdf > 0)
 		rp->value += T * indirect;
 

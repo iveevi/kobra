@@ -16,6 +16,7 @@
 #include "../optix/parameters.cuh"
 #include "../timer.hpp"
 #include "../vertex.hpp"
+#include "wsris_kd_parameters.cuh"
 
 namespace kobra {
 
@@ -64,7 +65,7 @@ struct WorldSpaceKdReservoirs {
 	} optix_programs;
 
 	// Launch parameters
-	optix::BasiliskParameters launch_params;
+	optix::WorldSpaceKdReservoirsParameters launch_params;
 
 	CUdeviceptr launch_params_buffer = 0;
 
@@ -89,44 +90,38 @@ struct WorldSpaceKdReservoirs {
 
 	// Functions
 	static WorldSpaceKdReservoirs make(const Context &, const vk::Extent2D &);
+
+	// Proprety methods
+	size_t size() {
+		return extent.width * extent.height;
+	}
+
+	// Buffer accessors
+	CUdeviceptr color_buffer() {
+		return (CUdeviceptr) launch_params.color_buffer;
+	}
+
+	CUdeviceptr normal_buffer() {
+		return (CUdeviceptr) launch_params.normal_buffer;
+	}
+
+	CUdeviceptr albedo_buffer() {
+		return (CUdeviceptr) launch_params.albedo_buffer;
+	}
+
+	CUdeviceptr position_buffer() {
+		return (CUdeviceptr) launch_params.position_buffer;
+	}
+
+	// Other methods
+	void set_envmap(const std::string &);
+
+	void render(
+		const ECS &, const Camera &,
+		const Transform &,
+		unsigned int, bool = false
+	);
 };
-
-// Proprety methods
-inline size_t size(const WorldSpaceKdReservoirs &layer)
-{
-	return layer.extent.width * layer.extent.height;
-}
-
-// Buffer accessors
-inline CUdeviceptr color_buffer(const WorldSpaceKdReservoirs &layer)
-{
-	return (CUdeviceptr) layer.launch_params.color_buffer;
-}
-
-inline CUdeviceptr normal_buffer(const WorldSpaceKdReservoirs &layer)
-{
-	return (CUdeviceptr) layer.launch_params.normal_buffer;
-}
-
-inline CUdeviceptr albedo_buffer(const WorldSpaceKdReservoirs &layer)
-{
-	return (CUdeviceptr) layer.launch_params.albedo_buffer;
-}
-
-inline CUdeviceptr position_buffer(const WorldSpaceKdReservoirs &layer)
-{
-	return (CUdeviceptr) layer.launch_params.position_buffer;
-}
-
-// Other methods
-void set_envmap(WorldSpaceKdReservoirs &, const std::string &);
-
-void render(
-	WorldSpaceKdReservoirs &,
-	const ECS &, const Camera &,
-	const Transform &,
-	unsigned int, bool = false
-);
 
 }
 

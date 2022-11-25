@@ -9,7 +9,6 @@
 #include "../../include/cuda/material.cuh"
 #include "../../include/cuda/math.cuh"
 #include "../../include/optix/core.cuh"
-#include "../../include/optix/parameters.cuh"
 #include "../../include/optix/lighting.cuh"
 #include "../../include/cuda/matrix.cuh"
 
@@ -17,17 +16,22 @@ using namespace kobra;
 using namespace kobra::cuda;
 using namespace kobra::optix;
 
-extern "C"
-{
-	__constant__ kobra::optix::BasiliskParameters parameters;
-}
-
 // TODO: launch parameter for ray depth
 // TODO: rename to MAX_BOUNCES
-#define MAX_DEPTH 1
+#define MAX_DEPTH 0
 
 // Local constants
 static const float eps = 1e-3f;
+
+// Generic lighting context
+struct LightingContext {
+	QuadLight *quads;
+	TriangleLight *triangles;
+	uint quad_count;
+	uint triangle_count;
+	bool has_envmap;
+	cudaTextureObject_t envmap;
+};
 
 // Ray packet data
 struct RayPacket {
@@ -52,7 +56,7 @@ struct RayPacket {
 
 // Interpolate triangle values
 template <class T>
-KCUDA_INLINE __device__
+KCUDA_INLINE KCUDA_DEVICE
 T interpolate(T *arr, uint3 triagle, float2 bary)
 {
 	T a = arr[triagle.x];
@@ -123,7 +127,7 @@ void calculate_material(Hit *hit_data, Material &mat, uint3 triangle, float2 uv)
 
 // Check shadow visibility
 KCUDA_INLINE __device__
-bool is_occluded(float3 origin, float3 dir, float R)
+bool is_occluded(OptixTraversableHandle handle, float3 origin, float3 dir, float R)
 {
 	static float eps = 0.05f;
 
@@ -132,7 +136,7 @@ bool is_occluded(float3 origin, float3 dir, float R)
 	unsigned int j0, j1;
 	pack_pointer <bool> (&vis, j0, j1);
 
-	optixTrace(parameters.traversable,
+	optixTrace(handle,
 		origin, dir,
 		0, R - eps, 0,
 		OptixVisibilityMask(0b1),
@@ -148,7 +152,7 @@ bool is_occluded(float3 origin, float3 dir, float R)
 
 // Get direct lighting for environment map
 KCUDA_DEVICE
-float3 Ld_Environment(const SurfaceHit &sh, float &pdf, Seed seed)
+float3 Ld_Environment(OptixTraversableHandle handle, const LightingContext &lc, const SurfaceHit &sh, float &pdf, Seed seed)
 {
 	// TODO: sample in UV space instead of direction...
 	static const float WORLD_RADIUS = 10000.0f;
@@ -167,7 +171,7 @@ float3 Ld_Environment(const SurfaceHit &sh, float &pdf, Seed seed)
 	float u = atan2(wi.x, wi.z)/(2.0f * M_PI) + 0.5f;
 	float v = asin(wi.y)/M_PI + 0.5f;
 
-	float4 sample = tex2D <float4> (parameters.envmap, u, v);
+	float4 sample = tex2D <float4> (lc.envmap, u, v);
 	float3 Li = make_float3(sample);
 
 	// pdf = 1.0f / (4.0f * M_PI * WORLD_RADIUS * WORLD_RADIUS);
@@ -175,7 +179,7 @@ float3 Ld_Environment(const SurfaceHit &sh, float &pdf, Seed seed)
 	pdf = 1.0f/(4.0f * M_PI);
 
 	// NEE
-	bool occluded = is_occluded(sh.x, wi, WORLD_RADIUS);
+	bool occluded = is_occluded(handle,sh.x, wi, WORLD_RADIUS);
 	if (occluded)
 		return make_float3(0.0f);
 
@@ -188,13 +192,13 @@ float3 Ld_Environment(const SurfaceHit &sh, float &pdf, Seed seed)
 
 // Trace ray into scene and get relevant information
 __device__
-float3 Ld(const SurfaceHit &sh, Seed seed)
+float3 Ld(OptixTraversableHandle handle, const LightingContext &lc, const SurfaceHit &sh, Seed seed)
 {
-	int quad_count = parameters.lights.quad_count;
-	int tri_count = parameters.lights.triangle_count;
+	int quad_count = lc.quad_count;
+	int tri_count = lc.triangle_count;
 
 	// TODO: parameter for if envmap is used
-	int total_count = quad_count + tri_count + parameters.has_envmap;
+	int total_count = quad_count + tri_count + lc.has_envmap;
 
 	// Regular direct lighting
 	unsigned int i = rand_uniform(seed) * total_count;
@@ -204,16 +208,16 @@ float3 Ld(const SurfaceHit &sh, Seed seed)
 
 	float light_pdf = 0.0f;
 	if (i < quad_count) {
-		QuadLight light = parameters.lights.quads[i];
-		contr = Ld_light(light, sh, light_pdf, seed);
+		QuadLight light = lc.quads[i];
+		contr = Ld_light(handle, light, sh, light_pdf, seed);
 	} else if (i < quad_count + tri_count) {
 		int ni = i - quad_count;
-		TriangleLight light = parameters.lights.triangles[ni];
-		contr = Ld_light(light, sh, light_pdf, seed);
+		TriangleLight light = lc.triangles[ni];
+		contr = Ld_light(handle, light, sh, light_pdf, seed);
 	} else {
 		// Environment light
 		// TODO: imlpement PBRT's better importance sampling
-		contr = Ld_Environment(sh, light_pdf, seed);
+		contr = Ld_Environment(handle, lc, sh, light_pdf, seed);
 	}
 
 	pdf *= light_pdf;
@@ -234,19 +238,19 @@ struct FullLightSample {
 };
 
 KCUDA_INLINE KCUDA_DEVICE
-FullLightSample sample_direct(const SurfaceHit &sh, Seed seed)
+FullLightSample sample_direct(const LightingContext &lc, const SurfaceHit &sh, Seed seed)
 {
 	// TODO: plus envmap
-	int quad_count = parameters.lights.quad_count;
-	int tri_count = parameters.lights.triangle_count;
+	int quad_count = lc.quad_count;
+	int tri_count = lc.triangle_count;
 
-	unsigned int total_lights = quad_count + tri_count + parameters.has_envmap;
+	unsigned int total_lights = quad_count + tri_count + lc.has_envmap;
 	unsigned int light_index = rand_uniform(seed) * total_lights;
 
 	FullLightSample sample;
 	if (light_index < quad_count) {
 		// Get quad light
-		QuadLight light = parameters.lights.quads[light_index];
+		QuadLight light = lc.quads[light_index];
 
 		// Sample point
 		float3 point = sample_area_light(light, seed);
@@ -262,7 +266,7 @@ FullLightSample sample_direct(const SurfaceHit &sh, Seed seed)
 	} else if (light_index < quad_count + tri_count) {
 		// Get triangle light
 		int ni = light_index - quad_count;
-		TriangleLight light = parameters.lights.triangles[ni];
+		TriangleLight light = lc.triangles[ni];
 
 		// Sample point
 		float3 point = sample_area_light(light, seed);
@@ -294,7 +298,7 @@ FullLightSample sample_direct(const SurfaceHit &sh, Seed seed)
 		float u = atan2(wi.x, wi.z)/(2.0f * M_PI) + 0.5f;
 		float v = asin(wi.y)/M_PI + 0.5f;
 
-		float4 env = tex2D <float4> (parameters.envmap, u, v);
+		float4 env = tex2D <float4> (lc.envmap, u, v);
 
 		float pdf = 1.0f/(4.0f * M_PI * total_lights);
 		
@@ -313,7 +317,8 @@ FullLightSample sample_direct(const SurfaceHit &sh, Seed seed)
 
 // Compute direct lighting for a given sample
 __device__ __forceinline__
-float3 direct_unoccluded(const SurfaceHit &sh, float3 Le, float3 normal, int type, float3 D, float d)
+float3 direct_unoccluded(const SurfaceHit &sh,
+		float3 Le, float3 normal, int type, float3 D, float d)
 {
 	// Assume that the light is visible
 	// TODO: evaluate all lobes...
@@ -331,9 +336,12 @@ float3 direct_unoccluded(const SurfaceHit &sh, float3 Le, float3 normal, int typ
 }
 
 __device__ __forceinline__
-float3 direct_occluded(const SurfaceHit &sh, float3 Le, float3 normal, int type, float3 D, float d)
+float3 direct_occluded(OptixTraversableHandle handle,
+		const SurfaceHit &sh,
+		float3 Le,
+		float3 normal, int type, float3 D, float d)
 {
-	bool occluded = is_occluded(sh.x, D, d);
+	bool occluded = is_occluded(handle, sh.x, D, d);
 
 	float3 Li = make_float3(0.0f);
 	if (!occluded) {
@@ -354,9 +362,9 @@ float3 direct_occluded(const SurfaceHit &sh, float3 Le, float3 normal, int type,
 // Kernel helpers/code blocks
 template <unsigned int Mode = 0>
 KCUDA_INLINE __device__
-void trace(float3 origin, float3 direction, uint i0, uint i1)
+void trace(OptixTraversableHandle handle, float3 origin, float3 direction, uint i0, uint i1)
 {
-	optixTrace(parameters.traversable,
+	optixTrace(handle,
 		origin, direction,
 		0.0f, 1e16f, 0.0f,
 		OptixVisibilityMask(0b11),

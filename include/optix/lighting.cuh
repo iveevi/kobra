@@ -1,12 +1,18 @@
 #ifndef KOBRA_OPTIX_LIGHTING_H_
 #define KOBRA_OPTIX_LIGHTING_H_
 
+// OptiX headers
+#include <optix.h>
+
 // Engine headers
 #include "../cuda/material.cuh"
 #include "../cuda/brdf.cuh"
 
+// TODO: kobra namespace
+
 // Forward declarations
-bool is_occluded(float3, float3, float);
+KCUDA_INLINE KCUDA_DEVICE
+bool is_occluded(OptixTraversableHandle, float3, float3, float);
 
 namespace kobra {
 
@@ -141,8 +147,10 @@ float3 sample_area_light(TriangleLight light, cuda::Seed seed)
 
 // Direct lighting for Next Event Estimation
 template <class Light>
-KCUDA_HOST_DEVICE
-float3 Ld_light(const Light &light, const cuda::SurfaceHit &sh, float &light_pdf, cuda::Seed seed)
+KCUDA_DEVICE
+float3 Ld_light(OptixTraversableHandle handle,
+		const Light &light, const cuda::SurfaceHit &sh,
+		float &light_pdf, cuda::Seed seed)
 {
 	// PDF for sampling point on diffuse light
 	light_pdf = 1.0f/light.area();
@@ -152,7 +160,7 @@ float3 Ld_light(const Light &light, const cuda::SurfaceHit &sh, float &light_pdf
 	float3 wi = normalize(lpos - sh.x);
 	float R = length(lpos - sh.x);
 
-	bool occluded = is_occluded(sh.x, wi, R);
+	bool occluded = is_occluded(handle, sh.x, wi, R);
 	if (occluded)
 		return make_float3(0.0f);
 

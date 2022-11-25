@@ -1,4 +1,10 @@
-#include "basilisk_common.cuh"
+#include "../../include/optix/parameters.cuh"
+#include "common.cuh"
+
+extern "C"
+{
+	__constant__ kobra::optix::BasiliskParameters parameters;
+}
 
 static KCUDA_INLINE KCUDA_HOST_DEVICE
 void make_ray(uint3 idx,
@@ -91,16 +97,32 @@ extern "C" __global__ void __raygen__rg()
 	// TODO: skip the templates, just pass the mode on...
 	switch (parameters.mode) {
 	case eRegular:
-		trace <eRegular> (origin, direction, i0, i1);
+		trace <eRegular> (
+			parameters.traversable,
+			origin, direction, i0, i1
+		);
+
 		break;
 	case eReSTIR:
-		trace <eReSTIR> (origin, direction, i0, i1);
+		trace <eReSTIR> (
+			parameters.traversable,
+			origin, direction, i0, i1
+		);
+
 		break;
 	case eReSTIRPT:
-		trace <eReSTIRPT> (origin, direction, i0, i1);
+		trace <eReSTIRPT> (
+			parameters.traversable,
+			origin, direction, i0, i1
+		);
+
 		break;
 	case eVoxel:
-		trace <eVoxel> (origin, direction, i0, i1);
+		trace <eVoxel> (
+			parameters.traversable,
+			origin, direction, i0, i1
+		);
+
 		break;
 	default:
 		break;
@@ -147,7 +169,16 @@ extern "C" __global__ void __closesthit__ch()
 		.x = x,
 	};
 
-	float3 direct = Ld(surface_hit, rp->seed);
+	LightingContext lc {
+		.quads = parameters.lights.quads,
+		.triangles = parameters.lights.triangles,
+		.quad_count = parameters.lights.quad_count,
+		.triangle_count = parameters.lights.triangle_count,
+		.has_envmap = parameters.has_envmap,
+		.envmap = parameters.envmap,
+	};
+
+	float3 direct = Ld(parameters.traversable, lc, surface_hit, rp->seed);
 	if (material.type == Shading::eEmissive)
 		direct += material.emission;
 
@@ -170,7 +201,11 @@ extern "C" __global__ void __closesthit__ch()
 	// Trace the next ray
 	float3 indirect = make_float3(0.0f);
 	if (pdf > 0) {
-		trace <eRegular> (x, wi, i0, i1);
+		trace <eRegular> (
+			parameters.traversable,
+			x, wi, i0, i1
+		);
+
 		indirect = rp->value;
 	}
 

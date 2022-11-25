@@ -125,17 +125,6 @@ struct MotionCapture : public kobra::BaseApp {
 
 		camera = scene.ecs.get_entity("Camera");
 
-		// DDS loading tests
-		std::string dds_path =
-			"/home/venki/models/ZeroDay_v1/MEASURE_ONE/tex/decal_BaseColor.dds";
-		std::filesystem::path path = dds_path;
-
-		int w, h, c;
-		kobra::load_texture(path, w, h, c);
-
-		// Setup Wadjet tracer
-		KOBRA_LOG_FILE(kobra::Log::INFO) << "Hybrid tracer setup\n";
-
 		// TODO: test lower resolution...
 		tracer = kobra::layers::Basilisk::make(get_context(), {1000, 1000});
 		
@@ -160,6 +149,8 @@ struct MotionCapture : public kobra::BaseApp {
 		wskdr = kobra::asmodeus::WorldSpaceKdReservoirs::make(
 			get_context(), {1000, 1000}
 		);
+
+		wskdr.set_envmap("resources/skies/background_1.jpg");
 
 #if 0
 
@@ -269,7 +260,7 @@ struct MotionCapture : public kobra::BaseApp {
 					mode, accumulate
 				);
 			} else {
-				render(wskdr, scene.ecs,
+				wskdr.render(scene.ecs,
 					camera.get <kobra::Camera> (),
 					camera.get <kobra::Transform> (),
 					mode, accumulate
@@ -409,7 +400,8 @@ struct MotionCapture : public kobra::BaseApp {
 			if (integrator == 0) {
 				d_output = (float4 *) kobra::layers::color_buffer(tracer);
 			} else {
-				d_output = (float4 *) kobra::asmodeus::color_buffer(wskdr);
+				// d_output = (float4 *) kobra::asmodeus::color_buffer(wskdr);
+				d_output = (float4 *) wskdr.color_buffer();
 			}
 
 			// TODO: denoise here?

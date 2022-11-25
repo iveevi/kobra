@@ -20,6 +20,28 @@
 // OptiX Source PTX
 #define OPTIX_PTX_FILE "bin/ptx/wsris_kd.ptx"
 
+// OptiX debugging options
+// TODO: put in core.cuh
+#ifdef KOBRA_OPTIX_DEBUG
+
+#define KOBRA_OPTIX_EXCEPTION_FLAGS \
+		OPTIX_EXCEPTION_FLAG_DEBUG \
+		| OPTIX_EXCEPTION_FLAG_TRACE_DEPTH \
+		| OPTIX_EXCEPTION_FLAG_STACK_OVERFLOW
+
+#define KOBRA_OPTIX_DEBUG_LEVEL OPTIX_COMPILE_DEBUG_LEVEL_FULL
+#define KOBRA_OPTIX_OPTIMIZATION_LEVEL OPTIX_COMPILE_OPTIMIZATION_LEVEL_0
+
+#else
+
+#define KOBRA_OPTIX_EXCEPTION_FLAGS \
+		OPTIX_EXCEPTION_FLAG_NONE
+
+#define KOBRA_OPTIX_DEBUG_LEVEL OPTIX_COMPILE_DEBUG_LEVEL_NONE
+#define KOBRA_OPTIX_OPTIMIZATION_LEVEL OPTIX_COMPILE_OPTIMIZATION_LEVEL_3
+
+#endif
+
 namespace kobra {
 
 namespace asmodeus {
@@ -29,9 +51,28 @@ using RaygenRecord = optix::Record <int>;
 using MissRecord = optix::Record <int>;
 using HitRecord = optix::Record <optix::Hit>;
 
-// Load OptiX program groups
-// #define KOBRA_OPTIX_DEBUG
+// OptiX compilation configurations
+static constexpr OptixPipelineCompileOptions ppl_compile_options = {
+	.usesMotionBlur = false,
+	.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING,
+	.numPayloadValues = 2,
+	.numAttributeValues = 0,
+	.exceptionFlags = KOBRA_OPTIX_EXCEPTION_FLAGS,
+	.pipelineLaunchParamsVariableName = "parameters",
+	.usesPrimitiveTypeFlags = (unsigned int) OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE,
+};
+	
+static constexpr OptixModuleCompileOptions module_options = {
+	.optLevel = KOBRA_OPTIX_OPTIMIZATION_LEVEL,
+	.debugLevel = KOBRA_OPTIX_DEBUG_LEVEL,
+};
+	
+static constexpr OptixPipelineLinkOptions ppl_link_options = {
+	.maxTraceDepth = 10,
+	.debugLevel = KOBRA_OPTIX_DEBUG_LEVEL,
+};
 
+// Load OptiX program groups
 static void load_optix_program_groups(WorldSpaceKdReservoirs &layer)
 {
 	// Load programs
@@ -64,8 +105,6 @@ static void load_optix_program_groups(WorldSpaceKdReservoirs &layer)
 }
 
 // Setup and load OptiX things
-const int VOXEL_RESOLUTION = 100;
-
 static void initialize_optix(WorldSpaceKdReservoirs &layer)
 {
 	// Create the context
@@ -73,49 +112,6 @@ static void initialize_optix(WorldSpaceKdReservoirs &layer)
 
 	// Allocate a stream for the layer
 	CUDA_CHECK(cudaStreamCreate(&layer.optix_stream));
-	
-	// Pipeline configuration
-	OptixPipelineCompileOptions ppl_compile_options = {};
-
-	ppl_compile_options.usesMotionBlur = false;
-	ppl_compile_options.numPayloadValues = 2;
-	ppl_compile_options.numAttributeValues = 0;
-
-#ifdef KOBRA_OPTIX_DEBUG
-
-	ppl_compile_options.exceptionFlags = OPTIX_EXCEPTION_FLAG_DEBUG
-		| OPTIX_EXCEPTION_FLAG_TRACE_DEPTH
-		| OPTIX_EXCEPTION_FLAG_STACK_OVERFLOW;
-
-#else
-
-	ppl_compile_options.exceptionFlags = OPTIX_EXCEPTION_FLAG_NONE;
-
-#endif
-
-	ppl_compile_options.pipelineLaunchParamsVariableName = "parameters";
-	
-	ppl_compile_options.usesPrimitiveTypeFlags =
-		OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE;
-	
-	ppl_compile_options.traversableGraphFlags =
-		OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING;
-
-	// Module configuration
-	OptixModuleCompileOptions module_options = {};
-
-
-#ifdef KOBRA_OPTIX_DEBUG
-
-	module_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
-	module_options.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_0;
-
-#else
-
-	module_options.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_3;
-	module_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_NONE;
-
-#endif
 
 	// Now load the module
 	char log[2048];
@@ -135,21 +131,6 @@ static void initialize_optix(WorldSpaceKdReservoirs &layer)
 	// Load programs
 	load_optix_program_groups(layer);
 
-	// Create the pipeline and configure it
-	OptixPipelineLinkOptions ppl_link_options = {};
-
-	ppl_link_options.maxTraceDepth = 10;
-
-#ifdef KOBRA_OPTIX_DEBUG
-
-	ppl_link_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
-
-#else
-
-	ppl_link_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_NONE;
-
-#endif
-		
 	layer.optix_pipeline = optix::link_optix_pipeline(
 		layer.optix_context,
 		{
@@ -202,37 +183,6 @@ static void initialize_optix(WorldSpaceKdReservoirs &layer)
 	// Accumulatoin on by default
 	layer.launch_params.accumulate = true;
 
-	// Options (set all to false/0)
-	optix::BasiliskOptions &options = layer.launch_params.options;
-	memset(&options, 0, sizeof(options));
-
-	// Advanced sampling resources - ReSTIR GI
-	float radius = std::min(width, height)/10.0f;
-
-	optix::LightReservoir r_lights_def {
-		.sample = {},
-		.count = 0,
-		.weight = 0.0f,
-		.mis = 0.0f
-	};
-
-	optix::ReSTIR_Reservoir def {
-		.sample = {},
-		.count = 0,
-		.weight = 0.0f,
-		.mis = 0.0f
-	};
-
-	std::vector <optix::LightReservoir> r_lights(width * height, r_lights_def);
-	std::vector <optix::ReSTIR_Reservoir> r_temporal(width * height, def);
-	std::vector <optix::ReSTIR_Reservoir> r_spatial(width * height, def);
-	std::vector <float> sampling_radii(width * height, radius);
-
-	params.advanced.r_lights = cuda::make_buffer(r_lights);
-	params.advanced.r_lights_prev = cuda::make_buffer(r_lights);
-	params.advanced.r_spatial = cuda::make_buffer(r_lights);
-	params.advanced.r_spatial_prev = cuda::make_buffer(r_lights);
-
 	// Color buffer (output)
 	size_t bytes = width * height * sizeof(float4);
 
@@ -247,7 +197,7 @@ static void initialize_optix(WorldSpaceKdReservoirs &layer)
 
 	// Allocate the parameters buffer
 	layer.launch_params_buffer = cuda::alloc(
-		sizeof(optix::BasiliskParameters)
+		sizeof(optix::WorldSpaceKdReservoirsParameters)
 	);
 
 	// Start the timer
@@ -278,15 +228,15 @@ WorldSpaceKdReservoirs WorldSpaceKdReservoirs::make(const Context &context, cons
 }
 
 // Set the environment map
-void set_envmap(WorldSpaceKdReservoirs &layer, const std::string &path)
+void WorldSpaceKdReservoirs::set_envmap(const std::string &path)
 {
 	// First load the environment map
 	const auto &map = TextureManager::load_texture(
-		*layer.phdev, *layer.device, path, true
+		*phdev, *device, path, true // TODO: use dev()
 	);
 
-	layer.launch_params.envmap = cuda::import_vulkan_texture(*layer.device, map);
-	layer.launch_params.has_envmap = true;
+	launch_params.envmap = cuda::import_vulkan_texture(*device, map);
+	launch_params.has_envmap = true;
 }
 
 // Update the light buffers if needed
@@ -545,6 +495,8 @@ static void update_acceleration_structure(WorldSpaceKdReservoirs &layer,
 		cuda::free(d_ias_tmp);
 		cuda::free(d_instances);
 	}
+
+	// std::cout << "Done building acceleration structure" << std::endl;
 
 	// Copy address to launch parameters
 	layer.launch_params.traversable = layer.optix.handle;
@@ -898,8 +850,6 @@ int build_kd_tree_recursive
 
 void build_kd_tree(WorldSpaceKdReservoirs &layer, float4 *point_array, int size)
 {
-	KOBRA_PROFILE_TASK(Build K-d tree);
-
 	// Gather all valid points
 	std::vector <float3> points;
 	for (int i = 0; i < size; i++) {
@@ -952,8 +902,8 @@ void build_kd_tree(WorldSpaceKdReservoirs &layer, float4 *point_array, int size)
 }
 
 // Path tracing computation
-void render(WorldSpaceKdReservoirs &layer,
-		const ECS &ecs,
+void WorldSpaceKdReservoirs::render
+		(const ECS &ecs,
 		const Camera &camera,
 		const Transform &transform,
 		unsigned int mode,
@@ -963,83 +913,81 @@ void render(WorldSpaceKdReservoirs &layer,
 	{
 		KOBRA_PROFILE_TASK(Update data);
 
-		preprocess_scene(layer, ecs, camera, transform);
+		preprocess_scene(*this, ecs, camera, transform);
 	}
 
 	// Reset the accumulation state if needed
 	if (!accumulate)
-		layer.launch_params.samples = 0;
+		launch_params.samples = 0;
 
 	// Copy parameters to the GPU
 	cuda::copy(
-		layer.launch_params_buffer,
-		&layer.launch_params, 1,
+		launch_params_buffer,
+		&launch_params, 1,
 		cudaMemcpyHostToDevice
 	);
 	
-	{
-		KOBRA_PROFILE_TASK(OptiX path tracing);
-		
-		int width = layer.extent.width;
-		int height = layer.extent.height;
+	int width = extent.width;
+	int height = extent.height;
 
-		// TODO: depth?
-		// TODO: alpha transparency...
-		OPTIX_CHECK(
-			optixLaunch(
-				layer.optix_pipeline,
-				layer.optix_stream,
-				layer.launch_params_buffer,
-				sizeof(optix::BasiliskParameters),
-				&layer.optix_sbt,
-				width, height, 1
-			)
-		);
-		
-		CUDA_SYNC_CHECK();
+	// TODO: depth?
+	// TODO: alpha transparency...
+	OPTIX_CHECK(
+		optixLaunch(
+			optix_pipeline,
+			optix_stream,
+			launch_params_buffer,
+			sizeof(optix::WorldSpaceKdReservoirsParameters),
+			&optix_sbt,
+			width, height, 1
+		)
+	);
+	
+	CUDA_SYNC_CHECK();
 
-		// TODO: async tasks...
-		if (!layer.initial_kd_tree) {
-			// TODO: update vs rebuild of k-d tree
+	/* TODO: async tasks...
+	if (!initial_kd_tree) {
+		// TODO: update vs rebuild of k-d tree
+		CUDA_CHECK(
 			cudaMemcpy(
-				layer.positions,
-				layer.launch_params.position_buffer,
+				positions,
+				launch_params.position_buffer,
 				width * height * sizeof(float4),
 				cudaMemcpyDeviceToHost
+			)
+		);
+
+		auto task = [&]() {
+			build_kd_tree(
+				*this,
+				positions,
+				width * height
 			);
+		};
 
-			auto task = [&]() {
-				build_kd_tree(
-					layer,
-					layer.positions,
-					width * height
-				);
-			};
+		// layer.async_task = new core::AsyncTask(task);
+		// layer.async_task->wait();
+		task();
 
-			// layer.async_task = new core::AsyncTask(task);
-			// layer.async_task->wait();
-			task();
+		initial_kd_tree = true;
+	} */
 
-			layer.initial_kd_tree = true;
-		}
+	if (initial_kd_tree) {
+		auto &params = launch_params;
+		int reservoir_size = sizeof(optix::LightReservoir) * params.kd_leaves;
 
-		if (layer.initial_kd_tree) {
-			auto &params = layer.launch_params;
-			int reservoir_size = sizeof(optix::LightReservoir) * params.kd_leaves;
-
-			CUDA_CHECK(
-				cudaMemcpy(
-					params.kd_reservoirs_prev,
-					params.kd_reservoirs,
-					reservoir_size,
-					cudaMemcpyDeviceToDevice
-				)
-			);
-		}
-
-		// Increment number of samples
-		layer.launch_params.samples++;
+		CUDA_CHECK(
+			cudaMemcpy(
+				params.kd_reservoirs_prev,
+				params.kd_reservoirs,
+				reservoir_size,
+				cudaMemcpyDeviceToDevice
+			)
+		);
 	}
+
+	// Increment number of samples
+	launch_params.samples++;
 }
 
 }
