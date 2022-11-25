@@ -104,6 +104,28 @@ static void load_optix_program_groups(WorldSpaceKdReservoirs &layer)
 	);
 }
 
+static OptixModule load_optix_module(OptixDeviceContext optix_context,
+		const std::string &path)
+{
+	static char log[2048];
+	static size_t sizeof_log = sizeof(log);
+
+	std::string file = common::read_file(path);
+
+	OptixModule module;
+	OPTIX_CHECK_LOG(
+		optixModuleCreateFromPTX(
+			optix_context,
+			&module_options, &ppl_compile_options,
+			file.c_str(), file.size(),
+			log, &sizeof_log,
+			&module
+		)
+	);
+
+	return module;
+}
+
 // Setup and load OptiX things
 static void initialize_optix(WorldSpaceKdReservoirs &layer)
 {
@@ -945,7 +967,7 @@ void WorldSpaceKdReservoirs::render
 	
 	CUDA_SYNC_CHECK();
 
-	/* TODO: async tasks...
+	// TODO: async tasks...
 	if (!initial_kd_tree) {
 		// TODO: update vs rebuild of k-d tree
 		CUDA_CHECK(
@@ -970,7 +992,7 @@ void WorldSpaceKdReservoirs::render
 		task();
 
 		initial_kd_tree = true;
-	} */
+	}
 
 	if (initial_kd_tree) {
 		auto &params = launch_params;
@@ -988,6 +1010,68 @@ void WorldSpaceKdReservoirs::render
 
 	// Increment number of samples
 	launch_params.samples++;
+}
+
+///////////////////////////////////////
+// World Space Grid Based Reservoirs //
+///////////////////////////////////////
+
+GridBasedReservoirs GridBasedReservoirs::make
+		(Backend &backend, const vk::Extent2D &extent)
+{
+	GridBasedReservoirs layer;
+
+	// Initialize basics
+	layer.backend = &backend;
+	layer.extent = extent;
+
+	// Load the module
+	layer.module = load_optix_module(
+		backend.optix_context,
+		"bin/ptx/basilisk_rt.ptx"
+	);
+
+	// Load programs
+	OptixProgramGroupOptions program_options = {};
+
+	// Descriptions of all the programs
+	std::vector <OptixProgramGroupDesc> program_descs = {
+		OPTIX_DESC_RAYGEN(layer.module, "__raygen__rg"),
+		OPTIX_DESC_HIT(layer.module, "__closesthit__ch"),
+		OPTIX_DESC_HIT(layer.module, "__closesthit__shadow"),
+		OPTIX_DESC_MISS(layer.module, "__miss__ms"),
+		OPTIX_DESC_MISS(layer.module, "__miss__shadow")
+	};
+
+	// Corresponding program groups
+	OptixProgramGroup program_groups[program_descs.size()];
+
+	std::vector <OptixProgramGroup *> ref_program_groups;
+	for (auto &program_group : program_groups)
+		ref_program_groups.push_back(&program_group);
+
+	optix::load_program_groups(
+		backend.optix_context,
+		program_descs,
+		program_options,
+		ref_program_groups
+	);
+
+	// Create the pipeline
+	// TODO: need two: one for initial, and then resumation
+	Backend::Pipeline pipeline(2, 2); // TODO: ref to backend
+
+	// TODO: specific overloads
+	set_programs(pipeline,
+		backend.optix_context,
+		program_groups[0],
+		{ program_groups[1], program_groups[2] },
+		{ program_groups[3], program_groups[4] },
+		ppl_compile_options,
+		ppl_link_options
+	);
+
+	return layer;
 }
 
 }

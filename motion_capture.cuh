@@ -49,6 +49,7 @@ struct MotionCapture : public kobra::BaseApp {
 
 	kobra::asmodeus::Backend backend;
 	kobra::asmodeus::WorldSpaceKdReservoirs wskdr;
+	kobra::asmodeus::GridBasedReservoirs grid_based;
 
 	// Buffers
 	CUdeviceptr b_traced;
@@ -148,6 +149,10 @@ struct MotionCapture : public kobra::BaseApp {
 
 		wskdr = kobra::asmodeus::WorldSpaceKdReservoirs::make(
 			get_context(), {1000, 1000}
+		);
+
+		grid_based = kobra::asmodeus::GridBasedReservoirs::make(
+			backend, {1000, 1000}
 		);
 
 		wskdr.set_envmap("resources/skies/background_1.jpg");

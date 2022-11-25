@@ -113,7 +113,8 @@ float3 direct_lighting_temporal_ris(OptixTraversableHandle handle,
 __device__
 float3 direct_lighting_restir(OptixTraversableHandle handle,
 		const LightingContext &lc,
-		const SurfaceHit &sh, int index, Seed seed, int spatial_samples, bool copy = false)
+		const SurfaceHit &sh, int index, Seed seed, int spatial_samples,
+		bool indirect = false)
 {
 	// Get the reservoir
 	// TODO: option to copy resrvoir and update locally rather than
@@ -122,12 +123,25 @@ float3 direct_lighting_restir(OptixTraversableHandle handle,
 	LightReservoir *temporal = &parameters.advanced.r_lights[index];
 	LightReservoir *spatial = &parameters.advanced.r_spatial[index];
 	
-	LightReservoir copy_temporal = *temporal;
-	LightReservoir copy_spatial = *spatial;
+	LightReservoir indirect_temporal = *temporal;
 
-	if (copy) {
-		temporal = &copy_temporal;
-		spatial = &copy_spatial;
+	// Cannot use the global spatial reservoir,
+	// which is local to the primary intersections
+	LightReservoir indirect_spatial {
+		.sample = LightSample {},
+		.count = 0,
+		.weight = 0.0f,
+		.mis = 0.0f,
+	};
+
+	// TODO: take into account local spatial reservoir with occlusion?
+	// Or is the overhead too high, and spatial resampling done later
+	// is enough?
+
+	if (indirect) {
+		// Copy so we do not disturb the global reservoirs
+		temporal = &indirect_temporal;
+		spatial = &indirect_spatial;
 	}
 
 	if (parameters.samples == 0) {
@@ -293,7 +307,7 @@ __device__
 float3 direct_indirect(OptixTraversableHandle handle, const LightingContext &lc, const SurfaceHit &surface_hit, Seed seed)
 {
 	if (!parameters.options.reprojected_reuse)
-		return Ld(handle, lc, surface_hit, seed);
+		return Ld(lc, surface_hit, seed);
 
 	// TODO: method
 	const float3 U = parameters.cam_u;
@@ -324,7 +338,7 @@ float3 direct_indirect(OptixTraversableHandle handle, const LightingContext &lc,
 		return direct_lighting_restir(handle, lc, surface_hit, index, seed, 3, true);
 	}
 	
-	return Ld(handle, lc, surface_hit, seed);
+	return Ld(lc, surface_hit, seed);
 }
 
 // Closest hit program for ReSTIR
@@ -349,12 +363,13 @@ extern "C" __global__ void __closesthit__restir()
 	};
 	
 	LightingContext lc {
-		.quads = parameters.lights.quads,
-		.triangles = parameters.lights.triangles,
-		.quad_count = parameters.lights.quad_count,
-		.triangle_count = parameters.lights.triangle_count,
-		.has_envmap = parameters.has_envmap,
-		.envmap = parameters.envmap,
+		parameters.traversable,
+		parameters.lights.quads,
+		parameters.lights.triangles,
+		parameters.lights.quad_count,
+		parameters.lights.triangle_count,
+		parameters.has_envmap,
+		parameters.envmap,
 	};
 
 	// Compute direct ligting
@@ -369,14 +384,14 @@ extern "C" __global__ void __closesthit__restir()
 			spatial_samples = 3;
 
 		direct = direct_lighting_restir(
-			parameters.traversable, lc,
+			lc.handle, lc,
 			surface_hit,
 			rp->index, rp->seed,
 			spatial_samples
 		);
 	} else {
 		direct = direct_indirect(
-			parameters.traversable, lc,
+			lc.handle, lc,
 			surface_hit, rp->seed
 		);
 	}
@@ -444,16 +459,17 @@ extern "C" __global__ void __closesthit__restir_pt()
 	};
 	
 	LightingContext lc {
-		.quads = parameters.lights.quads,
-		.triangles = parameters.lights.triangles,
-		.quad_count = parameters.lights.quad_count,
-		.triangle_count = parameters.lights.triangle_count,
-		.has_envmap = parameters.has_envmap,
-		.envmap = parameters.envmap,
+		parameters.traversable,
+		parameters.lights.quads,
+		parameters.lights.triangles,
+		parameters.lights.quad_count,
+		parameters.lights.triangle_count,
+		parameters.has_envmap,
+		parameters.envmap,
 	};
 
 	// Compute direct ligting
-	float3 direct = Ld(parameters.traversable, lc, surface_hit, rp->seed);
+	float3 direct = Ld(lc, surface_hit, rp->seed);
 	if (material.type == Shading::eEmissive)
 		direct += material.emission;
 	

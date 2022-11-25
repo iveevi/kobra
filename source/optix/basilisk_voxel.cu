@@ -39,12 +39,13 @@ extern "C" __global__ void __closesthit__voxel()
 	};
 	
 	LightingContext lc {
-		.quads = parameters.lights.quads,
-		.triangles = parameters.lights.triangles,
-		.quad_count = parameters.lights.quad_count,
-		.triangle_count = parameters.lights.triangle_count,
-		.has_envmap = parameters.has_envmap,
-		.envmap = parameters.envmap,
+		parameters.traversable,
+		parameters.lights.quads,
+		parameters.lights.triangles,
+		parameters.lights.quad_count,
+		parameters.lights.triangle_count,
+		parameters.has_envmap,
+		parameters.envmap,
 	};
 
 	// Reservoir for spatial sampling

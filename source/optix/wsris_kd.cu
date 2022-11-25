@@ -152,12 +152,13 @@ extern "C" __global__ void __closesthit__ch()
 	};
 	
 	LightingContext lc {
-		.quads = parameters.lights.quads,
-		.triangles = parameters.lights.triangles,
-		.quad_count = parameters.lights.quad_count,
-		.triangle_count = parameters.lights.triangle_count,
-		.has_envmap = parameters.has_envmap,
-		.envmap = parameters.envmap,
+		parameters.traversable,
+		parameters.lights.quads,
+		parameters.lights.triangles,
+		parameters.lights.quad_count,
+		parameters.lights.triangle_count,
+		parameters.has_envmap,
+		parameters.envmap,
 	};
 
 	// Reservoir for spatial sampling
@@ -297,7 +298,7 @@ extern "C" __global__ void __closesthit__ch()
 		// TODO: two strategies
 		//	hierarchical: go up a few levels and then traverse down
 		//	pick a random node and traverse down
-		const int SPATIAL_SAMPLES = 1;
+		const int SPATIAL_SAMPLES = 3;
 
 		// Choose a root node a few level up and randomly
 		// traverse the tree to obtain a sample

@@ -17,6 +17,7 @@
 #include "../timer.hpp"
 #include "../vertex.hpp"
 #include "wsris_kd_parameters.cuh"
+#include "backend.cuh"
 
 namespace kobra {
 
@@ -28,7 +29,6 @@ class Rasterizer;
 
 namespace asmodeus {
 
-// Regular path tracer
 struct WorldSpaceKdReservoirs {
 	// Critical Vulkan structures
 	vk::raii::Device *device = nullptr;
@@ -121,6 +121,17 @@ struct WorldSpaceKdReservoirs {
 		const Transform &,
 		unsigned int, bool = false
 	);
+};
+
+// World Space Grid-based Reservoirs
+struct GridBasedReservoirs {
+	Backend *backend;
+
+	vk::Extent2D extent;
+
+	static GridBasedReservoirs make(Backend &, const vk::Extent2D &);
+private:
+	OptixModule module;
 };
 
 }

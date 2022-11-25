@@ -170,15 +170,16 @@ extern "C" __global__ void __closesthit__ch()
 	};
 
 	LightingContext lc {
-		.quads = parameters.lights.quads,
-		.triangles = parameters.lights.triangles,
-		.quad_count = parameters.lights.quad_count,
-		.triangle_count = parameters.lights.triangle_count,
-		.has_envmap = parameters.has_envmap,
-		.envmap = parameters.envmap,
+		parameters.traversable,
+		parameters.lights.quads,
+		parameters.lights.triangles,
+		parameters.lights.quad_count,
+		parameters.lights.triangle_count,
+		parameters.has_envmap,
+		parameters.envmap,
 	};
 
-	float3 direct = Ld(parameters.traversable, lc, surface_hit, rp->seed);
+	float3 direct = Ld(lc, surface_hit, rp->seed);
 	if (material.type == Shading::eEmissive)
 		direct += material.emission;
 

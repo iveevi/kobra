@@ -18,19 +18,36 @@ using namespace kobra::optix;
 
 // TODO: launch parameter for ray depth
 // TODO: rename to MAX_BOUNCES
-#define MAX_DEPTH 0
+#define MAX_DEPTH 1
 
 // Local constants
 static const float eps = 1e-3f;
 
 // Generic lighting context
 struct LightingContext {
+	OptixTraversableHandle handle;
 	QuadLight *quads;
 	TriangleLight *triangles;
 	uint quad_count;
 	uint triangle_count;
 	bool has_envmap;
 	cudaTextureObject_t envmap;
+
+	KCUDA_DEVICE
+	LightingContext(OptixTraversableHandle _handle,
+			QuadLight *_quads,
+			TriangleLight *_triangles,
+			uint _quad_count,
+			uint _triangle_count,
+			bool _has_envmap,
+			cudaTextureObject_t _envmap) :
+		handle(_handle),
+		quads(_quads),
+		triangles(_triangles),
+		quad_count(_quad_count),
+		triangle_count(_triangle_count),
+		has_envmap(_has_envmap),
+		envmap(_envmap) {}
 };
 
 // Ray packet data
@@ -152,7 +169,7 @@ bool is_occluded(OptixTraversableHandle handle, float3 origin, float3 dir, float
 
 // Get direct lighting for environment map
 KCUDA_DEVICE
-float3 Ld_Environment(OptixTraversableHandle handle, const LightingContext &lc, const SurfaceHit &sh, float &pdf, Seed seed)
+float3 Ld_Environment(const LightingContext &lc, const SurfaceHit &sh, float &pdf, Seed seed)
 {
 	// TODO: sample in UV space instead of direction...
 	static const float WORLD_RADIUS = 10000.0f;
@@ -179,7 +196,7 @@ float3 Ld_Environment(OptixTraversableHandle handle, const LightingContext &lc, 
 	pdf = 1.0f/(4.0f * M_PI);
 
 	// NEE
-	bool occluded = is_occluded(handle,sh.x, wi, WORLD_RADIUS);
+	bool occluded = is_occluded(lc.handle, sh.x, wi, WORLD_RADIUS);
 	if (occluded)
 		return make_float3(0.0f);
 
@@ -192,7 +209,7 @@ float3 Ld_Environment(OptixTraversableHandle handle, const LightingContext &lc, 
 
 // Trace ray into scene and get relevant information
 __device__
-float3 Ld(OptixTraversableHandle handle, const LightingContext &lc, const SurfaceHit &sh, Seed seed)
+float3 Ld( const LightingContext &lc, const SurfaceHit &sh, Seed seed)
 {
 	int quad_count = lc.quad_count;
 	int tri_count = lc.triangle_count;
@@ -209,15 +226,15 @@ float3 Ld(OptixTraversableHandle handle, const LightingContext &lc, const Surfac
 	float light_pdf = 0.0f;
 	if (i < quad_count) {
 		QuadLight light = lc.quads[i];
-		contr = Ld_light(handle, light, sh, light_pdf, seed);
+		contr = Ld_light(lc.handle, light, sh, light_pdf, seed);
 	} else if (i < quad_count + tri_count) {
 		int ni = i - quad_count;
 		TriangleLight light = lc.triangles[ni];
-		contr = Ld_light(handle, light, sh, light_pdf, seed);
+		contr = Ld_light(lc.handle, light, sh, light_pdf, seed);
 	} else {
 		// Environment light
 		// TODO: imlpement PBRT's better importance sampling
-		contr = Ld_Environment(handle, lc, sh, light_pdf, seed);
+		contr = Ld_Environment(lc, sh, light_pdf, seed);
 	}
 
 	pdf *= light_pdf;
