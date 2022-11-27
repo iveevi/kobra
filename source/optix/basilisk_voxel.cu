@@ -154,66 +154,56 @@ extern "C" __global__ void __closesthit__voxel()
 			}
 		}
 
+		// TODO: visualization mode...
+		// rp->value = make_float3(lefts, rights, 0)/depth;
+		// return;
+
 		// Lock and update the reservoir
 		// TODO: similar scoped lock as std::lock_guard, in cuda/sync.h
-
-#ifdef WSRIS_HASH_RESOLUION
-
-		int base_idx = kd_node->data * WSRIS_HASH_RESOLUION;
-		int res_idx = base_idx;
-
-		// Hash position to get index in cell
-		uint3 hash = pcg3d(*((uint3 *) &x));
-		int cell_idx = (hash.x + hash.y + hash.z) % WSRIS_HASH_RESOLUION;
-
-		res_idx += cell_idx;
-
-		/* rp->value = make_float3(
-			lefts/(float) depth,
-			rights/(float) depth,
-			cell_idx/(float) WSRIS_HASH_RESOLUION
-		);
-
-		return; */
-
-#else
-
 		int res_idx = kd_node->data;
-
-#endif
 		
 		int *lock = parameters.kd_locks[res_idx];
-
-		// while (atomicCAS(lock, 0, 1) == 0); // Lock
 
 		auto *reservoir = &parameters.kd_reservoirs[res_idx];
 		auto *sample = &reservoir->sample;
 
-		reservoir_update(reservoir, LightSample {
+		/* reservoir_update(reservoir, LightSample {
 			.value = fls.Le,
 			.point = fls.point,
 			.normal = fls.normal,
 			.target = target,
 			.type = fls.type,
 			.index = fls.index
-		}, w, rp->seed);
+		}, w, rp->seed); */
 
-		LightSample ls = *sample;
-		float w_sum = reservoir->weight;
-		int count = reservoir->count;
+		// Atomic update
+		// TODO: method
+		float wold = atomicAdd(&reservoir->weight, w);
+		atomicAdd(&reservoir->count, 1);
+		float wnew = wold + w;
 
-		// atomicExch(lock, 0);			// Unlock
+		float eta = rand_uniform(rp->seed);
+		bool select = (wnew * eta < w);
 
-		// TODO: two strategies
-		//	hierarchical: go up a few levels and then traverse down
-		//	pick a random node and traverse down
-		const int SPATIAL_SAMPLES = 1;
+		if (select) {
+			reservoir->sample = LightSample {
+				.value = fls.Le,
+				.point = fls.point,
+				.normal = fls.normal,
+				.target = target,
+				.type = fls.type,
+				.index = fls.index
+			};
+		}
+
+		const int SPATIAL_SAMPLES = 10;
 
 		// Choose a root node a few level up and randomly
 		// traverse the tree to obtain a sample
 		const int LEVELS = 10;
 
-		// TODO: try selecting random indices in the tree instead?
+		// TODO: adaptive levels if success rate is low
+
 		int levels = min(depth, LEVELS);
 		while (levels--) {
 			kd_node = &parameters.kd_tree[root];
@@ -263,21 +253,7 @@ extern "C" __global__ void __closesthit__voxel()
 
 			// Get necessary data
 			// TODO: maybe lock?
-
-#ifdef WSRIS_HASH_RESOLUION
-
-			int base_idx = kd_node->data * WSRIS_HASH_RESOLUION;
-			res_idx = base_idx;
-
-			// Randomly select a cell
-			int cell_idx = rand_uniform(WSRIS_HASH_RESOLUION, rp->seed);
-			res_idx += cell_idx;
-
-#else
-
 			res_idx = kd_node->data;
-
-#endif
 
 			// TODO: syncronized pipeline, this one is copied
 			// because no lock is used
@@ -288,6 +264,8 @@ extern "C" __global__ void __closesthit__voxel()
 			D = sample.point - surface_hit.x;
 			d = length(D);
 			D /= d;
+
+			assert(!isnan(D.x) && !isnan(D.y) && !isnan(D.z));
 
 			Li = direct_occluded(parameters.traversable,
 				surface_hit, sample.value,
@@ -312,36 +290,6 @@ extern "C" __global__ void __closesthit__voxel()
 			// spatial.count = pcount + (target > 0.0f ? reservoir->count : 0);
 			spatial.count = pcount + rsampled.count;
 			successes += (target > 0.0f);
-
-			/* Also insert into temporal reservoir
-			Li = direct_unoccluded(surface_hit, sample.value, sample.normal, sample.type, D, d);
-
-			target = Li.x + Li.y + Li.z; // Luminance
-			denom = rsampled.count * target;
-			W = (denom > 0.0f) ? rsampled.weight/denom : 0.0f;
-			// assert(!isnan(W));
-
-			w = target * W * rsampled.count;
-			// assert(!isnan(w));
-
-			reservoir->weight += w;
-			// assert(!isnan(reservoir->weight));
-
-			float p = w/reservoir->weight;
-			float eta = rand_uniform(rp->seed);
-
-			if (eta < p) {
-				reservoir->sample = LightSample {
-					.value = Li,
-					.point = sample.point,
-					.normal = sample.normal,
-					.target = target,
-					.type = sample.type,
-					.index = sample.index
-				};
-			}
-
-			reservoir->count += rsampled.count; */
 		}
 	}
 
@@ -357,6 +305,7 @@ extern "C" __global__ void __closesthit__voxel()
 		direct += material.emission;
 
 	// Also compute indirect lighting
+	// TODO: method...
 	Shading out;
 	float3 wi;
 
@@ -376,6 +325,7 @@ extern "C" __global__ void __closesthit__voxel()
 		// trace <eRegular> (x, wi, i0, i1);
 		trace <eVoxel> (
 			parameters.traversable,
+			eCount,
 			x, wi, i0, i1
 		);
 

@@ -2,9 +2,7 @@
 #define KOBRA_OPTIX_PARAMETERS_H_
 
 // Engine headers
-#include "../bbox.hpp"
 #include "../core/kd.cuh"
-#include "../cuda/material.cuh"
 #include "../cuda/math.cuh"
 #include "../cuda/random.cuh"
 #include "lighting.cuh"
@@ -29,7 +27,7 @@ struct LightSample {
 	float3 point;
 	float3 normal;
 	float target;
-	int type; // 0 - quad, 1 - triangle
+	int type; // 0 - quad, 1 - triangle, 2 - envmap
 	int index;
 };
 
@@ -60,52 +58,7 @@ struct TMRIS_Sample {
 
 using LightReservoir = WeightedReservoir <LightSample>;
 using ReSTIR_Reservoir = WeightedReservoir <PathSample>;
-using TMRIS_Reservoir = WeightedReservoir <TMRIS_Sample>;
 using WorldNode = core::KdNode <int>;
-
-// Hit data record
-struct Hit {
-	// Mesh data
-	float2			*texcoords;
-	float3			*vertices;
-	uint3			*triangles;
-
-	float3			*normals;
-	float3			*tangents;
-	float3			*bitangents;
-
-	// Auto UV mapping parameters
-	BoundingBox		bbox;
-
-	// Material and textures
-	cuda::Material		material;
-
-	struct {
-		cudaTextureObject_t	diffuse;
-		cudaTextureObject_t	normal;
-		cudaTextureObject_t	roughness;
-
-		bool			has_diffuse = false;
-		bool			has_normal = false;
-		bool			has_roughness = false;
-	} textures;
-	
-	// Texture mapped reservoir sampling
-	static constexpr int TMRIS_RESOLUTION = 32;
-
-	struct {
-		TMRIS_Reservoir	*f_res; //facing forward
-		TMRIS_Reservoir	*b_res; //facing backward
-
-		TMRIS_Reservoir	*f_res_prev;
-		TMRIS_Reservoir	*b_res_prev;
-
-		int		**f_locks;
-		int		**b_locks;
-
-		int		resolution;
-	} tmris;
-};
 
 // Kernel-common parameters for hybrid tracer
 struct HT_Parameters {

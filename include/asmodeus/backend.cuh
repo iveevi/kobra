@@ -121,6 +121,7 @@ void initialize_sbt(Backend::Pipeline &,
 
 // Methods
 bool update(Backend &, const ECS &);
+OptixTraversableHandle construct_tlas(Backend &, int);
 cudaTextureObject_t import_texture(const Backend &, const std::string &);
 
 }

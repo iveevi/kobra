@@ -8,9 +8,10 @@
 #include "../../include/cuda/brdf.cuh"
 #include "../../include/cuda/material.cuh"
 #include "../../include/cuda/math.cuh"
+#include "../../include/cuda/matrix.cuh"
 #include "../../include/optix/core.cuh"
 #include "../../include/optix/lighting.cuh"
-#include "../../include/cuda/matrix.cuh"
+#include "../../include/optix/sbt.cuh"
 
 using namespace kobra;
 using namespace kobra::cuda;
@@ -18,7 +19,7 @@ using namespace kobra::optix;
 
 // TODO: launch parameter for ray depth
 // TODO: rename to MAX_BOUNCES
-#define MAX_DEPTH 1
+#define MAX_DEPTH 2
 
 // Local constants
 static const float eps = 1e-3f;
@@ -379,14 +380,14 @@ float3 direct_occluded(OptixTraversableHandle handle,
 // Kernel helpers/code blocks
 template <unsigned int Mode = 0>
 KCUDA_INLINE __device__
-void trace(OptixTraversableHandle handle, float3 origin, float3 direction, uint i0, uint i1)
+void trace(OptixTraversableHandle handle, int stride, float3 origin, float3 direction, uint i0, uint i1)
 {
 	optixTrace(handle,
 		origin, direction,
 		0.0f, 1e16f, 0.0f,
 		OptixVisibilityMask(0b11),
 		OPTIX_RAY_FLAG_DISABLE_ANYHIT,
-		Mode, eCount, 0,
+		Mode, stride, 0,
 		i0, i1
 	);
 }

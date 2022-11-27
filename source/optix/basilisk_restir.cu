@@ -29,8 +29,6 @@ float3 direct_lighting_ris(OptixTraversableHandle handle, const LightingContext 
 	for (int k = 0; k < M; k++) {
 		// Get direct lighting sample
 		FullLightSample fls = sample_direct(lc, sh, seed);
-		if (fls.type != 2)
-			continue;
 
 		// Compute lighting
 		float3 D = fls.point - sh.x;
@@ -419,7 +417,7 @@ extern "C" __global__ void __closesthit__restir()
 	if (pdf > 0) {
 		// trace <eRegular> (x, wi, i0, i1);
 		trace <eReSTIR> (
-			parameters.traversable,
+			parameters.traversable, eCount,
 			x, wi, i0, i1
 		);
 
@@ -492,7 +490,7 @@ extern "C" __global__ void __closesthit__restir_pt()
 	float3 indirect = make_float3(0.0f);
 	if (pdf > 0) {
 		trace <eRegular> (
-			parameters.traversable,
+			parameters.traversable, eCount,
 			x, wi, i0, i1
 		);
 

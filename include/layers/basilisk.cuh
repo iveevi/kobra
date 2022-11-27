@@ -13,6 +13,7 @@
 #include "../backend.hpp"
 #include "../core/async.hpp"
 #include "../core/kd.cuh"
+#include "../optix/sbt.cuh"
 #include "../optix/parameters.cuh"
 #include "../timer.hpp"
 #include "../vertex.hpp"

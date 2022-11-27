@@ -152,10 +152,11 @@ struct MotionCapture : public kobra::BaseApp {
 		);
 
 		grid_based = kobra::asmodeus::GridBasedReservoirs::make(
-			backend, {1000, 1000}
+			get_context(), {1000, 1000}
 		);
 
 		wskdr.set_envmap("resources/skies/background_1.jpg");
+		grid_based.set_envmap("resources/skies/background_1.jpg");
 
 #if 0
 
@@ -265,10 +266,16 @@ struct MotionCapture : public kobra::BaseApp {
 					mode, accumulate
 				);
 			} else {
-				wskdr.render(scene.ecs,
+				/* wskdr.render(scene.ecs,
 					camera.get <kobra::Camera> (),
 					camera.get <kobra::Transform> (),
 					mode, accumulate
+				); */
+
+				grid_based.render(scene.ecs,
+					camera.get <kobra::Camera> (),
+					camera.get <kobra::Transform> (),
+					accumulate
 				);
 			}
 			
@@ -406,7 +413,7 @@ struct MotionCapture : public kobra::BaseApp {
 				d_output = (float4 *) kobra::layers::color_buffer(tracer);
 			} else {
 				// d_output = (float4 *) kobra::asmodeus::color_buffer(wskdr);
-				d_output = (float4 *) wskdr.color_buffer();
+				d_output = (float4 *) grid_based.color_buffer();
 			}
 
 			// TODO: denoise here?

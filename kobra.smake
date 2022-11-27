@@ -56,7 +56,8 @@ kobra_ptx.add_sources(
     'source/optix/basilisk_rt.cu',
     'source/optix/basilisk_restir.cu',
     'source/optix/basilisk_voxel.cu',
-    'source/optix/wsris_kd.cu'
+    'source/optix/wsris_kd.cu',
+    'source/optix/wsris_grid.cu'
 )
 
 kobra_ptx.add_includes(kobra_includes)

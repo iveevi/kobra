@@ -95,7 +95,7 @@ extern "C" __global__ void __raygen__rg()
 	// Switch on the ray type
 	// TODO: skip the templates, just pass the mode on...
 	trace <eRegular> (
-		parameters.traversable,
+		parameters.traversable, eCount,
 		origin, direction, i0, i1
 	);
 
@@ -448,7 +448,7 @@ extern "C" __global__ void __closesthit__ch()
 	// Trace the next ray
 	float3 indirect = make_float3(0.0f);
 	if (pdf > 0) {
-		trace(parameters.traversable, x, wi, i0, i1);
+		trace(parameters.traversable, eCount, x, wi, i0, i1);
 		indirect = rp->value;
 	}
 

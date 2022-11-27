@@ -8,6 +8,7 @@
 #include "../../include/camera.hpp"
 #include "../../include/cuda/alloc.cuh"
 #include "../../include/cuda/cast.cuh"
+#include "../../include/cuda/math.cuh"
 #include "../../include/cuda/color.cuh"
 #include "../../include/cuda/interop.cuh"
 #include "../../include/ecs.hpp"
@@ -18,7 +19,7 @@
 #include "../../shaders/raster/bindings.h"
 
 // OptiX Source PTX
-#define OPTIX_PTX_FILE "bin/ptx/wsris_kd.ptx"
+#define OPTIX_PTX_FILE "bin/ptx/wsris_grid.ptx"
 
 // OptiX debugging options
 // TODO: put in core.cuh
@@ -73,15 +74,17 @@ static constexpr OptixPipelineLinkOptions ppl_link_options = {
 };
 
 // Load OptiX program groups
-static void load_optix_program_groups(WorldSpaceKdReservoirs &layer)
+static void load_optix_program_groups(GridBasedReservoirs &layer)
 {
 	// Load programs
 	OptixProgramGroupOptions program_options = {};
 
 	// Descriptions of all the programs
 	std::vector <OptixProgramGroupDesc> program_descs = {
-		OPTIX_DESC_RAYGEN(layer.optix_module, "__raygen__rg"),
-		OPTIX_DESC_HIT(layer.optix_module, "__closesthit__ch"),
+		OPTIX_DESC_RAYGEN(layer.optix_module, "__raygen__eval"),
+		OPTIX_DESC_RAYGEN(layer.optix_module, "__raygen__samples"),
+		OPTIX_DESC_HIT(layer.optix_module, "__closesthit__eval"),
+		OPTIX_DESC_HIT(layer.optix_module, "__closesthit__samples"),
 		OPTIX_DESC_HIT(layer.optix_module, "__closesthit__shadow"),
 		OPTIX_DESC_MISS(layer.optix_module, "__miss__ms"),
 		OPTIX_DESC_MISS(layer.optix_module, "__miss__shadow")
@@ -90,7 +93,9 @@ static void load_optix_program_groups(WorldSpaceKdReservoirs &layer)
 	// Corresponding program groups
 	std::vector <OptixProgramGroup *> program_groups = {
 		&layer.optix_programs.raygen,
+		&layer.optix_programs.sampling_raygen,
 		&layer.optix_programs.hit,
+		&layer.optix_programs.sampling_hit,
 		&layer.optix_programs.shadow_hit,
 		&layer.optix_programs.miss,
 		&layer.optix_programs.shadow_miss
@@ -127,13 +132,13 @@ static OptixModule load_optix_module(OptixDeviceContext optix_context,
 }
 
 // Setup and load OptiX things
-static void initialize_optix(WorldSpaceKdReservoirs &layer)
+void GridBasedReservoirs::initialize_optix()
 {
 	// Create the context
-	layer.optix_context = optix::make_context();
+	optix_context = optix::make_context();
 
 	// Allocate a stream for the layer
-	CUDA_CHECK(cudaStreamCreate(&layer.optix_stream));
+	CUDA_CHECK(cudaStreamCreate(&optix_stream));
 
 	// Now load the module
 	char log[2048];
@@ -142,56 +147,75 @@ static void initialize_optix(WorldSpaceKdReservoirs &layer)
 	std::string file = common::read_file(OPTIX_PTX_FILE);
 	OPTIX_CHECK_LOG(
 		optixModuleCreateFromPTX(
-			layer.optix_context,
+			optix_context,
 			&module_options, &ppl_compile_options,
 			file.c_str(), file.size(),
 			log, &sizeof_log,
-			&layer.optix_module
+			&optix_module
 		)
 	);
 
 	// Load programs
-	load_optix_program_groups(layer);
+	load_optix_program_groups(*this);
 
-	layer.optix_pipeline = optix::link_optix_pipeline(
-		layer.optix_context,
+	optix_pipeline = optix::link_optix_pipeline(
+		optix_context,
 		{
-			layer.optix_programs.raygen,
-			layer.optix_programs.miss,
-			layer.optix_programs.shadow_miss,
-			layer.optix_programs.hit,
+			optix_programs.hit,
+			optix_programs.miss,
+			optix_programs.raygen,
+			optix_programs.sampling_hit,
+			optix_programs.sampling_raygen,
+			optix_programs.shadow_miss
 		},
 		ppl_compile_options,
 		ppl_link_options
 	);
 
-	// Create the shader binding table
-	std::vector <RaygenRecord> rg_records(1);
-	std::vector <MissRecord> ms_records(2);
+	// Sampling stage SBT
+	std::vector <RaygenRecord> sampling_rg_records(1);
+	std::vector <MissRecord> sampling_ms_records(1);
 
-	optix::pack_header(layer.optix_programs.raygen, rg_records[0]);
+	optix::pack_header(optix_programs.sampling_raygen, sampling_rg_records[0]);
 
-	optix::pack_header(layer.optix_programs.miss, ms_records[0]);
-	optix::pack_header(layer.optix_programs.shadow_miss, ms_records[1]);
+	optix::pack_header(optix_programs.miss, sampling_ms_records[0]);
 
-	CUdeviceptr d_raygen_sbt = cuda::make_buffer_ptr(rg_records);
-	CUdeviceptr d_miss_sbt = cuda::make_buffer_ptr(ms_records);
+	CUdeviceptr d_raygen_sbt = cuda::make_buffer_ptr(sampling_rg_records);
+	CUdeviceptr d_miss_sbt = cuda::make_buffer_ptr(sampling_ms_records);
 
-	layer.optix_sbt.raygenRecord = d_raygen_sbt;
+	sampling_sbt.raygenRecord = d_raygen_sbt;
 	
-	layer.optix_sbt.missRecordBase = d_miss_sbt;
-	layer.optix_sbt.missRecordCount = ms_records.size();
-	layer.optix_sbt.missRecordStrideInBytes = sizeof(MissRecord);
+	sampling_sbt.missRecordBase = d_miss_sbt;
+	sampling_sbt.missRecordCount = sampling_ms_records.size();
+	sampling_sbt.missRecordStrideInBytes = sizeof(MissRecord);
+
+	// Evaluation stage SBT
+	std::vector <RaygenRecord> eval_rg_records(1);
+	std::vector <MissRecord> eval_ms_records(2);
+	
+	optix::pack_header(optix_programs.raygen, eval_rg_records[0]);
+
+	optix::pack_header(optix_programs.miss, eval_ms_records[0]);
+	optix::pack_header(optix_programs.shadow_miss, eval_ms_records[1]);
+
+	d_raygen_sbt = cuda::make_buffer_ptr(eval_rg_records);
+	d_miss_sbt = cuda::make_buffer_ptr(eval_ms_records);
+
+	eval_sbt.raygenRecord = d_raygen_sbt;
+	
+	eval_sbt.missRecordBase = d_miss_sbt;
+	eval_sbt.missRecordCount = eval_ms_records.size();
+	eval_sbt.missRecordStrideInBytes = sizeof(MissRecord);
 
 	// Configure launch parameters
-	auto &params = layer.launch_params;
+	auto &params = launch_params;
 
-	int width = layer.extent.width;
-	int height = layer.extent.height;
+	int width = extent.width;
+	int height = extent.height;
 
 	params.resolution = {
-		layer.extent.width,
-		layer.extent.height
+		extent.width,
+		extent.height
 	};
 
 	params.envmap = 0;
@@ -199,39 +223,64 @@ static void initialize_optix(WorldSpaceKdReservoirs &layer)
 	params.samples = 0;
 
 	// Lights (set to null, etc)
-	layer.launch_params.lights.quad_count = 0;
-	layer.launch_params.lights.triangle_count = 0;
+	launch_params.lights.quad_count = 0;
+	launch_params.lights.triangle_count = 0;
 
 	// Accumulatoin on by default
-	layer.launch_params.accumulate = true;
+	launch_params.accumulate = true;
 
 	// Color buffer (output)
 	size_t bytes = width * height * sizeof(float4);
 
-	layer.launch_params.color_buffer = (float4 *) cuda::alloc(bytes);
-	layer.launch_params.normal_buffer = (float4 *) cuda::alloc(bytes);
-	layer.launch_params.albedo_buffer = (float4 *) cuda::alloc(bytes);
-	layer.launch_params.position_buffer = (float4 *) cuda::alloc(bytes);
+	launch_params.color_buffer = (float4 *) cuda::alloc(bytes);
+	launch_params.normal_buffer = (float4 *) cuda::alloc(bytes);
+	launch_params.albedo_buffer = (float4 *) cuda::alloc(bytes);
+	launch_params.position_buffer = (float4 *) cuda::alloc(bytes);
 
-	// Plus others
-	layer.launch_params.kd_tree = nullptr;
-	layer.launch_params.kd_nodes = 0;
+	// Grib-based reservoirs resources
+	auto &gb_ris = launch_params.gb_ris;
+
+	gb_ris.resolution = optix::GBR_RESOLUTION;
+	gb_ris.new_samples = cuda::alloc <optix::Reservoir> (width * height);
+
+	optix::Reservoir default_reservoir {
+		.sample = optix::GRBSample {},
+		.count = 0,
+		.weight = 0.0f,
+	};
+
+	std::vector <optix::Reservoir>
+	reservoir_array(optix::TOTAL_RESERVOIRS, default_reservoir);
+
+	gb_ris.light_reservoirs = cuda::make_buffer(reservoir_array);
+	gb_ris.light_reservoirs_old = cuda::make_buffer(reservoir_array);
+
+	d_cell_sizes = cuda::alloc <int> (optix::TOTAL_CELLS);
+	d_sample_indices = cuda::alloc <int> (
+		optix::TOTAL_CELLS * optix::GBR_CELL_LIMIT
+	);
+
+	gb_ris.cell_sizes = d_cell_sizes;
+	gb_ris.sample_indices = d_sample_indices;
 
 	// Allocate the parameters buffer
-	layer.launch_params_buffer = cuda::alloc(
-		sizeof(optix::WorldSpaceKdReservoirsParameters)
+	launch_params_buffer = cuda::alloc(
+		sizeof(optix::GridBasedReservoirsParameters)
 	);
 
 	// Start the timer
-	layer.timer.start();
+	timer.start();
+
+	// Initialize generator
+	generator = {};
 }
 
 // Create the layer
 // TOOD: all custom extent...
-WorldSpaceKdReservoirs WorldSpaceKdReservoirs::make(const Context &context, const vk::Extent2D &extent)
+GridBasedReservoirs GridBasedReservoirs::make(const Context &context, const vk::Extent2D &extent)
 {
 	// To return
-	WorldSpaceKdReservoirs layer;
+	GridBasedReservoirs layer;
 
 	// Extract critical Vulkan structures
 	layer.device = context.device;
@@ -240,7 +289,7 @@ WorldSpaceKdReservoirs WorldSpaceKdReservoirs::make(const Context &context, cons
 	layer.extent = extent;
 
 	// Initialize OptiX
-	initialize_optix(layer);
+	layer.initialize_optix();
 
 	// Others (experimental)...
 	layer.positions = new float4[extent.width * extent.height];
@@ -250,7 +299,7 @@ WorldSpaceKdReservoirs WorldSpaceKdReservoirs::make(const Context &context, cons
 }
 
 // Set the environment map
-void WorldSpaceKdReservoirs::set_envmap(const std::string &path)
+void GridBasedReservoirs::set_envmap(const std::string &path)
 {
 	// First load the environment map
 	const auto &map = TextureManager::load_texture(
@@ -262,7 +311,7 @@ void WorldSpaceKdReservoirs::set_envmap(const std::string &path)
 }
 
 // Update the light buffers if needed
-static void update_light_buffers(WorldSpaceKdReservoirs &layer,
+static void update_light_buffers(GridBasedReservoirs &layer,
 		const std::vector <const Light *> &lights,
 		const std::vector <const Transform *> &light_transforms,
 		const std::vector <const Submesh *> &submeshes,
@@ -336,14 +385,11 @@ static void update_light_buffers(WorldSpaceKdReservoirs &layer,
 
 		layer.launch_params.lights.triangles = cuda::make_buffer(layer.host.tri_lights);
 		layer.launch_params.lights.triangle_count = layer.host.tri_lights.size();
-
-		KOBRA_LOG_FUNC(Log::INFO) << "Uploaded " << layer.host.tri_lights.size()
-			<< " triangle lights to the GPU\n";
 	}
 }
 
 // Build or update acceleration structures for the scene
-static void update_acceleration_structure(WorldSpaceKdReservoirs &layer,
+static void update_acceleration_structure(GridBasedReservoirs &layer,
 		const std::vector <const Submesh *> &submeshes,
 		const std::vector <const Transform *> &submesh_transforms)
 {
@@ -363,8 +409,8 @@ static void update_acceleration_structure(WorldSpaceKdReservoirs &layer,
 
 	// TODO: CACHE the vertices for the sbts
 	// TODO: reuse the vertex buffer from the rasterizer
-
 	for (int i = 0; i < submesh_count; i++) {
+		// TODO: method
 		const Submesh *s = submeshes[i];
 
 		// Prepare submesh vertices and triangles
@@ -524,44 +570,6 @@ static void update_acceleration_structure(WorldSpaceKdReservoirs &layer,
 	layer.launch_params.traversable = layer.optix.handle;
 }
 
-// Compute scene bounds
-static void update_scene_bounds(WorldSpaceKdReservoirs &layer,
-		const std::vector <const Submesh *> &submeshes,
-		const std::vector <const Transform *> &submesh_transforms)
-{
-	// Collect all bounding boxes
-	std::vector <BoundingBox> bboxes;
-
-	for (int i = 0; i < submeshes.size(); i++) {
-		const Submesh *submesh = submeshes[i];
-		const Transform *transform = submesh_transforms[i];
-
-		BoundingBox bbox = submesh->bbox(*transform);
-		bboxes.push_back(bbox);
-	}
-
-	// Now merge them in pairs
-	while (bboxes.size() > 1) {
-		std::vector <BoundingBox> new_bboxes;
-
-		for (int i = 0; i < bboxes.size(); i += 2) {
-			BoundingBox bbox;
-
-			if (i + 1 < bboxes.size())
-				bbox = bbox_union(bboxes[i], bboxes[i + 1]);
-			else
-				bbox = bboxes[i];
-
-			new_bboxes.push_back(bbox);
-		}
-
-		bboxes = new_bboxes;
-	}
-
-	float3 min = cuda::to_f3(bboxes[0].min);
-	float3 max = cuda::to_f3(bboxes[0].max);
-}
-
 static void generate_submesh_data
 		(const Submesh &submesh,
 		const Transform &transform,
@@ -625,13 +633,15 @@ static void generate_submesh_data
 }
 
 // Update the SBT data
-static void update_sbt_data(WorldSpaceKdReservoirs &layer,
+static void update_sbt_data(GridBasedReservoirs &layer,
 		const std::vector <const Submesh *> &submeshes,
 		const std::vector <const Transform *> &submesh_transforms)
 {
 	int submesh_count = submeshes.size();
 
-	std::vector <HitRecord> hit_records;
+	std::vector <HitRecord> sampling_hit_records;
+	std::vector <HitRecord> eval_hit_records;
+
 	for (int i = 0; i < submesh_count; i++) {
 		const Submesh *submesh = submeshes[i];
 
@@ -686,33 +696,38 @@ static void update_sbt_data(WorldSpaceKdReservoirs &layer,
 		}
 
 		// Push back
+		optix::pack_header(layer.optix_programs.sampling_hit, hit_record);
+		sampling_hit_records.push_back(hit_record);
+
 		optix::pack_header(layer.optix_programs.hit, hit_record);
-		hit_records.push_back(hit_record);
+		eval_hit_records.push_back(hit_record);
 	}
 
 	// Update the SBT
-	CUdeviceptr d_hit_records = cuda::make_buffer_ptr(hit_records);
+	CUdeviceptr d_hit_records = cuda::make_buffer_ptr(sampling_hit_records);
 	
-	layer.optix_sbt.hitgroupRecordBase = d_hit_records;
-	layer.optix_sbt.hitgroupRecordCount = hit_records.size();
-	layer.optix_sbt.hitgroupRecordStrideInBytes = sizeof(HitRecord);
+	layer.sampling_sbt.hitgroupRecordBase = d_hit_records;
+	layer.sampling_sbt.hitgroupRecordCount = sampling_hit_records.size();
+	layer.sampling_sbt.hitgroupRecordStrideInBytes = sizeof(HitRecord);
+
+	d_hit_records = cuda::make_buffer_ptr(eval_hit_records);
+
+	layer.eval_sbt.hitgroupRecordBase = d_hit_records;
+	layer.eval_sbt.hitgroupRecordCount = eval_hit_records.size();
+	layer.eval_sbt.hitgroupRecordStrideInBytes = sizeof(HitRecord);
 
 	layer.launch_params.instances = submesh_count;
-
-	KOBRA_LOG_FUNC(Log::INFO) << "Updated SBT with " << submesh_count
-		<< " submeshes, for total of " << hit_records.size() << " hit records\n";
 }
 
 // Preprocess scene data
 
 // TODO: perform this in a separate command buffer than the main one used to
 // present, etc (and separate queue)
-static void preprocess_scene(WorldSpaceKdReservoirs &layer,
-		const ECS &ecs,
+void GridBasedReservoirs::preprocess_scene
+		(const ECS &ecs,
 		const Camera &camera,
 		const Transform &transform)
 {
-
 	// Preprocess the entities
 	std::vector <const Rasterizer *> rasterizers;
 	std::vector <const Transform *> rasterizer_transforms;
@@ -720,35 +735,31 @@ static void preprocess_scene(WorldSpaceKdReservoirs &layer,
 	std::vector <const Light *> lights;
 	std::vector <const Transform *> light_transforms;
 
-	{
-		KOBRA_PROFILE_TASK(Preprocess of ECS)
+	for (int i = 0; i < ecs.size(); i++) {
+		// TODO: one unifying renderer component, with options for
+		// raytracing, etc
+		if (ecs.exists <Rasterizer> (i)) {
+			const auto *rasterizer = &ecs.get <Rasterizer> (i);
+			const auto *transform = &ecs.get <Transform> (i);
 
-		for (int i = 0; i < ecs.size(); i++) {
-			// TODO: one unifying renderer component, with options for
-			// raytracing, etc
-			if (ecs.exists <Rasterizer> (i)) {
-				const auto *rasterizer = &ecs.get <Rasterizer> (i);
-				const auto *transform = &ecs.get <Transform> (i);
+			rasterizers.push_back(rasterizer);
+			rasterizer_transforms.push_back(transform);
+		}
+		
+		if (ecs.exists <Light> (i)) {
+			const auto *light = &ecs.get <Light> (i);
+			const auto *transform = &ecs.get <Transform> (i);
 
-				rasterizers.push_back(rasterizer);
-				rasterizer_transforms.push_back(transform);
-			}
-			
-			if (ecs.exists <Light> (i)) {
-				const auto *light = &ecs.get <Light> (i);
-				const auto *transform = &ecs.get <Transform> (i);
-
-				lights.push_back(light);
-				light_transforms.push_back(transform);
-			}
+			lights.push_back(light);
+			light_transforms.push_back(transform);
 		}
 	}
 
 	// Check if an update is needed
 	bool update = false;
-	if (rasterizers.size() == layer.cache.rasterizers.size()) {
+	if (rasterizers.size() == cache.rasterizers.size()) {
 		for (int i = 0; i < rasterizers.size(); i++) {
-			if (rasterizers[i] != layer.cache.rasterizers[i]) {
+			if (rasterizers[i] != cache.rasterizers[i]) {
 				update = true;
 				break;
 			}
@@ -759,10 +770,8 @@ static void preprocess_scene(WorldSpaceKdReservoirs &layer,
 
 	// Update data if necessary 
 	if (update) {
-		KOBRA_PROFILE_TASK(Actually perform the update)
-
 		// Update the cache
-		layer.cache.rasterizers = rasterizers;
+		cache.rasterizers = rasterizers;
 	
 		// Load the list of all submeshes
 		std::vector <const Submesh *> submeshes;
@@ -781,162 +790,316 @@ static void preprocess_scene(WorldSpaceKdReservoirs &layer,
 		}
 
 		// Update the data
-		update_light_buffers(layer,
+		update_light_buffers(*this,
 			lights, light_transforms,
 			submeshes, submesh_transforms
 		);
 
-		update_acceleration_structure(layer, submeshes, submesh_transforms);
-		update_sbt_data(layer, submeshes, submesh_transforms);
-		update_scene_bounds(layer, submeshes, submesh_transforms);
+		update_acceleration_structure(*this, submeshes, submesh_transforms);
+		update_sbt_data(*this, submeshes, submesh_transforms);
 
 		// Reset the number of samples stored
-		layer.launch_params.samples = 0;
+		launch_params.samples = 0;
 	}
 
 	// Set viewing position
-	layer.launch_params.camera = cuda::to_f3(transform.position);
+	launch_params.camera = cuda::to_f3(transform.position);
+
+	if (first_frame) {
+		p_camera = launch_params.camera;
+		first_frame = false;
+	}
 	
 	auto uvw = kobra::uvw_frame(camera, transform);
 
-	layer.launch_params.cam_u = cuda::to_f3(uvw.u);
-	layer.launch_params.cam_v = cuda::to_f3(uvw.v);
-	layer.launch_params.cam_w = cuda::to_f3(uvw.w);
+	launch_params.cam_u = cuda::to_f3(uvw.u);
+	launch_params.cam_v = cuda::to_f3(uvw.v);
+	launch_params.cam_w = cuda::to_f3(uvw.w);
 
 	// Get time
-	layer.launch_params.time = layer.timer.elapsed_start();
+	launch_params.time = timer.elapsed_start();
 }
 
-// CPU side construction algorithm
-inline float get(float3 a, int axis)
+__global__
+void binner(float3 center, float3 delta,
+		optix::Reservoir *base, int size,
+		int *thread_indices,
+		int *sample_indices,
+		int *cell_sizes)
 {
-	if (axis == 0) return a.x;
-	if (axis == 1) return a.y;
-	if (axis == 2) return a.z;
-	return 0.0f;
-}
+	int idx = blockIdx.x * blockDim.x + threadIdx.x;
+	int stride = blockDim.x * gridDim.x;
 
-static int build_kd_tree_recursive
-		(std::vector <float3> &points, int depth,
-		std::vector <optix::WorldNode> &nodes,
-		int &node_idx, int &res_idx, int parent = -1)
-{
-	if (points.size() == 0)
-		return -1;
+	if (idx >= size)
+		return;
+	
+	for (int i = idx; i < size; i += stride) {
+		int ri = thread_indices[i];
+		optix::Reservoir &res = base[ri];
 
-	// Curent axis
-	int axis = depth % 3;
+		// Skip entirely if empty
+		if (res.count <= 0)
+			continue;
 
-	// Find the median
-	std::sort(points.begin(), points.end(),
-		[axis](float3 a, float3 b) {
-			return get(a, axis) < get(b, axis);
+		optix::GRBSample &sample = res.sample;
+		float3 pos = sample.source;
+
+		float3 diff = (pos - center) + optix::GBR_SIZE;
+
+		int dim = optix::GRID_RESOLUTION;
+		int x = (int) (dim * diff.x / (2 * optix::GBR_SIZE));
+		int y = (int) (dim * diff.y / (2 * optix::GBR_SIZE));
+		int z = (int) (dim * diff.z / (2 * optix::GBR_SIZE));
+
+		if (x < 0 || x >= dim || y < 0 || y >= dim || z < 0 || z >= dim)
+			continue;
+
+		int bin = x + y * dim + z * dim * dim;
+		
+		// Atomically add to the corresponding cell if space is available
+		int *address = &cell_sizes[bin];
+		int old = *address;
+		int assumed;
+		
+		if (old >= optix::GBR_CELL_LIMIT)
+			continue;
+
+		do {
+			assumed = old;
+			if (assumed >= optix::GBR_CELL_LIMIT)
+				break;
+
+			old = atomicCAS(address, assumed, assumed + 1);
+		} while (assumed != old);
+
+		if (assumed < optix::GBR_CELL_LIMIT) {
+			int index = assumed + bin * optix::GBR_CELL_LIMIT;
+			sample_indices[index] = ri;
 		}
-	);
-
-	int median = points.size() / 2;
-
-	// Create the node
-	optix::WorldNode node {
-		.axis = axis,
-		.split = get(points[median], axis),
-		.point = points[median],
-		.parent = parent,
-	};
-
-	int index = node_idx++;
-
-	// Recurse
-	if (points.size() > 1) {
-		std::vector <float3> left(points.begin(), points.begin() + median);
-		std::vector <float3> right(points.begin() + median + 1, points.end());
-
-		node.left = build_kd_tree_recursive(
-			left, depth + 1, nodes,
-			node_idx, res_idx, index
-		);
-
-		node.right = build_kd_tree_recursive(
-			right, depth + 1, nodes,
-			node_idx, res_idx, index
-		);
-	} else {
-		node.left = -1;
-		node.right = -1;
-		node.data = res_idx++;
 	}
-
-	nodes[index] = node;
-	return index;
 }
 
-static void build_kd_tree(WorldSpaceKdReservoirs &layer, float4 *point_array, int size)
+__global__
+void cluster_and_merge
+		(optix::Reservoir *dst,
+		optix::Reservoir *base,
+		const int *const sample_indices,
+		const int *const cell_sizes,
+		float3 h_seed)
 {
-	// Gather all valid points
-	std::vector <float3> points;
-	for (int i = 0; i < size; i++) {
-		float4 point = point_array[i];
-		if (point.w > 0.0f)
-			points.push_back(make_float3(point));
+	float3 seed = h_seed;
+
+	int idx = blockIdx.x * blockDim.x + threadIdx.x;
+	int stride = blockDim.x * gridDim.x;
+
+	if (idx >= optix::TOTAL_CELLS)
+		return;
+
+	for (int i = idx; i < optix::TOTAL_CELLS; i += stride) {
+		int dst_base = i * optix::GBR_RESERVOIR_COUNT;
+		int sample_base = i * optix::GBR_CELL_LIMIT;
+		int sample_count = cell_sizes[i];
+
+		if (sample_count <= 0)
+			continue;
+		
+		// Initialize or update the existing reservoirs...
+		// Fill out the reservoirs, then update them stochasticly
+		/* for (int j = 0; j < optix::GBR_RESERVOIR_COUNT; j++) {
+			if (j < sample_count) {
+				int index = sample_indices[sample_base + j];
+				dst[dst_base + j] = base[index];
+			} else {
+				dst[dst_base + j] = optix::Reservoir {
+					.sample = optix::GRBSample {},
+					.count = 0,
+					.weight = 0.0f,
+				};
+			}
+		} */
+
+		// First fill empty reservoirs
+		int sample_index = 0;
+		for (int j = 0; j < optix::GBR_RESERVOIR_COUNT; j++) {
+			if (dst[dst_base + j].count <= 0) {
+				if (sample_index < sample_count) {
+					int index = sample_indices[sample_base + sample_index];
+					dst[dst_base + j] = base[index];
+					sample_index++;
+				}
+			}
+		}
+
+		if (sample_index >= sample_count)
+			continue;
+
+		// Then update the rest stochastically
+		for (int j = sample_index; j < sample_count; j++) {
+			int index = sample_indices[sample_base + j];
+			optix::Reservoir &res = base[index];
+
+			// Pick a reservoir to update
+			int r = cuda::rand_uniform(optix::GBR_RESERVOIR_COUNT, seed);
+			optix::Reservoir &dst_res = dst[dst_base + r];
+
+			// Update the reservoir
+			float denom = res.count * res.sample.target;
+			float W = (denom > 0.0f) ? res.weight / denom : 0.0f;
+			float w = res.sample.target * W * res.count;
+
+			int count = dst_res.count;
+			reservoir_update(&dst_res, res.sample, w, seed);
+			dst_res.count = count + res.count;
+		}
+
+		/* If less than GBR_RESERVOIR_COUNT samples, just copy them
+		if (sample_count <= optix::GBR_RESERVOIR_COUNT) {
+			for (int j = 0; j < optix::GBR_RESERVOIR_COUNT; j++) {
+				if (j < sample_count) {
+					int index = sample_indices[sample_base + j];
+					dst[dst_base + j] = base[index];
+				} else {
+					dst[dst_base + j] = optix::Reservoir {
+						.sample = optix::GRBSample {},
+						.count = 0,
+						.weight = 0.0f,
+					};
+				}
+			}
+
+			continue;
+		}
+
+		// Need to perform k-means clustering with k = GBR_RESERVOIR_COUNT
+		
+		// First, pick k random samples
+		constexpr int k = optix::GBR_RESERVOIR_COUNT;
+
+		float3 centroids[k];
+		for (int j = 0; j < k; j++) {
+			int offset = cuda::rand_uniform(sample_count, seed);
+			int index = sample_indices[sample_base + offset];
+			centroids[j] = base[index].sample.source;
+		}
+
+		// Perform update iterations
+		constexpr int ITERATIONS = 10;
+
+		int clusters[optix::GBR_CELL_LIMIT];
+		for (int it = 0; it < ITERATIONS; it++) {
+			// Assign to clusters
+			for (int j = 0; j < sample_count; j++) {
+				int index = sample_indices[dst_base + j];
+				float3 pos = base[index].sample.source;
+
+				float min_dist = FLT_MAX;
+				int min_index = -1;
+
+				for (int c = 0; c < k; c++) {
+					float dist = length(pos - centroids[c]);
+					if (dist < min_dist) {
+						min_dist = dist;
+						min_index = c;
+					}
+				}
+
+				clusters[j] = min_index;
+			}
+
+			// Update centroids
+			for (int c = 0; c < k; c++) {
+				float3 sum = float3 { 0.0f, 0.0f, 0.0f };
+				int count = 0;
+
+				for (int j = 0; j < sample_count; j++) {
+					if (clusters[j] != c)
+						continue;
+
+					int index = sample_indices[dst_base + j];
+					float3 pos = base[index].sample.source;
+
+					sum += pos;
+					count++;
+				}
+
+				if (count > 0)
+					centroids[c] = sum / (float) count;
+			}
+		}
+
+		// Assign samples to clusters once more
+		for (int j = 0; j < sample_count; j++) {
+			int index = sample_indices[dst_base + j];
+			float3 pos = base[index].sample.source;
+
+			float min_dist = FLT_MAX;
+			int min_index = -1;
+
+			for (int c = 0; c < k; c++) {
+				float dist = length(pos - centroids[c]);
+				if (dist < min_dist) {
+					min_dist = dist;
+					min_index = c;
+				}
+			}
+
+			clusters[j] = min_index;
+		}
+
+		// Merge reservoirs in the same cluster
+		optix::Reservoir merged[k];
+
+		for (int c = 0; c < k; c++) {
+			merged[c] = optix::Reservoir {
+				.sample = optix::GRBSample {},
+				.count = 0,
+				.weight = 0.0f,
+			};
+
+			for (int j = 0; j < sample_count; j++) {
+				if (clusters[j] != c)
+					continue;
+
+		 		int index = sample_indices[dst_base + j];
+				optix::Reservoir r = base[index];
+
+				if (r.count <= 0)
+					continue;
+
+				// Target function is the same, no complicated merging
+				// TODO: at some point, try normal quasi-occlusion
+				float denom = r.count * r.sample.target;
+				float W = (denom > 0.0f) ? r.weight / denom : 0.0f;
+				float w = r.sample.target * W * r.count;
+
+				int count = merged[c].count;
+				reservoir_update(&merged[c], r.sample, w, seed);
+				merged[c].count = count + r.count;
+			}
+
+			// If a reservoir is empty, choose a random sample from the cell
+			if (merged[c].count <= 0) {
+				int offset = cuda::rand_uniform(sample_count, seed);
+				int index = sample_indices[dst_base + offset];
+				merged[c] = base[index];
+			}
+		}
+
+		// Copy merged reservoirs to output
+		// TODO: just use the reference when update above
+		for (int j = 0; j < k; j++)
+			dst[dst_base + j] = merged[j]; */
 	}
-
-	// Build the tree
-	std::vector <optix::WorldNode> nodes(points.size());
-
-	int node_idx = 0;
-	int res_idx = 0;
-
-	build_kd_tree_recursive(points, 0, nodes, node_idx, res_idx);
-
-	std::cout << "root node split: " << nodes[0].split << std::endl;
-	std::cout << "\tleft = " << nodes[0].left << std::endl;
-	std::cout << "\tright = " << nodes[0].right << std::endl;
-	std::cout << "# of nodes = " << node_idx << std::endl;
-	std::cout << "Size of reservoir" << sizeof(optix::LightReservoir) << std::endl;
-	std::cout << "Size of node" << sizeof(optix::WorldNode) << std::endl;
-	std::cout << "# of bytes to allocate = "
-		<< node_idx * sizeof(optix::WorldNode) << std::endl;
-
-	// Allocate corresponding resources
-	int leaves = res_idx;
-	size = node_idx;
-	
-	int total_reservoirs = leaves;
-	
-	std::vector <optix::LightReservoir> reservoir_data(total_reservoirs);
-
-	optix::LightReservoir *d_reservoirs = cuda::make_buffer(reservoir_data);
-	optix::LightReservoir *d_reservoirs_prev = cuda::make_buffer(reservoir_data);
-
-	std::vector <int> lock_data(size);
-	std::vector <int *> lock_ptrs(size);
-
-	CUdeviceptr d_lock_data = cuda::make_buffer_ptr(lock_data);
-	for (int i = 0; i < size; i++)
-		lock_ptrs[i] = (int *) (d_lock_data + i * sizeof(int));
-
-	layer.launch_params.kd_tree = cuda::make_buffer(nodes);
-	layer.launch_params.kd_reservoirs = d_reservoirs;
-	layer.launch_params.kd_reservoirs_prev = d_reservoirs_prev;
-	layer.launch_params.kd_locks = cuda::make_buffer(lock_ptrs);
-	layer.launch_params.kd_nodes = size;
-	layer.launch_params.kd_leaves = leaves;
 }
 
 // Path tracing computation
-void WorldSpaceKdReservoirs::render
+void GridBasedReservoirs::render
 		(const ECS &ecs,
 		const Camera &camera,
 		const Transform &transform,
-		unsigned int mode,
 		bool accumulate)
 {
-	// Preprocess the scene
-	{
-		KOBRA_PROFILE_TASK(Update data);
-
-		preprocess_scene(*this, ecs, camera, transform);
-	}
+	preprocess_scene(ecs, camera, transform);
 
 	// Reset the accumulation state if needed
 	if (!accumulate)
@@ -952,64 +1115,96 @@ void WorldSpaceKdReservoirs::render
 	int width = extent.width;
 	int height = extent.height;
 
-	// TODO: depth?
-	// TODO: alpha transparency...
+	// NOTE: the two tracing stages can be done independently?
 	OPTIX_CHECK(
 		optixLaunch(
 			optix_pipeline,
 			optix_stream,
 			launch_params_buffer,
-			sizeof(optix::WorldSpaceKdReservoirsParameters),
-			&optix_sbt,
+			sizeof(optix::GridBasedReservoirsParameters),
+			&sampling_sbt,
 			width, height, 1
 		)
 	);
 	
 	CUDA_SYNC_CHECK();
 
-	// TODO: async tasks...
-	if (!initial_kd_tree) {
-		// TODO: update vs rebuild of k-d tree
-		CUDA_CHECK(
-			cudaMemcpy(
-				positions,
-				launch_params.position_buffer,
-				width * height * sizeof(float4),
-				cudaMemcpyDeviceToHost
-			)
+	float3 camera_delta = launch_params.camera - p_camera;
+	{
+		// Process new samples
+		int total = width * height;
+		
+		int threads = 256;
+		int blocks = (total + threads - 1) / threads;
+
+		// TODO: memset to correct values
+		cudaMemset(d_sample_indices, 0, sizeof(int) * optix::TOTAL_CELLS * optix::GBR_CELL_LIMIT);
+		cudaMemset(d_cell_sizes, 0, sizeof(int) * optix::TOTAL_CELLS);
+
+		optix::Reservoir *base1 = launch_params.gb_ris.new_samples;
+		optix::Reservoir *dst = launch_params.gb_ris.light_reservoirs_old;
+
+		// Create a random permutation of indices to start with
+		// TODO: there is a very large overhead here
+		std::vector <int> threads_indices(total);
+		for (int i = 0; i < total; i++)
+			threads_indices[i] = i;
+
+		std::shuffle(threads_indices.begin(), threads_indices.end(), generator);
+
+		int *d_threads_indices = cuda::make_buffer(threads_indices);
+
+		binner <<<blocks, threads>>> (
+			launch_params.camera,
+			camera_delta,
+			base1, total,
+			d_threads_indices,
+			d_sample_indices,
+			d_cell_sizes
 		);
+		
+		CUDA_SYNC_CHECK();
 
-		auto task = [&]() {
-			build_kd_tree(
-				*this,
-				positions,
-				width * height
-			);
-		};
+		cuda::free(d_threads_indices);
 
-		// layer.async_task = new core::AsyncTask(task);
-		// layer.async_task->wait();
-		task();
-
-		initial_kd_tree = true;
+		cluster_and_merge <<<blocks, threads>>> (
+			dst, base1,
+			d_sample_indices,
+			d_cell_sizes,
+			float3 {
+				(float) timer.elapsed_start(),
+				(float) launch_params.samples,
+				(float) total,
+			}
+		);
 	}
 
-	if (initial_kd_tree) {
-		auto &params = launch_params;
-		int reservoir_size = sizeof(optix::LightReservoir) * params.kd_leaves;
+	// Copy the parameters again
+	cuda::copy(
+		launch_params_buffer,
+		&launch_params, 1,
+		cudaMemcpyHostToDevice
+	);
 
-		CUDA_CHECK(
-			cudaMemcpy(
-				params.kd_reservoirs_prev,
-				params.kd_reservoirs,
-				reservoir_size,
-				cudaMemcpyDeviceToDevice
-			)
-		);
-	}
+	// Execute the second stage
+	OPTIX_CHECK(
+		optixLaunch(
+			optix_pipeline,
+			optix_stream,
+			launch_params_buffer,
+			sizeof(optix::GridBasedReservoirsParameters),
+			&eval_sbt,
+			width, height, 1
+		)
+	);
+	
+	CUDA_SYNC_CHECK();
 
 	// Increment number of samples
 	launch_params.samples++;
+
+	// Always copy back the camera position
+	p_camera = launch_params.camera;
 }
 
 }

@@ -79,16 +79,20 @@ inline void copy(std::vector <T> &dst, CUdeviceptr src, size_t elements, cudaMem
 template <class T>
 inline T *make_buffer(const std::vector <T> &src)
 {
-	T *dst = alloc <T> (src.size());
-	copy(dst, src);
+	KOBRA_ASSERT(src.size() > 0, "Size must be greater than 0");
+	T *dst;
+	CUDA_CHECK(cudaMalloc((void **) &dst, src.size() * sizeof(T)));
+	CUDA_CHECK(cudaMemcpy(dst, src.data(), src.size() * sizeof(T), cudaMemcpyHostToDevice));
 	return dst;
 }
 
 template <class T>
 inline CUdeviceptr make_buffer_ptr(const std::vector <T> &src)
 {
-	CUdeviceptr dst = alloc(src.size() * sizeof(T));
-	copy(dst, src);
+	KOBRA_ASSERT(src.size() > 0, "Size must be greater than 0");
+	CUdeviceptr dst;
+	CUDA_CHECK(cudaMalloc((void **) &dst, src.size() * sizeof(T)));
+	CUDA_CHECK(cudaMemcpy((void *) dst, src.data(), src.size() * sizeof(T), cudaMemcpyHostToDevice));
 	return dst;
 }
 

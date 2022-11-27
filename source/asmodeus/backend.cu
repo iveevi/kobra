@@ -6,6 +6,7 @@
 #include "../../include/texture_manager.hpp"
 
 // TODO: manage
+#include "../../include/optix/sbt.cuh"
 #include "../../include/optix/parameters.cuh"
 
 namespace kobra {
@@ -312,6 +313,84 @@ static void construct_tlas(Backend &backend, Backend::Pipeline &pipeline)
 	// cuda::free(d_instances);
 }
 
+OptixTraversableHandle construct_tlas(Backend &backend, int expected_hit)
+{
+	// Localize backend members
+	OptixDeviceContext &optix_context = backend.optix_context;
+	std::vector <Backend::Instance> &instances = backend.instances;
+
+	// Build instances and top level acceleration structure
+	std::vector <OptixInstance> optix_instances;
+
+	int instance_count = instances.size();
+	for (int i = 0; i < instance_count; i++) {
+		glm::mat4 mat = instances[i].transform->matrix();
+
+		float transform[12] = {
+			mat[0][0], mat[1][0], mat[2][0], mat[3][0],
+			mat[0][1], mat[1][1], mat[2][1], mat[3][1],
+			mat[0][2], mat[1][2], mat[2][2], mat[3][2]
+		};
+
+		OptixInstance instance {};
+		memcpy(instance.transform, transform, sizeof(float) * 12);
+
+		// Set the instance handle
+		instance.traversableHandle = instances[i].handle;
+		instance.visibilityMask = 0b1;
+		instance.sbtOffset = i;
+		instance.instanceId = i;
+
+		optix_instances.push_back(instance);
+	}
+
+	// Create top level acceleration structure
+	CUdeviceptr d_instances = cuda::make_buffer_ptr(instances);
+
+	// TLAS for objects and lights
+	OptixBuildInput ias_build_input {};
+	ias_build_input.type = OPTIX_BUILD_INPUT_TYPE_INSTANCES;
+	ias_build_input.instanceArray.instances = d_instances;
+	ias_build_input.instanceArray.numInstances = instances.size();
+
+	// IAS options
+	OptixAccelBuildOptions ias_accel_options {};
+	ias_accel_options.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
+	ias_accel_options.operation = OPTIX_BUILD_OPERATION_BUILD;
+
+	// IAS buffer sizes
+	OptixAccelBufferSizes ias_buffer_sizes;
+	OPTIX_CHECK(
+		optixAccelComputeMemoryUsage(
+			optix_context, &ias_accel_options,
+			&ias_build_input, 1,
+			&ias_buffer_sizes
+		)
+	);
+
+	// Allocate the IAS
+	CUdeviceptr d_ias_output = cuda::alloc(ias_buffer_sizes.outputSizeInBytes);
+	CUdeviceptr d_ias_tmp = cuda::alloc(ias_buffer_sizes.tempSizeInBytes);
+
+	// Build the IAS
+	OptixTraversableHandle tlas;
+
+	OPTIX_CHECK(
+		optixAccelBuild(optix_context,
+			0, &ias_accel_options,
+			&ias_build_input, 1,
+			d_ias_tmp, ias_buffer_sizes.tempSizeInBytes,
+			d_ias_output, ias_buffer_sizes.outputSizeInBytes,
+			&tlas, nullptr, 0
+		)
+	);
+
+	// cuda::free(d_ias_tmp);
+	// cuda::free(d_instances);
+
+	return tlas;
+}
+
 // Construct TLAS for all pipelines
 static void update_all_tlas(Backend &backend)
 {
@@ -393,7 +472,7 @@ static void generate_submesh_data
 
 // TODO: pass Pipeline instead? create hit sbts in order
 static void update_sbt_data(const Backend &backend,
-		const Backend::Pipeline &pipeline,
+		Backend::Pipeline &pipeline,
 		const std::vector <const Submesh *> &submeshes,
 		const std::vector <const Transform *> &submesh_transforms,
 		CUdeviceptr &hit_data, size_t &stride)
@@ -452,8 +531,6 @@ static void update_sbt_data(const Backend &backend,
 		std::cout << "Pushing back hit record; header: "
 			<< OPTIX_SBT_RECORD_ALIGNMENT << std::endl;
 
-		// optix::pack_header(pipeline.hit[0], &hit_record);
-
 		optix::pack_header(pipeline.hit[0], hit_record);
 		hit_records.push_back(hit_record);
 		
@@ -463,7 +540,7 @@ static void update_sbt_data(const Backend &backend,
 
 	// Copy to device
 	// hit_data = cuda::make_buffer_ptr(hit_records);
-	stride = sizeof(HitRecord);
+	// stride = sizeof(HitRecord);
 }
 
 // Construct or update the SBT for a specific pipeline
@@ -486,10 +563,11 @@ static void construct_sbt(const Backend &backend,
 		backend.instances, d_sbt, stride
 	); */
 
-	KOBRA_ASSERT(stride > 0, "SBT stride is 0");
-	pipeline.sbt.hitgroupRecordBase = d_sbt;
+	// KOBRA_ASSERT(stride > 0, "SBT stride is 0");
+	/* pipeline.sbt.hitgroupRecordBase = d_sbt;
 	pipeline.sbt.hitgroupRecordStrideInBytes = stride;
-	pipeline.sbt.hitgroupRecordCount = backend.instances.size();
+	pipeline.sbt.hitgroupRecordCount = pipeline.expected_hit
+		* backend.instances.size(); */
 }
 
 // Update SBTs for all pipelines
@@ -532,6 +610,8 @@ static void update_from_submeshes(Backend &backend,
 // Update the backend with scene data
 bool update(Backend &backend, const ECS &ecs)
 {
+	std::cout << "backend update" << std::endl;
+
 	// Preprocess the entities
 	std::vector <const Rasterizer *> rasterizers;
 	std::vector <const Transform *> rasterizer_transforms;
@@ -582,6 +662,7 @@ bool update(Backend &backend, const ECS &ecs)
 	// of the ecs
 	// ECS ->inverstors.alert() => backend.ecs_alert() ->needs_update = true
 	if (dirty) {
+		std::cout << "Dirty rasterizers" << std::endl;
 		backend.scene.c_rasterizers = rasterizers;
 
 		// Collect all submeshes

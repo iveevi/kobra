@@ -983,12 +983,14 @@ void build_kd_tree(Basilisk &layer, float4 *point_array, int size)
 	optix::LightReservoir *d_reservoirs = cuda::make_buffer(reservoir_data);
 	optix::LightReservoir *d_reservoirs_prev = cuda::make_buffer(reservoir_data);
 
-	std::vector <int> lock_data(size);
+	std::vector <int> lock_data(size, 0);
 	std::vector <int *> lock_ptrs(size);
 
-	CUdeviceptr d_lock_data = cuda::make_buffer_ptr(lock_data);
-	for (int i = 0; i < size; i++)
-		lock_ptrs[i] = (int *) (d_lock_data + i * sizeof(int));
+	int *d_lock_data = cuda::make_buffer(lock_data);
+	for (int i = 0; i < size; i++) {
+		lock_ptrs[i] = d_lock_data;
+		d_lock_data++;
+	}
 
 	layer.launch_params.kd_tree = cuda::make_buffer(nodes);
 	layer.launch_params.kd_reservoirs = d_reservoirs;

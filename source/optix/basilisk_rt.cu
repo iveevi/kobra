@@ -98,28 +98,28 @@ extern "C" __global__ void __raygen__rg()
 	switch (parameters.mode) {
 	case eRegular:
 		trace <eRegular> (
-			parameters.traversable,
+			parameters.traversable, eCount,
 			origin, direction, i0, i1
 		);
 
 		break;
 	case eReSTIR:
 		trace <eReSTIR> (
-			parameters.traversable,
+			parameters.traversable, eCount,
 			origin, direction, i0, i1
 		);
 
 		break;
 	case eReSTIRPT:
 		trace <eReSTIRPT> (
-			parameters.traversable,
+			parameters.traversable, eCount,
 			origin, direction, i0, i1
 		);
 
 		break;
 	case eVoxel:
 		trace <eVoxel> (
-			parameters.traversable,
+			parameters.traversable, eCount,
 			origin, direction, i0, i1
 		);
 
@@ -203,7 +203,7 @@ extern "C" __global__ void __closesthit__ch()
 	float3 indirect = make_float3(0.0f);
 	if (pdf > 0) {
 		trace <eRegular> (
-			parameters.traversable,
+			parameters.traversable, eCount,
 			x, wi, i0, i1
 		);
 
