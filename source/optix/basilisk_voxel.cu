@@ -196,7 +196,7 @@ extern "C" __global__ void __closesthit__voxel()
 			};
 		}
 
-		const int SPATIAL_SAMPLES = 10;
+		const int SPATIAL_SAMPLES = 3;
 
 		// Choose a root node a few level up and randomly
 		// traverse the tree to obtain a sample
@@ -298,11 +298,7 @@ extern "C" __global__ void __closesthit__voxel()
 	float W = (denom > 0) ? spatial.weight/denom : 0.0f;
 	// assert(!isnan(W));
 
-	direct = spatial.sample.value * W;
-	
-	// Add emission as well
-	if (material.type == Shading::eEmissive)
-		direct += material.emission;
+	direct = material.emission + spatial.sample.value * W;
 
 	// Also compute indirect lighting
 	// TODO: method...

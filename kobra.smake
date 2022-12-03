@@ -1,5 +1,3 @@
-import copy
-
 # TODO: try to make this possible
 # from .files import *
 
@@ -88,6 +86,7 @@ glsl_vertex.config({
 })
 
 # GLSL fragment shader dependencies
+# TODO: move to another smake config
 glsl_frag = proxy_build('glsl_frag')
 glsl_frag.set_compiler('glslc')
 glsl_frag.set_flags('-fshader-stage=fragment')
@@ -121,9 +120,16 @@ build_gdb.set_flags(' -g ' + flags)
 build_sanitizer = kobra.new_build('sanitizer')
 build_sanitizer.copy(build_gdb)
 
+# Similar other builds
+bench = kobra.new_build('bench')
+bench.copy(build_default)
+
+bench.set_sources('bench.cu', kobra_sources)
+
 # Postbuilds
 kobra.set_post_builds(
     '${SMAKE_TARGET}',
+    ('bench', '${SMAKE_TARGET}'),
     ('gdb', 'gdb ${SMAKE_TARGET}'),
     ('sanitizer', 'compute-sanitizer --tool=memcheck ${SMAKE_TARGET}')
 )

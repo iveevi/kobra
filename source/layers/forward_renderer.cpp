@@ -40,21 +40,18 @@ const std::vector <DSLB> ForwardRenderer::dsl_bindings {
 };
 
 // Create a forward renderer layer
-ForwardRenderer ForwardRenderer::make(const Context &context)
+ForwardRenderer::ForwardRenderer(const Context &context)
 {
-	// Layer to return
-	ForwardRenderer layer;
-	
 	// Extract critical Vulkan structures
-	layer.device = context.device;
-	layer.phdev = context.phdev;
-	layer.descriptor_pool = context.descriptor_pool;
+	device = context.device;
+	phdev = context.phdev;
+	descriptor_pool = context.descriptor_pool;
 	
-	layer.extent = context.extent;
+	extent = context.extent;
 
 	// Create the render pass
-	layer.render_pass = make_render_pass(
-		*layer.device,
+	render_pass = make_render_pass(
+		*device,
 		{context.swapchain_format},
 		{vk::AttachmentLoadOp::eClear},
 		context.depth_format,
@@ -62,15 +59,15 @@ ForwardRenderer ForwardRenderer::make(const Context &context)
 	);
 
 	// Create descriptor set layout
-	layer.dsl = make_descriptor_set_layout(
-		*layer.device,
-		layer.dsl_bindings
+	dsl = make_descriptor_set_layout(
+		*device,
+		dsl_bindings
 	);
 
 	// Load the default available shaders
 	// TODO: store as shader program structs...
 	auto shaders = make_shader_modules(
-		*layer.device,
+		*device,
 		{
 			KOBRA_SHADERS_DIR "/bin/raster/vertex.spv",
 			KOBRA_SHADERS_DIR "/bin/raster/color_frag.spv"
@@ -84,9 +81,9 @@ ForwardRenderer ForwardRenderer::make(const Context &context)
 	};
 
 	// Pipeline layout
-	layer.ppl  = vk::raii::PipelineLayout(
-		*layer.device,
-		{{}, *layer.dsl, push_constants}
+	ppl  = vk::raii::PipelineLayout(
+		*device,
+		{{}, *dsl, push_constants}
 	);
 
 	// Pipelines
@@ -94,21 +91,18 @@ ForwardRenderer ForwardRenderer::make(const Context &context)
 	auto vertex_attributes = Vertex::vertex_attributes();
 
 	GraphicsPipelineInfo grp_info {
-		*layer.device,
-		layer.render_pass,
+		*device,
+		render_pass,
 		nullptr, nullptr,
 		nullptr, nullptr,
 		vertex_binding, vertex_attributes,
-		layer.ppl
+		ppl
 	};
 
 	grp_info.vertex_shader = std::move(shaders[0]);
 	grp_info.fragment_shader = std::move(shaders[1]);
 
-	layer.pipeline = make_graphics_pipeline(grp_info);
-
-	// Return the layer
-	return layer;
+	pipeline = make_graphics_pipeline(grp_info);
 }
 
 // Create a descriptor set for the layer
@@ -178,8 +172,7 @@ static void configure_dset(ForwardRenderer &layer,
 }
 
 // Render a given scene wrt a given camera
-void render(ForwardRenderer &layer,
-		const ECS &ecs,
+void ForwardRenderer::render(const ECS &ecs,
 		const Camera &camera,
 		const Transform &camera_transform,
 		const CommandBuffer &cmd,
@@ -187,7 +180,7 @@ void render(ForwardRenderer &layer,
 		const RenderArea &ra)
 {
 	// Apply the rendering area
-	ra.apply(cmd, layer.extent);
+	ra.apply(cmd, extent);
 	
 	// Clear colors
 	// FIXME: seriously make a method from clering values...
@@ -207,11 +200,11 @@ void render(ForwardRenderer &layer,
 	// Start the render pass
 	cmd.beginRenderPass(
 		vk::RenderPassBeginInfo {
-			*layer.render_pass,
+			*render_pass,
 			*framebuffer,
 			vk::Rect2D {
 				vk::Offset2D {0, 0},
-				layer.extent
+				extent
 			},
 			static_cast <uint32_t> (clear_values.size()),
 			clear_values.data()
@@ -237,14 +230,14 @@ void render(ForwardRenderer &layer,
 			rasterizer_transforms.push_back(transform);
 
 			// If not it the dsets dictionary, create it
-			if (layer.dsets.find(rasterizer) == layer.dsets.end()) {
-				layer.dsets[rasterizer] = serve_dset(
-					layer,
+			if (dsets.find(rasterizer) == dsets.end()) {
+				dsets[rasterizer] = serve_dset(
+					*this, // TODO: change signature
 					rasterizer->materials.size()
 				);
 
 				// Configure the dset
-				configure_dset(layer, layer.dsets[rasterizer], rasterizer);
+				configure_dset(*this, dsets[rasterizer], rasterizer);
 			}
 		}
 		
@@ -261,7 +254,7 @@ void render(ForwardRenderer &layer,
 	// TODO: update only when needed, and update lights...
 	
 	// Bind pipeline
-	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *layer.pipeline);
+	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
 
 	// Prepare push constants
 	Rasterizer::PushConstants pc;
@@ -275,12 +268,12 @@ void render(ForwardRenderer &layer,
 		pc.model = rasterizer_transforms[i]->matrix();
 
 		const Rasterizer &rasterizer = *rasterizers[i];
-		ForwardRenderer::RasterizerDset &dset = layer.dsets[rasterizers[i]];
+		ForwardRenderer::RasterizerDset &dset = dsets[rasterizers[i]];
 
 		int submesh_count = rasterizers[i]->size();
 		for (int j = 0; j < submesh_count; j++) {
 			// Push constants
-			cmd.pushConstants <Rasterizer::PushConstants> (*layer.ppl,
+			cmd.pushConstants <Rasterizer::PushConstants> (*ppl,
 				vk::ShaderStageFlagBits::eVertex,
 				0, pc
 			);
@@ -293,7 +286,7 @@ void render(ForwardRenderer &layer,
 
 			// Bind descriptor set
 			cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-				*layer.ppl, 0, *dset[j], {}
+				*ppl, 0, *dset[j], {}
 			);
 
 			// Draw

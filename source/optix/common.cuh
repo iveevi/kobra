@@ -19,7 +19,7 @@ using namespace kobra::optix;
 
 // TODO: launch parameter for ray depth
 // TODO: rename to MAX_BOUNCES
-#define MAX_DEPTH 2
+#define MAX_DEPTH 0
 
 // Local constants
 static const float eps = 1e-3f;
@@ -135,6 +135,16 @@ void calculate_material(Hit *hit_data, Material &mat, uint3 triangle, float2 uv)
 	if (hit_data->textures.has_diffuse) {
 		float4 d4 = tex2D <float4> (hit_data->textures.diffuse, uv.x, uv.y);
 		mat.diffuse = make_float3(d4);
+	}
+
+	if (hit_data->textures.has_specular) {
+		float4 s4 = tex2D <float4> (hit_data->textures.specular, uv.x, uv.y);
+		mat.specular = make_float3(s4);
+	}
+
+	if (hit_data->textures.has_emission) {
+		float4 e4 = tex2D <float4> (hit_data->textures.emission, uv.x, uv.y);
+		mat.emission = make_float3(e4);
 	}
 
 	if (hit_data->textures.has_roughness) {

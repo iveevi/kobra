@@ -100,7 +100,12 @@ struct RenderArea {
 	glm::vec2 min;
 	glm::vec2 max;
 
-	// TODO: scissor as well
+	// Default is full screen
+	RenderArea() : min {-1.0f, -1.0f}, max {1.0f, 1.0f} {}
+
+	// Also specify min and max
+	RenderArea(const glm::vec2 &_min, const glm::vec2 &_max)
+			: min {_min}, max {_max} {}
 
 	// Width and height
 	uint32_t width() const {

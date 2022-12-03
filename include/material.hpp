@@ -31,14 +31,19 @@ struct Material {
 	// TODO: refactor ttexture names (diffuse, etc)
 	std::string	albedo_texture = "";
 	std::string	normal_texture = "";
+	std::string	specular_texture = "";
+	std::string	emission_texture = "";
 	std::string	roughness_texture = "";
 
 	// TODO: emissive termm, reafctor eEmissive to eLight?
 	Shading		type = Shading::eDiffuse;
 
 	// Properties
+	// TODO: refactor to better names...
 	bool has_albedo() const;
 	bool has_normal() const;
+	bool has_specular() const;
+	bool has_emission() const;
 	bool has_roughness() const;
 
 	// Serialize to GPU buffer

@@ -1,0 +1,13 @@
+smake_import('../files.py')
+
+experimental = target('experimental')
+
+build_default = experimental.new_build('default')
+build_default.add_sources('main.cpp')
+build_default.add_includes(localize(kobra_includes, '..'))
+build_default.add_libraries('freetype')
+build_default.define({
+    'KOBRA_DIR': kobra_dir
+})
+
+experimental.set_post_builds('${SMAKE_TARGET}')

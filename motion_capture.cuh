@@ -47,8 +47,6 @@ struct MotionCapture : public kobra::BaseApp {
 	kobra::layers::Framer framer;
 	kobra::layers::FontRenderer font_renderer;
 
-	kobra::asmodeus::Backend backend;
-	kobra::asmodeus::WorldSpaceKdReservoirs wskdr;
 	kobra::asmodeus::GridBasedReservoirs grid_based;
 
 	// Buffers
@@ -86,43 +84,8 @@ struct MotionCapture : public kobra::BaseApp {
 		// Load scene and camera
 		scene.load(get_device(), scene_path);
 
-		// Add extra lights
-		float width = 10.0f;
-		float height = 10.0f;
-		float depth = 10.0f;
-
-		float stride = 5.0f;
-
-		/* auto lighter = [&](float x, float y, float z) {
-			kobra::Entity light = scene.ecs.make_entity();
-
-			light.get <kobra::Transform> ().position = glm::vec3 {x, y, z};
-			light.get <kobra::Transform> ().scale = glm::vec3 {0.1f};
-
-			// Add emissive box
-			kobra::Mesh box = kobra::Mesh::box({},
-					{1, 1, 1});
-
-			light.add <kobra::Mesh> (box);
-
-			kobra::Mesh *mesh = &light.get <kobra::Mesh> ();
-			mesh->submeshes[0].material.emission = glm::vec3 {100.0f};
-			mesh->submeshes[0].material.diffuse = {0, 0, 0};
-			mesh->submeshes[0].material.type = Shading::eEmissive;
-
-			light.add <kobra::Rasterizer> (get_device(), mesh);
-
-			// TODO: material update method for rasterizers,
-			// adds tasks to a queue or something...?
-			kobra::Rasterizer *rasterizer = &light.get <kobra::Rasterizer> ();
-		};
-
-		for (float x = 0; x <= width; x += stride) {
-			for (float y = 0; y <= height; y += stride) {
-				for (float z = 0; z <= depth; z += stride)
-					lighter(x, y, z);
-			}
-		} */
+		// TODO: save mesh source...
+		// scene.save("scene.kobra");
 
 		camera = scene.ecs.get_entity("Camera");
 
@@ -133,29 +96,18 @@ struct MotionCapture : public kobra::BaseApp {
 
 		// Create the denoiser layer
 		denoiser = kobra::layers::Denoiser::make(
-			extent
-			/*,
+			extent,
 			kobra::layers::Denoiser::eNormal
-				| kobra::layers::Denoiser::eAlbedo */
+				| kobra::layers::Denoiser::eAlbedo
 		);
 
 		framer = kobra::layers::Framer::make(get_context());
 
 		// Create Asmodeus backend
-		backend = kobra::asmodeus::Backend::make(
-			get_context(),
-			kobra::asmodeus::Backend::BackendType::eOptiX
-		);
-
-		wskdr = kobra::asmodeus::WorldSpaceKdReservoirs::make(
-			get_context(), {1000, 1000}
-		);
-
 		grid_based = kobra::asmodeus::GridBasedReservoirs::make(
 			get_context(), {1000, 1000}
 		);
 
-		wskdr.set_envmap("resources/skies/background_1.jpg");
 		grid_based.set_envmap("resources/skies/background_1.jpg");
 
 #if 0
@@ -205,7 +157,7 @@ struct MotionCapture : public kobra::BaseApp {
 		// Input callbacks
 		io.mouse_events.subscribe(mouse_callback, this);
 		io.keyboard_events.subscribe(keyboard_callback, this);
-			
+		
 		// NOTE: we need this precomputation step to load all the
 		// resources before rendering; we need some system to allocate
 		// queues so that we dont need to do this...
@@ -215,14 +167,13 @@ struct MotionCapture : public kobra::BaseApp {
 			camera.get <kobra::Transform> (),
 			mode, false 
 		);
-			
-		// Launch compute thread
+
 		compute_thread = new std::thread(
 			&MotionCapture::path_trace_kernel, this
 		);
 
 		// Allocate buffers
-		size_t size = kobra::layers::size(tracer);
+		size_t size = grid_based.size(); // kobra::layers::size(tracer);
 
 		b_traced = kobra::cuda::alloc(size * sizeof(uint32_t));
 		b_traced_cpu.resize(size);
@@ -244,7 +195,7 @@ struct MotionCapture : public kobra::BaseApp {
 	// Path tracing kernel
 	int integrator = 0;
 
-	void path_trace_kernel() {
+	void path_trace_kernel() {	
 		compute_timer.start();
 		while (!kill) {
 			bool accumulate = true;
@@ -266,12 +217,6 @@ struct MotionCapture : public kobra::BaseApp {
 					mode, accumulate
 				);
 			} else {
-				/* wskdr.render(scene.ecs,
-					camera.get <kobra::Camera> (),
-					camera.get <kobra::Transform> (),
-					mode, accumulate
-				); */
-
 				grid_based.render(scene.ecs,
 					camera.get <kobra::Camera> (),
 					camera.get <kobra::Transform> (),
@@ -279,11 +224,11 @@ struct MotionCapture : public kobra::BaseApp {
 				);
 			}
 			
-			/* kobra::layers::denoise(denoiser, {
-				.color = kobra::layers::color_buffer(tracer),
-				.normal = kobra::layers::normal_buffer(tracer),
-				.albedo = kobra::layers::albedo_buffer(tracer)
-			}); */
+			kobra::layers::denoise(denoiser, {
+				.color = grid_based.color_buffer(),
+				.normal = grid_based.normal_buffer(),
+				.albedo = grid_based.albedo_buffer()
+			});
 
 			compute_time = compute_timer.lap()/1e6;
 		}
@@ -405,8 +350,8 @@ struct MotionCapture : public kobra::BaseApp {
 
 		// Now trace and render
 		cmd.begin({});
-			int width = tracer.extent.width;
-			int height = tracer.extent.height;
+			int width = grid_based.extent.width;
+			int height = grid_based.extent.height;
 
 			float4 *d_output = 0;
 			if (integrator == 0) {
@@ -417,6 +362,7 @@ struct MotionCapture : public kobra::BaseApp {
 			}
 
 			// TODO: denoise here?
+			// d_output = (float4 *) denoiser.result;
 
 			kobra::cuda::hdr_to_ldr(
 				d_output,
@@ -638,9 +584,8 @@ struct MotionCapture : public kobra::BaseApp {
 
 		// I for info
 		if (event.key == GLFW_KEY_I && event.action == GLFW_PRESS) {
-			std::cout << "Camera transform:\n";
-			std::cout << "\tPosition: " << transform.position.x << ", " << transform.position.y << ", " << transform.position.z << "\n";
-			std::cout << "\tRotation: " << transform.rotation.x << ", " << transform.rotation.y << ", " << transform.rotation.z << "\n";
+			printf("\n{%.2f, %.2f, %.2f}\n", transform.position.x, transform.position.y, transform.position.z);
+			printf("{%.2f, %.2f, %.2f}\n", transform.rotation.x, transform.rotation.y, transform.rotation.z);
 		}
 
 		// C for capture

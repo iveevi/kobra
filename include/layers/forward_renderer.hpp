@@ -47,21 +47,19 @@ struct ForwardRenderer {
 
 	std::map <const Rasterizer *, RasterizerDset> dsets;
 
+	// Constructors
+	ForwardRenderer() = default;
+	ForwardRenderer(const Context &);
+
 	// TODO: add extra and default shader pograms here...
-
-	// Functions
-	static ForwardRenderer make(const Context &);
+	// TODO: parameters into a struct
+	void render(const ECS &,
+		const Camera &,
+		const Transform &,
+		const CommandBuffer &,
+		const Framebuffer &,
+		const RenderArea & = RenderArea());
 };
-
-// Other methods
-// TODO: parameters into a struct
-void render(ForwardRenderer &,
-	const ECS &,
-	const Camera &,
-	const Transform &,
-	const CommandBuffer &,
-	const Framebuffer &,
-	const RenderArea & = {{-1, -1}, {-1, -1}});
 
 }
 

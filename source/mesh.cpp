@@ -1094,6 +1094,24 @@ std::optional <Mesh> load_mesh(const std::string &path)
 									m.normal_texname, {reader_config.mtl_search_path}
 								);
 							}
+
+							// Specular texture
+							if (!m.specular_texname.empty()) {
+								mat.specular_texture = m.specular_texname;
+								mat.specular_texture = common::resolve_path(
+									m.specular_texname, {reader_config.mtl_search_path}
+								);
+							}
+
+							// Emission texture
+							if (!m.emissive_texname.empty()) {
+								mat.emission_texture = m.emissive_texname;
+								mat.emission_texture = common::resolve_path(
+									m.emissive_texname, {reader_config.mtl_search_path}
+								);
+								
+								mat.type = eEmissive;
+							}
 						}
 
 						// Add submesh
@@ -1114,7 +1132,7 @@ std::optional <Mesh> load_mesh(const std::string &path)
 			tasks.push(task);
 		}
 
-		core::run_tasks(tasks);
+		core::run_tasks(tasks, 1);
 
 	}
 
@@ -1140,6 +1158,7 @@ std::optional <Mesh> Mesh::load(const std::string &path)
 	// Check if cached
 	// TODO: central filesystem manager for caching, etc
 	std::string filename = ".kobra/cached/" + common::get_filename(path) + ".cache";
+	// TODO: create this directory if it doesn't exist
 	if (common::file_exists(filename))
 		return Mesh::cache_load(filename);
 
@@ -1169,7 +1188,7 @@ std::optional <Mesh> Mesh::load(const std::string &path)
 
 	// Cache the mesh
 	Mesh::cache_save(m, filename);
-
+	
 	return m;
 }
 
@@ -1196,6 +1215,8 @@ void Mesh::cache_save(const Mesh &mesh, const std::string &path)
 		offset += sizeof(float) * 3;
 		offset += sizeof(int) + submesh.material.albedo_texture.size();
 		offset += sizeof(int) + submesh.material.normal_texture.size();
+		offset += sizeof(int) + submesh.material.specular_texture.size();
+		offset += sizeof(int) + submesh.material.emission_texture.size();
 		offset += sizeof(int) + submesh.material.roughness_texture.size();
 
 		offset += sizeof(Shading);
@@ -1227,6 +1248,7 @@ void Mesh::cache_save(const Mesh &mesh, const std::string &path)
 		file.write((char *) &s.material.roughness, sizeof(float));
 		file.write((char *) &s.material.refraction, sizeof(float));
 
+		// TODO: organize so that errors are not as prone
 		int tex_albedo_length = s.material.albedo_texture.length();
 		file.write((char *) &tex_albedo_length, sizeof(int));
 		file.write(s.material.albedo_texture.c_str(), tex_albedo_length);
@@ -1234,6 +1256,14 @@ void Mesh::cache_save(const Mesh &mesh, const std::string &path)
 		int tex_normal_length = s.material.normal_texture.length();
 		file.write((char *) &tex_normal_length, sizeof(int));
 		file.write(s.material.normal_texture.c_str(), tex_normal_length);
+
+		int tex_specular_length = s.material.specular_texture.length();
+		file.write((char *) &tex_specular_length, sizeof(int));
+		file.write(s.material.specular_texture.c_str(), tex_specular_length);
+
+		int tex_emission_length = s.material.emission_texture.length();
+		file.write((char *) &tex_emission_length, sizeof(int));
+		file.write(s.material.emission_texture.c_str(), tex_emission_length);
 
 		int tex_roughness_length = s.material.roughness_texture.length();
 		file.write((char *) &tex_roughness_length, sizeof(int));
@@ -1298,7 +1328,6 @@ std::optional <Mesh> Mesh::cache_load(const std::string &path)
 			std::vector <Vertex> vertices;
 			vertices.resize(num_vertices);
 			std::memcpy(vertices.data(), &data[offset], sizeof(Vertex) * num_vertices);
-			// vertices.insert(vertices.begin(), (Vertex *) &data[offset], (Vertex *) &data[offset + sizeof(Vertex) * num_vertices]);
 			offset += sizeof(Vertex) * num_vertices;
 
 			// Read the number of indices
@@ -1309,7 +1338,6 @@ std::optional <Mesh> Mesh::cache_load(const std::string &path)
 			std::vector <uint32_t> indices;
 			indices.resize(num_indices);
 			std::memcpy(indices.data(), &data[offset], sizeof(uint32_t) * num_indices);
-			// indices.insert(indices.begin(), (uint32_t *) &data[offset], (uint32_t *) &data[offset + sizeof(uint32_t) * num_indices]);
 			offset += sizeof(uint32_t) * num_indices;
 
 			// Read the material
@@ -1345,6 +1373,16 @@ std::optional <Mesh> Mesh::cache_load(const std::string &path)
 			offset += sizeof(int);
 			material.normal_texture = std::string(&data[offset], tex_normal_length);
 			offset += tex_normal_length;
+
+			int tex_specular_length = *(int *) &data[offset];
+			offset += sizeof(int);
+			material.specular_texture = std::string(&data[offset], tex_specular_length);
+			offset += tex_specular_length;
+
+			int tex_emission_length = *(int *) &data[offset];
+			offset += sizeof(int);
+			material.emission_texture = std::string(&data[offset], tex_emission_length);
+			offset += tex_emission_length;
 
 			int tex_roughness_length = *(int *) &data[offset];
 			offset += sizeof(int);

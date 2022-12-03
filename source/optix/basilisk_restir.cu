@@ -467,9 +467,7 @@ extern "C" __global__ void __closesthit__restir_pt()
 	};
 
 	// Compute direct ligting
-	float3 direct = Ld(lc, surface_hit, rp->seed);
-	if (material.type == Shading::eEmissive)
-		direct += material.emission;
+	float3 direct = material.emission + Ld(lc, surface_hit, rp->seed);
 	
 	// Generate new ray
 	Shading out;

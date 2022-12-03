@@ -28,12 +28,16 @@ struct Hit {
 
 	struct {
 		cudaTextureObject_t	diffuse;
+		cudaTextureObject_t	emission;
 		cudaTextureObject_t	normal;
 		cudaTextureObject_t	roughness;
+		cudaTextureObject_t	specular;
 
 		bool			has_diffuse = false;
+		bool			has_emission = false;
 		bool			has_normal = false;
 		bool			has_roughness = false;
+		bool			has_specular = false;
 	} textures;
 };
 

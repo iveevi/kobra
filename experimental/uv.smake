@@ -25,4 +25,4 @@ build_default.define({
 
 build_default.add_libraries(kobra_libraries)
 
-uv.set_post_builds('$SMAKE_TARGET')
+uv.set_post_builds('${SMAKE_TARGET}')

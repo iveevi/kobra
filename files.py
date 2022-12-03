@@ -9,7 +9,6 @@ kobra_sources = [
 	'source/layers/denoiser.cu',
 	'source/layers/optix_tracer.cu',
 	'source/asmodeus/*',
-	'source/arbok/*',
     'source/optix/core.cu'
 ]
 	

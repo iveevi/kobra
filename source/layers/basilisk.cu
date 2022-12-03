@@ -363,7 +363,8 @@ static void update_light_buffers(Basilisk &layer,
 	std::vector <std::pair <const Submesh *, int>> emissive_submeshes;
 	for (int i = 0; i < submeshes.size(); i++) {
 		const Submesh *submesh = submeshes[i];
-		if (glm::length(submesh->material.emission) > 0) {
+		if (glm::length(submesh->material.emission) > 0
+				|| submesh->material.has_emission()) {
 			emissive_submeshes.push_back({submesh, i});
 			emissive_count += submesh->triangles();
 		}
@@ -389,6 +390,9 @@ static void update_light_buffers(Basilisk &layer,
 						cuda::to_f3(b - a),
 						cuda::to_f3(c - a),
 						cuda::to_f3(submesh->material.emission)
+						// cuda::to_f3(glm::vec3 {1, 1, 1})
+						// TODO: what if material has
+						// textured emission?
 					}
 				);
 			}
@@ -733,6 +737,26 @@ static void update_sbt_data(Basilisk &layer,
 			hit_record.data.textures.has_normal = true;
 		}
 
+		if (mat.has_specular()) {
+			const ImageData &specular = TextureManager::load_texture(
+				*layer.phdev, *layer.device, mat.specular_texture
+			);
+
+			hit_record.data.textures.specular
+				= cuda::import_vulkan_texture(*layer.device, specular);
+			hit_record.data.textures.has_specular = true;
+		}
+
+		if (mat.has_emission()) {
+			const ImageData &emission = TextureManager::load_texture(
+				*layer.phdev, *layer.device, mat.emission_texture
+			);
+
+			hit_record.data.textures.emission
+				= cuda::import_vulkan_texture(*layer.device, emission);
+			hit_record.data.textures.has_emission = true;
+		}
+
 		if (mat.has_roughness()) {
 			const ImageData &roughness = TextureManager::load_texture(
 				*layer.phdev, *layer.device, mat.roughness_texture
@@ -742,7 +766,7 @@ static void update_sbt_data(Basilisk &layer,
 				= cuda::import_vulkan_texture(*layer.device, roughness);
 			hit_record.data.textures.has_roughness = true;
 		}
-	
+
 		// Push back
 		optix::pack_header(layer.optix_programs.hit, hit_record);
 		hit_records.push_back(hit_record);

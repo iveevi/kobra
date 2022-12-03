@@ -912,9 +912,6 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 
 	byte *data = load_texture(filename, width, height, channels);
 
-	KOBRA_LOG_FUNC(Log::INFO) << "Loaded image: " << filename << ": width="
-			<< width << ", height=" << height << ", channels=" << channels << "\n";
-
 	// Create the image
 	vk::Extent2D extent {
 		static_cast <uint32_t> (width),
@@ -937,8 +934,6 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 
 	// Copy the image data into a staging buffer
 	vk::DeviceSize size = width * height * vk::blockSize(img.format);
-
-	std::cout << "Buffer (staging) size = " << size << std::endl;
 
 	buffer = BufferData(
 		phdev, device,

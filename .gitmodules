@@ -28,3 +28,6 @@
 [submodule "thirdparty/ImageMagick"]
 	path = thirdparty/ImageMagick
 	url = https://github.com/ImageMagick/ImageMagick.git
+[submodule "thirdparty/oidn"]
+	path = thirdparty/oidn
+	url = https://github.com/OpenImageDenoise/oidn

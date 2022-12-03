@@ -70,7 +70,7 @@ struct ECSApp : public BaseApp {
 		io::MouseEventQueue &mouse_events;
 
 		SceneGraph(ECS &ecs_, layers::FontRenderer &fr_, io::MouseEventQueue &mouse_events_)
-aq				: ecs(ecs_), fr(fr_), mouse_events(mouse_events_) {
+				: ecs(ecs_), fr(fr_), mouse_events(mouse_events_) {
 			// TODO: modify this constructor for the rectangle
 			r_background.min = glm::vec2 {5.0f, 5.0f};
 			r_background.max = glm::vec2 {scene_graph_width - 5, window_size.y - 5};

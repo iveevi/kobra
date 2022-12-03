@@ -252,7 +252,11 @@ void GridBasedReservoirs::initialize_optix()
 	std::vector <optix::Reservoir>
 	reservoir_array(optix::TOTAL_RESERVOIRS, default_reservoir);
 
-	gb_ris.light_reservoirs = cuda::make_buffer(reservoir_array);
+	KOBRA_LOG_FILE(Log::INFO) << "Total reservoirs: " << optix::TOTAL_RESERVOIRS
+		<< ", equating to " << optix::TOTAL_RESERVOIRS * sizeof(optix::Reservoir) / 1024.0f / 1024.0f
+		<< " MB\n";
+
+	// gb_ris.light_reservoirs = cuda::make_buffer(reservoir_array);
 	gb_ris.light_reservoirs_old = cuda::make_buffer(reservoir_array);
 
 	d_cell_sizes = cuda::alloc <int> (optix::TOTAL_CELLS);
@@ -563,8 +567,6 @@ static void update_acceleration_structure(GridBasedReservoirs &layer,
 		cuda::free(d_ias_tmp);
 		cuda::free(d_instances);
 	}
-
-	// std::cout << "Done building acceleration structure" << std::endl;
 
 	// Copy address to launch parameters
 	layer.launch_params.traversable = layer.optix.handle;
@@ -902,22 +904,10 @@ void cluster_and_merge
 
 		if (sample_count <= 0)
 			continue;
-		
-		// Initialize or update the existing reservoirs...
-		// Fill out the reservoirs, then update them stochasticly
-		/* for (int j = 0; j < optix::GBR_RESERVOIR_COUNT; j++) {
-			if (j < sample_count) {
-				int index = sample_indices[sample_base + j];
-				dst[dst_base + j] = base[index];
-			} else {
-				dst[dst_base + j] = optix::Reservoir {
-					.sample = optix::GRBSample {},
-					.count = 0,
-					.weight = 0.0f,
-				};
-			}
-		} */
 
+		optix::Reservoir reservoirs[optix::GBR_RESERVOIR_COUNT];
+		optix::Reservoir *dst_res = &dst[dst_base];
+		
 		// First fill empty reservoirs
 		int sample_index = 0;
 		for (int j = 0; j < optix::GBR_RESERVOIR_COUNT; j++) {
@@ -934,6 +924,7 @@ void cluster_and_merge
 			continue;
 
 		// Then update the rest stochastically
+		// TODO: M-capping
 		for (int j = sample_index; j < sample_count; j++) {
 			int index = sample_indices[sample_base + j];
 			optix::Reservoir &res = base[index];
@@ -951,144 +942,6 @@ void cluster_and_merge
 			reservoir_update(&dst_res, res.sample, w, seed);
 			dst_res.count = count + res.count;
 		}
-
-		/* If less than GBR_RESERVOIR_COUNT samples, just copy them
-		if (sample_count <= optix::GBR_RESERVOIR_COUNT) {
-			for (int j = 0; j < optix::GBR_RESERVOIR_COUNT; j++) {
-				if (j < sample_count) {
-					int index = sample_indices[sample_base + j];
-					dst[dst_base + j] = base[index];
-				} else {
-					dst[dst_base + j] = optix::Reservoir {
-						.sample = optix::GRBSample {},
-						.count = 0,
-						.weight = 0.0f,
-					};
-				}
-			}
-
-			continue;
-		}
-
-		// Need to perform k-means clustering with k = GBR_RESERVOIR_COUNT
-		
-		// First, pick k random samples
-		constexpr int k = optix::GBR_RESERVOIR_COUNT;
-
-		float3 centroids[k];
-		for (int j = 0; j < k; j++) {
-			int offset = cuda::rand_uniform(sample_count, seed);
-			int index = sample_indices[sample_base + offset];
-			centroids[j] = base[index].sample.source;
-		}
-
-		// Perform update iterations
-		constexpr int ITERATIONS = 10;
-
-		int clusters[optix::GBR_CELL_LIMIT];
-		for (int it = 0; it < ITERATIONS; it++) {
-			// Assign to clusters
-			for (int j = 0; j < sample_count; j++) {
-				int index = sample_indices[dst_base + j];
-				float3 pos = base[index].sample.source;
-
-				float min_dist = FLT_MAX;
-				int min_index = -1;
-
-				for (int c = 0; c < k; c++) {
-					float dist = length(pos - centroids[c]);
-					if (dist < min_dist) {
-						min_dist = dist;
-						min_index = c;
-					}
-				}
-
-				clusters[j] = min_index;
-			}
-
-			// Update centroids
-			for (int c = 0; c < k; c++) {
-				float3 sum = float3 { 0.0f, 0.0f, 0.0f };
-				int count = 0;
-
-				for (int j = 0; j < sample_count; j++) {
-					if (clusters[j] != c)
-						continue;
-
-					int index = sample_indices[dst_base + j];
-					float3 pos = base[index].sample.source;
-
-					sum += pos;
-					count++;
-				}
-
-				if (count > 0)
-					centroids[c] = sum / (float) count;
-			}
-		}
-
-		// Assign samples to clusters once more
-		for (int j = 0; j < sample_count; j++) {
-			int index = sample_indices[dst_base + j];
-			float3 pos = base[index].sample.source;
-
-			float min_dist = FLT_MAX;
-			int min_index = -1;
-
-			for (int c = 0; c < k; c++) {
-				float dist = length(pos - centroids[c]);
-				if (dist < min_dist) {
-					min_dist = dist;
-					min_index = c;
-				}
-			}
-
-			clusters[j] = min_index;
-		}
-
-		// Merge reservoirs in the same cluster
-		optix::Reservoir merged[k];
-
-		for (int c = 0; c < k; c++) {
-			merged[c] = optix::Reservoir {
-				.sample = optix::GRBSample {},
-				.count = 0,
-				.weight = 0.0f,
-			};
-
-			for (int j = 0; j < sample_count; j++) {
-				if (clusters[j] != c)
-					continue;
-
-		 		int index = sample_indices[dst_base + j];
-				optix::Reservoir r = base[index];
-
-				if (r.count <= 0)
-					continue;
-
-				// Target function is the same, no complicated merging
-				// TODO: at some point, try normal quasi-occlusion
-				float denom = r.count * r.sample.target;
-				float W = (denom > 0.0f) ? r.weight / denom : 0.0f;
-				float w = r.sample.target * W * r.count;
-
-				int count = merged[c].count;
-				reservoir_update(&merged[c], r.sample, w, seed);
-				merged[c].count = count + r.count;
-			}
-
-			// If a reservoir is empty, choose a random sample from the cell
-			if (merged[c].count <= 0) {
-				int offset = cuda::rand_uniform(sample_count, seed);
-				int index = sample_indices[dst_base + offset];
-				merged[c] = base[index];
-			}
-		}
-
-		// Copy merged reservoirs to output
-		// TODO: just use the reference when update above
-		for (int j = 0; j < k; j++)
-			dst[dst_base + j] = merged[j]; */
 	}
 }
 
@@ -1141,8 +994,10 @@ void GridBasedReservoirs::render
 		cudaMemset(d_sample_indices, 0, sizeof(int) * optix::TOTAL_CELLS * optix::GBR_CELL_LIMIT);
 		cudaMemset(d_cell_sizes, 0, sizeof(int) * optix::TOTAL_CELLS);
 
-		optix::Reservoir *base1 = launch_params.gb_ris.new_samples;
-		optix::Reservoir *dst = launch_params.gb_ris.light_reservoirs_old;
+		auto &gb_ris = launch_params.gb_ris;
+
+		optix::Reservoir *base = gb_ris.new_samples;
+		optix::Reservoir *dst = gb_ris.light_reservoirs_old;
 
 		// Create a random permutation of indices to start with
 		// TODO: there is a very large overhead here
@@ -1157,7 +1012,7 @@ void GridBasedReservoirs::render
 		binner <<<blocks, threads>>> (
 			launch_params.camera,
 			camera_delta,
-			base1, total,
+			base, total,
 			d_threads_indices,
 			d_sample_indices,
 			d_cell_sizes
@@ -1168,7 +1023,7 @@ void GridBasedReservoirs::render
 		cuda::free(d_threads_indices);
 
 		cluster_and_merge <<<blocks, threads>>> (
-			dst, base1,
+			dst, base,
 			d_sample_indices,
 			d_cell_sizes,
 			float3 {

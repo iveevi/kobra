@@ -7,8 +7,8 @@ namespace optix {
 
 constexpr float GBR_SIZE = 50.0f;
 
-constexpr int GBR_CELL_LIMIT = 64;
-constexpr int GBR_RESERVOIR_COUNT = 16;
+constexpr int GBR_CELL_LIMIT = 100;
+constexpr int GBR_RESERVOIR_COUNT = 1;
 constexpr int GRID_RESOLUTION = 100;
 constexpr int TOTAL_CELLS = GRID_RESOLUTION * GRID_RESOLUTION * GRID_RESOLUTION;
 constexpr int TOTAL_RESERVOIRS = GBR_RESERVOIR_COUNT * TOTAL_CELLS;

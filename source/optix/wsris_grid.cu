@@ -44,7 +44,7 @@ void make_ray(uint3 idx,
 __forceinline__ __device__
 void accumulate(float4 &dst, float4 sample)
 {
-	if (parameters.accumulate) {
+	if (parameters.accumulate && false) {
 		float4 prev = dst;
 		int count = parameters.samples;
 		dst = (prev * count + sample)/(count + 1);
@@ -256,6 +256,23 @@ extern "C" __global__ void __raygen__eval()
 	parameters.position_buffer[index] = rp.position;
 }
 
+// Ray box intersection
+__device__
+float ray_x_box(float3 o, float3 d, float3 bmin, float3 bmax)
+{
+	float3 inv_d = 1.0f / d;
+	float3 t0 = (bmin - o) * inv_d;
+	float3 t1 = (bmax - o) * inv_d;
+
+	float3 tmin = fminf(t0, t1);
+	float3 tmax = fmaxf(t0, t1);
+
+	float tmin_max = fmaxf(fmaxf(tmin.x, tmin.y), tmin.z);
+	float tmax_min = fminf(fminf(tmax.x, tmax.y), tmax.z);
+
+	return (tmin_max < tmax_min) ? tmin_max : -1.0f;
+}
+
 // Closest hit kernel
 extern "C" __global__ void __closesthit__eval()
 {
@@ -297,14 +314,27 @@ extern "C" __global__ void __closesthit__eval()
 	int iy = (int) (dim * delta.y / (2 * optix::GBR_SIZE));
 	int iz = (int) (dim * delta.z / (2 * optix::GBR_SIZE));
 
+	// TODO: M capping
 	float3 direct = make_float3(0.0);
 	if (ix < 0 || ix >= dim || iy < 0 || iy >= dim || iz < 0 || iz >= dim) {
-		direct = Ld(lc, surface_hit, rp->seed);
-		if (material.type == Shading::eEmissive)
-			direct += material.emission;
-	} else {
-		// TODO: method
-		// Get reservoirs
+#if 0
+		direct = material.emission + Ld(lc, surface_hit, rp->seed);
+#else
+		// Get closest cell to camera; ray box intersection
+		float3 bmin = parameters.camera - optix::GBR_SIZE;
+		float3 bmax = parameters.camera + optix::GBR_SIZE;
+		float3 d = normalize(parameters.camera - surface_hit.x);
+
+		float t = ray_x_box(surface_hit.x, d, bmin, bmax);
+		float3 new_x = surface_hit.x + (t + optix::GBR_SIZE * 0.1f) * d;
+
+		// Get new grid index
+		delta = (new_x - parameters.camera) + optix::GBR_SIZE;
+
+		ix = (int) (dim * delta.x / (2 * optix::GBR_SIZE));
+		iy = (int) (dim * delta.y / (2 * optix::GBR_SIZE));
+		iz = (int) (dim * delta.z / (2 * optix::GBR_SIZE));
+
 		int cell = ix + iy * dim + iz * dim * dim;
 		int mod = (ix + iy + iz) % 2;
 		
@@ -320,41 +350,12 @@ extern "C" __global__ void __closesthit__eval()
 			.weight = 0.0f,
 		};
 
-		int local_samples = 0;
-		for (int i = 0; i < local_samples; i++) {
-			int rindex = cell * GBR_RESERVOIR_COUNT;
-			rindex += rand_uniform(GBR_RESERVOIR_COUNT, rp->seed);
-			const Reservoir &reservoir = gb_ris.light_reservoirs_old[rindex];
-
-			// Get the sample
-			const GRBSample &sample = reservoir.sample; // TODO: refactor to GBR...
-			float denom = reservoir.count * sample.target;
-			float W = (denom > 0 ? reservoir.weight/denom : 0.0f);
-
-			float3 D = sample.point - surface_hit.x;
-			float d = length(D);
-			D /= d;
-
-			float3 Le = sample.value;
-			float3 Li = direct_occluded(
-				lc.handle,
-				surface_hit, Le, sample.normal,
-				sample.type, D, d
-			);
-
-			float target = target_function(Li);
-			float w = reservoir.count * target * W;
-
-			int count = local.count;
-			reservoir_update(&local, GRBSample {
-				.value = Li,
-				.target = target,
-			}, w, rp->seed);
-			local.count = count + reservoir.count;
-		}
-
-		int spatial_samples = 10;
+		int spatial_samples = 3;
 		float3 radius = make_float3(10);
+		float3 sum = make_float3(0);
+
+		// TODO: multireservoir; then choose closest from each reservoir
+		// TODO: remove the duplicate code...
 
 		int Z = 0;
 		for (int i = 0; i < spatial_samples; i++) {
@@ -369,8 +370,17 @@ extern "C" __global__ void __closesthit__eval()
 			int ny = iy + offset.y;
 			int nz = iz + offset.z;
 
-			if (nx < 0 || nx >= dim || ny < 0 || ny >= dim || nz < 0 || nz >= dim)
-				continue;
+			if (nx < 0 || nx >= dim)
+				nx = ix - offset.x;
+
+			if (ny < 0 || ny >= dim)
+				ny = iy - offset.y;
+
+			if (nz < 0 || nz >= dim)
+				nz = iz - offset.z;
+
+			/* if (nx < 0 || nx >= dim || ny < 0 || ny >= dim || nz < 0 || nz >= dim)
+				continue; */
 
 			int ncell = nx + ny * dim + nz * dim * dim;
 
@@ -396,6 +406,8 @@ extern "C" __global__ void __closesthit__eval()
 				surface_hit, Le, sample.normal,
 				sample.type, D, d
 			);
+
+			sum += Li * W;
 			
 			float target = target_function(Li);
 			float w = reservoir.count * target * W;
@@ -411,7 +423,103 @@ extern "C" __global__ void __closesthit__eval()
 				Z += reservoir.count;
 		}
 
-		local.count = Z;
+		sum /= spatial_samples;
+
+		float denom = local.count * local.sample.target;
+		float W = (denom > 0 ? local.weight/denom : 0.0f);
+		direct = local.sample.value * W;
+		if (material.type == Shading::eEmissive)
+			direct += material.emission;
+#endif
+	} else {
+		// TODO: method
+		// Get reservoirs
+		int cell = ix + iy * dim + iz * dim * dim;
+		int mod = (ix + iy + iz) % 2;
+		
+		auto &gb_ris = parameters.gb_ris;
+		int cell_size = gb_ris.cell_sizes[cell];
+
+		float min_dist = 1e10f;
+		int min_index = -1;
+
+		Reservoir local {
+			.sample = {},
+			.count = 0,
+			.weight = 0.0f,
+		};
+
+		int spatial_samples = 3;
+		float3 radius = make_float3(10);
+		float3 sum = make_float3(0);
+
+		int Z = 0;
+		for (int i = 0; i < spatial_samples; i++) {
+			// Generate random cell offset
+			float3 offset_f = 2 * rand_uniform_3f(rp->seed) - 1;
+			offset_f *= radius;
+
+			// TODO: spherical...
+			int3 offset = make_int3(offset_f);
+
+			int nx = ix + offset.x;
+			int ny = iy + offset.y;
+			int nz = iz + offset.z;
+
+			if (nx < 0 || nx >= dim)
+				nx = ix - offset.x;
+
+			if (ny < 0 || ny >= dim)
+				ny = iy - offset.y;
+
+			if (nz < 0 || nz >= dim)
+				nz = iz - offset.z;
+
+			/* if (nx < 0 || nx >= dim || ny < 0 || ny >= dim || nz < 0 || nz >= dim)
+				continue; */
+
+			int ncell = nx + ny * dim + nz * dim * dim;
+
+			auto &gb_ris = parameters.gb_ris;
+
+			int rindex = ncell * GBR_RESERVOIR_COUNT;
+			rindex += rand_uniform(GBR_RESERVOIR_COUNT, rp->seed);
+
+			const Reservoir &reservoir = gb_ris.light_reservoirs_old[rindex];
+
+			// Get the sample
+			const GRBSample &sample = reservoir.sample; // TODO: refactor to GBR...
+			float denom = reservoir.count * sample.target;
+			float W = (denom > 0 ? reservoir.weight/denom : 0.0f);
+
+			float3 D = sample.point - surface_hit.x;
+			float d = length(D);
+			D /= d;
+
+			float3 Le = sample.value;
+			float3 Li = direct_occluded(
+				lc.handle,
+				surface_hit, Le, sample.normal,
+				sample.type, D, d
+			);
+
+			sum += Li * W;
+			
+			float target = target_function(Li);
+			float w = reservoir.count * target * W;
+
+			int count = local.count;
+			reservoir_update(&local, GRBSample {
+				.value = Li,
+				.target = target,
+			}, w, rp->seed);
+			local.count = count + reservoir.count;
+
+			if (sample.target > 1e-6f)
+				Z += reservoir.count;
+		}
+
+		sum /= spatial_samples;
 
 		float denom = local.count * local.sample.target;
 		float W = (denom > 0 ? local.weight/denom : 0.0f);
@@ -453,6 +561,11 @@ extern "C" __global__ void __closesthit__eval()
 	rp->value = direct;
 	if (pdf > 0)
 		rp->value += T * indirect;
+	
+	rp->position = make_float4(x, 1);
+	rp->normal = n;
+	rp->albedo = material.diffuse;
+	rp->wi = wi;
 }
 
 // Other shaders...

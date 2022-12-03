@@ -9,7 +9,7 @@
 
 // TODO: do base app without inheritance (simple struct..., app and baseapp not
 // related)
-struct MotionCapture : public kobra::BaseApp {
+struct UVMapper : public kobra::BaseApp {
 	// TODO: let the scene run on any virtual device?
 	kobra::Entity camera;
 	kobra::Scene scene;
@@ -17,10 +17,10 @@ struct MotionCapture : public kobra::BaseApp {
 	kobra::layers::FontRenderer font_renderer;
 	kobra::layers::ForwardRenderer forward_renderer;
 	
-	MotionCapture(const vk::raii::PhysicalDevice &phdev,
+	UVMapper(const vk::raii::PhysicalDevice &phdev,
 			const std::vector <const char *> &extensions,
 			const std::string &scene_path)
-			: BaseApp(phdev, "MotionCapture",
+			: BaseApp(phdev, "UVMapper",
 				vk::Extent2D {1000, 1000},
 				extensions, vk::AttachmentLoadOp::eLoad
 			),
@@ -33,7 +33,7 @@ struct MotionCapture : public kobra::BaseApp {
 		camera = scene.ecs.get_entity("Camera");
 
 		// Setup forward renderer
-		forward_renderer = kobra::layers::ForwardRenderer::make(get_context());
+		forward_renderer = kobra::layers::ForwardRenderer(get_context());
 
 		// Input callbacks
 		io.mouse_events.subscribe(mouse_callback, this);
@@ -100,7 +100,7 @@ struct MotionCapture : public kobra::BaseApp {
 
 		// Now trace and render
 		cmd.begin({});
-			kobra::layers::render(forward_renderer,
+			forward_renderer.render(
 				scene.ecs,
 				camera.get <kobra::Camera> (),
 				camera.get <kobra::Transform> (),
@@ -180,7 +180,7 @@ struct MotionCapture : public kobra::BaseApp {
 		static float yaw = 0.0f;
 		static float pitch = 0.0f;
 
-		auto &app = *static_cast <MotionCapture *> (us);
+		auto &app = *static_cast <UVMapper *> (us);
 		auto &transform = app.camera.get <kobra::Transform> ();
 
 		// Deltas and directions
@@ -232,7 +232,7 @@ struct MotionCapture : public kobra::BaseApp {
 	
 	// Keyboard callback
 	static void keyboard_callback(void *us, const kobra::io::KeyboardEvent &event) {
-		auto &app = *static_cast <MotionCapture *> (us);
+		auto &app = *static_cast <UVMapper *> (us);
 		auto &transform = app.camera.get <kobra::Transform> ();
 
 		// I for info
@@ -267,11 +267,15 @@ int main()
 		std::cout << "\t" << str << std::endl;
 
 	const std::string scene_path = "/home/venki/models/sponza.kobra";
-	MotionCapture app(phdev, {
-		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-		VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
-		VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
-	}, scene_path);
+
+	UVMapper app {
+		phdev, {
+			VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+			VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
+			VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
+		},
+		scene_path
+	};
 
 	app.run();
 }
