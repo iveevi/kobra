@@ -1,14 +1,20 @@
 // Engine headers
 #include "../../include/app.hpp"
 #include "../../include/capture.hpp"
+#include "../../include/common.hpp"
 #include "../../include/core/interpolation.hpp"
 #include "../../include/layers/font_renderer.hpp"
 #include "../../include/layers/forward_renderer.hpp"
 #include "../../include/scene.hpp"
-#include "../../include/common.hpp"
+#include "../../include/shader_program.hpp"
 
-// TODO: do base app without inheritance (simple struct..., app and baseapp not
-// related)
+// ImGUI headers
+#include <imgui/imgui.h>
+#include <imgui/backends/imgui_impl_glfw.h>
+#include <imgui/backends/imgui_impl_vulkan.h>
+
+#define CWD KOBRA_DIR "/experimental/uv"
+
 struct UVMapper : public kobra::BaseApp {
 	// TODO: let the scene run on any virtual device?
 	kobra::Entity camera;
@@ -16,6 +22,9 @@ struct UVMapper : public kobra::BaseApp {
 
 	kobra::layers::FontRenderer font_renderer;
 	kobra::layers::ForwardRenderer forward_renderer;
+
+	vk::raii::RenderPass imgui_render_pass = nullptr;
+	vk::raii::DescriptorPool imgui_descriptor_pool = nullptr;
 	
 	UVMapper(const vk::raii::PhysicalDevice &phdev,
 			const std::vector <const char *> &extensions,
@@ -26,7 +35,7 @@ struct UVMapper : public kobra::BaseApp {
 			),
 			font_renderer(get_context(),
 				render_pass,
-				KOBRA_DIR "/resources/fonts/noto_sans.ttf"
+				KOBRA_DIR "/resources/fonts/NotoSans.ttf"
 			) {
 		// Load scene and camera
 		scene.load(get_device(), scene_path);
@@ -38,6 +47,76 @@ struct UVMapper : public kobra::BaseApp {
 		// Input callbacks
 		io.mouse_events.subscribe(mouse_callback, this);
 		io.keyboard_events.subscribe(keyboard_callback, this);
+
+		// Setup ImGUI
+		std::vector <vk::DescriptorPoolSize> pool_sizes {
+			vk::DescriptorPoolSize(vk::DescriptorType::eSampler, 1000),
+			vk::DescriptorPoolSize(vk::DescriptorType::eCombinedImageSampler, 1000),
+			vk::DescriptorPoolSize(vk::DescriptorType::eSampledImage, 1000),
+			vk::DescriptorPoolSize(vk::DescriptorType::eStorageImage, 1000),
+			vk::DescriptorPoolSize(vk::DescriptorType::eUniformTexelBuffer, 1000),
+			vk::DescriptorPoolSize(vk::DescriptorType::eStorageTexelBuffer, 1000),
+			vk::DescriptorPoolSize(vk::DescriptorType::eUniformBuffer, 1000),
+			vk::DescriptorPoolSize(vk::DescriptorType::eStorageBuffer, 1000),
+			vk::DescriptorPoolSize(vk::DescriptorType::eUniformBufferDynamic, 1000),
+			vk::DescriptorPoolSize(vk::DescriptorType::eStorageBufferDynamic, 1000),
+			vk::DescriptorPoolSize(vk::DescriptorType::eInputAttachment, 1000)
+		};
+
+		// TODO: pass max sets as a parameter
+		imgui_descriptor_pool = kobra::make_descriptor_pool(device, pool_sizes);
+	
+		imgui_render_pass = kobra::make_render_pass(device,
+			{swapchain.format}, {vk::AttachmentLoadOp::eLoad},
+			depth_buffer.format, vk::AttachmentLoadOp::eClear
+		);
+
+		// Initialize ImGUI
+		ImGui::CreateContext();
+		
+		ImGuiIO &io = ImGui::GetIO();
+		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+
+		// Load custom font
+		io.Fonts->AddFontFromFileTTF(
+			KOBRA_DIR "/resources/fonts/NotoSans.ttf", 20.0f
+		);
+
+		ImGui_ImplGlfw_InitForVulkan(window.handle, true);
+
+		ImGui_ImplVulkan_InitInfo init_info = {};
+		init_info.Instance = *kobra::get_vulkan_instance();
+		init_info.PhysicalDevice = *phdev;
+		init_info.Device = *device;
+		init_info.Queue = *graphics_queue;
+		init_info.DescriptorPool = *descriptor_pool;
+		init_info.MinImageCount = 3;
+		init_info.ImageCount = 3;
+		init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT; // TODO: pass as a parameter
+		
+		ImGui_ImplVulkan_Init(&init_info, *imgui_render_pass);
+
+		// command_now(queue, ...)
+		vk::raii::CommandBuffer immediate = kobra::make_command_buffer
+			(device, command_pool);
+
+		// Upload fonts
+		immediate.begin({});
+			ImGui_ImplVulkan_CreateFontsTexture(*immediate);
+		immediate.end();
+
+		// Submit command buffer
+		vk::SubmitInfo submit_info = {};
+		submit_info.commandBufferCount = 1;
+		submit_info.pCommandBuffers = &*immediate;
+
+		graphics_queue.submit(submit_info, nullptr);
+
+		// Wait for the command buffer to finish
+		graphics_queue.waitIdle();
+
+		// Destroy CPU-side resources
+		ImGui_ImplVulkan_DestroyFontUploadObjects();
 	}
 
 	float time = 0.0f;
@@ -145,22 +224,25 @@ struct UVMapper : public kobra::BaseApp {
 
 			font_renderer.render(cmd, {t_fps});
 
+			// Draw ImGui
+			ImGui_ImplVulkan_NewFrame();
+			ImGui_ImplGlfw_NewFrame();
+
+			ImGui::NewFrame();
+
+			ImGui::Begin("Hello, world!");
+			ImGui::Text("This is some useful text.");
+			ImGui::End();
+
+			ImGui::Render();
+
+			ImGui_ImplVulkan_RenderDrawData(
+				ImGui::GetDrawData(),
+				*cmd
+			);
+
 			cmd.endRenderPass();
 		cmd.end();
-
-#ifdef RECORD
-
-		// Write the frame to the video
-		cv::Mat mat(1000, 1000, CV_8UC4, frame.data());
-		cv::cvtColor(mat, mat, cv::COLOR_BGRA2RGB);
-		capture.write(mat);
-
-		if (time > camera_pos.size() - 1) {
-			capture.release();
-			terminate_now();
-		}
-
-#endif
 
 		// Update time (fixed)
 		time += 1/60.0f;

@@ -200,25 +200,29 @@ KOBRA_MAKE_SHARED(Raytracer, RaytracerPtr);
 
 // _ref specializations
 // TODO: another header
-template <>
-struct ECS::_ref <Transform> {
-	static Transform &ref(ECS *ecs, int i) {
-		return ecs->transforms[i];
+#define KOBRA_REF(T, Array)					\
+	template <>						\
+	struct ECS::_ref <T> {					\
+		static T &ref(ECS *ecs, int i) {		\
+			return ecs->Array[i];			\
+		}						\
+								\
+		static T &get(ECS *ecs, int i) {		\
+			return ecs->Array[i];			\
+		}						\
+								\
+		static const T &get(const ECS *ecs, int i) {	\
+			return ecs->Array[i];			\
+		}						\
+		static bool exists(const ECS *ecs, int i) {	\
+			return ecs->Array.size() > i;		\
+		}						\
 	}
 
-	static Transform &get(ECS *ecs, int i) {
-		return ecs->transforms[i];
-	}
+KOBRA_REF(Transform, transforms);
 
-	static const Transform &get(const ECS *ecs, int i) {
-		return ecs->transforms[i];
-	}
-
-	static bool exists(const ECS *ecs, int i) {
-		return ecs->transforms.size() > i;
-	}
-};
-
+// TODO: we shouldnt need to use refs...
+// if it is large, then move it...
 #define KOBRA_RET_SHARED(T, Ret, Array)				\
 	template <>						\
 	struct ECS::_ref <T> {					\

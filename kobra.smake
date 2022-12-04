@@ -22,25 +22,13 @@ build_default.define({
 })
 
 # TODO: require method for dependencies
-build_default.add_sources('main.cu', kobra_sources)
+build_default.add_sources('main.cu', kobra_sources, glslang_sources)
 
 # TODO: find system
 build_default.add_includes(kobra_includes)
 
-build_default.add_libraries(
-	'glfw',
-	'vulkan',
-	'assimp',
-    'pthread',
-	'freetype',
-	'opencv_core',
-	'opencv_videoio',
-	'opencv_imgcodecs',
-	'opencv_imgproc',
-	'Magick++-7.Q16HDRI', # TODO: find header and libraries...
-	'MagickWand-7.Q16HDRI',
-	'MagickCore-7.Q16HDRI'
-)
+# TODO: find header and libraries...
+build_default.add_libraries(kobra_libraries)
 
 # TODO: dependencies in another smake file, then
 # force smake to delay references
@@ -124,7 +112,7 @@ build_sanitizer.copy(build_gdb)
 bench = kobra.new_build('bench')
 bench.copy(build_default)
 
-bench.set_sources('bench.cu', kobra_sources)
+bench.set_sources('bench.cu', kobra_sources, glslang_sources)
 
 # Postbuilds
 kobra.set_post_builds(

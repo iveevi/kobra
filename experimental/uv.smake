@@ -12,7 +12,9 @@ build_default.set_flags(flags)
 
 build_default.add_sources(
         'uv/main.cpp',
-        localize(kobra_sources, '..')
+        localize(kobra_sources, '..'),
+        localize(glslang_sources, '..'),
+        localize(imgui_sources, '..'),
 )
 
 build_default.add_includes(localize(kobra_includes, '..'))

@@ -101,7 +101,7 @@ struct RenderArea {
 	glm::vec2 max;
 
 	// Default is full screen
-	RenderArea() : min {-1.0f, -1.0f}, max {1.0f, 1.0f} {}
+	RenderArea() : min {-1.0f, -1.0f}, max {-1.0f, -1.0f} {}
 
 	// Also specify min and max
 	RenderArea(const glm::vec2 &_min, const glm::vec2 &_max)

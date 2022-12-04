@@ -38,6 +38,14 @@ struct Material {
 	// TODO: emissive termm, reafctor eEmissive to eLight?
 	Shading		type = Shading::eDiffuse;
 
+	// TODO: each material needs a reference to a shader program...
+	// how do we extend it to support multiple shader languages, like CUDA?
+	// Material presets:
+	// 	GGX, Disney, Blinn-Phong based materials?
+	// 	Then restrict CUDA to GGX only?
+	//	Actually cuda can implement all these, and then extract
+	//	appropriate during calculate_material()
+
 	// Properties
 	// TODO: refactor to better names...
 	bool has_albedo() const;

@@ -11,16 +11,32 @@ kobra_sources = [
 	'source/asmodeus/*',
     'source/optix/core.cu'
 ]
+
+glslang_sources = [
+    'thirdparty/glslang/SPIRV/GlslangToSpv.cpp',
+    'thirdparty/glslang/StandAlone/ResourceLimits.cpp'
+]
+
+imgui_sources = [
+    'thirdparty/imgui/imgui.cpp',
+    'thirdparty/imgui/imgui_demo.cpp',
+    'thirdparty/imgui/imgui_draw.cpp',
+    'thirdparty/imgui/imgui_tables.cpp',
+    'thirdparty/imgui/imgui_widgets.cpp',
+    'thirdparty/imgui/backends/imgui_impl_glfw.cpp',
+    'thirdparty/imgui/backends/imgui_impl_vulkan.cpp',
+]
 	
 kobra_includes = [
-    'thirdparty',
+	'/usr/include/ImageMagick-7',
 	'thirdparty/freetype/include',
 	'thirdparty/glm',
 	'thirdparty/optix',
 	'thirdparty/termcolor/include',
 	'thirdparty/tinyfiledialogs',
     '/usr/include/opencv4',
-	'/usr/include/ImageMagick-7'
+    'thirdparty',
+    'thirdparty/imgui',
 ]
 
 kobra_libraries = [
@@ -29,6 +45,10 @@ kobra_libraries = [
 	'assimp',
     'pthread',
 	'freetype',
+    'glslang',
+    'SPIRV',
+    'OSDependent',
+    'OGLCompiler',
 	'opencv_core',
 	'opencv_videoio',
 	'opencv_imgcodecs',
