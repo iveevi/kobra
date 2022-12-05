@@ -26,6 +26,12 @@ imgui_sources = [
     'thirdparty/imgui/backends/imgui_impl_glfw.cpp',
     'thirdparty/imgui/backends/imgui_impl_vulkan.cpp',
 ]
+
+implot_sources = [
+    'thirdparty/implot/implot.cpp',
+    'thirdparty/implot/implot_demo.cpp',
+    'thirdparty/implot/implot_items.cpp',
+]
 	
 kobra_includes = [
 	'/usr/include/ImageMagick-7',

@@ -34,7 +34,7 @@ struct HybridTracer {
 	vk::raii::PhysicalDevice *phdev = nullptr;
 	vk::raii::DescriptorPool *descriptor_pool = nullptr;
 
-	CommandBuffer cmd = nullptr;
+	vk::raii::CommandBuffer cmd = nullptr;
 	vk::raii::Queue queue = nullptr;
 
 	// Geometry buffers
@@ -67,15 +67,15 @@ struct HybridTracer {
 	DepthBuffer depth = nullptr;
 
 	// Vulkan structures
-	RenderPass gbuffer_render_pass = nullptr;
-	RenderPass present_render_pass = nullptr;
-	Framebuffer framebuffer = nullptr;
+	vk::raii::RenderPass gbuffer_render_pass = nullptr;
+	vk::raii::RenderPass present_render_pass = nullptr;
+	vk::raii::Framebuffer framebuffer = nullptr;
 
-	Pipeline gbuffer_pipeline = nullptr;
-	Pipeline present_pipeline = nullptr;
+	vk::raii::Pipeline gbuffer_pipeline = nullptr;
+	vk::raii::Pipeline present_pipeline = nullptr;
 
-	PipelineLayout gbuffer_ppl = nullptr;
-	PipelineLayout present_ppl = nullptr;
+	vk::raii::PipelineLayout gbuffer_ppl = nullptr;
+	vk::raii::PipelineLayout present_ppl = nullptr;
 
 	vk::Extent2D extent = { 0, 0 };
 
@@ -151,8 +151,8 @@ void capture(HybridTracer &, std::vector <uint8_t> &);
 void compute(HybridTracer &, const ECS &, const Camera &, const Transform &, bool = false);
 
 void render(HybridTracer &,
-	const CommandBuffer &,
-	const Framebuffer &,
+	const vk::raii::CommandBuffer &,
+	const vk::raii::Framebuffer &,
 	const RenderArea & = {{-1, -1}, {-1, -1}});
 
 }

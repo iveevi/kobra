@@ -45,7 +45,7 @@ Framer Framer::make(const Context &context)
 	layer.dset = std::move(dsets.front());
 
 	// Push constants and pipeline layout
-	layer.ppl = PipelineLayout {
+	layer.ppl = vk::raii::PipelineLayout {
 		*context.device,
 		{{}, *layer.dsl, {}}
 	};
@@ -118,8 +118,8 @@ Framer Framer::make(const Context &context)
 // TODO: custom extent
 void render(Framer &layer,
 		const std::vector <uint32_t> &frame,
-		const CommandBuffer &cmd,
-		const Framebuffer &framebuffer,
+		const vk::raii::CommandBuffer &cmd,
+		const vk::raii::Framebuffer &framebuffer,
 		const RenderArea &ra)
 {
 	// Upload data to the buffer

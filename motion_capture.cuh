@@ -33,6 +33,8 @@
 #include "include/texture.hpp"
 #include "include/asmodeus/backend.cuh"
 #include "include/asmodeus/wsris.cuh"
+#include "include/ui/framerate.hpp"
+#include "include/layers/imgui.hpp"
 
 // TODO: do base app without inheritance (simple struct..., app and baseapp not related)
 // TODO: and then insert layers with .attach() method
@@ -46,6 +48,7 @@ struct MotionCapture : public kobra::BaseApp {
 	kobra::layers::Denoiser denoiser;
 	kobra::layers::Framer framer;
 	kobra::layers::FontRenderer font_renderer;
+	kobra::layers::ImGUI imgui;
 
 	kobra::asmodeus::GridBasedReservoirs grid_based;
 
@@ -79,7 +82,7 @@ struct MotionCapture : public kobra::BaseApp {
 			),
 			font_renderer(get_context(),
 				render_pass,
-				"resources/fonts/noto_sans.ttf"
+				"resources/fonts/NotoSans.ttf"
 			) {
 		// Load scene and camera
 		scene.load(get_device(), scene_path);
@@ -157,6 +160,18 @@ struct MotionCapture : public kobra::BaseApp {
 		// Input callbacks
 		io.mouse_events.subscribe(mouse_callback, this);
 		io.keyboard_events.subscribe(keyboard_callback, this);
+		
+		// Initialize ImGUI
+		// TODO: ui/core method (initialize)
+		ImGui::CreateContext();
+		ImPlot::CreateContext();
+
+		ImGui_ImplGlfw_InitForVulkan(window.handle, true);
+
+		imgui = kobra::layers::ImGUI(get_context(), window, graphics_queue);
+		imgui.set_font(KOBRA_DIR "/resources/fonts/NotoSans.ttf", 30);
+
+		imgui.attach(std::make_shared <kobra::ui::FramerateAttachment> ());
 		
 		// NOTE: we need this precomputation step to load all the
 		// resources before rendering; we need some system to allocate
@@ -376,14 +391,7 @@ struct MotionCapture : public kobra::BaseApp {
 			// TODO: import CUDA to Vulkan and render straight to the image
 			kobra::layers::render(framer, b_traced_cpu, cmd, framebuffer);
 
-			// kobra::layers::capture(tracer, frame);
-
 			// Text to render
-			kobra::ui::Text t_fps(
-				kobra::common::sprintf("%.2f fps", 1.0f/compute_time),
-				{5, 5}, glm::vec3 {1, 0.6, 0.6}, 0.7f
-			);
-
 			kobra::ui::Text t_samples(
 				kobra::common::sprintf("%d samples", tracer.launch_params.samples),
 				{0, 5}, glm::vec3 {1, 0.6, 0.6}, 0.7f
@@ -445,11 +453,13 @@ struct MotionCapture : public kobra::BaseApp {
 			);
 
 			font_renderer.render(cmd, {
-				t_fps, t_samples,
+				t_samples,
 				t_mode, t_additional
 			});
 
 			cmd.endRenderPass();
+
+			imgui.render(cmd, framebuffer, extent);
 		cmd.end();
 
 #ifdef RECORD
@@ -493,7 +503,7 @@ struct MotionCapture : public kobra::BaseApp {
 	
 	// Mouse callback
 	static void mouse_callback(void *us, const kobra::io::MouseEvent &event) {
-		static const int pan_button = GLFW_MOUSE_BUTTON_MIDDLE;
+		static const int pan_button = GLFW_MOUSE_BUTTON_RIGHT;
 
 		static const float sensitivity = 0.001f;
 

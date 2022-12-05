@@ -175,8 +175,8 @@ static void configure_dset(ForwardRenderer &layer,
 void ForwardRenderer::render(const ECS &ecs,
 		const Camera &camera,
 		const Transform &camera_transform,
-		const CommandBuffer &cmd,
-		const Framebuffer &framebuffer,
+		const vk::raii::CommandBuffer &cmd,
+		const vk::raii::Framebuffer &framebuffer,
 		const RenderArea &ra)
 {
 	// Apply the rendering area

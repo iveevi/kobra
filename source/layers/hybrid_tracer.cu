@@ -512,7 +512,7 @@ HybridTracer HybridTracer::make(const Context &context)
 		1
 	};
 
-	layer.framebuffer = Framebuffer {*context.device, fb_info};
+	layer.framebuffer = vk::raii::Framebuffer {*context.device, fb_info};
 
 	// Create the present render pass
 	layer.present_render_pass = make_render_pass(*context.device,
@@ -540,12 +540,12 @@ HybridTracer HybridTracer::make(const Context &context)
 		0, sizeof(PushConstants)
 	};
 
-	layer.gbuffer_ppl = PipelineLayout {
+	layer.gbuffer_ppl = vk::raii::PipelineLayout {
 		*context.device,
 		{{}, *layer.gbuffer_dsl, gbuffer_push_constants}
 	};
 
-	layer.present_ppl = PipelineLayout {
+	layer.present_ppl = vk::raii::PipelineLayout {
 		*context.device,
 		{{}, *layer.present_dsl, {}}
 	};
@@ -1096,7 +1096,7 @@ static void update_sbt_data(HybridTracer &layer,
 // TODO: perform this in a separate command buffer than the main one used to
 // present, etc (and separate queue)
 static void generate_gbuffers(HybridTracer &layer,
-		const CommandBuffer &cmd,
+		const vk::raii::CommandBuffer &cmd,
 		const ECS &ecs,
 		const Camera &camera,
 		const Transform &transform)

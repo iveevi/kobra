@@ -18,10 +18,10 @@ struct Framer {
 	vk::raii::DescriptorPool *descriptor_pool = nullptr;
 
 	// Local Vulkan structures
-	RenderPass render_pass = nullptr;
+	vk::raii::RenderPass render_pass = nullptr;
 
-	Pipeline pipeline = nullptr;
-	PipelineLayout ppl = nullptr;
+	vk::raii::Pipeline pipeline = nullptr;
+	vk::raii::PipelineLayout ppl = nullptr;
 
 	vk::Extent2D extent = { 0, 0 };
 
@@ -47,8 +47,8 @@ struct Framer {
 // TODO: pack command buffer, frame buffer and render area into a struct
 void render(Framer &,
 	const std::vector <uint32_t> &,
-	const CommandBuffer &,
-	const Framebuffer &,
+	const vk::raii::CommandBuffer &,
+	const vk::raii::Framebuffer &,
 	const RenderArea & = {{-1, -1}, {-1, -1}});
 
 }

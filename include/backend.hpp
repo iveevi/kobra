@@ -60,12 +60,6 @@ struct Context {
 };
 
 // Simpler Vulkan aliases
-using CommandBuffer = vk::raii::CommandBuffer;
-using Framebuffer = vk::raii::Framebuffer;
-using Pipeline = vk::raii::Pipeline;
-using PipelineLayout = vk::raii::PipelineLayout;
-using RenderPass = vk::raii::RenderPass;
-
 using SyncTask = std::pair <std::string, std::function <void ()>>;
 
 class SyncQueue {
@@ -100,12 +94,13 @@ struct RenderArea {
 	glm::vec2 min;
 	glm::vec2 max;
 
-	// Default is full screen
-	RenderArea() : min {-1.0f, -1.0f}, max {-1.0f, -1.0f} {}
-
-	// Also specify min and max
-	RenderArea(const glm::vec2 &_min, const glm::vec2 &_max)
-			: min {_min}, max {_max} {}
+	// Full screen
+	static RenderArea full() {
+		return RenderArea {
+			{-1, -1},
+			{-1, -1}
+		};
+	}
 
 	// Width and height
 	uint32_t width() const {
@@ -259,6 +254,36 @@ vk::raii::DeviceMemory allocate_device_memory(const vk::raii::Device &,
 // Create a command buffer
 vk::raii::CommandBuffer make_command_buffer(const vk::raii::Device &,
 		const vk::raii::CommandPool &);
+
+// Execute a command buffer immediately
+inline void command_now
+		(const vk::raii::Device &device,
+		const vk::raii::CommandPool &command_pool,
+		const std::function <void (const vk::raii::CommandBuffer &)> &command)
+{
+	// TODO: get queue from queue system...
+	
+	vk::raii::Queue queue {device, 0, 0};
+	vk::raii::CommandBuffer command_buffer = make_command_buffer(device, command_pool);
+
+	command_buffer.begin({});
+	command(command_buffer);
+	command_buffer.end();
+
+	// Submit and wait
+	// TODO: return fence
+
+	queue.submit(
+		vk::SubmitInfo {
+			0, nullptr, nullptr,
+			1, &*command_buffer,
+			0, nullptr
+		},
+		nullptr
+	);
+
+	queue.waitIdle();
+}
 
 // Pick a surface format
 vk::SurfaceFormatKHR pick_surface_format(const vk::raii::PhysicalDevice &,

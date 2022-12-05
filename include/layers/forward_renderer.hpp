@@ -26,13 +26,13 @@ struct ForwardRenderer {
 	vk::raii::DescriptorPool *descriptor_pool = nullptr;
 	
 	// Vulkan structures
-	RenderPass render_pass = nullptr;
+	vk::raii::RenderPass render_pass = nullptr;
 
 	// TODO: map of pipelines, for each rasterizer...
-	Pipeline pipeline = nullptr;
+	vk::raii::Pipeline pipeline = nullptr;
 
 	// Pipeline layout is shared across all fragment shaders
-	PipelineLayout ppl = nullptr;
+	vk::raii::PipelineLayout ppl = nullptr;
 
 	vk::Extent2D extent = { 0, 0 };
 
@@ -56,9 +56,9 @@ struct ForwardRenderer {
 	void render(const ECS &,
 		const Camera &,
 		const Transform &,
-		const CommandBuffer &,
-		const Framebuffer &,
-		const RenderArea & = RenderArea());
+		const vk::raii::CommandBuffer &,
+		const vk::raii::Framebuffer &,
+		const RenderArea & = RenderArea::full());
 };
 
 }

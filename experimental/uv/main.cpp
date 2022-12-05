@@ -5,13 +5,10 @@
 #include "../../include/core/interpolation.hpp"
 #include "../../include/layers/font_renderer.hpp"
 #include "../../include/layers/forward_renderer.hpp"
+#include "../../include/layers/imgui.hpp"
 #include "../../include/scene.hpp"
 #include "../../include/shader_program.hpp"
-
-// ImGUI headers
-#include <imgui/imgui.h>
-#include <imgui/backends/imgui_impl_glfw.h>
-#include <imgui/backends/imgui_impl_vulkan.h>
+#include "../../include/ui/framerate.hpp"
 
 #define CWD KOBRA_DIR "/experimental/uv"
 
@@ -20,11 +17,8 @@ struct UVMapper : public kobra::BaseApp {
 	kobra::Entity camera;
 	kobra::Scene scene;
 
-	kobra::layers::FontRenderer font_renderer;
 	kobra::layers::ForwardRenderer forward_renderer;
-
-	vk::raii::RenderPass imgui_render_pass = nullptr;
-	vk::raii::DescriptorPool imgui_descriptor_pool = nullptr;
+	kobra::layers::ImGUI imgui;
 	
 	UVMapper(const vk::raii::PhysicalDevice &phdev,
 			const std::vector <const char *> &extensions,
@@ -32,10 +26,6 @@ struct UVMapper : public kobra::BaseApp {
 			: BaseApp(phdev, "UVMapper",
 				vk::Extent2D {1000, 1000},
 				extensions, vk::AttachmentLoadOp::eLoad
-			),
-			font_renderer(get_context(),
-				render_pass,
-				KOBRA_DIR "/resources/fonts/NotoSans.ttf"
 			) {
 		// Load scene and camera
 		scene.load(get_device(), scene_path);
@@ -48,75 +38,17 @@ struct UVMapper : public kobra::BaseApp {
 		io.mouse_events.subscribe(mouse_callback, this);
 		io.keyboard_events.subscribe(keyboard_callback, this);
 
-		// Setup ImGUI
-		std::vector <vk::DescriptorPoolSize> pool_sizes {
-			vk::DescriptorPoolSize(vk::DescriptorType::eSampler, 1000),
-			vk::DescriptorPoolSize(vk::DescriptorType::eCombinedImageSampler, 1000),
-			vk::DescriptorPoolSize(vk::DescriptorType::eSampledImage, 1000),
-			vk::DescriptorPoolSize(vk::DescriptorType::eStorageImage, 1000),
-			vk::DescriptorPoolSize(vk::DescriptorType::eUniformTexelBuffer, 1000),
-			vk::DescriptorPoolSize(vk::DescriptorType::eStorageTexelBuffer, 1000),
-			vk::DescriptorPoolSize(vk::DescriptorType::eUniformBuffer, 1000),
-			vk::DescriptorPoolSize(vk::DescriptorType::eStorageBuffer, 1000),
-			vk::DescriptorPoolSize(vk::DescriptorType::eUniformBufferDynamic, 1000),
-			vk::DescriptorPoolSize(vk::DescriptorType::eStorageBufferDynamic, 1000),
-			vk::DescriptorPoolSize(vk::DescriptorType::eInputAttachment, 1000)
-		};
-
-		// TODO: pass max sets as a parameter
-		imgui_descriptor_pool = kobra::make_descriptor_pool(device, pool_sizes);
-	
-		imgui_render_pass = kobra::make_render_pass(device,
-			{swapchain.format}, {vk::AttachmentLoadOp::eLoad},
-			depth_buffer.format, vk::AttachmentLoadOp::eClear
-		);
-
 		// Initialize ImGUI
+		// TODO: ui/core method (initialize)
 		ImGui::CreateContext();
-		
-		ImGuiIO &io = ImGui::GetIO();
-		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-
-		// Load custom font
-		io.Fonts->AddFontFromFileTTF(
-			KOBRA_DIR "/resources/fonts/NotoSans.ttf", 20.0f
-		);
+		ImPlot::CreateContext();
 
 		ImGui_ImplGlfw_InitForVulkan(window.handle, true);
 
-		ImGui_ImplVulkan_InitInfo init_info = {};
-		init_info.Instance = *kobra::get_vulkan_instance();
-		init_info.PhysicalDevice = *phdev;
-		init_info.Device = *device;
-		init_info.Queue = *graphics_queue;
-		init_info.DescriptorPool = *descriptor_pool;
-		init_info.MinImageCount = 3;
-		init_info.ImageCount = 3;
-		init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT; // TODO: pass as a parameter
-		
-		ImGui_ImplVulkan_Init(&init_info, *imgui_render_pass);
+		imgui = kobra::layers::ImGUI(get_context(), window, graphics_queue);
+		imgui.set_font(KOBRA_DIR "/resources/fonts/NotoSans.ttf", 30);
 
-		// command_now(queue, ...)
-		vk::raii::CommandBuffer immediate = kobra::make_command_buffer
-			(device, command_pool);
-
-		// Upload fonts
-		immediate.begin({});
-			ImGui_ImplVulkan_CreateFontsTexture(*immediate);
-		immediate.end();
-
-		// Submit command buffer
-		vk::SubmitInfo submit_info = {};
-		submit_info.commandBufferCount = 1;
-		submit_info.pCommandBuffers = &*immediate;
-
-		graphics_queue.submit(submit_info, nullptr);
-
-		// Wait for the command buffer to finish
-		graphics_queue.waitIdle();
-
-		// Destroy CPU-side resources
-		ImGui_ImplVulkan_DestroyFontUploadObjects();
+		imgui.attach(std::make_shared <kobra::ui::FramerateAttachment> ());
 	}
 
 	float time = 0.0f;
@@ -128,13 +60,6 @@ struct UVMapper : public kobra::BaseApp {
 			const vk::raii::Framebuffer &framebuffer) override {
 		// Move the camera
 		auto &transform = camera.get <kobra::Transform> ();
-		
-		// Interpolate camera position
-		/* glm::vec3 pos = kobra::core::piecewise_linear(camera_pos_seq, time);
-		glm::vec3 rot = kobra::core::piecewise_linear(camera_rot_seq, time);
-
-		transform.position = pos;
-		transform.rotation = rot; */
 
 		float speed = 20.0f * frame_time;
 		
@@ -186,62 +111,7 @@ struct UVMapper : public kobra::BaseApp {
 				cmd, framebuffer
 			);
 
-			// TODO: UI layer...
-			// Text to render
-			kobra::ui::Text t_fps(
-				kobra::common::sprintf("%.2f fps", 1.0f/frame_time),
-				{5, 5}, glm::vec3 {1, 0.6, 0.6}, 0.7f
-			);
-
-			// Start render pass
-			// TODO: Make this a function
-			std::array <vk::ClearValue, 2> clear_values = {
-				vk::ClearValue {
-					vk::ClearColorValue {
-						std::array <float, 4> {0.0f, 0.0f, 0.0f, 1.0f}
-					}
-				},
-				vk::ClearValue {
-					vk::ClearDepthStencilValue {
-						1.0f, 0
-					}
-				}
-			};
-
-			cmd.beginRenderPass(
-				vk::RenderPassBeginInfo {
-					*render_pass,
-					*framebuffer,
-					vk::Rect2D {
-						vk::Offset2D {0, 0},
-						extent,
-					},
-					static_cast <uint32_t> (clear_values.size()),
-					clear_values.data()
-				},
-				vk::SubpassContents::eInline
-			);
-
-			font_renderer.render(cmd, {t_fps});
-
-			// Draw ImGui
-			ImGui_ImplVulkan_NewFrame();
-			ImGui_ImplGlfw_NewFrame();
-
-			ImGui::NewFrame();
-
-			ImGui::Begin("Hello, world!");
-			ImGui::Text("This is some useful text.");
-			ImGui::End();
-
-			ImGui::Render();
-
-			ImGui_ImplVulkan_RenderDrawData(
-				ImGui::GetDrawData(),
-				*cmd
-			);
-
-			cmd.endRenderPass();
+			imgui.render(cmd, framebuffer, extent);
 		cmd.end();
 
 		// Update time (fixed)
@@ -250,7 +120,7 @@ struct UVMapper : public kobra::BaseApp {
 	
 	// Mouse callback
 	static void mouse_callback(void *us, const kobra::io::MouseEvent &event) {
-		static const int pan_button = GLFW_MOUSE_BUTTON_MIDDLE;
+		static const int pan_button = GLFW_MOUSE_BUTTON_RIGHT;
 
 		static const float sensitivity = 0.001f;
 

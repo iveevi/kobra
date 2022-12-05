@@ -22,7 +22,12 @@ build_default.define({
 })
 
 # TODO: require method for dependencies
-build_default.add_sources('main.cu', kobra_sources, glslang_sources)
+build_default.add_sources('main.cu',
+        kobra_sources,
+        glslang_sources,
+        imgui_sources,
+        implot_sources
+)
 
 # TODO: find system
 build_default.add_includes(kobra_includes)

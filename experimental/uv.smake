@@ -15,6 +15,7 @@ build_default.add_sources(
         localize(kobra_sources, '..'),
         localize(glslang_sources, '..'),
         localize(imgui_sources, '..'),
+        localize(implot_sources, '..'),
 )
 
 build_default.add_includes(localize(kobra_includes, '..'))
