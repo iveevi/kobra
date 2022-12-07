@@ -13,20 +13,16 @@ const std::vector <DSLB> Framer::dsl_bindings = {
 };
 
 // Create the layer
-// TODO: all custom extent...
-Framer Framer::make(const Context &context)
+Framer::Framer(const Context &context)
 {
-	// To return
-	Framer layer;
-
 	// Extract critical Vulkan structures
-	layer.device = context.device;
-	layer.phdev = context.phdev;
-	layer.descriptor_pool = context.descriptor_pool;
-	layer.extent = context.extent;
+	device = context.device;
+	phdev = context.phdev;
+	descriptor_pool = context.descriptor_pool;
+	sync_queue = context.sync_queue;
 
 	// Create the present render pass
-	layer.render_pass = make_render_pass(*context.device,
+	render_pass = make_render_pass(*context.device,
 		{context.swapchain_format},
 		{vk::AttachmentLoadOp::eClear},
 		context.depth_format,
@@ -34,20 +30,20 @@ Framer Framer::make(const Context &context)
 	);
 
 	// Descriptor set layout
-	layer.dsl = make_descriptor_set_layout(*context.device, dsl_bindings);
+	dsl = make_descriptor_set_layout(*context.device, dsl_bindings);
 
 	// Allocate present descriptor set
 	auto dsets = vk::raii::DescriptorSets {
 		*context.device,
-		{**context.descriptor_pool, *layer.dsl}
+		{**context.descriptor_pool, *dsl}
 	};
 
-	layer.dset = std::move(dsets.front());
+	dset = std::move(dsets.front());
 
 	// Push constants and pipeline layout
-	layer.ppl = vk::raii::PipelineLayout {
+	ppl = vk::raii::PipelineLayout {
 		*context.device,
-		{{}, *layer.dsl, {}}
+		{{}, *dsl, {}}
 	};
 
 	// Create the present pipeline
@@ -57,23 +53,21 @@ Framer Framer::make(const Context &context)
 	});
 	
 	GraphicsPipelineInfo present_grp_info {
-		*context.device, layer.render_pass,
+		*context.device, render_pass,
 		std::move(shaders[0]), nullptr,
 		std::move(shaders[1]), nullptr,
 		{}, {},
-		layer.ppl
+		ppl
 	};
 
 	present_grp_info.no_bindings = true;
 	present_grp_info.depth_test = false;
 	present_grp_info.depth_write = false;
 
-	layer.pipeline = make_graphics_pipeline(present_grp_info);
+	pipeline = make_graphics_pipeline(present_grp_info);
 
 	// Allocate resources for rendering results
-
-	// TODO: shared resource as a CUDA texture?
-	layer.result_image = ImageData(
+	result_image = ImageData(
 		*context.phdev, *context.device,
 		vk::Format::eR8G8B8A8Unorm,
 		context.extent,
@@ -85,7 +79,7 @@ Framer Framer::make(const Context &context)
 		vk::ImageAspectFlagBits::eColor
 	);
 
-	layer.result_sampler = make_sampler(*context.device, layer.result_image);
+	result_sampler = make_sampler(*context.device, result_image);
 
 	// Allocate staging buffer
 	vk::DeviceSize stage_size = context.extent.width
@@ -97,7 +91,7 @@ Framer Framer::make(const Context &context)
 		| vk::MemoryPropertyFlagBits::eHostCoherent
 		| vk::MemoryPropertyFlagBits::eHostVisible;
 
-	layer.result_buffer = BufferData(
+	result_buffer = BufferData(
 		*context.phdev, *context.device, stage_size,
 		usage | vk::BufferUsageFlagBits::eTransferSrc, mem_props
 	);
@@ -105,44 +99,85 @@ Framer Framer::make(const Context &context)
 	// Bind image sampler to the present descriptor set
 	//	immediately, since it will not change
 	bind_ds(*context.device,
-		layer.dset,
-		layer.result_sampler,
-		layer.result_image, 0
+		dset,
+		result_sampler,
+		result_image, 0
+	);
+}
+
+// Resize callback
+void Framer::resize_callback(const Image &frame)
+{
+	// Resize resources
+	result_buffer.resize(frame.size());
+
+	result_image = ImageData(
+		*phdev, *device,
+		vk::Format::eR8G8B8A8Unorm,
+		{frame.width, frame.height},
+		vk::ImageTiling::eOptimal,
+		vk::ImageUsageFlagBits::eSampled
+			| vk::ImageUsageFlagBits::eTransferDst,
+		vk::ImageLayout::eUndefined,
+		vk::MemoryPropertyFlagBits::eDeviceLocal,
+		vk::ImageAspectFlagBits::eColor
 	);
 
-	// Return
-	return layer;
+	result_sampler = make_sampler(*device, result_image);
+
+	bind_ds(*device,
+		dset,
+		result_sampler,
+		result_image, 0
+	);
 }
 
 // Render to the presentable framebuffer
 // TODO: custom extent
-void render(Framer &layer,
-		const std::vector <uint32_t> &frame,
+void Framer::render
+		(const Image &frame,
 		const vk::raii::CommandBuffer &cmd,
 		const vk::raii::Framebuffer &framebuffer,
+		const vk::Extent2D &extent,
 		const RenderArea &ra)
 {
 	// Upload data to the buffer
 	// TODO: also allow resize... pass an image struct instead
-	layer.result_buffer.upload(frame);
-	
-	// Copy buffer to image
-	layer.result_image.transition_layout(cmd, vk::ImageLayout::eTransferDstOptimal);
+	bool skip_frame = false;
+	if (result_buffer.size != frame.size()) {
+		// Sync changes
+		sync_queue->push({
+			"[Framer] Resized resources",
+			[&, frame] () {
+				resize_callback(frame);
+			}
+		});
 
-	copy_data_to_image(cmd,
-		layer.result_buffer.buffer,
-		layer.result_image.image,
-		layer.result_image.format,
-		layer.extent.width, layer.extent.height
-	);
+		skip_frame = true;
+	}
+
+	if (!skip_frame) {
+		result_buffer.upload(frame.data);
+		
+		// Copy buffer to image
+		result_image.transition_layout(cmd, vk::ImageLayout::eTransferDstOptimal);
+
+		copy_data_to_image(cmd,
+			result_buffer.buffer,
+			result_image.image,
+			result_image.format,
+			frame.width, frame.height
+		);
+	}
 
 	// Transition image back to shader read
-	layer.result_image.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);	
-	
+	result_image.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
+		
 	// Apply render area
-	ra.apply(cmd, layer.extent);
+	ra.apply(cmd, extent);
 
 	// Clear colors
+	// TODO: method
 	std::array <vk::ClearValue, 2> clear_values {
 		vk::ClearValue {
 			vk::ClearColorValue {
@@ -159,11 +194,11 @@ void render(Framer &layer,
 	// Start the render pass
 	cmd.beginRenderPass(
 		vk::RenderPassBeginInfo {
-			*layer.render_pass,
+			*render_pass,
 			*framebuffer,
 			vk::Rect2D {
 				vk::Offset2D {0, 0},
-				layer.extent
+				extent
 			},
 			static_cast <uint32_t> (clear_values.size()),
 			clear_values.data()
@@ -174,13 +209,13 @@ void render(Framer &layer,
 	// Presentation pipeline
 	cmd.bindPipeline(
 		vk::PipelineBindPoint::eGraphics,
-		*layer.pipeline
+		*pipeline
 	);
 
 	// Bind descriptor set
 	cmd.bindDescriptorSets(
 		vk::PipelineBindPoint::eGraphics,
-		*layer.ppl, 0, {*layer.dset}, {}
+		*ppl, 0, {*dset}, {}
 	);
 
 	// Draw and end

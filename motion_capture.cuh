@@ -54,7 +54,7 @@ struct MotionCapture : public kobra::BaseApp {
 
 	// Buffers
 	CUdeviceptr b_traced;
-	std::vector <uint32_t> b_traced_cpu;
+	std::vector <uint8_t> b_traced_cpu;
 
 	// Capture
 	cv::VideoWriter capture;
@@ -76,7 +76,7 @@ struct MotionCapture : public kobra::BaseApp {
 	bool lock_motion = false;
 
 	static constexpr vk::Extent2D raytracing_extent = {1000, 1000};
-	static constexpr vk::Extent2D rendering_extent = {1000, 1000};
+	static constexpr vk::Extent2D rendering_extent = {1920, 1080};
 	// TODO: try different rendering extent
 
 	struct CaptureInterface : kobra::ui::ImGUIAttachment {
@@ -128,7 +128,8 @@ struct MotionCapture : public kobra::BaseApp {
 			: BaseApp(phdev, "MotionCapture",
 				rendering_extent,
 				extensions, vk::AttachmentLoadOp::eLoad
-			) {
+			),
+			framer(get_context()) {
 		// Load scene and camera
 		scene.load(get_device(), scene_path);
 
@@ -148,8 +149,6 @@ struct MotionCapture : public kobra::BaseApp {
 			kobra::layers::Denoiser::eNormal
 				| kobra::layers::Denoiser::eAlbedo
 		);
-
-		framer = kobra::layers::Framer::make(get_context());
 
 		// Create Asmodeus backend
 		grid_based = kobra::asmodeus::GridBasedReservoirs::make(
@@ -388,16 +387,8 @@ struct MotionCapture : public kobra::BaseApp {
 			const vk::raii::Framebuffer &framebuffer) override {
 		// Move the camera
 		auto &transform = camera.get <kobra::Transform> ();
-		
-		// Interpolate camera position
-		/* glm::vec3 pos = kobra::core::piecewise_linear(camera_pos_seq, time);
-		glm::vec3 rot = kobra::core::piecewise_linear(camera_rot_seq, time);
 
-		transform.position = pos;
-		transform.rotation = rot; */
-
-		// kobra::asmodeus::update(backend, scene.ecs);
-
+		// TODO: motion method
 		float speed = 20.0f * frame_time;
 		
 		glm::vec3 forward = transform.forward();
@@ -435,8 +426,8 @@ struct MotionCapture : public kobra::BaseApp {
 
 		// Now trace and render
 		cmd.begin({});
-			int width = grid_based.extent.width;
-			int height = grid_based.extent.height;
+			unsigned int width = grid_based.extent.width;
+			unsigned int height = grid_based.extent.height;
 
 			float4 *d_output = 0;
 			if (integrator == 0) {
@@ -456,10 +447,20 @@ struct MotionCapture : public kobra::BaseApp {
 				kobra::cuda::eTonemappingACES
 			);
 
-			kobra::cuda::copy(b_traced_cpu, b_traced, width * height);
+			kobra::cuda::copy(b_traced_cpu, b_traced, width * height * sizeof(uint32_t));
 
 			// TODO: import CUDA to Vulkan and render straight to the image
-			kobra::layers::render(framer, b_traced_cpu, cmd, framebuffer);
+			framer.render(
+				kobra::Image {
+					.data = b_traced_cpu,
+					.width = width,
+					.height = height,
+					.channels = 4
+				},
+				cmd, framebuffer, extent,
+				// TODO: embed in a docked ImGui window
+				{{420, 0}, {1080 + 420, 1080}}
+			);
 
 			imgui.render(cmd, framebuffer, extent);
 		cmd.end();

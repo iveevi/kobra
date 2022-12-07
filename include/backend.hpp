@@ -45,20 +45,6 @@ struct Device {
 	vk::raii::Device		*device = nullptr;
 };
 
-struct Context {
-	vk::raii::PhysicalDevice	*phdev = nullptr;
-	vk::raii::Device		*device = nullptr;
-	vk::raii::CommandPool		*command_pool = nullptr;
-	vk::raii::DescriptorPool	*descriptor_pool = nullptr;
-	vk::Extent2D			extent = {};
-	vk::Format			swapchain_format = vk::Format::eUndefined;
-	vk::Format			depth_format = vk::Format::eUndefined;
-
-	Device dev() const {
-		return Device {phdev, device};
-	}
-};
-
 // Simpler Vulkan aliases
 using SyncTask = std::pair <std::string, std::function <void ()>>;
 
@@ -86,6 +72,22 @@ public:
 	size_t size() {
 		std::lock_guard <std::mutex> lock(_mutex);
 		return _handlers.size();
+	}
+};
+
+// Application context; resources that would be needed by most rendering layers
+struct Context {
+	vk::raii::PhysicalDevice	*phdev = nullptr;
+	vk::raii::Device		*device = nullptr;
+	vk::raii::CommandPool		*command_pool = nullptr;
+	vk::raii::DescriptorPool	*descriptor_pool = nullptr;
+	SyncQueue			*sync_queue;
+	vk::Extent2D			extent = {};
+	vk::Format			swapchain_format = vk::Format::eUndefined;
+	vk::Format			depth_format = vk::Format::eUndefined;
+
+	Device dev() const {
+		return Device {phdev, device};
 	}
 };
 

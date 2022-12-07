@@ -186,7 +186,6 @@ void BaseApp::present()
 
 	// Perform sync tasks if needed
 	if (sync_queue.size() > 0) {
-		// std::cout << "Running sync tasks...\n";
 		graphics_queue.waitIdle();
 
 		while (sync_queue.size() > 0)
@@ -263,6 +262,7 @@ Context BaseApp::get_context()
 		.device = &device,
 		.command_pool = &command_pool,
 		.descriptor_pool = &descriptor_pool,
+		.sync_queue = &sync_queue,
 		.extent = extent,
 		.swapchain_format = swapchain.format,
 		.depth_format = depth_buffer.format,
