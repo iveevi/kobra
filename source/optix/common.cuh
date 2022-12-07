@@ -19,7 +19,7 @@ using namespace kobra::optix;
 
 // TODO: launch parameter for ray depth
 // TODO: rename to MAX_BOUNCES
-#define MAX_DEPTH 0
+#define MAX_DEPTH 10
 
 // Local constants
 static const float eps = 1e-3f;

@@ -33,6 +33,7 @@
 #include "include/texture.hpp"
 #include "include/asmodeus/backend.cuh"
 #include "include/asmodeus/wsris.cuh"
+#include "include/ui/attachment.hpp"
 #include "include/ui/framerate.hpp"
 #include "include/layers/imgui.hpp"
 
@@ -47,7 +48,6 @@ struct MotionCapture : public kobra::BaseApp {
 	kobra::layers::Basilisk tracer;
 	kobra::layers::Denoiser denoiser;
 	kobra::layers::Framer framer;
-	kobra::layers::FontRenderer font_renderer;
 	kobra::layers::ImGUI imgui;
 
 	kobra::asmodeus::GridBasedReservoirs grid_based;
@@ -72,17 +72,62 @@ struct MotionCapture : public kobra::BaseApp {
 	std::queue <bool> events;
 	std::mutex events_mutex;
 	bool kill = false;
+	bool capture_now = false;
+	bool lock_motion = false;
+
+	static constexpr vk::Extent2D raytracing_extent = {1000, 1000};
+	static constexpr vk::Extent2D rendering_extent = {1000, 1000};
+	// TODO: try different rendering extent
+
+	struct CaptureInterface : kobra::ui::ImGUIAttachment {
+		std::string m_mode_description;
+		std::set <std::string> m_additional_descriptions;
+		int m_samples = 1;
+		int m_captured_samples = -1;
+		char m_capture_path[256] = "capture.png";
+
+		MotionCapture *m_parent = nullptr;
+
+		void render() override {
+			ImGui::Begin("Capture");
+
+			ImGui::Text("Mode: %s", m_mode_description.c_str());
+
+			// TODO: check boxes...
+			std::string additional_description;
+			for (auto &description : m_additional_descriptions)
+				additional_description += description + ", ";
+
+			ImGui::Text("Additional: %s", additional_description.c_str());
+
+			// Slider to control the number of samples
+			ImGui::SliderInt("Samples", &m_samples, 1, 4096);
+
+			// Text field to control the capture path
+			ImGui::InputText("Capture path", m_capture_path, 256);
+
+			if (m_captured_samples < 0 && ImGui::Button("Capture")) {
+				m_captured_samples = m_samples;
+				m_parent->events_mutex.lock();
+				m_parent->events.push(true);
+				m_parent->events_mutex.unlock();
+			} else if (m_captured_samples >= 0) {
+				// Progress bar
+				ImGui::ProgressBar((float) m_captured_samples/m_samples, ImVec2(0.0f, 0.0f));
+			}
+
+			ImGui::End();
+		}
+	};
+
+	std::shared_ptr <CaptureInterface> capture_interface;
 
 	MotionCapture(const vk::raii::PhysicalDevice &phdev,
 			const std::vector <const char *> &extensions,
 			const std::string &scene_path)
 			: BaseApp(phdev, "MotionCapture",
-				vk::Extent2D {1000, 1000},
+				rendering_extent,
 				extensions, vk::AttachmentLoadOp::eLoad
-			),
-			font_renderer(get_context(),
-				render_pass,
-				"resources/fonts/NotoSans.ttf"
 			) {
 		// Load scene and camera
 		scene.load(get_device(), scene_path);
@@ -93,7 +138,7 @@ struct MotionCapture : public kobra::BaseApp {
 		camera = scene.ecs.get_entity("Camera");
 
 		// TODO: test lower resolution...
-		tracer = kobra::layers::Basilisk::make(get_context(), {1000, 1000});
+		tracer = kobra::layers::Basilisk::make(get_context(), raytracing_extent);
 		
 		kobra::layers::set_envmap(tracer, "resources/skies/background_1.jpg");
 
@@ -108,7 +153,7 @@ struct MotionCapture : public kobra::BaseApp {
 
 		// Create Asmodeus backend
 		grid_based = kobra::asmodeus::GridBasedReservoirs::make(
-			get_context(), {1000, 1000}
+			get_context(), raytracing_extent
 		);
 
 		grid_based.set_envmap("resources/skies/background_1.jpg");
@@ -171,7 +216,11 @@ struct MotionCapture : public kobra::BaseApp {
 		imgui = kobra::layers::ImGUI(get_context(), window, graphics_queue);
 		imgui.set_font(KOBRA_DIR "/resources/fonts/NotoSans.ttf", 30);
 
+		capture_interface = std::make_shared <CaptureInterface> ();
 		imgui.attach(std::make_shared <kobra::ui::FramerateAttachment> ());
+		imgui.attach(capture_interface);
+
+		capture_interface->m_parent = this;
 		
 		// NOTE: we need this precomputation step to load all the
 		// resources before rendering; we need some system to allocate
@@ -182,6 +231,12 @@ struct MotionCapture : public kobra::BaseApp {
 			camera.get <kobra::Transform> (),
 			mode, false 
 		);
+
+		/* grid_based.render(scene.ecs,
+			camera.get <kobra::Camera> (),
+			camera.get <kobra::Transform> (),
+			false
+		); */
 
 		compute_thread = new std::thread(
 			&MotionCapture::path_trace_kernel, this
@@ -213,6 +268,9 @@ struct MotionCapture : public kobra::BaseApp {
 	void path_trace_kernel() {	
 		compute_timer.start();
 		while (!kill) {
+			// Wait for the latest capture if any
+			while (!capture_now);
+
 			bool accumulate = true;
 
 			// Also check our events
@@ -246,6 +304,9 @@ struct MotionCapture : public kobra::BaseApp {
 			});
 
 			compute_time = compute_timer.lap()/1e6;
+
+			if (capture_interface->m_captured_samples >= 0)
+				capture_now = (--capture_interface->m_captured_samples <= 0);
 		}
 	}
 
@@ -253,38 +314,34 @@ struct MotionCapture : public kobra::BaseApp {
 
 	unsigned int mode = kobra::optix::eRegular;
 
-	std::string mode_description = "Regular";
-
-	std::set <std::string> additional_descriptions;
-
 	// Mode map for Basilisk
 	// TODO: turn into keybindings
 	const std::unordered_map <int, std::function <void ()>> mode_map {
 		{1, [&]() {
 			mode = kobra::optix::eRegular;
-			mode_description = "Regular";
+			capture_interface->m_mode_description = "Regular";
 		}},
 
 		{2, [&]() {
 			mode = kobra::optix::eReSTIR;
 			tracer.launch_params.options.reprojected_reuse = false;
-			mode_description = "ReSTIR";
+			capture_interface->m_mode_description = "ReSTIR";
 		}},
 
 		{3, [&]() {
 			mode = kobra::optix::eReSTIR;
 			tracer.launch_params.options.reprojected_reuse = true;
-			mode_description = "ReSTIR Reprojected";
+			capture_interface->m_mode_description = "ReSTIR (reprojected reuse)";
 		}},
 
 		{4, [&]() {
 			mode = kobra::optix::eVoxel;
-			mode_description = "Voxel";
+			capture_interface->m_mode_description = "WSSR using K-d tree";
 		}},
 
 		{5, [&]() {
 			mode = kobra::optix::eReSTIRPT;
-			mode_description = "ReSTIR PT";
+			capture_interface->m_mode_description = "ReSTIR Path Tracing";
 		}},
 
 		{6, [&]() {
@@ -292,28 +349,38 @@ struct MotionCapture : public kobra::BaseApp {
 			b = !b;
 
 			if (b)
-				additional_descriptions.insert("Indirect Only");
+				capture_interface->m_additional_descriptions.insert("Indirect Only");
 			else
-				additional_descriptions.erase("Indirect Only");
+				capture_interface->m_additional_descriptions.erase("Indirect Only");
 		}},
 
 		{7, [&]() {
+			// TODO: disabled accumulation should just reset every
+			// frame...
 			bool &b = tracer.launch_params.options.disable_accumulation;
 			b = !b;
 
 			if (b)
-				additional_descriptions.insert("No Accumulation");
+				capture_interface->m_additional_descriptions.insert("No Accumulation");
 			else
-				additional_descriptions.erase("No Accumulation");
+				capture_interface->m_additional_descriptions.erase("No Accumulation");
 		}},
 
 		{8, [&]() {
 			integrator = 1 - integrator;
+
 			if (integrator == 1) {
-				mode_description = "WSRIS-KD";
+				capture_interface->m_mode_description = "WSSR using Grid";
 			} else {
-				mode_description = "Basilisk";
+				// TODO: get a string representation of the
+				// integrator...
+				capture_interface->m_mode_description = "Basilisk";
 			}
+		}},
+
+		{9, [&]() {
+			auto &gb_ris = grid_based.launch_params.gb_ris;
+			gb_ris.reproject = !gb_ris.reproject;
 		}}
 	};
 
@@ -339,28 +406,31 @@ struct MotionCapture : public kobra::BaseApp {
 
 		bool accumulate = true;
 
-		if (io.input.is_key_down(GLFW_KEY_W)) {
-			transform.move(forward * speed);
-			events.push(true);
-		} else if (io.input.is_key_down(GLFW_KEY_S)) {
-			transform.move(-forward * speed);
-			events.push(true);
-		}
+		if (!lock_motion) {
+			// TODO: method...
+			if (io.input.is_key_down(GLFW_KEY_W)) {
+				transform.move(forward * speed);
+				events.push(true);
+			} else if (io.input.is_key_down(GLFW_KEY_S)) {
+				transform.move(-forward * speed);
+				events.push(true);
+			}
 
-		if (io.input.is_key_down(GLFW_KEY_A)) {
-			transform.move(-right * speed);
-			events.push(true);
-		} else if (io.input.is_key_down(GLFW_KEY_D)) {
-			transform.move(right * speed);
-			events.push(true);
-		}
+			if (io.input.is_key_down(GLFW_KEY_A)) {
+				transform.move(-right * speed);
+				events.push(true);
+			} else if (io.input.is_key_down(GLFW_KEY_D)) {
+				transform.move(right * speed);
+				events.push(true);
+			}
 
-		if (io.input.is_key_down(GLFW_KEY_E)) {
-			transform.move(up * speed);
-			events.push(true);
-		} else if (io.input.is_key_down(GLFW_KEY_Q)) {
-			transform.move(-up * speed);
-			events.push(true);
+			if (io.input.is_key_down(GLFW_KEY_E)) {
+				transform.move(up * speed);
+				events.push(true);
+			} else if (io.input.is_key_down(GLFW_KEY_Q)) {
+				transform.move(-up * speed);
+				events.push(true);
+			}
 		}
 
 		// Now trace and render
@@ -391,74 +461,6 @@ struct MotionCapture : public kobra::BaseApp {
 			// TODO: import CUDA to Vulkan and render straight to the image
 			kobra::layers::render(framer, b_traced_cpu, cmd, framebuffer);
 
-			// Text to render
-			kobra::ui::Text t_samples(
-				kobra::common::sprintf("%d samples", tracer.launch_params.samples),
-				{0, 5}, glm::vec3 {1, 0.6, 0.6}, 0.7f
-			);
-
-			std::string mode_str = "Mode: " + mode_description;
-			std::string additional_str = "";
-
-			for (auto it = additional_descriptions.begin();
-					it != additional_descriptions.end(); it++) {
-				additional_str += *it;
-				if (std::next(it) != additional_descriptions.end())
-					additional_str += ", ";
-			}
-
-			if (additional_str != "")
-				additional_str = "(" + additional_str + ")";
-
-			kobra::ui::Text t_mode(
-				mode_str,
-				{5, 45}, glm::vec3 {1, 0.6, 0.6}, 0.5f
-			);
-
-			kobra::ui::Text t_additional(
-				additional_str,
-				{5, 75}, glm::vec3 {1, 0.6, 0.6}, 0.4f
-			);
-
-			glm::vec2 size = font_renderer.size(t_samples);
-			t_samples.anchor.x = 1000 - size.x - 5;
-		
-			// Start render pass
-			// TODO: Make this a function
-			std::array <vk::ClearValue, 2> clear_values = {
-				vk::ClearValue {
-					vk::ClearColorValue {
-						std::array <float, 4> {0.0f, 0.0f, 0.0f, 1.0f}
-					}
-				},
-				vk::ClearValue {
-					vk::ClearDepthStencilValue {
-						1.0f, 0
-					}
-				}
-			};
-
-			cmd.beginRenderPass(
-				vk::RenderPassBeginInfo {
-					*render_pass,
-					*framebuffer,
-					vk::Rect2D {
-						vk::Offset2D {0, 0},
-						extent,
-					},
-					static_cast <uint32_t> (clear_values.size()),
-					clear_values.data()
-				},
-				vk::SubpassContents::eInline
-			);
-
-			font_renderer.render(cmd, {
-				t_samples,
-				t_mode, t_additional
-			});
-
-			cmd.endRenderPass();
-
 			imgui.render(cmd, framebuffer, extent);
 		cmd.end();
 
@@ -475,6 +477,19 @@ struct MotionCapture : public kobra::BaseApp {
 		}
 
 #endif
+
+		if (capture_now) {
+			int width = raytracing_extent.width;
+			int height = raytracing_extent.height;
+
+			stbi_write_png(capture_interface->m_capture_path,
+				width, height, 4,
+				b_traced_cpu.data(),
+				width * 4
+			);
+
+			capture_now = false;
+		}
 
 		// Update time (fixed)
 		time += 1/60.0f;
@@ -598,20 +613,9 @@ struct MotionCapture : public kobra::BaseApp {
 			printf("{%.2f, %.2f, %.2f}\n", transform.rotation.x, transform.rotation.y, transform.rotation.z);
 		}
 
-		// C for capture
-		if (event.key == GLFW_KEY_C && event.action == GLFW_PRESS) {
-			// Get data to save
-			int width = app.tracer.extent.width;
-			int height = app.tracer.extent.height;
-
-			std::string capture_path = "capture.png";
-			stbi_write_png(capture_path.c_str(),
-				width, height, 4, app.b_traced_cpu.data(),
-				width * 4
-			);
-		
-			KOBRA_LOG_FILE(kobra::Log::INFO) << "Captured image to "
-				<< capture_path << "\n";
+		// F1 to lock motion
+		if (event.key == GLFW_KEY_F1 && event.action == GLFW_PRESS) {
+			app.lock_motion = !app.lock_motion;
 		}
 	}
 

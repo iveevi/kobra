@@ -266,6 +266,7 @@ void GridBasedReservoirs::initialize_optix()
 
 	gb_ris.cell_sizes = d_cell_sizes;
 	gb_ris.sample_indices = d_sample_indices;
+	gb_ris.reproject = false;
 
 	// Allocate the parameters buffer
 	launch_params_buffer = cuda::alloc(

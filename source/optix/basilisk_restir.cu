@@ -154,30 +154,32 @@ float3 direct_lighting_restir(OptixTraversableHandle handle,
 		spatial->mis = 0.0f;
 	}
 
-	// Get direct lighting sample
-	FullLightSample fls = sample_direct(lc, sh, seed);
+	for (int i = 0; i < 32; i++) {
+		// Get direct lighting sample
+		FullLightSample fls = sample_direct(lc, sh, seed);
 
-	// Compute target function (unocculted lighting)
-	float3 D = fls.point - sh.x;
-	float d = length(D);
-	D /= d;
+		// Compute target function (unocculted lighting)
+		float3 D = fls.point - sh.x;
+		float d = length(D);
+		D /= d;
 
-	float3 Li = direct_unoccluded(sh, fls.Le, fls.normal, fls.type, D, d);
+		float3 Li = direct_unoccluded(sh, fls.Le, fls.normal, fls.type, D, d);
 
-	// Temporal Resampling
-	float target = target_function(Li);
-	float pdf = fls.pdf;
+		// Temporal Resampling
+		float target = target_function(Li);
+		float pdf = fls.pdf;
 
-	float w = (pdf > 0.0f) ? target/pdf : 0.0f;
+		float w = (pdf > 0.0f) ? target/pdf : 0.0f;
 
-	reservoir_update(temporal, LightSample {
-		.value = fls.Le,
-		.point = fls.point,
-		.normal = fls.normal,
-		.target = target,
-		.type = fls.type,
-		.index = fls.index
-	}, w, seed);
+		reservoir_update(temporal, LightSample {
+			.value = fls.Le,
+			.point = fls.point,
+			.normal = fls.normal,
+			.target = target,
+			.type = fls.type,
+			.index = fls.index
+		}, w, seed);
+	}
 
 	// Add current sample
 	int Z = 0;
@@ -189,8 +191,8 @@ float3 direct_lighting_restir(OptixTraversableHandle handle,
 		float W = (denominator > 0) ? temporal->weight/denominator : 0.0f;
 
 		// Compute value and target
-		D = sample.point - sh.x;
-		d = length(D);
+		float3 D = sample.point - sh.x;
+		float d = length(D);
 		D /= d;
 
 		float3 Li = direct_occluded(handle, sh, sample.value, sample.normal, sample.type, D, d);
@@ -225,6 +227,7 @@ float3 direct_lighting_restir(OptixTraversableHandle handle,
 	const int HEIGHT = parameters.resolution.y;
 
 	const float SAMPLING_RADIUS = min(WIDTH, HEIGHT) * 0.1f;
+	// const float SAMPLING_RADIUS = 20.0f;
 
 	int ix = index % WIDTH;
 	int iy = index / WIDTH;
@@ -262,8 +265,8 @@ float3 direct_lighting_restir(OptixTraversableHandle handle,
 		float W = (denominator > 0) ? reservoir->weight/denominator : 0.0f;
 
 		// Compute value and target
-		D = sample.point - sh.x;
-		d = length(D);
+		float3 D = sample.point - sh.x;
+		float d = length(D);
 		D /= d;
 
 		float3 Li = direct_occluded(handle, sh, sample.value, sample.normal, sample.type, D, d);
@@ -377,7 +380,7 @@ extern "C" __global__ void __closesthit__restir()
 		// direct = direct_lighting_ris(surface_hit, rp->seed);
 		// direct = direct_lighting_temporal_ris(surface_hit, rp);
 
-		int spatial_samples = 10;
+		int spatial_samples = 5;
 		if (parameters.options.reprojected_reuse)
 			spatial_samples = 3;
 

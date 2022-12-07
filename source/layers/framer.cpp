@@ -123,6 +123,7 @@ void render(Framer &layer,
 		const RenderArea &ra)
 {
 	// Upload data to the buffer
+	// TODO: also allow resize... pass an image struct instead
 	layer.result_buffer.upload(frame);
 	
 	// Copy buffer to image

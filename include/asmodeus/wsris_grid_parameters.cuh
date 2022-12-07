@@ -86,6 +86,7 @@ struct GridBasedReservoirsParameters {
 		int *sample_indices;
 		int *cell_sizes;
 		uint3 resolution;
+		bool reproject;
 	} gb_ris;
 };
 

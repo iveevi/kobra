@@ -29,10 +29,12 @@
 #include "sequences.hpp"
 
 #define DENOISER 0
-#define SAMPLES_PER_FRAME 4
+#define SAMPLES_PER_FRAME 16
 #define CAPTURE_PATH "capture.mp4"
 #define ENVIRONMENT_MAP "resources/skies/background_1.jpg"
-#define BASILISK_MODE kobra::optix::eReSTIR
+// #define BASILISK_MODE kobra::optix::eVoxel
+#define BENCHMARK_SCENE "/home/venki/models/bistro_interior.kobra"
+#define STILL_IMAGE
 
 struct Bench : public kobra::BaseApp {
 	// TODO: let the scene run on any virtual device?
@@ -132,9 +134,13 @@ struct Bench : public kobra::BaseApp {
 
 	void record(const vk::raii::CommandBuffer &cmd,
 			const vk::raii::Framebuffer &framebuffer) override {
+#ifdef STILL_IMAGE
+		time = 0.0f;
+#endif
+
 		// Move the camera
 		auto &transform = camera.get <kobra::Transform> ();
-		
+
 		// Interpolate camera position
 		glm::vec3 pos = kobra::core::piecewise_linear(positions, time);
 		glm::vec3 rot = kobra::core::piecewise_linear(rotations, time);
@@ -142,7 +148,7 @@ struct Bench : public kobra::BaseApp {
 		transform.position = pos;
 		transform.rotation = rot;
 		
-		// Render hte frame
+		// Render the frame
 		int frames = 0;
 		while (frames < SAMPLES_PER_FRAME) {
 #ifdef BASILISK_MODE
@@ -216,13 +222,17 @@ struct Bench : public kobra::BaseApp {
 			capture.release();
 			terminate_now();
 		}
-			
-		/* std::string capture_path = "capture.png";
+		
+#ifdef STILL_IMAGE
+		
+		std::string capture_path = "capture.png";
 		stbi_write_png(capture_path.c_str(),
 			width, height, 4,
 			b_traced_cpu.data(),
 			width * 4
-		); */
+		);
+
+#endif
 
 		// Update time (fixed)
 		time += 1/60.0f;
@@ -251,15 +261,12 @@ int main()
 	for (auto str : extensions)
 		std::cout << "\t" << str << std::endl;
 
-	// Load the project
-	kobra::Project project = kobra::Project::load(".kobra/project");
-
 	// Create and launch the application
 	Bench app(phdev, {
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 		VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
 		VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
-	}, project.scene);
+	}, BENCHMARK_SCENE);
 
 	app.run();
 }
