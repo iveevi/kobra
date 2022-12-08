@@ -8,7 +8,7 @@
 
 #endif
 
-#define KOBRA_SHADERS_DIR KOBRA_DIR "/shaders"
+#define KOBRA_SHADERS_DIR KOBRA_DIR "/bin/spv"
 
 // Standard headers
 #include <fstream>

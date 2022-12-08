@@ -1,5 +1,5 @@
 #include "../../include/optix/sbt.cuh"
-#include "../../include/asmodeus/wsris_grid_parameters.cuh"
+#include "../../include/layers/wssr_grid_parameters.cuh"
 #include "common.cuh"
 
 extern "C"

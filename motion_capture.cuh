@@ -31,8 +31,8 @@
 #include "include/renderer.hpp"
 #include "include/scene.hpp"
 #include "include/texture.hpp"
-#include "include/asmodeus/backend.cuh"
-#include "include/asmodeus/wsris.cuh"
+// #include "include/asmodeus/backend.cuh"
+#include "include/layers/wssr.cuh"
 #include "include/ui/attachment.hpp"
 #include "include/ui/framerate.hpp"
 #include "include/layers/imgui.hpp"
@@ -49,6 +49,8 @@ struct MotionCapture : public kobra::BaseApp {
 	kobra::layers::Denoiser denoiser;
 	kobra::layers::Framer framer;
 	kobra::layers::ImGUI imgui;
+
+	// TODO: GPU utilization (mem and compute) monitor
 
 	kobra::asmodeus::GridBasedReservoirs grid_based;
 

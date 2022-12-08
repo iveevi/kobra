@@ -1200,7 +1200,9 @@ inline vk::raii::DescriptorPool make_descriptor_pool(const vk::raii::Device &dev
 }
 
 // Create a descriptor set layout
+// TODO: remove the short version
 using DSLB = std::tuple <uint32_t, vk::DescriptorType, uint32_t, vk::ShaderStageFlagBits>;
+using DescriptorSetLayoutBinding = std::tuple <uint32_t, vk::DescriptorType, uint32_t, vk::ShaderStageFlagBits>;
 
 // TODO: is this function even required? 1:1 parameter mapping
 inline vk::raii::DescriptorSetLayout make_descriptor_set_layout

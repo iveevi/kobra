@@ -5,8 +5,9 @@ namespace kobra {
 namespace layers {
 
 // Static member variables
-const std::vector <DSLB> Framer::dsl_bindings = {
-	DSLB {
+const std::vector <DescriptorSetLayoutBinding>
+		Framer::DESCRIPTOR_SET_BINDINGS = {
+	DescriptorSetLayoutBinding {
 		0, vk::DescriptorType::eCombinedImageSampler,
 		1, vk::ShaderStageFlagBits::eFragment
 	}
@@ -14,15 +15,13 @@ const std::vector <DSLB> Framer::dsl_bindings = {
 
 // Create the layer
 Framer::Framer(const Context &context)
+		: m_device(context.device),
+		m_phdev(context.phdev),
+		m_descriptor_pool(context.descriptor_pool),
+		m_sync_queue(context.sync_queue)
 {
-	// Extract critical Vulkan structures
-	device = context.device;
-	phdev = context.phdev;
-	descriptor_pool = context.descriptor_pool;
-	sync_queue = context.sync_queue;
-
 	// Create the present render pass
-	render_pass = make_render_pass(*context.device,
+	m_render_pass = make_render_pass(*context.device,
 		{context.swapchain_format},
 		{vk::AttachmentLoadOp::eClear},
 		context.depth_format,
@@ -30,44 +29,47 @@ Framer::Framer(const Context &context)
 	);
 
 	// Descriptor set layout
-	dsl = make_descriptor_set_layout(*context.device, dsl_bindings);
+	m_dsl = make_descriptor_set_layout(
+		*context.device,
+		DESCRIPTOR_SET_BINDINGS
+	);
 
 	// Allocate present descriptor set
 	auto dsets = vk::raii::DescriptorSets {
 		*context.device,
-		{**context.descriptor_pool, *dsl}
+		{**context.descriptor_pool, *m_dsl}
 	};
 
-	dset = std::move(dsets.front());
+	m_dset = std::move(dsets.front());
 
 	// Push constants and pipeline layout
-	ppl = vk::raii::PipelineLayout {
+	m_ppl = vk::raii::PipelineLayout {
 		*context.device,
-		{{}, *dsl, {}}
+		{{}, *m_dsl, {}}
 	};
 
 	// Create the present pipeline
 	auto shaders = make_shader_modules(*context.device, {
-		"bin/spv/spit_vert.spv",
-		"bin/spv/spit_frag.spv"
+		KOBRA_SHADERS_DIR "/spit_vert.spv",
+		KOBRA_SHADERS_DIR "/spit_frag.spv"
 	});
 	
 	GraphicsPipelineInfo present_grp_info {
-		*context.device, render_pass,
+		*context.device, m_render_pass,
 		std::move(shaders[0]), nullptr,
 		std::move(shaders[1]), nullptr,
 		{}, {},
-		ppl
+		m_ppl
 	};
 
 	present_grp_info.no_bindings = true;
 	present_grp_info.depth_test = false;
 	present_grp_info.depth_write = false;
 
-	pipeline = make_graphics_pipeline(present_grp_info);
+	m_pipeline = make_graphics_pipeline(present_grp_info);
 
 	// Allocate resources for rendering results
-	result_image = ImageData(
+	m_result_image = ImageData(
 		*context.phdev, *context.device,
 		vk::Format::eR8G8B8A8Unorm,
 		context.extent,
@@ -79,7 +81,7 @@ Framer::Framer(const Context &context)
 		vk::ImageAspectFlagBits::eColor
 	);
 
-	result_sampler = make_sampler(*context.device, result_image);
+	m_result_sampler = make_sampler(*context.device, m_result_image);
 
 	// Allocate staging buffer
 	vk::DeviceSize stage_size = context.extent.width
@@ -91,7 +93,7 @@ Framer::Framer(const Context &context)
 		| vk::MemoryPropertyFlagBits::eHostCoherent
 		| vk::MemoryPropertyFlagBits::eHostVisible;
 
-	result_buffer = BufferData(
+	m_result_buffer = BufferData(
 		*context.phdev, *context.device, stage_size,
 		usage | vk::BufferUsageFlagBits::eTransferSrc, mem_props
 	);
@@ -99,9 +101,9 @@ Framer::Framer(const Context &context)
 	// Bind image sampler to the present descriptor set
 	//	immediately, since it will not change
 	bind_ds(*context.device,
-		dset,
-		result_sampler,
-		result_image, 0
+		m_dset,
+		m_result_sampler,
+		m_result_image, 0
 	);
 }
 
@@ -109,10 +111,10 @@ Framer::Framer(const Context &context)
 void Framer::resize_callback(const Image &frame)
 {
 	// Resize resources
-	result_buffer.resize(frame.size());
+	m_result_buffer.resize(frame.size());
 
-	result_image = ImageData(
-		*phdev, *device,
+	m_result_image = ImageData(
+		*m_phdev, *m_device,
 		vk::Format::eR8G8B8A8Unorm,
 		{frame.width, frame.height},
 		vk::ImageTiling::eOptimal,
@@ -123,17 +125,16 @@ void Framer::resize_callback(const Image &frame)
 		vk::ImageAspectFlagBits::eColor
 	);
 
-	result_sampler = make_sampler(*device, result_image);
+	m_result_sampler = make_sampler(*m_device, m_result_image);
 
-	bind_ds(*device,
-		dset,
-		result_sampler,
-		result_image, 0
+	bind_ds(*m_device,
+		m_dset,
+		m_result_sampler,
+		m_result_image, 0
 	);
 }
 
 // Render to the presentable framebuffer
-// TODO: custom extent
 void Framer::render
 		(const Image &frame,
 		const vk::raii::CommandBuffer &cmd,
@@ -144,9 +145,9 @@ void Framer::render
 	// Upload data to the buffer
 	// TODO: also allow resize... pass an image struct instead
 	bool skip_frame = false;
-	if (result_buffer.size != frame.size()) {
+	if (m_result_buffer.size != frame.size()) {
 		// Sync changes
-		sync_queue->push({
+		m_sync_queue->push({
 			"[Framer] Resized resources",
 			[&, frame] () {
 				resize_callback(frame);
@@ -157,21 +158,21 @@ void Framer::render
 	}
 
 	if (!skip_frame) {
-		result_buffer.upload(frame.data);
+		m_result_buffer.upload(frame.data);
 		
 		// Copy buffer to image
-		result_image.transition_layout(cmd, vk::ImageLayout::eTransferDstOptimal);
+		m_result_image.transition_layout(cmd, vk::ImageLayout::eTransferDstOptimal);
 
 		copy_data_to_image(cmd,
-			result_buffer.buffer,
-			result_image.image,
-			result_image.format,
+			m_result_buffer.buffer,
+			m_result_image.image,
+			m_result_image.format,
 			frame.width, frame.height
 		);
 	}
 
 	// Transition image back to shader read
-	result_image.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
+	m_result_image.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
 		
 	// Apply render area
 	ra.apply(cmd, extent);
@@ -194,7 +195,7 @@ void Framer::render
 	// Start the render pass
 	cmd.beginRenderPass(
 		vk::RenderPassBeginInfo {
-			*render_pass,
+			*m_render_pass,
 			*framebuffer,
 			vk::Rect2D {
 				vk::Offset2D {0, 0},
@@ -209,13 +210,13 @@ void Framer::render
 	// Presentation pipeline
 	cmd.bindPipeline(
 		vk::PipelineBindPoint::eGraphics,
-		*pipeline
+		*m_pipeline
 	);
 
 	// Bind descriptor set
 	cmd.bindDescriptorSets(
 		vk::PipelineBindPoint::eGraphics,
-		*ppl, 0, {*dset}, {}
+		*m_ppl, 0, {*m_dset}, {}
 	);
 
 	// Draw and end

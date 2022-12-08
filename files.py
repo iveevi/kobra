@@ -7,8 +7,9 @@ kobra_sources = [
 	'source/layers/*.cpp',
 	'source/layers/basilisk.cu',
 	'source/layers/denoiser.cu',
+	'source/layers/wssr_grid.cu',
 	'source/layers/optix_tracer.cu',
-	'source/asmodeus/*',
+	# 'source/asmodeus/*',
     'source/optix/core.cu'
 ]
 

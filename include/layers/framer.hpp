@@ -13,36 +13,38 @@ namespace layers {
 // said image frame is a simple array of pixels of particular format
 // TODO: allow formats other than RGBA
 class Framer {
-	void resize_callback(const Image &);
-public:
 	// Critical Vulkan structures
-	vk::raii::Device *device = nullptr;
-	vk::raii::PhysicalDevice *phdev = nullptr;
-	vk::raii::DescriptorPool *descriptor_pool = nullptr;
+	vk::raii::Device *m_device = nullptr;
+	vk::raii::PhysicalDevice *m_phdev = nullptr;
+	vk::raii::DescriptorPool *m_descriptor_pool = nullptr;
 
 	// Local Vulkan structures
-	vk::raii::RenderPass render_pass = nullptr;
+	vk::raii::RenderPass m_render_pass = nullptr;
 
-	vk::raii::Pipeline pipeline = nullptr;
-	vk::raii::PipelineLayout ppl = nullptr;
-
-	// Descriptor set bindings
-	static const std::vector <DSLB> dsl_bindings;
+	vk::raii::Pipeline m_pipeline = nullptr;
+	vk::raii::PipelineLayout m_ppl = nullptr;
 
 	// Descriptor set layout
-	vk::raii::DescriptorSetLayout dsl = nullptr;
+	vk::raii::DescriptorSetLayout m_dsl = nullptr;
 
 	// Descriptor sets
-	vk::raii::DescriptorSet dset = nullptr;
+	vk::raii::DescriptorSet m_dset = nullptr;
 
 	// Synchronization handle
-	SyncQueue *sync_queue = nullptr;
+	SyncQueue *m_sync_queue = nullptr;
 
 	// Data for rendering
-	ImageData result_image = nullptr;
-	BufferData result_buffer = nullptr;
-	vk::raii::Sampler result_sampler = nullptr;
+	ImageData m_result_image = nullptr;
+	BufferData m_result_buffer = nullptr;
+	vk::raii::Sampler m_result_sampler = nullptr;
 
+	// Private helper functions
+	void resize_callback(const Image &);
+
+	// Static member variables
+	static const std::vector <DescriptorSetLayoutBinding>
+		DESCRIPTOR_SET_BINDINGS;
+public:
 	// Default constructor
 	Framer() = default;
 
