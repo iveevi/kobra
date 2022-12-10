@@ -1,3 +1,6 @@
+#ifndef KOBRA_OPTIX_GRID_BASED_RESERVOIRS_PARAMETERS_H_
+#define KOBRA_OPTIX_GRID_BASED_RESERVOIRS_PARAMETERS_H_
+
 #include "../optix/lighting.cuh"
 #include "../optix/reservoir.cuh"
 
@@ -93,3 +96,5 @@ struct GridBasedReservoirsParameters {
 }
 
 }
+
+#endif

@@ -1,5 +1,5 @@
-#ifndef KOBRA_ASMODEUS_WSRIS_H_
-#define KOBRA_ASMODEUS_WSRIS_H_
+#ifndef KOBRA_LAYERS_WSSR_H_
+#define KOBRA_LAYERS_WSSR_H_
 
 // Standard headers
 #include <map>

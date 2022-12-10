@@ -19,9 +19,6 @@
 [submodule "thirdparty/tinyobjloader"]
 	path = thirdparty/tinyobjloader
 	url = https://github.com/tinyobjloader/tinyobjloader
-[submodule "thirdparty/nabu"]
-	path = thirdparty/nabu
-	url = https://github.com/vedavamadathil/nabu.git
 [submodule "thirdparty/libffi"]
 	path = thirdparty/libffi
 	url = https://github.com/libffi/libffi.git

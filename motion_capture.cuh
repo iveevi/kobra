@@ -31,7 +31,7 @@
 #include "include/renderer.hpp"
 #include "include/scene.hpp"
 #include "include/texture.hpp"
-// #include "include/asmodeus/backend.cuh"
+// #include "include/amadeus/backend.cuh"
 #include "include/layers/wssr.cuh"
 #include "include/ui/attachment.hpp"
 #include "include/ui/framerate.hpp"
