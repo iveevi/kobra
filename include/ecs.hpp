@@ -16,7 +16,7 @@
 #include "logger.hpp"
 #include "material.hpp"
 #include "mesh.hpp"
-#include "renderer.hpp"
+#include "renderable.hpp"
 #include "transform.hpp"
 
 namespace kobra {

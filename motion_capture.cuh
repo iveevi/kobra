@@ -30,7 +30,6 @@
 #include "include/layers/wssr.cuh"
 #include "include/optix/options.cuh"
 #include "include/optix/parameters.cuh"
-#include "include/renderer.hpp"
 #include "include/scene.hpp"
 #include "include/texture.hpp"
 #include "include/ui/attachment.hpp"

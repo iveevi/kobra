@@ -1,5 +1,5 @@
 // Engine headers
-#include "../include/renderer.hpp"
+#include "../include/renderable.hpp"
 #include "../include/texture_manager.hpp"
 #include "../shaders/raster/bindings.h"
 

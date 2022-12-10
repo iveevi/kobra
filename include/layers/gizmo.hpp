@@ -3,7 +3,7 @@
 
 // Engine headers
 #include "../backend.hpp"
-#include "../renderer.hpp"
+#include "../renderable.hpp"
 
 namespace kobra {
 
