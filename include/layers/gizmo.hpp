@@ -28,7 +28,7 @@ struct Gizmo {
 	vk::Extent2D extent;
 	
 	// Mesh data
-	Rasterizer *translate;
+	Renderable *translate;
 
 	// Create a gizmo layer
 	static Gizmo make(const Context &);

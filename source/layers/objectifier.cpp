@@ -162,7 +162,7 @@ void render(Objectifier &layer,
 
 	// Render all entities (with rasterizers)
 	for (int i = 0; i < ecs.size(); i++) {
-		if (ecs.exists <Rasterizer> (i)) {
+		if (ecs.exists <Renderable> (i)) {
 			pc.model = ecs.get <Transform> (i).matrix();
 			pc.id = i;
 
@@ -172,7 +172,7 @@ void render(Objectifier &layer,
 			);
 
 			// Bind and draw
-			const Rasterizer &rasterizer = ecs.get <Rasterizer> (i);
+			const Renderable &rasterizer = ecs.get <Renderable> (i);
 
 			int submeshes = rasterizer.size();
 			for (int i = 0; i < submeshes; i++) {

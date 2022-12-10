@@ -81,17 +81,12 @@ static void save_material(const Material &mat, std::ofstream &fout)
 	fout << "shading_type: " << shading_str(mat.type) << "\n";
 }
 
-static void save_rasterizer(const Rasterizer &rasterizer, std::ofstream &fout)
+static void save_rasterizer(const Renderable &rasterizer, std::ofstream &fout)
 {
 	fout << "\n[RASTERIZER]\n";
 	fout << common::sprintf(rasterizer_format,
 		rasterizer_modes[rasterizer.mode].c_str()
 	);
-}
-
-static void save_raytracer(const Raytracer &raytracer, std::ofstream &fout)
-{
-	fout << "\n[RAYTRACER]\n";
 }
 
 static void save_light(const Light &light, std::ofstream &fout)
@@ -151,11 +146,8 @@ static void save_components(const Entity &e, std::ofstream &fout)
 	if (e.exists <Mesh> ())
 		save_mesh(e.get <Mesh> (), fout);
 
-	if (e.exists <Rasterizer> ())
-		save_rasterizer(e.get <Rasterizer> (), fout);
-
-	if (e.exists <Raytracer> ())
-		save_raytracer(e.get <Raytracer> (), fout);
+	if (e.exists <Renderable> ())
+		save_rasterizer(e.get <Renderable> (), fout);
 
 	if (e.exists <Light> ())
 		save_light(e.get <Light> (), fout);
@@ -380,10 +372,6 @@ void load_mesh(Entity &e, std::ifstream &fin)
 	}
 }
 
-/* std::set <uint32_t> parse_indices(std::ifstream &fin)
-{
-} */
-
 void load_rasterizer(Entity &e, std::ifstream &fin, const Device &dev)
 {
 	static char buf_mode[1024];
@@ -394,7 +382,7 @@ void load_rasterizer(Entity &e, std::ifstream &fin, const Device &dev)
 		return;
 	}
 
-	e.add <Rasterizer> (dev, &e.get <Mesh> ());
+	e.add <Renderable> (dev, &e.get <Mesh> ());
 
 	// Read mode
 	std::string line;
@@ -413,18 +401,7 @@ void load_rasterizer(Entity &e, std::ifstream &fin, const Device &dev)
 	}
 
 	// Set mode
-	e.get <Rasterizer> ().mode = RasterMode(index);
-}
-
-void load_raytracer(Entity &e, std::ifstream &fin)
-{
-	// Make sure we have a mesh and material
-	if (!e.exists <Mesh> ()) {
-		KOBRA_LOG_FUNC(Log::WARN) << "No mesh for raytracer" << std::endl;
-		return;
-	}
-
-	e.add <Raytracer> (&e.get <Mesh> ());
+	e.get <Renderable> ().mode = RasterMode(index);
 }
 
 void load_camera(Entity &e, std::ifstream &fin)
@@ -486,11 +463,6 @@ std::string load_components(Entity &e, std::ifstream &fin, const Device &dev)
 
 		if (header == "[RASTERIZER]") {
 			load_rasterizer(e, fin, dev);
-			continue;
-		}
-
-		if (header == "[RAYTRACER]") {
-			load_raytracer(e, fin);
 			continue;
 		}
 

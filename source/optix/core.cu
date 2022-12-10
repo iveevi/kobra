@@ -3,6 +3,7 @@
 #include <optix_device.h>
 #include <optix_host.h>
 #include <optix_stack_size.h>
+#include <optix_function_table_definition.h>
 
 // Engine headers
 #include "../../include/optix/core.cuh"

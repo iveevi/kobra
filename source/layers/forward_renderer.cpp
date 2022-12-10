@@ -77,7 +77,7 @@ ForwardRenderer::ForwardRenderer(const Context &context)
 	//
 	vk::PushConstantRange push_constants {
 		vk::ShaderStageFlagBits::eVertex,
-		0, sizeof(Rasterizer::PushConstants)
+		0, sizeof(Renderable::PushConstants)
 	};
 
 	// Pipeline layout
@@ -106,7 +106,7 @@ ForwardRenderer::ForwardRenderer(const Context &context)
 }
 
 // Create a descriptor set for the layer
-static ForwardRenderer::RasterizerDset serve_dset(ForwardRenderer &layer, uint32_t count)
+static ForwardRenderer::RenderableDset serve_dset(ForwardRenderer &layer, uint32_t count)
 {
 	std::vector <vk::DescriptorSetLayout> layouts(count, *layer.dsl);
 
@@ -120,17 +120,17 @@ static ForwardRenderer::RasterizerDset serve_dset(ForwardRenderer &layer, uint32
 		alloc_info
 	};
 
-	ForwardRenderer::RasterizerDset rdset;
+	ForwardRenderer::RenderableDset rdset;
 	for (auto &d : dsets)
 		rdset.emplace_back(std::move(d));
 
 	return rdset;
 }
 
-// Configure/update the descriptor set wrt a Rasterizer component
+// Configure/update the descriptor set wrt a Renderable component
 static void configure_dset(ForwardRenderer &layer,
-		const ForwardRenderer::RasterizerDset &dset,
-		const Rasterizer *rasterizer)
+		const ForwardRenderer::RenderableDset &dset,
+		const Renderable *rasterizer)
 {
 	assert(dset.size() == rasterizer->materials.size());
 
@@ -213,7 +213,7 @@ void ForwardRenderer::render(const ECS &ecs,
 	);
 	
 	// Preprocess the entities
-	std::vector <const Rasterizer *> rasterizers;
+	std::vector <const Renderable *> rasterizers;
 	std::vector <const Transform *> rasterizer_transforms;
 
 	std::vector <const Light *> lights;
@@ -222,8 +222,8 @@ void ForwardRenderer::render(const ECS &ecs,
 	for (int i = 0; i < ecs.size(); i++) {
 		// TODO: one unifying renderer component, with options for
 		// raytracing, etc
-		if (ecs.exists <Rasterizer> (i)) {
-			const auto *rasterizer = &ecs.get <Rasterizer> (i);
+		if (ecs.exists <Renderable> (i)) {
+			const auto *rasterizer = &ecs.get <Renderable> (i);
 			const auto *transform = &ecs.get <Transform> (i);
 
 			rasterizers.push_back(rasterizer);
@@ -257,7 +257,7 @@ void ForwardRenderer::render(const ECS &ecs,
 	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
 
 	// Prepare push constants
-	Rasterizer::PushConstants pc;
+	Renderable::PushConstants pc;
 
 	pc.view = camera.view_matrix(camera_transform);
 	pc.perspective = camera.perspective_matrix();
@@ -267,13 +267,13 @@ void ForwardRenderer::render(const ECS &ecs,
 	for (int i = 0; i < count; i++) {
 		pc.model = rasterizer_transforms[i]->matrix();
 
-		const Rasterizer &rasterizer = *rasterizers[i];
-		ForwardRenderer::RasterizerDset &dset = dsets[rasterizers[i]];
+		const Renderable &rasterizer = *rasterizers[i];
+		ForwardRenderer::RenderableDset &dset = dsets[rasterizers[i]];
 
 		int submesh_count = rasterizers[i]->size();
 		for (int j = 0; j < submesh_count; j++) {
 			// Push constants
-			cmd.pushConstants <Rasterizer::PushConstants> (*ppl,
+			cmd.pushConstants <Renderable::PushConstants> (*ppl,
 				vk::ShaderStageFlagBits::eVertex,
 				0, pc
 			);

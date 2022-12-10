@@ -71,11 +71,11 @@ private:
 	// Create a descriptor set
 	vk::raii::DescriptorSet	_make_ds() const;
 
-	// Rasterizer components to descriptor set
-	std::set <const Rasterizer *>	_cached_rasterizers;
+	// Renderable components to descriptor set
+	std::set <const Renderable *>	_cached_rasterizers;
 
 	// Box mesh for area lights
-	Rasterizer			*_area_light;
+	Renderable			*_area_light;
 
 	// Timer
 	Timer				_timer;

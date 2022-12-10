@@ -24,7 +24,7 @@ namespace kobra {
 class ECS;
 class Camera;
 class Transform;
-class Rasterizer;
+class Renderable;
 
 namespace layers {
 
@@ -82,7 +82,7 @@ struct Basilisk {
 
 	// Cached data
 	struct {
-		std::vector <const Rasterizer *> rasterizers;
+		std::vector <const Renderable *> rasterizers;
 	} cache;
 
 	// Timer

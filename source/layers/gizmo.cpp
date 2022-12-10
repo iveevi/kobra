@@ -28,7 +28,7 @@ struct PushConstants {
 };
 
 // Create rasterizer for translate gizmo
-static Rasterizer *make_translate_rasterizer(const Device &dev)
+static Renderable *make_translate_rasterizer(const Device &dev)
 {
 	Submesh cone_x = Submesh::cone();
 	Submesh cone_y = Submesh::cone();
@@ -97,7 +97,7 @@ static Rasterizer *make_translate_rasterizer(const Device &dev)
 	}};
 
 	// Create a rasterizer
-	return new Rasterizer(dev, mesh);
+	return new Renderable(dev, mesh);
 }
 
 // Get model matrix for scaling gizmo

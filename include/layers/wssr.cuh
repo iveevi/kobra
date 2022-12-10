@@ -26,7 +26,7 @@ namespace kobra {
 class ECS;
 class Camera;
 class Transform;
-class Rasterizer;
+class Renderable;
 
 namespace asmodeus {
 
@@ -84,7 +84,7 @@ struct GridBasedReservoirs {
 
 	// Cached data
 	struct {
-		std::vector <const Rasterizer *> rasterizers;
+		std::vector <const Renderable *> rasterizers;
 	} cache;
 
 	// Timer

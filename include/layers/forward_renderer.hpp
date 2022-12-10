@@ -15,7 +15,7 @@ namespace kobra {
 class ECS;
 class Camera;
 class Transform;
-class Rasterizer;
+class Renderable;
 
 namespace layers {
 
@@ -43,9 +43,9 @@ struct ForwardRenderer {
 	vk::raii::DescriptorSetLayout dsl = nullptr;
 
 	// Descriptor sets
-	using RasterizerDset = std::vector <vk::raii::DescriptorSet>;
+	using RenderableDset = std::vector <vk::raii::DescriptorSet>;
 
-	std::map <const Rasterizer *, RasterizerDset> dsets;
+	std::map <const Renderable *, RenderableDset> dsets;
 
 	// Constructors
 	ForwardRenderer() = default;

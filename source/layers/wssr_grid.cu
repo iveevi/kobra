@@ -732,7 +732,7 @@ void GridBasedReservoirs::preprocess_scene
 		const Transform &transform)
 {
 	// Preprocess the entities
-	std::vector <const Rasterizer *> rasterizers;
+	std::vector <const Renderable *> rasterizers;
 	std::vector <const Transform *> rasterizer_transforms;
 
 	std::vector <const Light *> lights;
@@ -741,8 +741,8 @@ void GridBasedReservoirs::preprocess_scene
 	for (int i = 0; i < ecs.size(); i++) {
 		// TODO: one unifying renderer component, with options for
 		// raytracing, etc
-		if (ecs.exists <Rasterizer> (i)) {
-			const auto *rasterizer = &ecs.get <Rasterizer> (i);
+		if (ecs.exists <Renderable> (i)) {
+			const auto *rasterizer = &ecs.get <Renderable> (i);
 			const auto *transform = &ecs.get <Transform> (i);
 
 			rasterizers.push_back(rasterizer);
@@ -781,7 +781,7 @@ void GridBasedReservoirs::preprocess_scene
 		std::vector <const Transform *> submesh_transforms;
 
 		for (int i = 0; i < rasterizers.size(); i++) {
-			const Rasterizer *rasterizer = rasterizers[i];
+			const Renderable *rasterizer = rasterizers[i];
 			const Transform *transform = rasterizer_transforms[i];
 
 			for (int j = 0; j < rasterizer->mesh->submeshes.size(); j++) {

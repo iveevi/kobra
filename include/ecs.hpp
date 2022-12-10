@@ -45,8 +45,7 @@ KOBRA_COMPONENT_STRING(Camera)
 KOBRA_COMPONENT_STRING(Light)
 KOBRA_COMPONENT_STRING(Material)
 KOBRA_COMPONENT_STRING(Mesh)
-KOBRA_COMPONENT_STRING(Rasterizer)
-KOBRA_COMPONENT_STRING(Raytracer)
+KOBRA_COMPONENT_STRING(Renderable)
 KOBRA_COMPONENT_STRING(Transform)
 
 // Components which all entities must have
@@ -61,8 +60,7 @@ class ECS {
 	Archetype <LightPtr>		lights;
 	Archetype <MaterialPtr>		materials;
 	Archetype <MeshPtr>		meshes;
-	Archetype <RasterizerPtr>	rasterizers;
-	Archetype <RaytracerPtr>	raytracers;
+	Archetype <RenderablePtr>	rasterizers;
 	Archetype <Transform>		transforms;
 	
 	Archetype <Entity>		entities;
@@ -195,8 +193,7 @@ KOBRA_MAKE_SHARED(Camera, CameraPtr);
 KOBRA_MAKE_SHARED(Light, LightPtr);
 KOBRA_MAKE_SHARED(Material, MaterialPtr);
 KOBRA_MAKE_SHARED(Mesh, MeshPtr);
-KOBRA_MAKE_SHARED(Rasterizer, RasterizerPtr);
-KOBRA_MAKE_SHARED(Raytracer, RaytracerPtr);
+KOBRA_MAKE_SHARED(Renderable, RenderablePtr);
 
 // _ref specializations
 // TODO: another header
@@ -247,8 +244,7 @@ KOBRA_RET_SHARED(Camera, CameraPtr, cameras);
 KOBRA_RET_SHARED(Light, LightPtr, lights);
 KOBRA_RET_SHARED(Material, MaterialPtr, materials);
 KOBRA_RET_SHARED(Mesh, MeshPtr, meshes);
-KOBRA_RET_SHARED(Rasterizer, RasterizerPtr, rasterizers);
-KOBRA_RET_SHARED(Raytracer, RaytracerPtr, raytracers);
+KOBRA_RET_SHARED(Renderable, RenderablePtr, rasterizers);
 
 // Entity class, acts like a pointer to a component
 class Entity {

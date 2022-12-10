@@ -165,7 +165,7 @@ Raster::Raster(const Context &ctx, const vk::AttachmentLoadOp &load)
 	// Push constants
 	vk::PushConstantRange push_constants {
 		vk::ShaderStageFlagBits::eVertex,
-		0, sizeof(Rasterizer::PushConstants)
+		0, sizeof(Renderable::PushConstants)
 	};
 
 	// Pipeline layout
@@ -213,7 +213,7 @@ Raster::Raster(const Context &ctx, const vk::AttachmentLoadOp &load)
 	{
 		auto box = Mesh::box({0, 0, 0}, {0.5, 0.01, 0.5});
 
-		_area_light = new Rasterizer(_ctx.dev(), new Mesh(box));
+		_area_light = new Renderable(_ctx.dev(), new Mesh(box));
 
 		// Setup descriptor set for area light
 		_cached_rasterizers.insert(_area_light);
@@ -311,10 +311,10 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 		}
 
 		// Deal with rasterizer component
-		if (ecs.exists <Rasterizer> (i)) {
+		if (ecs.exists <Renderable> (i)) {
 			// Initialize corresponding descriptor
 			// set if not done yet
-			const Rasterizer *rasterizer = &ecs.get <Rasterizer> (i);
+			const Renderable *rasterizer = &ecs.get <Renderable> (i);
 
 			if (_cached_rasterizers.count(rasterizer) == 0) {
 				_cached_rasterizers.insert(rasterizer);
@@ -367,7 +367,7 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 
 	// Render all rasterizer components
 	float ms = _timer.elapsed_start();
-	Rasterizer::PushConstants push_constants {
+	Renderable::PushConstants push_constants {
 		.time = ms,
 		.view = camera.view_matrix(camera_transform),
 		.perspective = camera.perspective_matrix(),
@@ -378,7 +378,7 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 	// Render all regular meshes
 	// TODO: sort by pipeline
 	for (int i = 0; i < ecs.size(); i++) {
-		if (!ecs.exists <Rasterizer> (i))
+		if (!ecs.exists <Renderable> (i))
 			continue;
 
 		// Get transform
@@ -386,7 +386,7 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 		push_constants.model = transform.matrix();
 
 		// Get rasterizer
-		const Rasterizer *rasterizer = &ecs.get <Rasterizer> (i);
+		const Renderable *rasterizer = &ecs.get <Renderable> (i);
 
 		// Bind pipeline
 		cmd.bindPipeline(
@@ -429,7 +429,7 @@ void Raster::render(const vk::raii::CommandBuffer &cmd,
 
 		// Push constants
 		push_constants.view = glm::mat4(glm::mat3(push_constants.view));
-		cmd.pushConstants <Rasterizer::PushConstants> (
+		cmd.pushConstants <Renderable::PushConstants> (
 			*_skybox.ppl,
 			vk::ShaderStageFlagBits::eVertex,
 			0, push_constants
@@ -462,7 +462,7 @@ void Raster::_initialize_skybox()
 	// Push constants
 	vk::PushConstantRange push_constants {
 		vk::ShaderStageFlagBits::eVertex,
-		0, sizeof(Rasterizer::PushConstants)
+		0, sizeof(Renderable::PushConstants)
 	};
 
 	// Pipeline layout
@@ -559,7 +559,7 @@ const vk::raii::Pipeline &Raster::get_pipeline(RasterMode mode)
 		break;
 	}
 
-	KOBRA_ASSERT(false, "Rasterizer: invalid raster mode");
+	KOBRA_ASSERT(false, "Renderable: invalid raster mode");
 }
 
 vk::raii::DescriptorSet	Raster::_make_ds() const
