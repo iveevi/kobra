@@ -10,11 +10,12 @@
 #include <optix_stubs.h>
 
 // Engine headers
+#include "../amadeus/system.cuh"
 #include "../backend.hpp"
 #include "../core/async.hpp"
 #include "../core/kd.cuh"
-#include "../optix/sbt.cuh"
 #include "../optix/parameters.cuh"
+#include "../optix/sbt.cuh"
 #include "../timer.hpp"
 #include "../vertex.hpp"
 
@@ -30,6 +31,9 @@ namespace layers {
 
 // Regular path tracer
 struct Basilisk {
+	// Raytracing backend
+	std::shared_ptr <amadeus::System> m_system;
+
 	// Critical Vulkan structures
 	vk::raii::Device *device = nullptr;
 	vk::raii::PhysicalDevice *phdev = nullptr;
@@ -50,10 +54,6 @@ struct Basilisk {
 	OptixModule optix_module = nullptr;
 	OptixModule optix_restir_module = nullptr;
 	OptixModule optix_voxel_module = nullptr;
-
-	struct {
-		OptixTraversableHandle handle = 0;
-	} optix;
 
 	// Program groups
 	struct {
@@ -93,42 +93,49 @@ struct Basilisk {
 	bool initial_kd_tree = false;
 	core::AsyncTask *async_task = nullptr;
 
-	// Functions
-	static Basilisk make(const Context &, const vk::Extent2D &);
+	// Default constructor
+	Basilisk() = default;
+
+	// Constructor
+	Basilisk(
+		const Context &,
+		const std::shared_ptr <amadeus::System> &,
+		const vk::Extent2D &
+	);
+
+	// Proprety methods
+	size_t size() {
+		return extent.width * extent.height;
+	}
+
+	// Buffer accessors
+	CUdeviceptr color_buffer() {
+		return (CUdeviceptr) launch_params.color_buffer;
+	}
+
+	CUdeviceptr normal_buffer() {
+		return (CUdeviceptr) launch_params.normal_buffer;
+	}
+
+	CUdeviceptr albedo_buffer() {
+		return (CUdeviceptr) launch_params.albedo_buffer;
+	}
+
+	CUdeviceptr position_buffer() {
+		return (CUdeviceptr) launch_params.position_buffer;
+	}
+
+	// Methods
+	void set_envmap(const std::string &);
+
+	void render(
+		const ECS &,
+		const Camera &,
+		const Transform &,
+		unsigned int,
+		bool = false
+	);
 };
-
-// Proprety methods
-inline size_t size(const Basilisk &layer)
-{
-	return layer.extent.width * layer.extent.height;
-}
-
-// Buffer accessors
-inline CUdeviceptr color_buffer(const Basilisk &layer)
-{
-	return (CUdeviceptr) layer.launch_params.color_buffer;
-}
-
-inline CUdeviceptr normal_buffer(const Basilisk &layer)
-{
-	return (CUdeviceptr) layer.launch_params.normal_buffer;
-}
-
-inline CUdeviceptr albedo_buffer(const Basilisk &layer)
-{
-	return (CUdeviceptr) layer.launch_params.albedo_buffer;
-}
-
-inline CUdeviceptr position_buffer(const Basilisk &layer)
-{
-	return (CUdeviceptr) layer.launch_params.position_buffer;
-}
-
-// Other methods
-void set_envmap(Basilisk &, const std::string &);
-
-void compute(Basilisk &, const ECS &, const Camera &, const Transform &,
-		unsigned int, bool = false);
 
 }
 

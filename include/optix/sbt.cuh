@@ -11,6 +11,9 @@ namespace optix {
 
 // Hit data record
 struct Hit {
+	// Transform data
+	// glm::mat4		model;
+
 	// Mesh data
 	float2			*texcoords;
 	float3			*vertices;

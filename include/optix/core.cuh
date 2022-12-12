@@ -87,7 +87,6 @@ inline OptixDeviceContext make_context()
 	// Associate CUDA context
 	CUcontext cuda_context = 0;
 
-	
 	OptixDeviceContext context = 0;
 	OPTIX_CHECK(optixDeviceContextCreate(cuda_context, &options, &context));
 

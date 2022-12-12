@@ -19,7 +19,7 @@ namespace kobra {
 
 namespace ui {
 
-class FramerateAttachment : public ImGUIAttachment {
+class FramerateAttachment : public ImGuiAttachment {
 public:
 	static constexpr int LIMIT = 100;
 

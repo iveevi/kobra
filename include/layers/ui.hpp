@@ -1,6 +1,9 @@
 #ifndef KOBRA_LAYERS_IMGUI_H_
 #define KOBRA_LAYERS_IMGUI_H_
 
+// Standard headers
+#include <vector>
+
 // ImGUI headers
 #include <imgui/imgui.h>
 #include <imgui/backends/imgui_impl_glfw.h>
@@ -14,8 +17,8 @@ namespace kobra {
 
 namespace layers {
 
-// ImGUI rendering backend
-class ImGUI {
+// UI rendering backend
+class UI {
 	// TODO: GraphicalLayer abstract for these common structures
 	// 	.initialize(phdev, dev, ...)
 
@@ -27,13 +30,13 @@ class ImGUI {
 	vk::raii::DescriptorPool descriptor_pool = nullptr;
 	vk::raii::RenderPass render_pass = nullptr;
 	
-	std::vector <std::shared_ptr <ui::ImGUIAttachment>> attachments;
+	std::vector <std::shared_ptr <ui::ImGuiAttachment>> attachments;
 public:
 	// Default constructor
-	ImGUI() = default;
+	UI() = default;
 
 	// Constructor
-	ImGUI(const Context &context,
+	UI(const Context &context,
 			const Window &window,
 			const vk::raii::Queue &queue) {
 		// TODO: just get the graphics queue from the device...
@@ -149,7 +152,7 @@ public:
 	}
 
 	// Add attachments
-	void attach(std::shared_ptr <ui::ImGUIAttachment> attachment) {
+	void attach(std::shared_ptr <ui::ImGuiAttachment> attachment) {
 		attachments.emplace_back(attachment);
 	}
 

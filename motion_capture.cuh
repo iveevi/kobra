@@ -16,6 +16,7 @@
 #include <opencv2/imgcodecs.hpp>
 
 // Engine headers
+#include "include/amadeus/system.cuh"
 #include "include/app.hpp"
 #include "include/capture.hpp"
 #include "include/core/interpolation.hpp"
@@ -26,7 +27,7 @@
 #include "include/layers/font_renderer.hpp"
 #include "include/layers/framer.hpp"
 #include "include/layers/hybrid_tracer.cuh"
-#include "include/layers/imgui.hpp"
+#include "include/layers/ui.hpp"
 #include "include/layers/wssr.cuh"
 #include "include/optix/options.cuh"
 #include "include/optix/parameters.cuh"
@@ -35,7 +36,7 @@
 #include "include/ui/attachment.hpp"
 #include "include/ui/framerate.hpp"
 
-// #include "include/amadeus/backend.cuh"
+#include <nvml.h>
 
 // TODO: do base app without inheritance (simple struct..., app and baseapp not related)
 // TODO: and then insert layers with .attach() method
@@ -48,11 +49,12 @@ struct MotionCapture : public kobra::BaseApp {
 	kobra::layers::Basilisk tracer;
 	kobra::layers::Denoiser denoiser;
 	kobra::layers::Framer framer;
-	kobra::layers::ImGUI imgui;
+	kobra::layers::UI ui;
 
 	// TODO: GPU utilization (mem and compute) monitor
 
-	kobra::asmodeus::GridBasedReservoirs grid_based;
+	kobra::layers::GridBasedReservoirs grid_based;
+	std::shared_ptr <kobra::amadeus::System> amadeus;
 
 	// Buffers
 	CUdeviceptr b_traced;
@@ -79,9 +81,31 @@ struct MotionCapture : public kobra::BaseApp {
 
 	static constexpr vk::Extent2D raytracing_extent = {1000, 1000};
 	static constexpr vk::Extent2D rendering_extent = {1920, 1080};
-	// TODO: try different rendering extent
 
-	struct CaptureInterface : kobra::ui::ImGUIAttachment {
+	struct GPUUsageMonitor : kobra::ui::ImGuiAttachment {
+		void render() {
+			// TODO: graph memory usage over time
+			nvmlDevice_t device;
+			nvmlReturn_t result = nvmlDeviceGetHandleByIndex(0, &device);
+
+			nvmlUtilization_t utilization;
+			result = nvmlDeviceGetUtilizationRates(device, &utilization);
+
+			nvmlMemory_t memory;
+			result = nvmlDeviceGetMemoryInfo(device, &memory);
+
+			ImGui::Begin("GPU Usage");
+			ImGui::Text("GPU usage: %d%%", utilization.gpu);
+			ImGui::Text("Memory used: %llu/%llu MiB",
+				memory.used/(1024ull * 1024ull),
+				memory.total/(1024ull * 1024ull)
+			);
+
+			ImGui::End();
+		}
+	};
+
+	struct CaptureInterface : kobra::ui::ImGuiAttachment {
 		std::string m_mode_description;
 		std::set <std::string> m_additional_descriptions;
 		int m_samples = 1;
@@ -140,10 +164,13 @@ struct MotionCapture : public kobra::BaseApp {
 
 		camera = scene.ecs.get_entity("Camera");
 
+		// Create Asmodeus backend
+		amadeus = std::make_shared <kobra::amadeus::System> ();
+
 		// TODO: test lower resolution...
-		tracer = kobra::layers::Basilisk::make(get_context(), raytracing_extent);
+		tracer = kobra::layers::Basilisk(get_context(), amadeus, raytracing_extent);
 		
-		kobra::layers::set_envmap(tracer, "resources/skies/background_1.jpg");
+		tracer.set_envmap("resources/skies/background_1.jpg");
 
 		// Create the denoiser layer
 		denoiser = kobra::layers::Denoiser::make(
@@ -152,9 +179,9 @@ struct MotionCapture : public kobra::BaseApp {
 				| kobra::layers::Denoiser::eAlbedo
 		);
 
-		// Create Asmodeus backend
-		grid_based = kobra::asmodeus::GridBasedReservoirs::make(
-			get_context(), raytracing_extent
+		// WSSR layer
+		grid_based = kobra::layers::GridBasedReservoirs(
+			get_context(), amadeus, raytracing_extent
 		);
 
 		grid_based.set_envmap("resources/skies/background_1.jpg");
@@ -214,19 +241,21 @@ struct MotionCapture : public kobra::BaseApp {
 
 		ImGui_ImplGlfw_InitForVulkan(window.handle, true);
 
-		imgui = kobra::layers::ImGUI(get_context(), window, graphics_queue);
-		imgui.set_font(KOBRA_DIR "/resources/fonts/NotoSans.ttf", 30);
+		ui = kobra::layers::UI(get_context(), window, graphics_queue);
+		ui.set_font(KOBRA_DIR "/resources/fonts/NotoSans.ttf", 30);
 
 		capture_interface = std::make_shared <CaptureInterface> ();
-		imgui.attach(std::make_shared <kobra::ui::FramerateAttachment> ());
-		imgui.attach(capture_interface);
+
+		ui.attach(capture_interface);
+		ui.attach(std::make_shared <kobra::ui::FramerateAttachment> ());
+		ui.attach(std::make_shared <GPUUsageMonitor> ());
 
 		capture_interface->m_parent = this;
 		
 		// NOTE: we need this precomputation step to load all the
 		// resources before rendering; we need some system to allocate
 		// queues so that we dont need to do this...
-		kobra::layers::compute(tracer,
+		tracer.render(
 			scene.ecs,
 			camera.get <kobra::Camera> (),
 			camera.get <kobra::Transform> (),
@@ -284,7 +313,7 @@ struct MotionCapture : public kobra::BaseApp {
 			events_mutex.unlock();
 
 			if (integrator == 0) {
-				kobra::layers::compute(tracer,
+				tracer.render(
 					scene.ecs,
 					camera.get <kobra::Camera> (),
 					camera.get <kobra::Transform> (),
@@ -432,12 +461,10 @@ struct MotionCapture : public kobra::BaseApp {
 			unsigned int height = grid_based.extent.height;
 
 			float4 *d_output = 0;
-			if (integrator == 0) {
-				d_output = (float4 *) kobra::layers::color_buffer(tracer);
-			} else {
-				// d_output = (float4 *) kobra::asmodeus::color_buffer(wskdr);
+			if (integrator == 0)
+				d_output = (float4 *) tracer.color_buffer();
+			else
 				d_output = (float4 *) grid_based.color_buffer();
-			}
 
 			// TODO: denoise here?
 			// d_output = (float4 *) denoiser.result;
@@ -464,7 +491,7 @@ struct MotionCapture : public kobra::BaseApp {
 				{{420, 0}, {1080 + 420, 1080}}
 			);
 
-			imgui.render(cmd, framebuffer, extent);
+			ui.render(cmd, framebuffer, extent);
 		cmd.end();
 
 #ifdef RECORD

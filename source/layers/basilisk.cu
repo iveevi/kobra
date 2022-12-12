@@ -223,6 +223,7 @@ static void initialize_optix(Basilisk &layer)
 		layer.extent.height
 	};
 
+	params.traversable = 0;
 	params.envmap = 0;
 	params.has_envmap = false;
 	params.samples = 0;
@@ -281,44 +282,39 @@ static void initialize_optix(Basilisk &layer)
 	layer.launch_params_buffer = cuda::alloc(
 		sizeof(optix::BasiliskParameters)
 	);
-
-	// Start the timer
-	layer.timer.start();
 }
 
 // Create the layer
 // TOOD: all custom extent...
-Basilisk Basilisk::make(const Context &context, const vk::Extent2D &extent)
+Basilisk::Basilisk
+		(const Context &context,
+		const std::shared_ptr <amadeus::System> &system,
+		const vk::Extent2D &extent)
+		: m_system(system),
+		device(context.device), phdev(context.phdev),
+		descriptor_pool(context.descriptor_pool),
+		extent(extent)
 {
-	// To return
-	Basilisk layer;
-
-	// Extract critical Vulkan structures
-	layer.device = context.device;
-	layer.phdev = context.phdev;
-	layer.descriptor_pool = context.descriptor_pool;
-	layer.extent = extent;
-
 	// Initialize OptiX
-	initialize_optix(layer);
+	initialize_optix(*this);
 
 	// Others (experimental)...
-	layer.positions = new float4[extent.width * extent.height];
+	positions = new float4[extent.width * extent.height];
 
-	// Return
-	return layer;
+	// Start the timer
+	timer.start();
 }
 
 // Set the environment map
-void set_envmap(Basilisk &layer, const std::string &path)
+void Basilisk::set_envmap(const std::string &path)
 {
 	// First load the environment map
 	const auto &map = TextureManager::load_texture(
-		*layer.phdev, *layer.device, path, true
+		*phdev, *device, path, true
 	);
 
-	layer.launch_params.envmap = cuda::import_vulkan_texture(*layer.device, map);
-	layer.launch_params.has_envmap = true;
+	launch_params.envmap = cuda::import_vulkan_texture(*device, map);
+	launch_params.has_envmap = true;
 }
 
 // Update the light buffers if needed
@@ -406,186 +402,6 @@ static void update_light_buffers(Basilisk &layer,
 	}
 }
 
-// Build or update acceleration structures for the scene
-static void update_acceleration_structure(Basilisk &layer,
-		const std::vector <const Submesh *> &submeshes,
-		const std::vector <const Transform *> &submesh_transforms)
-{
-	int submesh_count = submeshes.size();
-
-	// Build acceleration structures
-	OptixAccelBuildOptions gas_accel_options = {};
-	gas_accel_options.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
-	gas_accel_options.operation  = OPTIX_BUILD_OPERATION_BUILD;
-
-	std::vector <OptixTraversableHandle> instance_gas(submesh_count);
-	
-	// Flags
-	const uint32_t triangle_input_flags[1] = {OPTIX_GEOMETRY_FLAG_NONE};
-
-	KOBRA_LOG_FUNC(Log::INFO) << "Building GAS for instances (# = " << submesh_count << ")" << std::endl;
-
-	// TODO: CACHE the vertices for the sbts
-	// TODO: reuse the vertex buffer from the rasterizer
-
-	for (int i = 0; i < submesh_count; i++) {
-		const Submesh *s = submeshes[i];
-
-		// Prepare submesh vertices and triangles
-		std::vector <float3> vertices;
-		std::vector <uint3> triangles;
-		
-		// TODO: method to generate accel handle from cuda buffers
-		for (int j = 0; j < s->indices.size(); j += 3) {
-			triangles.push_back({
-				s->indices[j],
-				s->indices[j + 1],
-				s->indices[j + 2]
-			});
-		}
-
-		for (int j = 0; j < s->vertices.size(); j++) {
-			auto p = s->vertices[j].position;
-			vertices.push_back(cuda::to_f3(p));
-		}
-
-		// Create the build input
-		OptixBuildInput build_input {};
-
-		build_input.type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
-
-		CUdeviceptr d_vertices = cuda::make_buffer_ptr(vertices);
-		CUdeviceptr d_triangles = cuda::make_buffer_ptr(triangles);
-
-		OptixBuildInputTriangleArray &triangle_array = build_input.triangleArray;
-		triangle_array.vertexFormat	= OPTIX_VERTEX_FORMAT_FLOAT3;
-		triangle_array.numVertices	= vertices.size();
-		triangle_array.vertexBuffers	= &d_vertices;
-
-		triangle_array.indexFormat	= OPTIX_INDICES_FORMAT_UNSIGNED_INT3;
-		triangle_array.numIndexTriplets	= triangles.size();
-		triangle_array.indexBuffer	= d_triangles;
-
-		triangle_array.flags		= triangle_input_flags;
-
-		// SBT record properties
-		triangle_array.numSbtRecords	= 1;
-		triangle_array.sbtIndexOffsetBuffer = 0;
-		triangle_array.sbtIndexOffsetStrideInBytes = 0;
-		triangle_array.sbtIndexOffsetSizeInBytes = 0;
-
-		// Build GAS
-		CUdeviceptr d_gas_output;
-		CUdeviceptr d_gas_tmp;
-
-		OptixAccelBufferSizes gas_buffer_sizes;
-		OPTIX_CHECK(
-			optixAccelComputeMemoryUsage(
-				layer.optix_context, &gas_accel_options,
-				&build_input, 1,
-				&gas_buffer_sizes
-			)
-		);
-		
-		// KOBRA_LOG_FUNC(Log::INFO) << "GAS buffer sizes: " << gas_buffer_sizes.tempSizeInBytes
-		//	<< " " << gas_buffer_sizes.outputSizeInBytes << std::endl;
-
-		d_gas_output = cuda::alloc(gas_buffer_sizes.outputSizeInBytes);
-		d_gas_tmp = cuda::alloc(gas_buffer_sizes.tempSizeInBytes);
-
-		OptixTraversableHandle handle;
-		OPTIX_CHECK(
-			optixAccelBuild(layer.optix_context,
-				0, &gas_accel_options,
-				&build_input, 1,
-				d_gas_tmp, gas_buffer_sizes.tempSizeInBytes,
-				d_gas_output, gas_buffer_sizes.outputSizeInBytes,
-				&handle, nullptr, 0
-			)
-		);
-
-		instance_gas[i] = handle;
-
-		// Free data at the end
-		cuda::free(d_vertices);
-		cuda::free(d_triangles);
-		cuda::free(d_gas_tmp);
-	}
-
-	// Build instances and top level acceleration structure
-	std::vector <OptixInstance> instances;
-
-	for (int i = 0; i < submesh_count; i++) {
-		glm::mat4 mat = submesh_transforms[i]->matrix();
-
-		float transform[12] = {
-			mat[0][0], mat[1][0], mat[2][0], mat[3][0],
-			mat[0][1], mat[1][1], mat[2][1], mat[3][1],
-			mat[0][2], mat[1][2], mat[2][2], mat[3][2]
-		};
-
-		OptixInstance instance {};
-		memcpy(instance.transform, transform, sizeof(float) * 12);
-
-		// Set the instance handle
-		instance.traversableHandle = instance_gas[i];
-		instance.visibilityMask = 0b1;
-		instance.sbtOffset = optix::eCount * i;
-		instance.instanceId = i;
-
-		instances.push_back(instance);
-	}
-
-	// Create top level acceleration structure
-	CUdeviceptr d_instances = cuda::make_buffer_ptr(instances);
-
-	// TLAS for objects and lights
-	{
-		OptixBuildInput ias_build_input {};
-		ias_build_input.type = OPTIX_BUILD_INPUT_TYPE_INSTANCES;
-		ias_build_input.instanceArray.instances = d_instances;
-		ias_build_input.instanceArray.numInstances = instances.size();
-
-		// IAS options
-		OptixAccelBuildOptions ias_accel_options {};
-		ias_accel_options.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
-		ias_accel_options.operation = OPTIX_BUILD_OPERATION_BUILD;
-
-		// IAS buffer sizes
-		OptixAccelBufferSizes ias_buffer_sizes;
-		OPTIX_CHECK(
-			optixAccelComputeMemoryUsage(
-				layer.optix_context, &ias_accel_options,
-				&ias_build_input, 1,
-				&ias_buffer_sizes
-			)
-		);
-
-		// KOBRA_LOG_FUNC(Log::INFO) << "IAS buffer sizes: " << ias_buffer_sizes.tempSizeInBytes << " " << ias_buffer_sizes.outputSizeInBytes << std::endl;
-
-		// Allocate the IAS
-		CUdeviceptr d_ias_output = cuda::alloc(ias_buffer_sizes.outputSizeInBytes);
-		CUdeviceptr d_ias_tmp = cuda::alloc(ias_buffer_sizes.tempSizeInBytes);
-
-		// Build the IAS
-		OPTIX_CHECK(
-			optixAccelBuild(layer.optix_context,
-				0, &ias_accel_options,
-				&ias_build_input, 1,
-				d_ias_tmp, ias_buffer_sizes.tempSizeInBytes,
-				d_ias_output, ias_buffer_sizes.outputSizeInBytes,
-				&layer.optix.handle, nullptr, 0
-			)
-		);
-
-		cuda::free(d_ias_tmp);
-		cuda::free(d_instances);
-	}
-
-	// Copy address to launch parameters
-	layer.launch_params.traversable = layer.optix.handle;
-}
-
 // Compute scene bounds
 static void update_scene_bounds(Basilisk &layer,
 		const std::vector <const Submesh *> &submeshes,
@@ -629,9 +445,9 @@ static void generate_submesh_data
 		const Transform &transform,
 		optix::Hit &data)
 {
-	std::vector <float3> vertices(submesh.vertices.size());
+	std::vector <glm::vec3> vertices(submesh.vertices.size());
 	std::vector <float2> uvs(submesh.vertices.size());
-	std::vector <uint3> triangles(submesh.triangles());
+	std::vector <glm::uvec3> triangles(submesh.triangles());
 	
 	std::vector <float3> normals(submesh.vertices.size());
 	std::vector <float3> tangents(submesh.vertices.size());
@@ -662,7 +478,7 @@ static void generate_submesh_data
 		tangents[tangent_index++] = {t.x, t.y, t.z};
 		bitangents[bitangent_index++] = {b.x, b.y, b.z};
 
-		vertices[vertex_index++] = {v.x, v.y, v.z};
+		vertices[vertex_index++] = v;
 		uvs[uv_index++] = {uv.x, uv.y};
 	}
 
@@ -676,14 +492,14 @@ static void generate_submesh_data
 
 	// Store the data
 	// TODO: cache later
-	data.vertices = cuda::make_buffer(vertices);
+	data.vertices = (float3 *) cuda::make_buffer(vertices);
 	data.texcoords = cuda::make_buffer(uvs);
 
 	data.normals = cuda::make_buffer(normals);
 	data.tangents = cuda::make_buffer(tangents);
 	data.bitangents = cuda::make_buffer(bitangents);
 
-	data.triangles = cuda::make_buffer(triangles);
+	data.triangles = (uint3 *) cuda::make_buffer(triangles);
 }
 
 // Update the SBT data
@@ -700,6 +516,7 @@ static void update_sbt_data(Basilisk &layer,
 		// Material
 		Material mat = submesh->material;
 
+		// TODO: no need for a separate material??
 		cuda::Material material;
 		material.diffuse = cuda::to_f3(mat.diffuse);
 		material.specular = cuda::to_f3(mat.specular);
@@ -711,6 +528,8 @@ static void update_sbt_data(Basilisk &layer,
 		material.type = mat.type;
 
 		HitRecord hit_record {};
+
+		// hit_record.data.model = submesh_transforms[i]->matrix();
 		hit_record.data.material = material;
 
 		generate_submesh_data(*submesh, *submesh_transforms[i], hit_record.data);
@@ -790,7 +609,7 @@ static void update_sbt_data(Basilisk &layer,
 
 	layer.launch_params.instances = submesh_count;
 
-	KOBRA_LOG_FUNC(Log::INFO) << "Updated SBT with " << submesh_count
+	KOBRA_LOG_FILE(Log::INFO) << "Updated SBT with " << submesh_count
 		<< " submeshes, for total of " << hit_records.size() << " hit records\n";
 }
 
@@ -803,6 +622,20 @@ static void preprocess_scene(Basilisk &layer,
 		const Camera &camera,
 		const Transform &transform)
 {
+	// Set viewing position
+	layer.launch_params.camera = cuda::to_f3(transform.position);
+	
+	auto uvw = kobra::uvw_frame(camera, transform);
+
+	layer.launch_params.cam_u = cuda::to_f3(uvw.u);
+	layer.launch_params.cam_v = cuda::to_f3(uvw.v);
+	layer.launch_params.cam_w = cuda::to_f3(uvw.w);
+
+	// Get time
+	layer.launch_params.time = layer.timer.elapsed_start();
+
+	// Update the raytracing system
+	bool updated = layer.m_system->update(ecs);
 
 	// Preprocess the entities
 	std::vector <const Renderable *> rasterizers;
@@ -811,47 +644,28 @@ static void preprocess_scene(Basilisk &layer,
 	std::vector <const Light *> lights;
 	std::vector <const Transform *> light_transforms;
 
-	{
-		KOBRA_PROFILE_TASK(Preprocess of ECS)
+	for (int i = 0; i < ecs.size(); i++) {
+		// TODO: one unifying renderer component, with options for
+		// raytracing, etc
+		if (ecs.exists <Renderable> (i)) {
+			const auto *rasterizer = &ecs.get <Renderable> (i);
+			const auto *transform = &ecs.get <Transform> (i);
 
-		for (int i = 0; i < ecs.size(); i++) {
-			// TODO: one unifying renderer component, with options for
-			// raytracing, etc
-			if (ecs.exists <Renderable> (i)) {
-				const auto *rasterizer = &ecs.get <Renderable> (i);
-				const auto *transform = &ecs.get <Transform> (i);
-
-				rasterizers.push_back(rasterizer);
-				rasterizer_transforms.push_back(transform);
-			}
-			
-			if (ecs.exists <Light> (i)) {
-				const auto *light = &ecs.get <Light> (i);
-				const auto *transform = &ecs.get <Transform> (i);
-
-				lights.push_back(light);
-				light_transforms.push_back(transform);
-			}
+			rasterizers.push_back(rasterizer);
+			rasterizer_transforms.push_back(transform);
 		}
-	}
+		
+		if (ecs.exists <Light> (i)) {
+			const auto *light = &ecs.get <Light> (i);
+			const auto *transform = &ecs.get <Transform> (i);
 
-	// Check if an update is needed
-	bool update = false;
-	if (rasterizers.size() == layer.cache.rasterizers.size()) {
-		for (int i = 0; i < rasterizers.size(); i++) {
-			if (rasterizers[i] != layer.cache.rasterizers[i]) {
-				update = true;
-				break;
-			}
+			lights.push_back(light);
+			light_transforms.push_back(transform);
 		}
-	} else {
-		update = true;
 	}
 
 	// Update data if necessary 
-	if (update) {
-		KOBRA_PROFILE_TASK(Actually perform the update)
-
+	if (updated || layer.launch_params.traversable == 0) {
 		// Update the cache
 		layer.cache.rasterizers = rasterizers;
 	
@@ -877,25 +691,14 @@ static void preprocess_scene(Basilisk &layer,
 			submeshes, submesh_transforms
 		);
 
-		update_acceleration_structure(layer, submeshes, submesh_transforms);
+		// update_acceleration_structure(layer, submeshes, submesh_transforms);
+		layer.launch_params.traversable = layer.m_system->build_tlas(rasterizers, optix::eCount);
 		update_sbt_data(layer, submeshes, submesh_transforms);
 		update_scene_bounds(layer, submeshes, submesh_transforms);
 
 		// Reset the number of samples stored
 		layer.launch_params.samples = 0;
 	}
-
-	// Set viewing position
-	layer.launch_params.camera = cuda::to_f3(transform.position);
-	
-	auto uvw = kobra::uvw_frame(camera, transform);
-
-	layer.launch_params.cam_u = cuda::to_f3(uvw.u);
-	layer.launch_params.cam_v = cuda::to_f3(uvw.v);
-	layer.launch_params.cam_w = cuda::to_f3(uvw.w);
-
-	// Get time
-	layer.launch_params.time = layer.timer.elapsed_start();
 }
 
 // CPU side construction algorithm
@@ -1025,8 +828,8 @@ void build_kd_tree(Basilisk &layer, float4 *point_array, int size)
 }
 
 // Path tracing computation
-void compute(Basilisk &layer,
-		const ECS &ecs,
+void Basilisk::render
+		(const ECS &ecs,
 		const Camera &camera,
 		const Transform &transform,
 		unsigned int mode,
@@ -1038,45 +841,45 @@ void compute(Basilisk &layer,
 	{
 		KOBRA_PROFILE_TASK(Update data);
 
-		preprocess_scene(layer, ecs, camera, transform);
+		preprocess_scene(*this, ecs, camera, transform);
 	}
 
 	// Set rendering mode
-	layer.launch_params.mode = mode;
+	launch_params.mode = mode;
 
 	// Reset the accumulation state if needed
 	if (!accumulate)
-		layer.launch_params.samples = 0;
+		launch_params.samples = 0;
 
 	// Copy parameters to the GPU
 	cuda::copy(
-		layer.launch_params_buffer,
-		&layer.launch_params, 1,
+		launch_params_buffer,
+		&launch_params, 1,
 		cudaMemcpyHostToDevice
 	);
 	
 	{
 		KOBRA_PROFILE_TASK(OptiX path tracing);
 		
-		int width = layer.extent.width;
-		int height = layer.extent.height;
+		int width = extent.width;
+		int height = extent.height;
 
 		// TODO: depth?
 		// TODO: alpha transparency...
 		OPTIX_CHECK(
 			optixLaunch(
-				layer.optix_pipeline,
-				layer.optix_stream,
-				layer.launch_params_buffer,
+				optix_pipeline,
+				optix_stream,
+				launch_params_buffer,
 				sizeof(optix::BasiliskParameters),
-				&layer.optix_sbt,
+				&optix_sbt,
 				width, height, 1
 			)
 		);
 		
 		CUDA_SYNC_CHECK();
 
-		auto &advanced = layer.launch_params.advanced;
+		auto &advanced = launch_params.advanced;
 		int reservoir_size = sizeof(optix::LightReservoir) * width * height;
 
 		// TODO: only copy during corresponding modes...
@@ -1103,19 +906,19 @@ void compute(Basilisk &layer,
 		// TODO: async tasks...
 		// TODO: templatize by transfer type cudamemcpytype
 		// cuda::copy(layer.positions, layer.launch_params.position_buffer);
-		if (mode == optix::eVoxel && !layer.initial_kd_tree) {
+		if (mode == optix::eVoxel && !initial_kd_tree) {
 			// TODO: update vs rebuild of k-d tree
 			cudaMemcpy(
-				layer.positions,
-				layer.launch_params.position_buffer,
+				positions,
+				launch_params.position_buffer,
 				width * height * sizeof(float4),
 				cudaMemcpyDeviceToHost
 			);
 
 			auto task = [&]() {
 				build_kd_tree(
-					layer,
-					layer.positions,
+					*this,
+					positions,
 					width * height
 				);
 			};
@@ -1124,11 +927,11 @@ void compute(Basilisk &layer,
 			// layer.async_task->wait();
 			task();
 
-			layer.initial_kd_tree = true;
+			initial_kd_tree = true;
 		}
 
-		if (mode == optix::eVoxel && layer.initial_kd_tree) {
-			auto &params = layer.launch_params;
+		if (mode == optix::eVoxel && initial_kd_tree) {
+			auto &params = launch_params;
 			reservoir_size = sizeof(optix::LightReservoir) * params.kd_leaves;
 
 			CUDA_CHECK(
@@ -1154,7 +957,7 @@ void compute(Basilisk &layer,
 		); */
 
 		// Increment number of samples
-		layer.launch_params.samples++;
+		launch_params.samples++;
 	}
 
 	// KOBRA_PROFILE_PRINT();

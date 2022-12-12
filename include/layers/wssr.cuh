@@ -11,11 +11,12 @@
 #include <optix_stubs.h>
 
 // Engine headers
+#include "../amadeus/system.cuh"
 #include "../backend.hpp"
 #include "../core/async.hpp"
 #include "../core/kd.cuh"
-#include "../optix/sbt.cuh"
 #include "../optix/parameters.cuh"
+#include "../optix/sbt.cuh"
 #include "../timer.hpp"
 #include "../vertex.hpp"
 #include "wssr_grid_parameters.cuh"
@@ -28,9 +29,12 @@ class Camera;
 class Transform;
 class Renderable;
 
-namespace asmodeus {
+namespace layers {
 
 struct GridBasedReservoirs {
+	// Raytracing backend
+	std::shared_ptr <amadeus::System> m_system;
+
 	// Critical Vulkan structures
 	vk::raii::Device *device = nullptr;
 	vk::raii::PhysicalDevice *phdev = nullptr;
@@ -52,10 +56,6 @@ struct GridBasedReservoirs {
 	// OptiX modules
 	// TODO: we should delete this?
 	OptixModule optix_module = nullptr;
-
-	struct {
-		OptixTraversableHandle handle = 0;
-	} optix;
 
 	// Program groups
 	struct {
@@ -82,20 +82,18 @@ struct GridBasedReservoirs {
 		std::vector <optix::TriangleLight> tri_lights;
 	} host;
 
-	// Cached data
-	struct {
-		std::vector <const Renderable *> rasterizers;
-	} cache;
-
 	// Timer
 	Timer timer;
 
-	// Others
-	float4 *positions = nullptr;
-	bool initial_kd_tree = false;
+	// Default constructor
+	GridBasedReservoirs() = default;
 
-	// Functions
-	static GridBasedReservoirs make(const Context &, const vk::Extent2D &);
+	// Constructor 
+	GridBasedReservoirs(
+		const Context &,
+		const std::shared_ptr <amadeus::System> &,
+		const vk::Extent2D &
+	);
 
 	// Proprety methods
 	size_t size() {
@@ -123,7 +121,8 @@ struct GridBasedReservoirs {
 	void set_envmap(const std::string &);
 
 	void render(
-		const ECS &, const Camera &,
+		const ECS &,
+		const Camera &,
 		const Transform &,
 		bool = false
 	);

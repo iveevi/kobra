@@ -4,8 +4,8 @@ uv = target('uv')
 
 build_default = uv.new_build('default')
 
-flags = ' -std=c++17 -O3 -Xcompiler -fdiagnostics-color=always'
-flags += suppress_nvcc_warnings()
+flags = ['-std=c++17', '-Xcompiler', '-fdiagnostics-color=always']
+flags.extend(suppress_nvcc_warnings())
 
 build_default.set_compiler('nvcc')
 build_default.set_flags(flags)

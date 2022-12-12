@@ -6,7 +6,7 @@ namespace kobra {
 namespace ui {
 
 // UI attachments for ImGUI rendering
-struct ImGUIAttachment {
+struct ImGuiAttachment {
 	virtual void render() = 0;
 };
 

@@ -60,7 +60,8 @@ kobra_libraries = [
 	'opencv_imgproc',
 	'Magick++-7.Q16HDRI', # TODO: find header and libraries...
 	'MagickWand-7.Q16HDRI',
-	'MagickCore-7.Q16HDRI'
+	'MagickCore-7.Q16HDRI',
+    'nvidia-ml',
 ]
 
 kobra_dir = os.path.abspath(os.path.dirname(__file__))
@@ -68,7 +69,7 @@ kobra_dir = os.path.abspath(os.path.dirname(__file__))
 # Warning suppression
 def suppress_nvcc_warnings():
     nvcc_suppress = [20012, 20013, 20014]
-    flags = ' -Xcudafe "'
+    flags = ''
     for code in nvcc_suppress:
         flags += ' --diag_suppress ' + str(code)
-    return flags + '"'
+    return ['-Xcudafe',  flags.strip()]

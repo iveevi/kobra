@@ -10,10 +10,10 @@ build_default = kobra.new_build('default')
 # TODO: auto set of compilers for c, cpp, cuda, etc
 build_default.set_compiler('nvcc')
 
-flags = ' -std=c++17 -Xcompiler -fdiagnostics-color=always'
-flags += suppress_nvcc_warnings()
+flags = ['-std=c++17', '-Xcompiler', '-fdiagnostics-color=always']
+flags.extend(suppress_nvcc_warnings())
 
-build_default.set_flags(' -O3 ' + flags)
+build_default.set_flags(['-O3'] + flags)
 
 build_default.define({
 	'MAGICKCORE_QUANTUM_DEPTH': 16,
@@ -51,7 +51,7 @@ kobra_ptx.add_sources(
 )
 
 kobra_ptx.add_includes(kobra_includes)
-kobra_ptx.set_flags(flags + ' -ptx --expt-relaxed-constexpr')
+kobra_ptx.set_flags(flags + ['-ptx', '--expt-relaxed-constexpr'])
 kobra_ptx.config({
     'linking': False,
     'object_format': '${BASENAME}.ptx',
@@ -107,7 +107,7 @@ build_default.require(
 # Debug builds
 build_gdb = kobra.new_build('gdb')
 build_gdb.copy(build_default)
-build_gdb.set_flags(' -g ' + flags)
+build_gdb.set_flags(['-g '] + flags)
 
 build_sanitizer = kobra.new_build('sanitizer')
 build_sanitizer.copy(build_gdb)

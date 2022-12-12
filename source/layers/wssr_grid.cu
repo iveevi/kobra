@@ -45,7 +45,7 @@
 
 namespace kobra {
 
-namespace asmodeus {
+namespace layers {
 
 // SBT record types
 using RaygenRecord = optix::Record <int>;
@@ -208,19 +208,18 @@ void GridBasedReservoirs::initialize_optix()
 	eval_sbt.missRecordStrideInBytes = sizeof(MissRecord);
 
 	// Configure launch parameters
-	auto &params = launch_params;
-
 	int width = extent.width;
 	int height = extent.height;
 
-	params.resolution = {
+	launch_params.resolution = {
 		extent.width,
 		extent.height
 	};
 
-	params.envmap = 0;
-	params.has_envmap = false;
-	params.samples = 0;
+	launch_params.traversable = 0;
+	launch_params.envmap = 0;
+	launch_params.has_envmap = false;
+	launch_params.samples = 0;
 
 	// Lights (set to null, etc)
 	launch_params.lights.quad_count = 0;
@@ -281,26 +280,20 @@ void GridBasedReservoirs::initialize_optix()
 }
 
 // Create the layer
-// TOOD: all custom extent...
-GridBasedReservoirs GridBasedReservoirs::make(const Context &context, const vk::Extent2D &extent)
+GridBasedReservoirs::GridBasedReservoirs
+		(const Context &context,
+		const std::shared_ptr <amadeus::System> &system,
+		const vk::Extent2D &extent)
 {
-	// To return
-	GridBasedReservoirs layer;
-
-	// Extract critical Vulkan structures
-	layer.device = context.device;
-	layer.phdev = context.phdev;
-	layer.descriptor_pool = context.descriptor_pool;
-	layer.extent = extent;
+	// Extract critical structures
+	m_system = system;
+	device = context.device;
+	phdev = context.phdev;
+	descriptor_pool = context.descriptor_pool;
+	this->extent = extent;
 
 	// Initialize OptiX
-	layer.initialize_optix();
-
-	// Others (experimental)...
-	layer.positions = new float4[extent.width * extent.height];
-
-	// Return
-	return layer;
+	initialize_optix();
 }
 
 // Set the environment map
@@ -391,186 +384,6 @@ static void update_light_buffers(GridBasedReservoirs &layer,
 		layer.launch_params.lights.triangles = cuda::make_buffer(layer.host.tri_lights);
 		layer.launch_params.lights.triangle_count = layer.host.tri_lights.size();
 	}
-}
-
-// Build or update acceleration structures for the scene
-static void update_acceleration_structure(GridBasedReservoirs &layer,
-		const std::vector <const Submesh *> &submeshes,
-		const std::vector <const Transform *> &submesh_transforms)
-{
-	int submesh_count = submeshes.size();
-
-	// Build acceleration structures
-	OptixAccelBuildOptions gas_accel_options = {};
-	gas_accel_options.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
-	gas_accel_options.operation  = OPTIX_BUILD_OPERATION_BUILD;
-
-	std::vector <OptixTraversableHandle> instance_gas(submesh_count);
-	
-	// Flags
-	const uint32_t triangle_input_flags[1] = {OPTIX_GEOMETRY_FLAG_NONE};
-
-	KOBRA_LOG_FUNC(Log::INFO) << "Building GAS for instances (# = " << submesh_count << ")" << std::endl;
-
-	// TODO: CACHE the vertices for the sbts
-	// TODO: reuse the vertex buffer from the rasterizer
-	for (int i = 0; i < submesh_count; i++) {
-		// TODO: method
-		const Submesh *s = submeshes[i];
-
-		// Prepare submesh vertices and triangles
-		std::vector <float3> vertices;
-		std::vector <uint3> triangles;
-		
-		// TODO: method to generate accel handle from cuda buffers
-		for (int j = 0; j < s->indices.size(); j += 3) {
-			triangles.push_back({
-				s->indices[j],
-				s->indices[j + 1],
-				s->indices[j + 2]
-			});
-		}
-
-		for (int j = 0; j < s->vertices.size(); j++) {
-			auto p = s->vertices[j].position;
-			vertices.push_back(cuda::to_f3(p));
-		}
-
-		// Create the build input
-		OptixBuildInput build_input {};
-
-		build_input.type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
-
-		CUdeviceptr d_vertices = cuda::make_buffer_ptr(vertices);
-		CUdeviceptr d_triangles = cuda::make_buffer_ptr(triangles);
-
-		OptixBuildInputTriangleArray &triangle_array = build_input.triangleArray;
-		triangle_array.vertexFormat	= OPTIX_VERTEX_FORMAT_FLOAT3;
-		triangle_array.numVertices	= vertices.size();
-		triangle_array.vertexBuffers	= &d_vertices;
-
-		triangle_array.indexFormat	= OPTIX_INDICES_FORMAT_UNSIGNED_INT3;
-		triangle_array.numIndexTriplets	= triangles.size();
-		triangle_array.indexBuffer	= d_triangles;
-
-		triangle_array.flags		= triangle_input_flags;
-
-		// SBT record properties
-		triangle_array.numSbtRecords	= 1;
-		triangle_array.sbtIndexOffsetBuffer = 0;
-		triangle_array.sbtIndexOffsetStrideInBytes = 0;
-		triangle_array.sbtIndexOffsetSizeInBytes = 0;
-
-		// Build GAS
-		CUdeviceptr d_gas_output;
-		CUdeviceptr d_gas_tmp;
-
-		OptixAccelBufferSizes gas_buffer_sizes;
-		OPTIX_CHECK(
-			optixAccelComputeMemoryUsage(
-				layer.optix_context, &gas_accel_options,
-				&build_input, 1,
-				&gas_buffer_sizes
-			)
-		);
-		
-		// KOBRA_LOG_FUNC(Log::INFO) << "GAS buffer sizes: " << gas_buffer_sizes.tempSizeInBytes
-		//	<< " " << gas_buffer_sizes.outputSizeInBytes << std::endl;
-
-		d_gas_output = cuda::alloc(gas_buffer_sizes.outputSizeInBytes);
-		d_gas_tmp = cuda::alloc(gas_buffer_sizes.tempSizeInBytes);
-
-		OptixTraversableHandle handle;
-		OPTIX_CHECK(
-			optixAccelBuild(layer.optix_context,
-				0, &gas_accel_options,
-				&build_input, 1,
-				d_gas_tmp, gas_buffer_sizes.tempSizeInBytes,
-				d_gas_output, gas_buffer_sizes.outputSizeInBytes,
-				&handle, nullptr, 0
-			)
-		);
-
-		instance_gas[i] = handle;
-
-		// Free data at the end
-		cuda::free(d_vertices);
-		cuda::free(d_triangles);
-		cuda::free(d_gas_tmp);
-	}
-
-	// Build instances and top level acceleration structure
-	std::vector <OptixInstance> instances;
-
-	for (int i = 0; i < submesh_count; i++) {
-		glm::mat4 mat = submesh_transforms[i]->matrix();
-
-		float transform[12] = {
-			mat[0][0], mat[1][0], mat[2][0], mat[3][0],
-			mat[0][1], mat[1][1], mat[2][1], mat[3][1],
-			mat[0][2], mat[1][2], mat[2][2], mat[3][2]
-		};
-
-		OptixInstance instance {};
-		memcpy(instance.transform, transform, sizeof(float) * 12);
-
-		// Set the instance handle
-		instance.traversableHandle = instance_gas[i];
-		instance.visibilityMask = 0b1;
-		instance.sbtOffset = i;
-		instance.instanceId = i;
-
-		instances.push_back(instance);
-	}
-
-	// Create top level acceleration structure
-	CUdeviceptr d_instances = cuda::make_buffer_ptr(instances);
-
-	// TLAS for objects and lights
-	{
-		OptixBuildInput ias_build_input {};
-		ias_build_input.type = OPTIX_BUILD_INPUT_TYPE_INSTANCES;
-		ias_build_input.instanceArray.instances = d_instances;
-		ias_build_input.instanceArray.numInstances = instances.size();
-
-		// IAS options
-		OptixAccelBuildOptions ias_accel_options {};
-		ias_accel_options.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
-		ias_accel_options.operation = OPTIX_BUILD_OPERATION_BUILD;
-
-		// IAS buffer sizes
-		OptixAccelBufferSizes ias_buffer_sizes;
-		OPTIX_CHECK(
-			optixAccelComputeMemoryUsage(
-				layer.optix_context, &ias_accel_options,
-				&ias_build_input, 1,
-				&ias_buffer_sizes
-			)
-		);
-
-		// KOBRA_LOG_FUNC(Log::INFO) << "IAS buffer sizes: " << ias_buffer_sizes.tempSizeInBytes << " " << ias_buffer_sizes.outputSizeInBytes << std::endl;
-
-		// Allocate the IAS
-		CUdeviceptr d_ias_output = cuda::alloc(ias_buffer_sizes.outputSizeInBytes);
-		CUdeviceptr d_ias_tmp = cuda::alloc(ias_buffer_sizes.tempSizeInBytes);
-
-		// Build the IAS
-		OPTIX_CHECK(
-			optixAccelBuild(layer.optix_context,
-				0, &ias_accel_options,
-				&ias_build_input, 1,
-				d_ias_tmp, ias_buffer_sizes.tempSizeInBytes,
-				d_ias_output, ias_buffer_sizes.outputSizeInBytes,
-				&layer.optix.handle, nullptr, 0
-			)
-		);
-
-		cuda::free(d_ias_tmp);
-		cuda::free(d_instances);
-	}
-
-	// Copy address to launch parameters
-	layer.launch_params.traversable = layer.optix.handle;
 }
 
 static void generate_submesh_data
@@ -720,6 +533,9 @@ static void update_sbt_data(GridBasedReservoirs &layer,
 	layer.eval_sbt.hitgroupRecordStrideInBytes = sizeof(HitRecord);
 
 	layer.launch_params.instances = submesh_count;
+	
+	KOBRA_LOG_FILE(Log::INFO) << "Updated SBT with " << submesh_count
+		<< " submeshes, for total of " << sampling_hit_records.size() << " hit records\n";
 }
 
 // Preprocess scene data
@@ -731,6 +547,34 @@ void GridBasedReservoirs::preprocess_scene
 		const Camera &camera,
 		const Transform &transform)
 {
+	// Update the raytracing system
+	bool updated = m_system->update(ecs);
+
+	// Set viewing position
+	launch_params.camera = cuda::to_f3(transform.position);
+
+	if (first_frame) {
+		p_camera = launch_params.camera;
+		first_frame = false;
+	}
+	
+	auto uvw = kobra::uvw_frame(camera, transform);
+
+	launch_params.cam_u = cuda::to_f3(uvw.u);
+	launch_params.cam_v = cuda::to_f3(uvw.v);
+	launch_params.cam_w = cuda::to_f3(uvw.w);
+
+	// Get time
+	launch_params.time = timer.elapsed_start();
+
+	// Check if we need to update the lights
+	// TODO: callbacks for light changes
+
+	// TODO: method get_entities_with_component <T>
+	// TODO: method get_components <T>
+
+	// Check if we need to update the SBT
+
 	// Preprocess the entities
 	std::vector <const Renderable *> rasterizers;
 	std::vector <const Transform *> rasterizer_transforms;
@@ -739,8 +583,6 @@ void GridBasedReservoirs::preprocess_scene
 	std::vector <const Transform *> light_transforms;
 
 	for (int i = 0; i < ecs.size(); i++) {
-		// TODO: one unifying renderer component, with options for
-		// raytracing, etc
 		if (ecs.exists <Renderable> (i)) {
 			const auto *rasterizer = &ecs.get <Renderable> (i);
 			const auto *transform = &ecs.get <Transform> (i);
@@ -758,24 +600,10 @@ void GridBasedReservoirs::preprocess_scene
 		}
 	}
 
-	// Check if an update is needed
-	bool update = false;
-	if (rasterizers.size() == cache.rasterizers.size()) {
-		for (int i = 0; i < rasterizers.size(); i++) {
-			if (rasterizers[i] != cache.rasterizers[i]) {
-				update = true;
-				break;
-			}
-		}
-	} else {
-		update = true;
-	}
+	// TODO: cache light information...
 
 	// Update data if necessary 
-	if (update) {
-		// Update the cache
-		cache.rasterizers = rasterizers;
-	
+	if (updated || launch_params.traversable == 0) {
 		// Load the list of all submeshes
 		std::vector <const Submesh *> submeshes;
 		std::vector <const Transform *> submesh_transforms;
@@ -798,29 +626,12 @@ void GridBasedReservoirs::preprocess_scene
 			submeshes, submesh_transforms
 		);
 
-		update_acceleration_structure(*this, submeshes, submesh_transforms);
+		launch_params.traversable = m_system->build_tlas(rasterizers, 1);
 		update_sbt_data(*this, submeshes, submesh_transforms);
 
 		// Reset the number of samples stored
 		launch_params.samples = 0;
 	}
-
-	// Set viewing position
-	launch_params.camera = cuda::to_f3(transform.position);
-
-	if (first_frame) {
-		p_camera = launch_params.camera;
-		first_frame = false;
-	}
-	
-	auto uvw = kobra::uvw_frame(camera, transform);
-
-	launch_params.cam_u = cuda::to_f3(uvw.u);
-	launch_params.cam_v = cuda::to_f3(uvw.v);
-	launch_params.cam_w = cuda::to_f3(uvw.w);
-
-	// Get time
-	launch_params.time = timer.elapsed_start();
 }
 
 __global__

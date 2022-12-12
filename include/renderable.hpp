@@ -12,12 +12,19 @@
 
 namespace kobra {
 
-// Renderable component
-// 	the entity must have a Mesh component
-// 	TODO: reinherit from Renderer
+// Renderable component, consisting of a reference to a mesh, and the submesh
+// properties; all memory related to the mesh is managed by other layers
 class Renderable {
 public:
+	// Information for a single submesh
+	struct Renderlet {
+		int m_index;
+	};
+
+	std::vector <Renderlet> m_renderlets;
+public:
 	// Push constants
+	// TODO: remove from here... these should be managed by the layers
 	struct PushConstants {
 		float		time;
 
@@ -48,6 +55,7 @@ public:
 		float has_normal;
 	};
 
+	// TODO: move to another layer...
 	std::vector <BufferData>	vertex_buffer;
 	std::vector <BufferData>	index_buffer;
 	std::vector <BufferData>	ubo; // TODO: one single buffer, using
