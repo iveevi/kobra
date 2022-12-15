@@ -289,8 +289,9 @@ static void initialize_optix(Basilisk &layer)
 Basilisk::Basilisk
 		(const Context &context,
 		const std::shared_ptr <amadeus::System> &system,
+		const std::shared_ptr <MeshMemory> &mesh_memory,
 		const vk::Extent2D &extent)
-		: m_system(system),
+		: m_system(system), m_mesh_memory(mesh_memory),
 		device(context.device), phdev(context.phdev),
 		descriptor_pool(context.descriptor_pool),
 		extent(extent)
@@ -386,7 +387,6 @@ static void update_light_buffers(Basilisk &layer,
 						cuda::to_f3(b - a),
 						cuda::to_f3(c - a),
 						cuda::to_f3(submesh->material.emission)
-						// cuda::to_f3(glm::vec3 {1, 1, 1})
 						// TODO: what if material has
 						// textured emission?
 					}
@@ -440,70 +440,9 @@ static void update_scene_bounds(Basilisk &layer,
 	float3 max = cuda::to_f3(bboxes[0].max);
 }
 
-static void generate_submesh_data
-		(const Submesh &submesh,
-		const Transform &transform,
-		optix::Hit &data)
-{
-	std::vector <glm::vec3> vertices(submesh.vertices.size());
-	std::vector <float2> uvs(submesh.vertices.size());
-	std::vector <glm::uvec3> triangles(submesh.triangles());
-	
-	std::vector <float3> normals(submesh.vertices.size());
-	std::vector <float3> tangents(submesh.vertices.size());
-	std::vector <float3> bitangents(submesh.vertices.size());
-
-	int vertex_index = 0;
-	int uv_index = 0;
-	int triangle_index = 0;
-	
-	int normal_index = 0;
-	int tangent_index = 0;
-	int bitangent_index = 0;
-
-	for (int j = 0; j < submesh.vertices.size(); j++) {
-		glm::vec3 n = submesh.vertices[j].normal;
-		glm::vec3 t = submesh.vertices[j].tangent;
-		glm::vec3 b = submesh.vertices[j].bitangent;
-		
-		glm::vec3 v = submesh.vertices[j].position;
-		glm::vec2 uv = submesh.vertices[j].tex_coords;
-
-		v = transform.apply(v);
-		n = transform.apply_vector(n);
-		t = transform.apply_vector(t);
-		b = transform.apply_vector(b);
-		
-		normals[normal_index++] = {n.x, n.y, n.z};
-		tangents[tangent_index++] = {t.x, t.y, t.z};
-		bitangents[bitangent_index++] = {b.x, b.y, b.z};
-
-		vertices[vertex_index++] = v;
-		uvs[uv_index++] = {uv.x, uv.y};
-	}
-
-	for (int j = 0; j < submesh.indices.size(); j += 3) {
-		triangles[triangle_index++] = {
-			submesh.indices[j],
-			submesh.indices[j + 1],
-			submesh.indices[j + 2]
-		};
-	}
-
-	// Store the data
-	// TODO: cache later
-	data.vertices = (float3 *) cuda::make_buffer(vertices);
-	data.texcoords = cuda::make_buffer(uvs);
-
-	data.normals = cuda::make_buffer(normals);
-	data.tangents = cuda::make_buffer(tangents);
-	data.bitangents = cuda::make_buffer(bitangents);
-
-	data.triangles = (uint3 *) cuda::make_buffer(triangles);
-}
-
 // Update the SBT data
 static void update_sbt_data(Basilisk &layer,
+		const std::vector <MeshMemory::Cachelet> &cachelets,
 		const std::vector <const Submesh *> &submeshes,
 		const std::vector <const Transform *> &submesh_transforms)
 {
@@ -529,10 +468,11 @@ static void update_sbt_data(Basilisk &layer,
 
 		HitRecord hit_record {};
 
-		// hit_record.data.model = submesh_transforms[i]->matrix();
+		hit_record.data.model = submesh_transforms[i]->matrix();
 		hit_record.data.material = material;
 
-		generate_submesh_data(*submesh, *submesh_transforms[i], hit_record.data);
+		hit_record.data.triangles = cachelets[i].m_cuda_triangles;
+		hit_record.data.vertices = cachelets[i].m_cuda_vertices;
 
 		// Import textures if necessary
 		// TODO: method?
@@ -670,6 +610,8 @@ static void preprocess_scene(Basilisk &layer,
 		layer.cache.rasterizers = rasterizers;
 	
 		// Load the list of all submeshes
+		std::vector <MeshMemory::Cachelet> cachelets; // TODO: redo this
+							      // method...
 		std::vector <const Submesh *> submeshes;
 		std::vector <const Transform *> submesh_transforms;
 
@@ -677,9 +619,14 @@ static void preprocess_scene(Basilisk &layer,
 			const Renderable *rasterizer = rasterizers[i];
 			const Transform *transform = rasterizer_transforms[i];
 
+			// Cache the renderables
+			// TODO: all update functions should go to a separate methods
+			layer.m_mesh_memory->cache_cuda(rasterizer);
+
 			for (int j = 0; j < rasterizer->mesh->submeshes.size(); j++) {
 				const Submesh *submesh = &rasterizer->mesh->submeshes[j];
 
+				cachelets.push_back(layer.m_mesh_memory->get(rasterizer, j));
 				submeshes.push_back(submesh);
 				submesh_transforms.push_back(transform);
 			}
@@ -693,7 +640,9 @@ static void preprocess_scene(Basilisk &layer,
 
 		// update_acceleration_structure(layer, submeshes, submesh_transforms);
 		layer.launch_params.traversable = layer.m_system->build_tlas(rasterizers, optix::eCount);
-		update_sbt_data(layer, submeshes, submesh_transforms);
+		update_sbt_data(layer, cachelets, submeshes, submesh_transforms);
+
+		// TODO: bbox method for renderables...
 		update_scene_bounds(layer, submeshes, submesh_transforms);
 
 		// Reset the number of samples stored

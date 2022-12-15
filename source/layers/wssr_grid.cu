@@ -19,10 +19,12 @@
 #include "../../shaders/raster/bindings.h"
 
 // OptiX Source PTX
-#define OPTIX_PTX_FILE "bin/ptx/wsris_grid.ptx"
+#define OPTIX_PTX_FILE "bin/ptx/wssr_grid.ptx"
 
 // OptiX debugging options
 // TODO: put in core.cuh
+// #define KOBRA_OPTIX_DEBUG
+
 #ifdef KOBRA_OPTIX_DEBUG
 
 #define KOBRA_OPTIX_EXCEPTION_FLAGS \
@@ -283,10 +285,11 @@ void GridBasedReservoirs::initialize_optix()
 GridBasedReservoirs::GridBasedReservoirs
 		(const Context &context,
 		const std::shared_ptr <amadeus::System> &system,
+		const std::shared_ptr <MeshMemory> &mesh_memory,
 		const vk::Extent2D &extent)
+		: m_system(system), m_mesh_memory(mesh_memory)
 {
-	// Extract critical structures
-	m_system = system;
+	// TODO: move to the member initializer list
 	device = context.device;
 	phdev = context.phdev;
 	descriptor_pool = context.descriptor_pool;
@@ -386,70 +389,9 @@ static void update_light_buffers(GridBasedReservoirs &layer,
 	}
 }
 
-static void generate_submesh_data
-		(const Submesh &submesh,
-		const Transform &transform,
-		optix::Hit &data)
-{
-	std::vector <float3> vertices(submesh.vertices.size());
-	std::vector <float2> uvs(submesh.vertices.size());
-	std::vector <uint3> triangles(submesh.triangles());
-	
-	std::vector <float3> normals(submesh.vertices.size());
-	std::vector <float3> tangents(submesh.vertices.size());
-	std::vector <float3> bitangents(submesh.vertices.size());
-
-	int vertex_index = 0;
-	int uv_index = 0;
-	int triangle_index = 0;
-	
-	int normal_index = 0;
-	int tangent_index = 0;
-	int bitangent_index = 0;
-
-	for (int j = 0; j < submesh.vertices.size(); j++) {
-		glm::vec3 n = submesh.vertices[j].normal;
-		glm::vec3 t = submesh.vertices[j].tangent;
-		glm::vec3 b = submesh.vertices[j].bitangent;
-		
-		glm::vec3 v = submesh.vertices[j].position;
-		glm::vec2 uv = submesh.vertices[j].tex_coords;
-
-		v = transform.apply(v);
-		n = transform.apply_vector(n);
-		t = transform.apply_vector(t);
-		b = transform.apply_vector(b);
-		
-		normals[normal_index++] = {n.x, n.y, n.z};
-		tangents[tangent_index++] = {t.x, t.y, t.z};
-		bitangents[bitangent_index++] = {b.x, b.y, b.z};
-
-		vertices[vertex_index++] = {v.x, v.y, v.z};
-		uvs[uv_index++] = {uv.x, uv.y};
-	}
-
-	for (int j = 0; j < submesh.indices.size(); j += 3) {
-		triangles[triangle_index++] = {
-			submesh.indices[j],
-			submesh.indices[j + 1],
-			submesh.indices[j + 2]
-		};
-	}
-
-	// Store the data
-	// TODO: cache later
-	data.vertices = cuda::make_buffer(vertices);
-	data.texcoords = cuda::make_buffer(uvs);
-
-	data.normals = cuda::make_buffer(normals);
-	data.tangents = cuda::make_buffer(tangents);
-	data.bitangents = cuda::make_buffer(bitangents);
-
-	data.triangles = cuda::make_buffer(triangles);
-}
-
 // Update the SBT data
 static void update_sbt_data(GridBasedReservoirs &layer,
+		const std::vector <MeshMemory::Cachelet> &cachelets,
 		const std::vector <const Submesh *> &submeshes,
 		const std::vector <const Transform *> &submesh_transforms)
 {
@@ -475,9 +417,12 @@ static void update_sbt_data(GridBasedReservoirs &layer,
 		material.type = mat.type;
 
 		HitRecord hit_record {};
-		hit_record.data.material = material;
 
-		generate_submesh_data(*submesh, *submesh_transforms[i], hit_record.data);
+		hit_record.data.model = submesh_transforms[i]->matrix();
+		hit_record.data.material = material;
+		
+		hit_record.data.triangles = cachelets[i].m_cuda_triangles;
+		hit_record.data.vertices = cachelets[i].m_cuda_vertices;
 
 		// Import textures if necessary
 		// TODO: method?
@@ -605,6 +550,8 @@ void GridBasedReservoirs::preprocess_scene
 	// Update data if necessary 
 	if (updated || launch_params.traversable == 0) {
 		// Load the list of all submeshes
+		std::vector <MeshMemory::Cachelet> cachelets; // TODO: redo this
+							      // method...
 		std::vector <const Submesh *> submeshes;
 		std::vector <const Transform *> submesh_transforms;
 
@@ -612,9 +559,14 @@ void GridBasedReservoirs::preprocess_scene
 			const Renderable *rasterizer = rasterizers[i];
 			const Transform *transform = rasterizer_transforms[i];
 
+			// Cache the renderables
+			// TODO: all update functions should go to a separate methods
+			m_mesh_memory->cache_cuda(rasterizer);
+
 			for (int j = 0; j < rasterizer->mesh->submeshes.size(); j++) {
 				const Submesh *submesh = &rasterizer->mesh->submeshes[j];
 
+				cachelets.push_back(m_mesh_memory->get(rasterizer, j));
 				submeshes.push_back(submesh);
 				submesh_transforms.push_back(transform);
 			}
@@ -627,7 +579,7 @@ void GridBasedReservoirs::preprocess_scene
 		);
 
 		launch_params.traversable = m_system->build_tlas(rasterizers, 1);
-		update_sbt_data(*this, submeshes, submesh_transforms);
+		update_sbt_data(*this, cachelets, submeshes, submesh_transforms);
 
 		// Reset the number of samples stored
 		launch_params.samples = 0;

@@ -20,6 +20,7 @@
 #include "../timer.hpp"
 #include "../vertex.hpp"
 #include "wssr_grid_parameters.cuh"
+#include "mesh_memory.hpp"
 
 namespace kobra {
 
@@ -34,6 +35,7 @@ namespace layers {
 struct GridBasedReservoirs {
 	// Raytracing backend
 	std::shared_ptr <amadeus::System> m_system;
+	std::shared_ptr <MeshMemory> m_mesh_memory;
 
 	// Critical Vulkan structures
 	vk::raii::Device *device = nullptr;
@@ -92,6 +94,7 @@ struct GridBasedReservoirs {
 	GridBasedReservoirs(
 		const Context &,
 		const std::shared_ptr <amadeus::System> &,
+		const std::shared_ptr <MeshMemory> &,
 		const vk::Extent2D &
 	);
 

@@ -19,7 +19,7 @@ using namespace kobra::optix;
 
 // TODO: launch parameter for ray depth
 // TODO: rename to MAX_BOUNCES
-#define MAX_DEPTH 3
+#define MAX_DEPTH 2
 
 // Local constants
 static const float eps = 1e-3f;
@@ -75,24 +75,42 @@ struct RayPacket {
 // Interpolate triangle values
 template <class T>
 KCUDA_INLINE KCUDA_DEVICE
-T interpolate(T *arr, uint3 triagle, float2 bary)
+T interpolate(const T &a, const T &b, const T &c, float2 bary)
 {
-	T a = arr[triagle.x];
-	T b = arr[triagle.y];
-	T c = arr[triagle.z];
-
 	return (1.0f - bary.x - bary.y) * a + bary.x * b + bary.y * c;
+}
+
+// Compute hit point
+static KCUDA_INLINE KCUDA_DEVICE
+float3 calculate_intersection(Hit *hit, glm::uvec3 triangle, float2 bary)
+{
+	glm::vec3 a = hit->vertices[triangle.x].position;
+	glm::vec3 b = hit->vertices[triangle.y].position;
+	glm::vec3 c = hit->vertices[triangle.z].position;
+	glm::vec3 x = interpolate(a, b, c, bary);
+	x = hit->model * glm::vec4(x, 1.0f);
+	return { x.x, x.y, x.z };
 }
 
 // Calculate hit normal
 static __device__ float3 calculate_normal
-		(Hit *hit_data, uint3 triangle,
-		 float2 bary, float2 uv, bool &entering)
+		(Hit *hit_data, glm::uvec3 triangle,
+		float2 bary, glm::vec2 uv, bool &entering)
 {
-	float3 e1 = hit_data->vertices[triangle.y] - hit_data->vertices[triangle.x];
-	float3 e2 = hit_data->vertices[triangle.z] - hit_data->vertices[triangle.x];
-	float3 ng = cross(e1, e2);
+	glm::vec3 a = hit_data->vertices[triangle.x].position;
+	glm::vec3 b = hit_data->vertices[triangle.y].position;
+	glm::vec3 c = hit_data->vertices[triangle.z].position;
 
+	// TODO: compute cross, then transform?
+	glm::vec3 e1 = b - a;
+	glm::vec3 e2 = c - a;
+
+	e1 = hit_data->model * glm::vec4(e1, 0.0f);
+	e2 = hit_data->model * glm::vec4(e2, 0.0f);
+
+	glm::vec3 gnormal = glm::normalize(glm::cross(e1, e2));
+
+	float3 ng = { gnormal.x, gnormal.y, gnormal.z };
 	if (dot(ng, optixGetWorldRayDirection()) > 0.0f) {
 		ng = -ng;
 		entering = false;
@@ -102,7 +120,14 @@ static __device__ float3 calculate_normal
 
 	ng = normalize(ng);
 
-	float3 normal = interpolate(hit_data->normals, triangle, bary);
+	a = hit_data->vertices[triangle.x].normal;
+	b = hit_data->vertices[triangle.y].normal;
+	c = hit_data->vertices[triangle.z].normal;
+
+	gnormal = interpolate(a, b, c, bary);
+	gnormal = hit_data->model * glm::vec4(gnormal, 0.0f);
+
+	float3 normal = { gnormal.x, gnormal.y, gnormal.z };
 	if (dot(normal, ng) < 0.0f)
 		normal = -normal;
 
@@ -113,9 +138,27 @@ static __device__ float3 calculate_normal
 		float3 n = 2 * make_float3(n4.x, n4.y, n4.z) - 1;
 
 		// Tangent and bitangent
-		float3 tangent = interpolate(hit_data->tangents, triangle, bary);
-		float3 bitangent = interpolate(hit_data->bitangents, triangle, bary);
+		a = hit_data->vertices[triangle.x].tangent;
+		b = hit_data->vertices[triangle.y].tangent;
+		c = hit_data->vertices[triangle.z].tangent;
 
+		glm::vec3 gtangent = interpolate(a, b, c, bary);
+		gtangent = hit_data->model * glm::vec4(gtangent, 0.0f);
+
+		a = hit_data->vertices[triangle.x].bitangent;
+		b = hit_data->vertices[triangle.y].bitangent;
+		c = hit_data->vertices[triangle.z].bitangent;
+
+		glm::vec3 gbitangent = interpolate(a, b, c, bary);
+		gbitangent = hit_data->model * glm::vec4(gbitangent, 0.0f);
+
+		gtangent = glm::normalize(hit_data->model * glm::vec4(gtangent, 0.0f));
+		gbitangent = glm::normalize(hit_data->model * glm::vec4(gbitangent, 0.0f));
+
+		float3 tangent = { gtangent.x, gtangent.y, gtangent.z };
+		float3 bitangent = { gbitangent.x, gbitangent.y, gbitangent.z };
+
+		// TODO: get rid of this
 		mat3 tbn = mat3(
 			normalize(tangent),
 			normalize(bitangent),
@@ -130,7 +173,7 @@ static __device__ float3 calculate_normal
 
 // Calculate relevant material data for a hit
 KCUDA_INLINE __device__
-void calculate_material(Hit *hit_data, Material &mat, uint3 triangle, float2 uv)
+void calculate_material(Hit *hit_data, Material &mat, glm::uvec3 triangle, glm::vec2 uv)
 {
 	if (hit_data->textures.has_diffuse) {
 		float4 d4 = tex2D <float4> (hit_data->textures.diffuse, uv.x, uv.y);
@@ -418,9 +461,12 @@ void trace(OptixTraversableHandle handle, int stride, float3 origin, float3 dire
 									\
 	float2 bary = optixGetTriangleBarycentrics();			\
 	int primitive_index = optixGetPrimitiveIndex();			\
-	uint3 triangle = hit->triangles[primitive_index];		\
+	glm::uvec3 triangle = hit->triangles[primitive_index];		\
 									\
-	float2 uv = interpolate(hit->texcoords, triangle, bary);	\
+	glm::vec2 uv_a = hit->vertices[triangle.x].tex_coords;		\
+	glm::vec2 uv_b = hit->vertices[triangle.y].tex_coords;		\
+	glm::vec2 uv_c = hit->vertices[triangle.z].tex_coords;		\
+	glm::vec2 uv = interpolate(uv_a, uv_b, uv_c, bary);		\
 	uv.y = 1 - uv.y;						\
 									\
 	Material material = hit->material;				\
@@ -429,7 +475,7 @@ void trace(OptixTraversableHandle handle, int stride, float3 origin, float3 dire
 	bool entering;							\
 	float3 wo = -optixGetWorldRayDirection();			\
 	float3 n = calculate_normal(hit, triangle, bary, uv, entering);	\
-	float3 x = interpolate(hit->vertices, triangle, bary);		\
+	float3 x = calculate_intersection(hit, triangle, bary);		\
 									\
 	if (isnan(n.x) || isnan(n.y) || isnan(n.z)) {			\
 		rp->value = make_float3(0.0f);				\

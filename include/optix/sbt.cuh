@@ -4,24 +4,28 @@
 // Engine headers
 #include "../bbox.hpp"
 #include "../cuda/material.cuh"
+#include "../vertex.hpp"
 
 namespace kobra {
 
 namespace optix {
 
 // Hit data record
-struct Hit {
+struct Hit {	
 	// Transform data
-	// glm::mat4		model;
+	glm::mat4 model;
 
 	// Mesh data
-	float2			*texcoords;
-	float3			*vertices;
-	uint3			*triangles;
+	// glm::vec2		*texcoords;
+	glm::uvec3		*triangles;
+	
+	/* glm::vec3		*vertices;
 
-	float3			*normals;
-	float3			*tangents;
-	float3			*bitangents;
+	glm::vec3 		*normals;
+	glm::vec3		*tangents;
+	glm::vec3		*bitangents; */
+
+	Vertex			*vertices;
 
 	// Auto UV mapping parameters
 	BoundingBox		bbox;

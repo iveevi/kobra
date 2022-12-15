@@ -15,6 +15,9 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
 
+// NVIDIA diagnostics
+#include <nvml.h>
+
 // Engine headers
 #include "include/amadeus/system.cuh"
 #include "include/app.hpp"
@@ -35,8 +38,7 @@
 #include "include/texture.hpp"
 #include "include/ui/attachment.hpp"
 #include "include/ui/framerate.hpp"
-
-#include <nvml.h>
+#include "include/layers/mesh_memory.hpp"
 
 // TODO: do base app without inheritance (simple struct..., app and baseapp not related)
 // TODO: and then insert layers with .attach() method
@@ -50,8 +52,7 @@ struct MotionCapture : public kobra::BaseApp {
 	kobra::layers::Denoiser denoiser;
 	kobra::layers::Framer framer;
 	kobra::layers::UI ui;
-
-	// TODO: GPU utilization (mem and compute) monitor
+	std::shared_ptr <kobra::layers::MeshMemory> mesh_memory;
 
 	kobra::layers::GridBasedReservoirs grid_based;
 	std::shared_ptr <kobra::amadeus::System> amadeus;
@@ -164,11 +165,15 @@ struct MotionCapture : public kobra::BaseApp {
 
 		camera = scene.ecs.get_entity("Camera");
 
-		// Create Asmodeus backend
+		// Create the layers
 		amadeus = std::make_shared <kobra::amadeus::System> ();
+		mesh_memory = std::make_shared <kobra::layers::MeshMemory> (get_context());
 
 		// TODO: test lower resolution...
-		tracer = kobra::layers::Basilisk(get_context(), amadeus, raytracing_extent);
+		tracer = kobra::layers::Basilisk(
+			get_context(), amadeus,
+			mesh_memory, raytracing_extent
+		);
 		
 		tracer.set_envmap("resources/skies/background_1.jpg");
 
@@ -181,7 +186,8 @@ struct MotionCapture : public kobra::BaseApp {
 
 		// WSSR layer
 		grid_based = kobra::layers::GridBasedReservoirs(
-			get_context(), amadeus, raytracing_extent
+			get_context(), amadeus,
+			mesh_memory, raytracing_extent
 		);
 
 		grid_based.set_envmap("resources/skies/background_1.jpg");
@@ -271,6 +277,8 @@ struct MotionCapture : public kobra::BaseApp {
 		compute_thread = new std::thread(
 			&MotionCapture::path_trace_kernel, this
 		);
+		
+		KOBRA_LOG_FILE(kobra::Log::INFO) << "Launched path tracing thread\n";
 
 		// Allocate buffers
 		size_t size = grid_based.size(); // kobra::layers::size(tracer);
@@ -297,9 +305,12 @@ struct MotionCapture : public kobra::BaseApp {
 
 	void path_trace_kernel() {	
 		compute_timer.start();
+
 		while (!kill) {
 			// Wait for the latest capture if any
-			while (!capture_now);
+			/* while (!capture_now) {
+				std::cout << "\twaiting for capture, capture_now: " << std::boolalpha << capture_now << "\n";
+			} */
 
 			bool accumulate = true;
 
@@ -327,11 +338,11 @@ struct MotionCapture : public kobra::BaseApp {
 				);
 			}
 			
-			kobra::layers::denoise(denoiser, {
+			/* kobra::layers::denoise(denoiser, {
 				.color = grid_based.color_buffer(),
 				.normal = grid_based.normal_buffer(),
 				.albedo = grid_based.albedo_buffer()
-			});
+			}); */
 
 			compute_time = compute_timer.lap()/1e6;
 
