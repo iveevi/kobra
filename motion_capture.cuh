@@ -39,6 +39,8 @@
 #include "include/ui/attachment.hpp"
 #include "include/ui/framerate.hpp"
 #include "include/layers/mesh_memory.hpp"
+#include "include/amadeus/armada.cuh"
+#include "include/amadeus/path_tracer.cuh"
 
 // TODO: do base app without inheritance (simple struct..., app and baseapp not related)
 // TODO: and then insert layers with .attach() method
@@ -52,10 +54,12 @@ struct MotionCapture : public kobra::BaseApp {
 	kobra::layers::Denoiser denoiser;
 	kobra::layers::Framer framer;
 	kobra::layers::UI ui;
-	std::shared_ptr <kobra::layers::MeshMemory> mesh_memory;
-
 	kobra::layers::GridBasedReservoirs grid_based;
+	
+	std::shared_ptr <kobra::layers::MeshMemory> mesh_memory;
 	std::shared_ptr <kobra::amadeus::System> amadeus;
+
+	kobra::amadeus::ArmadaRTX armada_rtx;
 
 	// Buffers
 	CUdeviceptr b_traced;
@@ -176,6 +180,18 @@ struct MotionCapture : public kobra::BaseApp {
 		);
 		
 		tracer.set_envmap("resources/skies/background_1.jpg");
+
+		armada_rtx = kobra::amadeus::ArmadaRTX(
+			get_context(), amadeus,
+			mesh_memory, raytracing_extent
+		);
+
+		armada_rtx.attach(
+			"Path Tracer",
+			std::make_shared <kobra::amadeus::PathTracer> ()
+		);
+		
+		armada_rtx.set_envmap("resources/skies/background_1.jpg");
 
 		// Create the denoiser layer
 		denoiser = kobra::layers::Denoiser::make(
@@ -323,20 +339,12 @@ struct MotionCapture : public kobra::BaseApp {
 			events = std::queue <bool> (); // Clear events
 			events_mutex.unlock();
 
-			if (integrator == 0) {
-				tracer.render(
-					scene.ecs,
-					camera.get <kobra::Camera> (),
-					camera.get <kobra::Transform> (),
-					mode, accumulate
-				);
-			} else {
-				grid_based.render(scene.ecs,
-					camera.get <kobra::Camera> (),
-					camera.get <kobra::Transform> (),
-					accumulate
-				);
-			}
+			armada_rtx.render(
+				scene.ecs,
+				camera.get <kobra::Camera> (),
+				camera.get <kobra::Transform> (),
+				accumulate
+			);
 			
 			/* kobra::layers::denoise(denoiser, {
 				.color = grid_based.color_buffer(),
@@ -471,17 +479,17 @@ struct MotionCapture : public kobra::BaseApp {
 			unsigned int width = grid_based.extent.width;
 			unsigned int height = grid_based.extent.height;
 
-			float4 *d_output = 0;
+			/* float4 *d_output = 0;
 			if (integrator == 0)
 				d_output = (float4 *) tracer.color_buffer();
 			else
-				d_output = (float4 *) grid_based.color_buffer();
+				d_output = (float4 *) grid_based.color_buffer(); */
 
 			// TODO: denoise here?
 			// d_output = (float4 *) denoiser.result;
 
 			kobra::cuda::hdr_to_ldr(
-				d_output,
+				(float4 *) armada_rtx.color_buffer(),
 				(uint32_t *) b_traced,
 				width, height,
 				kobra::cuda::eTonemappingACES

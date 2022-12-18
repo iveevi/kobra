@@ -9,7 +9,8 @@ kobra_sources = [
 	'source/layers/denoiser.cu',
 	'source/layers/mesh_memory_cuda.cu',
 	'source/layers/wssr_grid.cu',
-    'source/optix/core.cu'
+    'source/optix/core.cu',
+    'source/amadeus/armada.cu'
 ]
 
 glslang_sources = [

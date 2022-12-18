@@ -46,7 +46,6 @@ static void load_optix_program_groups(Basilisk &layer)
 		OPTIX_DESC_HIT(layer.optix_restir_module, "__closesthit__restir"),
 		OPTIX_DESC_HIT(layer.optix_restir_module, "__closesthit__restir_pt"),
 		OPTIX_DESC_HIT(layer.optix_voxel_module, "__closesthit__voxel"),
-		OPTIX_DESC_HIT(layer.optix_module, "__closesthit__shadow"),
 		OPTIX_DESC_MISS(layer.optix_module, "__miss__ms"),
 		OPTIX_DESC_MISS(layer.optix_module, "__miss__shadow")
 	};
@@ -58,7 +57,6 @@ static void load_optix_program_groups(Basilisk &layer)
 		&layer.optix_programs.hit_restir,
 		&layer.optix_programs.hit_restir_pt,
 		&layer.optix_programs.hit_voxel,
-		&layer.optix_programs.shadow_hit,
 		&layer.optix_programs.miss,
 		&layer.optix_programs.shadow_miss
 	};

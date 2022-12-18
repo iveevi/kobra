@@ -67,7 +67,7 @@ struct Basilisk {
 		OptixProgramGroup hit_voxel = nullptr;
 
 		OptixProgramGroup shadow_miss = nullptr;
-		OptixProgramGroup shadow_hit = nullptr;
+		// OptixProgramGroup shadow_hit = nullptr;
 	} optix_programs;
 
 	// Launch parameters

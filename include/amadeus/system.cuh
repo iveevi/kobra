@@ -137,6 +137,11 @@ public:
         // Default constructor
         System() : m_context(optix::make_context()) {}
 
+	// Propreties
+	OptixDeviceContext context() const {
+		return m_context;
+	}
+
         // Update from ECS
         bool update(const ECS &ecs) {
 		bool updated = false;

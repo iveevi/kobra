@@ -47,11 +47,12 @@ kobra_ptx.add_sources(
     'source/optix/basilisk_rt.cu',
     'source/optix/basilisk_restir.cu',
     'source/optix/basilisk_voxel.cu',
-    'source/optix/wssr_grid.cu'
+    'source/optix/wssr_grid.cu',
+    'source/optix/amadeus_path_tracer.cu',
 )
 
 kobra_ptx.add_includes(kobra_includes)
-kobra_ptx.set_flags(flags + ['-g', '-ptx', '--expt-relaxed-constexpr'])
+kobra_ptx.set_flags(flags + ['-g', '-lineinfo', '-ptx', '--expt-relaxed-constexpr'])
 kobra_ptx.config({
     'linking': False,
     'object_format': '${BASENAME}.ptx',

@@ -21,30 +21,6 @@
 // OptiX Source PTX
 #define OPTIX_PTX_FILE "bin/ptx/wssr_grid.ptx"
 
-// OptiX debugging options
-// TODO: put in core.cuh
-// #define KOBRA_OPTIX_DEBUG
-
-#ifdef KOBRA_OPTIX_DEBUG
-
-#define KOBRA_OPTIX_EXCEPTION_FLAGS \
-		OPTIX_EXCEPTION_FLAG_DEBUG \
-		| OPTIX_EXCEPTION_FLAG_TRACE_DEPTH \
-		| OPTIX_EXCEPTION_FLAG_STACK_OVERFLOW
-
-#define KOBRA_OPTIX_DEBUG_LEVEL OPTIX_COMPILE_DEBUG_LEVEL_FULL
-#define KOBRA_OPTIX_OPTIMIZATION_LEVEL OPTIX_COMPILE_OPTIMIZATION_LEVEL_0
-
-#else
-
-#define KOBRA_OPTIX_EXCEPTION_FLAGS \
-		OPTIX_EXCEPTION_FLAG_NONE
-
-#define KOBRA_OPTIX_DEBUG_LEVEL OPTIX_COMPILE_DEBUG_LEVEL_NONE
-#define KOBRA_OPTIX_OPTIMIZATION_LEVEL OPTIX_COMPILE_OPTIMIZATION_LEVEL_3
-
-#endif
-
 namespace kobra {
 
 namespace layers {
@@ -111,28 +87,6 @@ static void load_optix_program_groups(GridBasedReservoirs &layer)
 	);
 }
 
-static OptixModule load_optix_module(OptixDeviceContext optix_context,
-		const std::string &path)
-{
-	static char log[2048];
-	static size_t sizeof_log = sizeof(log);
-
-	std::string file = common::read_file(path);
-
-	OptixModule module;
-	OPTIX_CHECK_LOG(
-		optixModuleCreateFromPTX(
-			optix_context,
-			&module_options, &ppl_compile_options,
-			file.c_str(), file.size(),
-			log, &sizeof_log,
-			&module
-		)
-	);
-
-	return module;
-}
-
 // Setup and load OptiX things
 void GridBasedReservoirs::initialize_optix()
 {
@@ -143,18 +97,9 @@ void GridBasedReservoirs::initialize_optix()
 	CUDA_CHECK(cudaStreamCreate(&optix_stream));
 
 	// Now load the module
-	char log[2048];
-	size_t sizeof_log = sizeof(log);
-
-	std::string file = common::read_file(OPTIX_PTX_FILE);
-	OPTIX_CHECK_LOG(
-		optixModuleCreateFromPTX(
-			optix_context,
-			&module_options, &ppl_compile_options,
-			file.c_str(), file.size(),
-			log, &sizeof_log,
-			&optix_module
-		)
+	optix_module = optix::load_optix_module(
+		optix_context, OPTIX_PTX_FILE,
+		ppl_compile_options, module_options
 	);
 
 	// Load programs
