@@ -50,11 +50,9 @@ struct MotionCapture : public kobra::BaseApp {
 	kobra::Scene scene;
 
 	// Necessary layers
-	kobra::layers::Basilisk tracer;
 	kobra::layers::Denoiser denoiser;
 	kobra::layers::Framer framer;
 	kobra::layers::UI ui;
-	kobra::layers::GridBasedReservoirs grid_based;
 	
 	std::shared_ptr <kobra::layers::MeshMemory> mesh_memory;
 	std::shared_ptr <kobra::amadeus::System> amadeus;
@@ -64,13 +62,6 @@ struct MotionCapture : public kobra::BaseApp {
 	// Buffers
 	CUdeviceptr b_traced;
 	std::vector <uint8_t> b_traced_cpu;
-
-	// Capture
-	cv::VideoWriter capture;
-	std::vector <byte> frame;
-
-	std::string capture_path;
-	int max_samples = 0;
 
 	// Threads
 	std::thread *compute_thread = nullptr;
@@ -174,13 +165,6 @@ struct MotionCapture : public kobra::BaseApp {
 		mesh_memory = std::make_shared <kobra::layers::MeshMemory> (get_context());
 
 		// TODO: test lower resolution...
-		tracer = kobra::layers::Basilisk(
-			get_context(), amadeus,
-			mesh_memory, raytracing_extent
-		);
-		
-		tracer.set_envmap("resources/skies/background_1.jpg");
-
 		armada_rtx = kobra::amadeus::ArmadaRTX(
 			get_context(), amadeus,
 			mesh_memory, raytracing_extent
@@ -199,58 +183,6 @@ struct MotionCapture : public kobra::BaseApp {
 			kobra::layers::Denoiser::eNormal
 				| kobra::layers::Denoiser::eAlbedo
 		);
-
-		// WSSR layer
-		grid_based = kobra::layers::GridBasedReservoirs(
-			get_context(), amadeus,
-			mesh_memory, raytracing_extent
-		);
-
-		grid_based.set_envmap("resources/skies/background_1.jpg");
-
-#if 0
-
-		std::cout << "Enter capture path: ";
-		std::cin >> capture_path;
-
-		if (capture_path.empty()) {
-			// Assume defaults
-			capture_path = "capture.png";
-			max_samples = 100000;
-		} else {
-			std::cout << "Enter max samples: ";
-			std::cin >> max_samples;
-		}
-
-#else
-
-		capture_path = "capture.png";
-		max_samples = 100000;
-
-#endif
-
-		std::cout << "Path tracing " << max_samples << " samples to " << capture_path << "\n";
-
-#ifdef RECORD
-
-		// Ask for destination
-		std::string video_name;
-		std::cout << "Enter video name: ";
-		std::cin >> video_name;
-
-		// Setup capture
-		capture.open(
-			("data/" + video_name + ".mp4"),
-			cv::VideoWriter::fourcc('A', 'V', 'C', '1'),
-			60, cv::Size(1000, 1000)
-		);
-
-		if (!capture.isOpened())
-			std::cout << "Failed to open capture" << std::endl;
-		else
-			std::cout << "Capture opened" << std::endl;
-
-#endif
 			
 		// Input callbacks
 		io.mouse_events.subscribe(mouse_callback, this);
@@ -277,18 +209,12 @@ struct MotionCapture : public kobra::BaseApp {
 		// NOTE: we need this precomputation step to load all the
 		// resources before rendering; we need some system to allocate
 		// queues so that we dont need to do this...
-		tracer.render(
+		armada_rtx.render(
 			scene.ecs,
 			camera.get <kobra::Camera> (),
 			camera.get <kobra::Transform> (),
-			mode, false 
+			false 
 		);
-
-		/* grid_based.render(scene.ecs,
-			camera.get <kobra::Camera> (),
-			camera.get <kobra::Transform> (),
-			false
-		); */
 
 		compute_thread = new std::thread(
 			&MotionCapture::path_trace_kernel, this
@@ -297,12 +223,10 @@ struct MotionCapture : public kobra::BaseApp {
 		KOBRA_LOG_FILE(kobra::Log::INFO) << "Launched path tracing thread\n";
 
 		// Allocate buffers
-		size_t size = grid_based.size(); // kobra::layers::size(tracer);
+		size_t size = armada_rtx.size();
 
 		b_traced = kobra::cuda::alloc(size * sizeof(uint32_t));
 		b_traced_cpu.resize(size);
-
-		mode_map.at(5)();
 	}
 
 	// Destructor
@@ -361,77 +285,9 @@ struct MotionCapture : public kobra::BaseApp {
 
 	float time = 0.0f;
 
-	unsigned int mode = kobra::optix::eRegular;
-
-	// Mode map for Basilisk
-	// TODO: turn into keybindings
-	const std::unordered_map <int, std::function <void ()>> mode_map {
-		{1, [&]() {
-			mode = kobra::optix::eRegular;
-			capture_interface->m_mode_description = "Regular";
-		}},
-
-		{2, [&]() {
-			mode = kobra::optix::eReSTIR;
-			tracer.launch_params.options.reprojected_reuse = false;
-			capture_interface->m_mode_description = "ReSTIR";
-		}},
-
-		{3, [&]() {
-			mode = kobra::optix::eReSTIR;
-			tracer.launch_params.options.reprojected_reuse = true;
-			capture_interface->m_mode_description = "ReSTIR (reprojected reuse)";
-		}},
-
-		{4, [&]() {
-			mode = kobra::optix::eVoxel;
-			capture_interface->m_mode_description = "WSSR using K-d tree";
-		}},
-
-		{5, [&]() {
-			mode = kobra::optix::eReSTIRPT;
-			capture_interface->m_mode_description = "ReSTIR Path Tracing";
-		}},
-
-		{6, [&]() {
-			bool &b = tracer.launch_params.options.indirect_only;
-			b = !b;
-
-			if (b)
-				capture_interface->m_additional_descriptions.insert("Indirect Only");
-			else
-				capture_interface->m_additional_descriptions.erase("Indirect Only");
-		}},
-
-		{7, [&]() {
-			// TODO: disabled accumulation should just reset every
-			// frame...
-			bool &b = tracer.launch_params.options.disable_accumulation;
-			b = !b;
-
-			if (b)
-				capture_interface->m_additional_descriptions.insert("No Accumulation");
-			else
-				capture_interface->m_additional_descriptions.erase("No Accumulation");
-		}},
-
-		{8, [&]() {
-			integrator = 1 - integrator;
-
-			if (integrator == 1) {
-				capture_interface->m_mode_description = "WSSR using Grid";
-			} else {
-				// TODO: get a string representation of the
-				// integrator...
-				capture_interface->m_mode_description = "Basilisk";
-			}
-		}},
-
-		{9, [&]() {
-			auto &gb_ris = grid_based.launch_params.gb_ris;
-			gb_ris.reproject = !gb_ris.reproject;
-		}}
-	};
+	// Keybindings
+	// TODO: separate header/class
+	const std::unordered_map <int, std::function <void ()>> mode_map {};
 
 	void record(const vk::raii::CommandBuffer &cmd,
 			const vk::raii::Framebuffer &framebuffer) override {
@@ -476,33 +332,26 @@ struct MotionCapture : public kobra::BaseApp {
 
 		// Now trace and render
 		cmd.begin({});
-			unsigned int width = grid_based.extent.width;
-			unsigned int height = grid_based.extent.height;
-
-			/* float4 *d_output = 0;
-			if (integrator == 0)
-				d_output = (float4 *) tracer.color_buffer();
-			else
-				d_output = (float4 *) grid_based.color_buffer(); */
-
-			// TODO: denoise here?
-			// d_output = (float4 *) denoiser.result;
+			vk::Extent2D rtx_extent = armada_rtx.extent();
 
 			kobra::cuda::hdr_to_ldr(
 				(float4 *) armada_rtx.color_buffer(),
 				(uint32_t *) b_traced,
-				width, height,
+				rtx_extent.width, rtx_extent.height,
 				kobra::cuda::eTonemappingACES
 			);
 
-			kobra::cuda::copy(b_traced_cpu, b_traced, width * height * sizeof(uint32_t));
+			kobra::cuda::copy(
+				b_traced_cpu, b_traced,
+				armada_rtx.size() * sizeof(uint32_t)
+			);
 
 			// TODO: import CUDA to Vulkan and render straight to the image
 			framer.render(
 				kobra::Image {
 					.data = b_traced_cpu,
-					.width = width,
-					.height = height,
+					.width = rtx_extent.width,
+					.height = rtx_extent.height,
 					.channels = 4
 				},
 				cmd, framebuffer, extent,
@@ -544,27 +393,6 @@ struct MotionCapture : public kobra::BaseApp {
 		time += 1/60.0f;
 	}
 
-	void terminate() override {
-		if (tracer.launch_params.samples > max_samples) {
-			// Get data to save
-			int width = tracer.extent.width;
-			int height = tracer.extent.height;
-
-			kill = true;
-			compute_thread->join();
-
-			stbi_write_png(capture_path.c_str(),
-				width, height, 4, b_traced_cpu.data(),
-				width * 4
-			);
-		
-			KOBRA_LOG_FILE(kobra::Log::INFO) << "Saved image to "
-				<< capture_path << "\n";
-
-			terminate_now();
-		}
-	}
-	
 	// Mouse callback
 	static void mouse_callback(void *us, const kobra::io::MouseEvent &event) {
 		static const int pan_button = GLFW_MOUSE_BUTTON_RIGHT;
@@ -628,16 +456,6 @@ struct MotionCapture : public kobra::BaseApp {
 	static void keyboard_callback(void *us, const kobra::io::KeyboardEvent &event) {
 		auto &app = *static_cast <MotionCapture *> (us);
 		auto &transform = app.camera.get <kobra::Transform> ();
-
-		// M to switch between modes
-		if (event.key == GLFW_KEY_M && event.action == GLFW_PRESS) {
-			app.mode = (app.mode + 1) % kobra::optix::eCount;
-			
-			// Add to event queue
-			app.events_mutex.lock();
-			app.events.push(true);
-			app.events_mutex.unlock();
-		}
 
 		if (event.key >= GLFW_KEY_0 && event.key <= GLFW_KEY_9 && event.action == GLFW_PRESS) {
 			int key = event.key - GLFW_KEY_0;
