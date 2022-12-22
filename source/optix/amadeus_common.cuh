@@ -17,8 +17,6 @@ using namespace kobra::cuda;
 using namespace kobra::optix;
 
 // TODO: launch parameter for ray depth
-// TODO: rename to MAX_BOUNCES
-#define MAX_DEPTH 2
 
 // Local constants
 static const float eps = 1e-3f;
@@ -50,27 +48,6 @@ struct LightingContext {
 		triangle_count(_triangle_count),
 		has_envmap(_has_envmap),
 		envmap(_envmap) {}
-};
-
-// Ray packet data
-struct RayPacket {
-	float3	value;
-
-	float4	position;
-	float3	normal;
-	float3	albedo;
-
-	float	pdf;
-
-	float3	wi;
-	int	miss_depth;
-
-	float	ior;
-	
-	int	depth;
-	uint	index;
-	
-	float3	seed;
 };
 
 // Interpolate triangle values
@@ -264,7 +241,7 @@ float3 Ld_Environment(const LightingContext &lc, const SurfaceHit &sh, float &pd
 
 // Trace ray into scene and get relevant information
 __device__
-float3 Ld( const LightingContext &lc, const SurfaceHit &sh, Seed seed)
+float3 Ld(const LightingContext &lc, const SurfaceHit &sh, Seed seed)
 {
 	int quad_count = lc.quad_count;
 	int tri_count = lc.triangle_count;
@@ -426,6 +403,49 @@ float3 direct_occluded(OptixTraversableHandle handle,
 		}
 
 		Li = rho * Le * geometric;
+	}
+
+	return Li;
+}
+
+// Using FullLightSample
+__device__ __forceinline__
+float3 direct_unoccluded(const SurfaceHit &sh, const FullLightSample &fls, float3 D, float d)
+{
+	// Assume that the light is visible
+	// TODO: evaluate all lobes...
+	float3 rho = brdf(sh, D, eDiffuse);
+
+	float geometric = abs(dot(sh.n, D));
+
+	// TODO: enums
+	if (fls.type != 2) {
+		float ldot = abs(dot(fls.normal, D));
+		geometric *= ldot/(d * d);
+	}
+
+	return rho * fls.Le * geometric;
+}
+
+__device__ __forceinline__
+float3 direct_occluded(OptixTraversableHandle handle,
+		const SurfaceHit &sh,
+		const FullLightSample &fls,
+		float3 D, float d)
+{
+	bool occluded = is_occluded(handle, sh.x, D, d);
+
+	float3 Li = make_float3(0.0f);
+	if (!occluded) {
+		float3 rho = brdf(sh, D, eDiffuse);
+
+		float geometric = abs(dot(sh.n, D));
+		if (fls.type != 2) {
+			float ldot = abs(dot(fls.normal, D));
+			geometric *= ldot/(d * d);
+		}
+
+		Li = rho * fls.Le * geometric;
 	}
 
 	return Li;

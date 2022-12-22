@@ -16,7 +16,7 @@
 #include "../common.hpp"
 
 // Debugging options
-// #define KOBRA_OPTIX_DEBUG
+#define KOBRA_OPTIX_DEBUG
 
 #ifdef KOBRA_OPTIX_DEBUG
 

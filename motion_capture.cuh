@@ -5,6 +5,7 @@
 #include <set>
 #include <string>
 #include <thread>
+#include <atomic>
 
 // GLM headers
 #include <glm/glm.hpp>
@@ -41,6 +42,7 @@
 #include "include/layers/mesh_memory.hpp"
 #include "include/amadeus/armada.cuh"
 #include "include/amadeus/path_tracer.cuh"
+#include "include/amadeus/restir.cuh"
 
 // TODO: do base app without inheritance (simple struct..., app and baseapp not related)
 // TODO: and then insert layers with .attach() method
@@ -57,7 +59,7 @@ struct MotionCapture : public kobra::BaseApp {
 	std::shared_ptr <kobra::layers::MeshMemory> mesh_memory;
 	std::shared_ptr <kobra::amadeus::System> amadeus;
 
-	kobra::amadeus::ArmadaRTX armada_rtx;
+	std::shared_ptr <kobra::amadeus::ArmadaRTX> armada_rtx;
 
 	// Buffers
 	CUdeviceptr b_traced;
@@ -71,6 +73,7 @@ struct MotionCapture : public kobra::BaseApp {
 
 	std::queue <bool> events;
 	std::mutex events_mutex;
+	std::atomic <int> semaphore = 0;
 	bool kill = false;
 	bool capture_now = false;
 	bool lock_motion = false;
@@ -165,17 +168,22 @@ struct MotionCapture : public kobra::BaseApp {
 		mesh_memory = std::make_shared <kobra::layers::MeshMemory> (get_context());
 
 		// TODO: test lower resolution...
-		armada_rtx = kobra::amadeus::ArmadaRTX(
+		armada_rtx = std::make_shared <kobra::amadeus::ArmadaRTX> (
 			get_context(), amadeus,
 			mesh_memory, raytracing_extent
 		);
 
-		armada_rtx.attach(
+		armada_rtx->attach(
 			"Path Tracer",
 			std::make_shared <kobra::amadeus::PathTracer> ()
 		);
 		
-		armada_rtx.set_envmap("resources/skies/background_1.jpg");
+		armada_rtx->attach(
+			"ReSTIR",
+			std::make_shared <kobra::amadeus::ReSTIR> ()
+		);
+		
+		armada_rtx->set_envmap("resources/skies/background_1.jpg");
 
 		// Create the denoiser layer
 		denoiser = kobra::layers::Denoiser::make(
@@ -209,7 +217,7 @@ struct MotionCapture : public kobra::BaseApp {
 		// NOTE: we need this precomputation step to load all the
 		// resources before rendering; we need some system to allocate
 		// queues so that we dont need to do this...
-		armada_rtx.render(
+		armada_rtx->render(
 			scene.ecs,
 			camera.get <kobra::Camera> (),
 			camera.get <kobra::Transform> (),
@@ -223,7 +231,7 @@ struct MotionCapture : public kobra::BaseApp {
 		KOBRA_LOG_FILE(kobra::Log::INFO) << "Launched path tracing thread\n";
 
 		// Allocate buffers
-		size_t size = armada_rtx.size();
+		size_t size = armada_rtx->size();
 
 		b_traced = kobra::cuda::alloc(size * sizeof(uint32_t));
 		b_traced_cpu.resize(size);
@@ -246,12 +254,13 @@ struct MotionCapture : public kobra::BaseApp {
 	void path_trace_kernel() {	
 		compute_timer.start();
 
-		while (!kill) {
+		while (!kill) {	
+			while (semaphore > 0);
+
 			// Wait for the latest capture if any
 			/* while (!capture_now) {
 				std::cout << "\twaiting for capture, capture_now: " << std::boolalpha << capture_now << "\n";
 			} */
-
 			bool accumulate = true;
 
 			// Also check our events
@@ -263,7 +272,7 @@ struct MotionCapture : public kobra::BaseApp {
 			events = std::queue <bool> (); // Clear events
 			events_mutex.unlock();
 
-			armada_rtx.render(
+			armada_rtx->render(
 				scene.ecs,
 				camera.get <kobra::Camera> (),
 				camera.get <kobra::Transform> (),
@@ -287,7 +296,18 @@ struct MotionCapture : public kobra::BaseApp {
 
 	// Keybindings
 	// TODO: separate header/class
-	const std::unordered_map <int, std::function <void ()>> mode_map {};
+	const std::unordered_map <int, std::function <void ()>> mode_map {
+		{1, [&]() {
+			semaphore++;
+			armada_rtx->activate("Path Tracer");
+			semaphore--;
+		}},
+		{2, [&]() {
+			semaphore++;
+			armada_rtx->activate("ReSTIR");
+			semaphore--;
+		}}
+	};
 
 	void record(const vk::raii::CommandBuffer &cmd,
 			const vk::raii::Framebuffer &framebuffer) override {
@@ -332,10 +352,10 @@ struct MotionCapture : public kobra::BaseApp {
 
 		// Now trace and render
 		cmd.begin({});
-			vk::Extent2D rtx_extent = armada_rtx.extent();
+			vk::Extent2D rtx_extent = armada_rtx->extent();
 
 			kobra::cuda::hdr_to_ldr(
-				(float4 *) armada_rtx.color_buffer(),
+				(float4 *) armada_rtx->color_buffer(),
 				(uint32_t *) b_traced,
 				rtx_extent.width, rtx_extent.height,
 				kobra::cuda::eTonemappingACES
@@ -343,7 +363,7 @@ struct MotionCapture : public kobra::BaseApp {
 
 			kobra::cuda::copy(
 				b_traced_cpu, b_traced,
-				armada_rtx.size() * sizeof(uint32_t)
+				armada_rtx->size() * sizeof(uint32_t)
 			);
 
 			// TODO: import CUDA to Vulkan and render straight to the image

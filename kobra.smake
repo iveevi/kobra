@@ -49,6 +49,7 @@ kobra_ptx.add_sources(
     'source/optix/basilisk_voxel.cu',
     'source/optix/wssr_grid.cu',
     'source/optix/amadeus_path_tracer.cu',
+    'source/optix/amadeus_restir.cu',
 )
 
 kobra_ptx.add_includes(kobra_includes)

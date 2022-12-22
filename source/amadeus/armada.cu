@@ -29,8 +29,7 @@ ArmadaRTX::ArmadaRTX(const Context &context,
 		const vk::Extent2D &extent)
 		: m_system(system), m_mesh_memory(mesh_memory),
 		m_device(context.device), m_phdev(context.phdev),
-		m_extent(extent), m_null_state(true),
-		m_active_attachment()
+		m_extent(extent), m_active_attachment()
 {
 	// Start the timer
 	m_timer.start();
@@ -346,21 +345,21 @@ ArmadaRTX::preprocess_scene
 		// Update TLAS state
 		m_tlas.null = false;
 		m_tlas.last_updated = clock();
-		
-		// Create acceleration structure for the attachment if needed
-		// assuming that there is currently a valid attachment
-		long long int attachment_time = m_tlas.times[m_active_attachment];
-		if (attachment_time < m_tlas.last_updated) {
-			// Create the acceleration structure
-			m_tlas.times[m_active_attachment] = m_tlas.last_updated;
-			handle = m_system->build_tlas(
-				rasterizers,
-				m_attachments[m_active_attachment]->m_hit_group_count
-			);
-		}
 
 		// Update the status
 		updated = true;
+	}
+		
+	// Create acceleration structure for the attachment if needed
+	// assuming that there is currently a valid attachment
+	long long int attachment_time = m_tlas.times[m_active_attachment];
+	if (attachment_time < m_tlas.last_updated) {
+		// Create the acceleration structure
+		m_tlas.times[m_active_attachment] = m_tlas.last_updated;
+		handle = m_system->build_tlas(
+			rasterizers,
+			m_attachments[m_active_attachment]->m_hit_group_count
+		);
 	}
 
 	return handle;
@@ -376,6 +375,15 @@ void ArmadaRTX::render(const ECS &ecs,
 	if (m_active_attachment.empty()) {
 		KOBRA_LOG_FUNC(Log::WARN) << "No active attachment\n";
 		return;
+	}
+
+	// Compare with previous attachment
+	if (m_active_attachment != m_previous_attachment) {
+		if (m_previous_attachment.size() > 0)
+			m_attachments[m_previous_attachment]->unload();
+
+		m_attachments[m_active_attachment]->load();
+		m_previous_attachment = m_active_attachment;
 	}
 
 	auto handle = preprocess_scene(ecs, camera, transform);

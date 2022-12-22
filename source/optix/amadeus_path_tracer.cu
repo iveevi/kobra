@@ -1,16 +1,34 @@
 #include "../../include/amadeus/path_tracer.cuh"
 #include "amadeus_common.cuh"
 
+#define MAX_DEPTH 0
+
 extern "C"
 {
 	__constant__ kobra::amadeus::PathTracerParameters parameters;
 }
 
+// Ray packet data
+struct RayPacket {
+	float3	value;
+
+	float4	position;
+	float3	normal;
+	float3	albedo;
+
+	float3	wi;
+	float3	seed;
+
+	float	ior;
+	
+	int	depth;
+};
+
 static KCUDA_INLINE KCUDA_HOST_DEVICE
 void make_ray(uint3 idx,
-		 float3 &origin,
-		 float3 &direction,
-		 float3 &seed)
+		float3 &origin,
+		float3 &direction,
+		float3 &seed)
 {
 	const float3 U = to_f3(parameters.camera.ax_u);
 	const float3 V = to_f3(parameters.camera.ax_v);
@@ -66,11 +84,8 @@ extern "C" __global__ void __raygen__()
 	RayPacket rp {
 		.value = make_float3(0.0f),
 		.position = make_float4(0),
-		.pdf = 1.0f,
-		.miss_depth = -1,
 		.ior = 1.0f,
 		.depth = 0,
-		.index = index,
 	};
 	
 	// Trace ray and generate contribution
@@ -164,7 +179,6 @@ extern "C" __global__ void __closesthit__()
 	// Update for next ray
 	// TODO: boolean member for toggling russian roulette
 	rp->ior = material.refraction;
-	rp->pdf *= pdf;
 	rp->depth++;
 	
 	// Trace the next ray
@@ -202,7 +216,6 @@ extern "C" __global__ void __miss__()
 
 	rp->value = make_float3(c);
 	rp->wi = ray_direction;
-	rp->miss_depth = rp->depth;
 }
 
 extern "C" __global__ void __miss__shadow()

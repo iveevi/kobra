@@ -5,6 +5,7 @@
 #include <map>
 #include <optional>
 #include <vector>
+#include <atomic>
 
 // OptiX headers
 #include <optix.h>
@@ -69,6 +70,28 @@ struct ArmadaLaunchInfo {
 	float time;
 };
 
+// TODO: organize better, e.g. put into attachment method
+// OptiX compilation configurations
+static constexpr OptixPipelineCompileOptions ppl_compile_options = {
+	.usesMotionBlur = false,
+	.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING,
+	.numPayloadValues = 2,
+	.numAttributeValues = 0,
+	.exceptionFlags = KOBRA_OPTIX_EXCEPTION_FLAGS,
+	.pipelineLaunchParamsVariableName = "parameters",
+	.usesPrimitiveTypeFlags = (unsigned int) OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE,
+};
+	
+static constexpr OptixModuleCompileOptions module_options = {
+	.optLevel = KOBRA_OPTIX_OPTIMIZATION_LEVEL,
+	.debugLevel = KOBRA_OPTIX_DEBUG_LEVEL,
+};
+	
+static constexpr OptixPipelineLinkOptions ppl_link_options = {
+	.maxTraceDepth = 10,
+	.debugLevel = KOBRA_OPTIX_DEBUG_LEVEL,
+};
+
 // RTX attachment sub-layers
 class AttachmentRTX {
 	int m_hit_group_count;
@@ -78,6 +101,8 @@ public:
 
 	// Attaching and unloading
 	virtual void attach(const ArmadaRTX &) = 0;
+	
+	virtual void load() = 0;
 	virtual void unload() = 0;
 
 	// Rendering
@@ -118,9 +143,6 @@ class ArmadaRTX {
 
 	// Timer
 	Timer m_timer;
-	
-	// Null state; whether any information has been loaded
-	bool m_null_state = true;
 
 	// Local launch parameters and results
 	ArmadaLaunchInfo m_launch_info;
@@ -128,6 +150,7 @@ class ArmadaRTX {
 	// Attachment sub-layers
 	std::map <std::string, std::shared_ptr <AttachmentRTX>> m_attachments;
 	std::string m_active_attachment;
+	std::string m_previous_attachment;
 
 	// Acceleration structure state
 	struct {
@@ -165,11 +188,11 @@ public:
 	);
 
 	// Proprety methods
-	size_t size() {
+	size_t size() const {
 		return m_extent.width * m_extent.height;
 	}
 
-	vk::Extent2D extent() {
+	vk::Extent2D extent() const {
 		return m_extent;
 	}
 
@@ -200,18 +223,15 @@ public:
 
 	// Attachment methods
 	void attach(const std::string &name, const std::shared_ptr <AttachmentRTX> &attachment) {
+		KOBRA_LOG_FUNC(Log::OK) << "Attaching attachment " << name << std::endl;
 		m_attachments[name] = attachment;
+		m_attachments[name]->attach(*this);
 		m_tlas.times[name] = 0;
-		activate(name);
+		m_active_attachment = name;
 	}
 
 	void activate(const std::string &name) {
-		// Unload previous attachment
-		if (m_active_attachment.size() > 0)
-			m_attachments[m_active_attachment]->unload();
-
 		m_active_attachment = name;
-		m_attachments[name]->attach(*this);
 	}
 
 	// Methods

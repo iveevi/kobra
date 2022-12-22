@@ -8,28 +8,6 @@ namespace kobra {
 
 namespace amadeus {
 
-// OptiX compilation configurations
-// TODO: move to armada header file (which contains boiler plate RTX attachment)...
-static constexpr OptixPipelineCompileOptions ppl_compile_options = {
-	.usesMotionBlur = false,
-	.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING,
-	.numPayloadValues = 2,
-	.numAttributeValues = 0,
-	.exceptionFlags = KOBRA_OPTIX_EXCEPTION_FLAGS,
-	.pipelineLaunchParamsVariableName = "parameters",
-	.usesPrimitiveTypeFlags = (unsigned int) OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE,
-};
-	
-static constexpr OptixModuleCompileOptions module_options = {
-	.optLevel = KOBRA_OPTIX_OPTIMIZATION_LEVEL,
-	.debugLevel = KOBRA_OPTIX_DEBUG_LEVEL,
-};
-	
-static constexpr OptixPipelineLinkOptions ppl_link_options = {
-	.maxTraceDepth = 10,
-	.debugLevel = KOBRA_OPTIX_DEBUG_LEVEL,
-};
-
 // Launch parameters
 struct PathTracerParameters : ArmadaLaunchInfo {
 	OptixTraversableHandle traversable;
@@ -144,6 +122,7 @@ public:
 		m_cuda_parameters = (CUdeviceptr) cuda::alloc <PathTracerParameters> (1);
 	}
 
+	void load() override {}
 	void unload() override {}
 
 	// Rendering
@@ -172,7 +151,7 @@ public:
 
 		cuda::copy(m_cuda_parameters, &m_parameters, 1, cudaMemcpyHostToDevice);
 
-		// Execute the second stage
+		// Execute the pipeline
 		OPTIX_CHECK(
 			optixLaunch(
 				m_pipeline, 0,
