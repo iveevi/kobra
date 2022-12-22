@@ -196,7 +196,7 @@ extern "C" __global__ void __raygen__temporal()
 		Reservoir <Sample> merged(parameters.auxiliary[index]);
 
 		// M-capping
-		previous.M = min(previous.M, 50);
+		previous.M = min(previous.M, 200);
 
 		float t_current = target(current, hit);
 		merged.update(current.data, t_current * current.W * current.M);
@@ -291,7 +291,6 @@ extern "C" __global__ void __raygen__spatial()
 		// Merge current and previous frame reservoirs
 		Reservoir <Sample> merged(parameters.auxiliary[index]);
 
-		current.M = min(current.M, 50);
 		float t_current = target(current, hit);
 		merged.update(current.data, t_current * current.W * current.M);
 
@@ -308,10 +307,8 @@ extern "C" __global__ void __raygen__spatial()
 
 			float t_neighbor = target(neighbor, hit);
 
-			if (neighbor.size() > 0) {
-				neighbor.M = min(neighbor.M, 50);
+			if (neighbor.size() > 0)
 				merged.update(neighbor.data, t_neighbor * neighbor.W * neighbor.M);
-			}
 
 			// Reconstruct neighbor surface intersection information
 			Material material0 = parameters.materials[index0];
@@ -343,6 +340,7 @@ extern "C" __global__ void __raygen__spatial()
 		}
 
 		// Resample merged reservoir
+		// TODO: option for bias merged instead
 		float t_merged = target(merged, hit);
 		float denominator = t_merged * Z;
 		merged.W = (denominator > 0.0f) ? merged.w/denominator : 0.0f;
@@ -366,6 +364,9 @@ extern "C" __global__ void __raygen__spatial()
 
 		// Save current reservoir to previous frame reservoir
 		parameters.previous[index] = current;
+	} else {
+		// Reset previous frame reservoir
+		parameters.previous[index].reset();
 	}
 
 	// Final shading using current frame reservoir

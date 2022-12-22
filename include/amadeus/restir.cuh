@@ -347,6 +347,7 @@ public:
 		
 			// Swap for next iteration
 			std::swap(m_parameters.current, m_parameters.previous);
+			cuda::copy(m_cuda_parameters, &m_parameters, 1, cudaMemcpyHostToDevice);
 		}
 
 		// Swap the reservoirs

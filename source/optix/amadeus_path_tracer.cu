@@ -1,7 +1,7 @@
 #include "../../include/amadeus/path_tracer.cuh"
 #include "amadeus_common.cuh"
 
-#define MAX_DEPTH 0
+#define MAX_DEPTH 2
 
 extern "C"
 {
