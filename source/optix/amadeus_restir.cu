@@ -283,9 +283,7 @@ extern "C" __global__ void __raygen__spatial()
 	};
 
 	// Get current reservoir
-	Reservoir <Sample> &current = parameters.current[index];
-
-	int radius = 0.1 * min(parameters.resolution.x, parameters.resolution.y);
+	Reservoir <Sample> current = parameters.current[index];
 
 	// If current reservoir is empty, skip resampling
 	float3 direct = make_float3(0.0f);
@@ -305,7 +303,7 @@ extern "C" __global__ void __raygen__spatial()
 
 		int count = 0;
 		for (int i = 0; i < SAMPLES; i++) {
-			int index0 = sample_spatial_neighborhood(index, merged.seed, radius);
+			int index0 = sample_spatial_neighborhood(index, merged.seed, 30);
 			Reservoir <Sample> neighbor = parameters.current[index0];
 
 			float t_neighbor = target(neighbor, hit);
@@ -365,6 +363,9 @@ extern "C" __global__ void __raygen__spatial()
 		);
 
 		direct = material.emission + lighting * current.W;
+
+		// Save current reservoir to previous frame reservoir
+		parameters.previous[index] = current;
 	}
 
 	// Final shading using current frame reservoir

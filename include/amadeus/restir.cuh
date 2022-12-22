@@ -344,6 +344,9 @@ public:
 			);
 
 			CUDA_SYNC_CHECK();
+		
+			// Swap for next iteration
+			std::swap(m_parameters.current, m_parameters.previous);
 		}
 
 		// Swap the reservoirs
