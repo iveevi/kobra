@@ -183,7 +183,7 @@ struct MotionCapture : public kobra::BaseApp {
 			std::make_shared <kobra::amadeus::ReSTIR> ()
 		);
 		
-		armada_rtx->set_envmap("resources/skies/background_1.jpg");
+		armada_rtx->set_envmap(KOBRA_DIR "/resources/skies/background_1.jpg");
 
 		// Create the denoiser layer
 		denoiser = kobra::layers::Denoiser::make(

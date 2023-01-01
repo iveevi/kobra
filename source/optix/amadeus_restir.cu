@@ -50,8 +50,12 @@ void make_ray(uint3 idx,
 
 	pcg3f(seed);
 	
-	float xoffset = (fract(seed.x) - 0.5f);
-	float yoffset = (fract(seed.y) - 0.5f);
+	// float xoffset = (fract(seed.x) - 0.5f);
+	// float yoffset = (fract(seed.y) - 0.5f);
+	
+	// TODO: store offsets for each pixel
+	float xoffset = -0.5f;
+	float yoffset = -0.5f;
 
 	float2 d = 2.0f * make_float2(
 		float(idx.x + xoffset)/parameters.resolution.x,
@@ -158,11 +162,41 @@ float target(const Reservoir <Sample> &reservoir, const SurfaceHit &hit)
 	return Li.x + Li.y + Li.z;
 }
 
+// Temporal reprojection index
+KCUDA_INLINE KCUDA_DEVICE
+int reproject(int index, glm::vec3 position)
+{
+	int pindex = -1;
+	if (parameters.samples > 0)
+		return index;
+
+	// Project position
+	glm::vec4 p = parameters.previous_camera.projection
+		* parameters.previous_camera.view
+		* glm::vec4(position, 1.0f);
+
+	float u = p.x/p.w;
+	float v = p.y/p.w;
+
+	bool in_u_bounds = (u >= -1.0f && u <= 1.0f);
+	bool in_v_bounds = (v >= -1.0f && v <= 1.0f);
+
+	if (in_u_bounds && in_v_bounds) {
+		u = (u + 1.0f) * 0.5f;
+		v = (v + 1.0f) * 0.5f;
+
+		int ix = u * parameters.resolution.x + 0.5;
+		int iy = v * parameters.resolution.y + 0.5;
+
+		pindex = iy * parameters.resolution.x + ix;
+	}
+
+	return pindex;
+}
+
 // Ray generation kernel for temporal reuse pass
 extern "C" __global__ void __raygen__temporal()
 {
-	// TODO: fix temporal flickering
-
 	// Get the launch index
 	const uint3 idx = optixGetLaunchIndex();
 
@@ -170,9 +204,7 @@ extern "C" __global__ void __raygen__temporal()
 	const int index = idx.x + idx.y * parameters.resolution.x;
 
 	// Get current and previous frame reservoirs
-	// TODO: temporal backprojection to recover previous frame
 	Reservoir <Sample> &current = parameters.current[index];
-	Reservoir <Sample> &previous = parameters.previous[index];
 
 	// If current reservoir is empty, skip resampling
 	float3 direct = make_float3(0.0f);
@@ -192,27 +224,33 @@ extern "C" __global__ void __raygen__temporal()
 			.x = {position.x, position.y, position.z},
 		};
 
+		// Find reprojected index
+		int pindex = reproject(index, position);
+		Reservoir <Sample> *previous = (pindex >= 0) ? &parameters.previous[pindex] : nullptr;
+
 		// Merge current and previous frame reservoirs
 		Reservoir <Sample> merged(parameters.auxiliary[index]);
-
-		// M-capping
-		previous.M = min(previous.M, 200);
 
 		float t_current = target(current, hit);
 		merged.update(current.data, t_current * current.W * current.M);
 
-		float t_previous = target(previous, hit);
-		if (previous.size() > 0 && parameters.samples > 0)
-			merged.update(previous.data, t_previous * previous.W * previous.M);
-		
-		merged.M = current.M + (t_previous > 0) * previous.M;
+		int N = current.M;
+		if (previous && previous->size() > 0) {
+			// M-capping
+			previous->M = min(previous->M, 200);
 
+			float t_previous = target(*previous, hit);
+			merged.update(previous->data, t_previous * previous->W * previous->M);
+			N += (t_previous > 0) * previous->M;
+		}
+		
 		// Resample merged reservoir
+		merged.M = N;
 		float t_merged = target(merged, hit);
 		merged.resample(t_merged);
 		current = merged;
 		
-		/* Shading
+		// Shading
 		Sample sample = current.data;
 		float3 point = sample.point;
 		float3 D = point - hit.x;
@@ -226,15 +264,15 @@ extern "C" __global__ void __raygen__temporal()
 			D/d, d
 		);
 
-		direct = material.emission + lighting * current.W; */
+		direct = material.emission + lighting * current.W;
 	}
 
-	/* Final shading using current frame reservoir
+	// Final shading using current frame reservoir
 	glm::vec4 color = {direct.x, direct.y, direct.z, 1.0f};
 	color += parameters.intermediate[index];
 
 	auto &buffers = parameters.buffers;
-	accumulate(buffers.color[index], color); */
+	accumulate(buffers.color[index], color);
 }
 
 // Sampling spatial neighborhood

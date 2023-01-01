@@ -39,11 +39,15 @@ class ArmadaRTX;
 struct ArmadaLaunchInfo {
 	glm::vec2 resolution;
 	
-	struct {
+	struct Camera {
 		glm::vec3 center;
+
 		glm::vec3 ax_u;
 		glm::vec3 ax_v;
 		glm::vec3 ax_w;
+
+		glm::mat4 projection;
+		glm::mat4 view;
 	} camera;
 
 	struct {

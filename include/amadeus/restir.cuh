@@ -90,6 +90,9 @@ struct ReSTIR_Parameters : ArmadaLaunchInfo {
 	cuda::Material *materials;
 	glm::vec4 *intermediate;
 	glm::vec4 *auxiliary;
+	
+	// Previous camera (for temporal reprojection)
+	Camera previous_camera;
 };
 
 // Classic Monte Carlo path tracer
@@ -334,7 +337,7 @@ public:
 
 		// Spatial pass
 		// TODO: option for multiple spatial reuses
-		for (int i = 0; i < 2; i++) {
+		for (int i = 0; i < 1; i++) {
 			OPTIX_CHECK(
 				optixLaunch(
 					m_pipeline_spatial, 0,
@@ -352,6 +355,9 @@ public:
 
 		// Swap the reservoirs
 		std::swap(m_parameters.current, m_parameters.previous);
+
+		// Copy camera parameters
+		std::memcpy(&m_parameters.previous_camera, &m_parameters.camera, sizeof(ArmadaLaunchInfo::Camera));
 	}
 };
 

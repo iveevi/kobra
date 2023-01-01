@@ -273,6 +273,9 @@ ArmadaRTX::preprocess_scene
 	m_launch_info.camera.ax_v = uvw.v;
 	m_launch_info.camera.ax_w = uvw.w;
 
+	m_launch_info.camera.projection = camera.perspective_matrix();
+	m_launch_info.camera.view = camera.view_matrix(transform);
+
 	// Get time
 	m_launch_info.time = m_timer.elapsed_start();
 
@@ -352,13 +355,13 @@ ArmadaRTX::preprocess_scene
 		
 	// Create acceleration structure for the attachment if needed
 	// assuming that there is currently a valid attachment
-	long long int attachment_time = m_tlas.times[m_active_attachment];
+	long long int attachment_time = m_tlas.times[m_previous_attachment];
 	if (attachment_time < m_tlas.last_updated) {
 		// Create the acceleration structure
-		m_tlas.times[m_active_attachment] = m_tlas.last_updated;
+		m_tlas.times[m_previous_attachment] = m_tlas.last_updated;
 		handle = m_system->build_tlas(
 			rasterizers,
-			m_attachments[m_active_attachment]->m_hit_group_count
+			m_attachments[m_previous_attachment]->m_hit_group_count
 		);
 	}
 
@@ -382,8 +385,8 @@ void ArmadaRTX::render(const ECS &ecs,
 		if (m_previous_attachment.size() > 0)
 			m_attachments[m_previous_attachment]->unload();
 
-		m_attachments[m_active_attachment]->load();
 		m_previous_attachment = m_active_attachment;
+		m_attachments[m_previous_attachment]->load();
 	}
 
 	auto handle = preprocess_scene(ecs, camera, transform);
@@ -393,7 +396,7 @@ void ArmadaRTX::render(const ECS &ecs,
 		m_launch_info.samples = 0;
 
 	// Invoke render for current attachment
-	auto &attachment = m_attachments[m_active_attachment];
+	auto &attachment = m_attachments[m_previous_attachment];
 	attachment->render(this, m_launch_info, handle, m_extent);
 
 	// Increment number of samples

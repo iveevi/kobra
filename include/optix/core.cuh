@@ -16,7 +16,7 @@
 #include "../common.hpp"
 
 // Debugging options
-#define KOBRA_OPTIX_DEBUG
+// #define KOBRA_OPTIX_DEBUG
 
 #ifdef KOBRA_OPTIX_DEBUG
 
@@ -37,7 +37,6 @@
 #define KOBRA_OPTIX_OPTIMIZATION_LEVEL OPTIX_COMPILE_OPTIMIZATION_LEVEL_3
 
 #endif
-
 
 namespace kobra {
 

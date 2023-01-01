@@ -1,0 +1,3 @@
+[
+	{"directory": "build", "command": "ninja -j 8 && ./kobra"}
+]
