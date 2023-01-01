@@ -1,9 +1,6 @@
-<center>
-	<img src="kobra_logo.svg" width=50% height=50%>
-</center>
-
 # Kobra
 
+<img align="left" src="kobra_logo.svg" width=40>
 Kobra is a 3D vulkan rendering engine written in C++. It's modular interface is
 designed to yield a robust yet flexible framework with which one can efficiently
 experiment with new rendering techniques. Thus, it presents itself as an easy
