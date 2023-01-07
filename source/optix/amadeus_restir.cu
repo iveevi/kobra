@@ -1,7 +1,7 @@
 #include "../../include/amadeus/restir.cuh"
 #include "amadeus_common.cuh"
 
-#define MAX_DEPTH 0
+#define MAX_DEPTH 2
 
 using kobra::amadeus::Reservoir;
 using kobra::amadeus::Sample;
@@ -162,6 +162,23 @@ float target(const Reservoir <Sample> &reservoir, const SurfaceHit &hit)
 	return Li.x + Li.y + Li.z;
 }
 
+KCUDA_INLINE KCUDA_DEVICE
+float occluded_target(const Reservoir <Sample> &reservoir, const SurfaceHit &hit)
+{
+	const Sample &sample = reservoir.data;
+
+	float3 D = sample.point - hit.x;
+	float d = length(D);
+
+	float3 Li = direct_occluded(
+		parameters.traversable,
+		hit, sample.Le, sample.normal,
+		sample.type, D/d, d
+	);
+
+	return Li.x + Li.y + Li.z;
+}
+
 // Temporal reprojection index
 KCUDA_INLINE KCUDA_DEVICE
 int reproject(int index, glm::vec3 position)
@@ -250,29 +267,29 @@ extern "C" __global__ void __raygen__temporal()
 		merged.resample(t_merged);
 		current = merged;
 		
-		// Shading
+		/* Shading
 		Sample sample = current.data;
 		float3 point = sample.point;
 		float3 D = point - hit.x;
 		float d = length(D);
 
-		float3 lighting = direct_unoccluded(
-			hit,
+		float3 lighting = direct_occluded(
+			parameters.traversable, hit,
 			sample.Le,
 			sample.normal,
 			sample.type,
 			D/d, d
 		);
 
-		direct = material.emission + lighting * current.W;
+		direct = material.emission + lighting * current.W; */
 	}
 
-	// Final shading using current frame reservoir
+	/* Final shading using current frame reservoir
 	glm::vec4 color = {direct.x, direct.y, direct.z, 1.0f};
 	color += parameters.intermediate[index];
 
 	auto &buffers = parameters.buffers;
-	accumulate(buffers.color[index], color);
+	accumulate(buffers.color[index], color); */
 }
 
 // Sampling spatial neighborhood
@@ -390,8 +407,8 @@ extern "C" __global__ void __raygen__spatial()
 		float3 D = point - hit.x;
 		float d = length(D);
 
-		float3 lighting = direct_unoccluded(
-			hit,
+		float3 lighting = direct_occluded(
+			parameters.traversable, hit,
 			sample.Le,
 			sample.normal,
 			sample.type,
@@ -492,7 +509,8 @@ extern "C" __global__ void __closesthit__initial()
 		float3 D = sample.point - surface_hit.x;
 		float d = length(D);
 
-		float3 Li = direct_unoccluded(surface_hit,
+		float3 Li = direct_occluded(
+			parameters.traversable, surface_hit,
 			sample.Le,
 			sample.normal,
 			sample.type,
@@ -502,8 +520,9 @@ extern "C" __global__ void __closesthit__initial()
 		float target = Li.x + Li.y + Li.z;
 		reservoir.resample(target);
 
-		bool occluded = is_occluded(lc.handle, surface_hit.x, D/d, d);
-		reservoir.W *= 1.0f - occluded;
+		// TODO: visibility reuse
+		// bool occluded = is_occluded(lc.handle, surface_hit.x, D/d, d);
+		// reservoir.W *= 1.0f - occluded;
 
 		// Save material
 		parameters.materials[rp->index] = material;

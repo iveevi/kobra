@@ -349,6 +349,7 @@ public:
 			CUDA_SYNC_CHECK();
 		
 			// Swap for next iteration
+			// TODO: indicate whether to shade or not
 			std::swap(m_parameters.current, m_parameters.previous);
 			cuda::copy(m_cuda_parameters, &m_parameters, 1, cudaMemcpyHostToDevice);
 		}
