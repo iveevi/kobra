@@ -248,7 +248,7 @@ extern "C" __global__ void __raygen__temporal()
 		// Merge current and previous frame reservoirs
 		Reservoir <Sample> merged(parameters.auxiliary[index]);
 
-		float t_current = target(current, hit);
+		float t_current = occluded_target(current, hit);
 		merged.update(current.data, t_current * current.W * current.M);
 
 		int N = current.M;
@@ -256,7 +256,7 @@ extern "C" __global__ void __raygen__temporal()
 			// M-capping
 			previous->M = min(previous->M, 200);
 
-			float t_previous = target(*previous, hit);
+			float t_previous = occluded_target(*previous, hit);
 			merged.update(previous->data, t_previous * previous->W * previous->M);
 			N += (t_previous > 0) * previous->M;
 		}
@@ -360,7 +360,7 @@ extern "C" __global__ void __raygen__spatial()
 			int index0 = sample_spatial_neighborhood(index, merged.seed, 30);
 			Reservoir <Sample> neighbor = parameters.current[index0];
 
-			float t_neighbor = target(neighbor, hit);
+			float t_neighbor = occluded_target(neighbor, hit);
 
 			if (neighbor.size() > 0)
 				merged.update(neighbor.data, t_neighbor * neighbor.W * neighbor.M);
@@ -389,7 +389,7 @@ extern "C" __global__ void __raygen__spatial()
 		// Fix bias (Original ReSTIR paper)
 		int Z = current.M;
 		for (int i = 0; i < SAMPLES; i++) {
-			float t_neighbor = (hits[i].entering) ? target(merged, hits[i]) : 0.0f;
+			float t_neighbor = (hits[i].entering) ? occluded_target(merged, hits[i]) : 0.0f;
 			if (t_neighbor > 0.0f)
 				Z += sizes[i];
 		}
@@ -521,8 +521,8 @@ extern "C" __global__ void __closesthit__initial()
 		reservoir.resample(target);
 
 		// TODO: visibility reuse
-		// bool occluded = is_occluded(lc.handle, surface_hit.x, D/d, d);
-		// reservoir.W *= 1.0f - occluded;
+		bool occluded = is_occluded(lc.handle, surface_hit.x, D/d, d);
+		reservoir.W *= 1.0f - occluded;
 
 		// Save material
 		parameters.materials[rp->index] = material;

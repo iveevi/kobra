@@ -337,7 +337,7 @@ public:
 
 		// Spatial pass
 		// TODO: option for multiple spatial reuses
-		for (int i = 0; i < 1; i++) {
+		for (int i = 0; i < 2; i++) {
 			OPTIX_CHECK(
 				optixLaunch(
 					m_pipeline_spatial, 0,
