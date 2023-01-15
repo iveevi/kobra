@@ -26,9 +26,6 @@ roughness_texture: 0
 shading_type: Diffuse
 
 [RASTERIZER]
-mode: Phong
-
-[RAYTRACER]
 
 [ENTITY]
 name: e1
@@ -55,9 +52,6 @@ roughness_texture: 0
 shading_type: Transmission
 
 [RASTERIZER]
-mode: Normal
-
-[RAYTRACER]
 
 [ENTITY]
 name: e2
@@ -84,9 +78,6 @@ roughness_texture: 0
 shading_type: Diffuse
 
 [RASTERIZER]
-mode: Normal
-
-[RAYTRACER]
 
 [ENTITY]
 name: e3
@@ -113,9 +104,6 @@ roughness_texture: 0
 shading_type: Diffuse
 
 [RASTERIZER]
-mode: Phong
-
-[RAYTRACER]
 
 [ENTITY]
 name: e4
@@ -142,9 +130,6 @@ roughness_texture: 0
 shading_type: Diffuse
 
 [RASTERIZER]
-mode: Phong
-
-[RAYTRACER]
 
 [ENTITY]
 name: e5
@@ -171,9 +156,6 @@ roughness_texture: 0
 shading_type: Diffuse
 
 [RASTERIZER]
-mode: Phong
-
-[RAYTRACER]
 
 [ENTITY]
 name: e6
@@ -200,9 +182,6 @@ roughness_texture: 0
 shading_type: Diffuse
 
 [RASTERIZER]
-mode: Phong
-
-[RAYTRACER]
 
 [ENTITY]
 name: back wall
@@ -229,9 +208,6 @@ roughness_texture: 0
 shading_type: Diffuse
 
 [RASTERIZER]
-mode: Phong
-
-[RAYTRACER]
 
 [ENTITY]
 name: overhead light 1

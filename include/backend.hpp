@@ -264,7 +264,7 @@ inline void command_now
 		const std::function <void (const vk::raii::CommandBuffer &)> &command)
 {
 	// TODO: get queue from queue system...
-	
+
 	vk::raii::Queue queue {device, 0, 0};
 	vk::raii::CommandBuffer command_buffer = make_command_buffer(device, command_pool);
 
@@ -299,7 +299,7 @@ vk::PresentModeKHR pick_present_mode(const vk::raii::PhysicalDevice &,
 struct Swapchain {
 	vk::Format				format;
 	vk::raii::SwapchainKHR			swapchain = nullptr;
-	std::vector <VkImage>			images;
+	std::vector <vk::Image>			images;
 	std::vector <vk::raii::ImageView>	image_views;
 
 	// Constructing a swapchain

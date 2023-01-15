@@ -96,6 +96,7 @@ set(ImPlot_SOURCES
 
 set(Glslang_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/glslang/SPIRV/GlslangToSpv.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/glslang/SPIRV/SpvBuilder.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/glslang/StandAlone/ResourceLimits.cpp
 )
 
@@ -198,4 +199,11 @@ add_custom_target(
 	DEPENDS optix_shaders
 )
 
-add_dependencies(kobra optix_shaders_copy)
+# Add binaries copy as a dependency of the executable
+add_custom_target(
+    copy_resources
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_BINARY_DIR}/bin ${CMAKE_CURRENT_SOURCE_DIR}/bin
+    DEPENDS glsl_shaders optix_shaders_copy
+)
+
+add_dependencies(kobra copy_resources)

@@ -1195,6 +1195,7 @@ std::optional <Mesh> Mesh::load(const std::string &path)
 // Cache mesh data to file
 void Mesh::cache_save(const Mesh &mesh, const std::string &path)
 {
+	// TODO: ensure that the directory is created
 	std::ofstream file(path, std::ios::binary);
 
 	// Write the number of submeshes
