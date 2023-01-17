@@ -179,6 +179,7 @@ file(GLOB_RECURSE OPTIX_SHADERS
 	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/wssr_grid.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/amadeus_path_tracer.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/amadeus_restir.cu
+	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/amadeus_repg.cu
 )
 
 add_library(optix_shaders

@@ -42,6 +42,7 @@
 #include "include/layers/mesh_memory.hpp"
 #include "include/amadeus/armada.cuh"
 #include "include/amadeus/path_tracer.cuh"
+#include "include/amadeus/repg.cuh"
 #include "include/amadeus/restir.cuh"
 
 // TODO: do base app without inheritance (simple struct..., app and baseapp not related)
@@ -182,6 +183,11 @@ struct MotionCapture : public kobra::BaseApp {
 			"ReSTIR",
 			std::make_shared <kobra::amadeus::ReSTIR> ()
 		);
+
+		armada_rtx->attach(
+			"RePG",
+			std::make_shared <kobra::amadeus::RePG> ()
+		);
 		
 		armada_rtx->set_envmap(KOBRA_DIR "/resources/skies/background_1.jpg");
 
@@ -209,8 +215,12 @@ struct MotionCapture : public kobra::BaseApp {
 		capture_interface = std::make_shared <CaptureInterface> ();
 
 		ui.attach(capture_interface);
-		ui.attach(std::make_shared <kobra::ui::FramerateAttachment> ());
 		ui.attach(std::make_shared <GPUUsageMonitor> ());
+		ui.attach(std::make_shared <kobra::ui::FramerateAttachment> (
+			[&]() {
+				return 1.0f/compute_time;
+			}
+		));
 
 		capture_interface->m_parent = this;
 		
@@ -255,8 +265,6 @@ struct MotionCapture : public kobra::BaseApp {
 		compute_timer.start();
 
 		while (!kill) {	
-			while (semaphore > 0);
-
 			// Wait for the latest capture if any
 			/* while (!capture_now) {
 				std::cout << "\twaiting for capture, capture_now: " << std::boolalpha << capture_now << "\n";
@@ -286,7 +294,6 @@ struct MotionCapture : public kobra::BaseApp {
 			}); */
 
 			compute_time = compute_timer.lap()/1e6;
-
 			if (capture_interface->m_captured_samples >= 0)
 				capture_now = (--capture_interface->m_captured_samples <= 0);
 		}
@@ -298,14 +305,13 @@ struct MotionCapture : public kobra::BaseApp {
 	// TODO: separate header/class
 	const std::unordered_map <int, std::function <void ()>> mode_map {
 		{1, [&]() {
-			semaphore++;
 			armada_rtx->activate("Path Tracer");
-			semaphore--;
 		}},
 		{2, [&]() {
-			semaphore++;
 			armada_rtx->activate("ReSTIR");
-			semaphore--;
+		}},
+		{3, [&]() {
+			armada_rtx->activate("RePG");
 		}}
 	};
 
