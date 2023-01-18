@@ -4,15 +4,6 @@
 #include "../../include/layers/gizmo.hpp"
 #include "../../include/vertex.hpp"
 
-// Overloaded new and delete operators
-void *operator new(size_t size) {
-	return kobra::Allocator::one().alloc(size);
-}
-
-void *operator new[](size_t size) {
-	return kobra::Allocator::one().alloc(size);
-}
-
 namespace kobra {
 
 namespace layers {

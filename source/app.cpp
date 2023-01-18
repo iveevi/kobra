@@ -101,7 +101,7 @@ BaseApp::BaseApp(const vk::raii::PhysicalDevice &phdev_,
 		const std::string &name_,
 		const vk::Extent2D &extent_,
 		const std::vector <const char *> &extensions,
-		const vk::AttachmentLoadOp &load = vk::AttachmentLoadOp::eClear)
+		const vk::AttachmentLoadOp &load)
 		: App(phdev_, name_, extent_, extensions)
 {
 	// Create the depth buffer

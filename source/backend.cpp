@@ -159,26 +159,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_logger
 	return VK_FALSE;
 }
 
-#ifdef KOBRA_VALIDATION_LAYERS
-
-// RAII handle for debug messenger
-struct DebugMessenger {
-	VkInstance			instance = nullptr;
-	VkDebugUtilsMessengerEXT	messenger = nullptr;
-
-	// Destructor
-	~DebugMessenger() {
-		std::cout << "Destroying debug messenger" << std::endl;
-		destroy_debug_messenger(instance, messenger, nullptr);
-	}
-
-	operator bool() const {
-		return messenger != nullptr;
-	}
-};
-
-#endif
-
 // Initialize GLFW statically
 void _initialize_glfw()
 {
@@ -246,27 +226,6 @@ const vk::raii::Instance &get_vulkan_instance()
 		get_required_extensions().data()
 	};
 
-#ifdef KOBRA_VALIDATION_LAYERS
-
-	static VkDebugUtilsMessengerEXT debug_messenger {};
-	static bool debug_messenger_created = false;
-
-	VkDebugUtilsMessengerCreateInfoEXT debug_messenger_info {
-		.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-		.messageSeverity =
-			VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT
-			| VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
-			| VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
-		.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
-			| VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
-			| VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
-		.pfnUserCallback = debug_logger
-	};
-
-	instance_info.pNext = &debug_messenger_info;
-
-#endif
-
 	instance = vk::raii::Instance {
 		get_vulkan_context(),
 		instance_info
@@ -274,21 +233,20 @@ const vk::raii::Instance &get_vulkan_instance()
 
 #ifdef KOBRA_VALIDATION_LAYERS
 
-	if (!debug_messenger_created) {
-		VkResult result = make_debug_messenger(
-			*instance,
-			&debug_messenger_info,
-			nullptr,
-			&debug_messenger
-		);
+	static constexpr vk::DebugUtilsMessengerCreateInfoEXT debug_messenger_info {
+		vk::DebugUtilsMessengerCreateFlagsEXT(),
+		vk::DebugUtilsMessageSeverityFlagBitsEXT::eError
+			| vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning
+			| vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose
+			| vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo,
+		vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral
+			| vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance
+			| vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation,
+		debug_logger
+	};
 
-		KOBRA_ASSERT(
-			result == VK_SUCCESS,
-			"Failed to create debug messenger"
-		);
-
-		debug_messenger_created = true;
-	}
+	static vk::raii::DebugUtilsMessengerEXT debug_messenger
+		{instance, debug_messenger_info};
 
 #endif
 

@@ -117,7 +117,7 @@ public:
 			const std::string &,
 			const vk::Extent2D &,
 			const std::vector <const char *> &,
-			const vk::AttachmentLoadOp &);
+			const vk::AttachmentLoadOp & = vk::AttachmentLoadOp::eClear);
 
 	// Requires a record function
 	virtual void record(const vk::raii::CommandBuffer &, const vk::raii::Framebuffer &) = 0;

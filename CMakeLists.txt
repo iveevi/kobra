@@ -1,4 +1,5 @@
 project(kobra CXX CUDA)
+project(stress CXX)
 
 # CXX options
 set(CMAKE_CXX_STANDARD 17)
@@ -116,6 +117,7 @@ set(Kobra_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/source/amadeus/armada.cu
 )
 
+# Set executable sources -- Kobra
 add_executable(kobra
 	main.cu
 	${ImGui_SOURCES}
@@ -125,6 +127,28 @@ add_executable(kobra
 )
 
 target_link_libraries(kobra
+	${Vulkan_LIBRARIES}
+	glfw
+	glslang
+	SPIRV
+	assimp
+	nvidia-ml
+	${OpenCV_LIBS}
+	${ImageMagick_LIBRARIES}
+)
+
+# TODO: create a shared library of library facilities
+
+# Set executable sources -- Stress
+add_executable(stress
+	experimental/stress.cpp
+	${ImGui_SOURCES}
+	${ImPlot_SOURCES}
+	${Glslang_SOURCES}
+	${Kobra_SOURCES}
+)
+
+target_link_libraries(stress
 	${Vulkan_LIBRARIES}
 	glfw
 	glslang
