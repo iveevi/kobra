@@ -372,7 +372,7 @@ void load_mesh(Entity &e, std::ifstream &fin)
 	}
 }
 
-void load_rasterizer(Entity &e, std::ifstream &fin, const Device &dev)
+void load_rasterizer(Entity &e, std::ifstream &fin, const Context &context)
 {
 	static char buf_mode[1024];
 
@@ -382,7 +382,7 @@ void load_rasterizer(Entity &e, std::ifstream &fin, const Device &dev)
 		return;
 	}
 
-	e.add <Renderable> (dev, &e.get <Mesh> ());
+	e.add <Renderable> (context, &e.get <Mesh> ());
 
 	// Read mode
 	std::string line;
@@ -439,7 +439,7 @@ void load_light(Entity &e, std::ifstream &fin)
 	light.type = Light::Type(index);
 }
 
-std::string load_components(Entity &e, std::ifstream &fin, const Device &dev)
+std::string load_components(Entity &e, std::ifstream &fin, const Context &context)
 {
 	std::string header;
 
@@ -462,7 +462,7 @@ std::string load_components(Entity &e, std::ifstream &fin, const Device &dev)
 		}
 
 		if (header == "[RASTERIZER]") {
-			load_rasterizer(e, fin, dev);
+			load_rasterizer(e, fin, context);
 			continue;
 		}
 
@@ -483,7 +483,7 @@ std::string load_components(Entity &e, std::ifstream &fin, const Device &dev)
 	return header;
 }
 
-void Scene::load(const Device &dev, const std::string &path)
+void Scene::load(const Context &context, const std::string &path)
 {
 	KOBRA_PROFILE_TASK(Scene loading)
 
@@ -515,7 +515,7 @@ void Scene::load(const Device &dev, const std::string &path)
 		read_fmt(fin, "name: %1023[^\n]\n", buf);
 		Entity &e = ecs.make_entity(buf);
 
-		header = load_components(e, fin, dev);
+		header = load_components(e, fin, context);
 	}
 }
 

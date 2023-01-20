@@ -75,6 +75,28 @@ public:
 	}
 };
 
+// Texture loader for a device context
+class ImageData;
+
+class TextureLoader {
+public:
+	TextureLoader() = default;
+
+	TextureLoader(const Device &);
+
+	// Texture loading and related operations
+	const ImageData &load_texture(const std::string &);
+	const vk::raii::Sampler &load_sampler(const std::string &);
+	vk::DescriptorImageInfo make_descriptor(const std::string &);
+	void bind(const vk::raii::DescriptorSet &, const std::string &, uint32_t);
+private:
+	Device m_device;
+	std::unordered_map <std::string, size_t> m_image_map;
+	std::unordered_map <std::string, vk::raii::Sampler> m_samplers;
+	std::vector <ImageData> m_images;
+	vk::raii::CommandPool m_command_pool = nullptr;
+};
+
 // Application context; resources that would be needed by most rendering layers
 struct Context {
 	vk::raii::PhysicalDevice	*phdev = nullptr;
@@ -85,6 +107,7 @@ struct Context {
 	vk::Extent2D			extent = {};
 	vk::Format			swapchain_format = vk::Format::eUndefined;
 	vk::Format			depth_format = vk::Format::eUndefined;
+	TextureLoader			*texture_loader;
 
 	Device dev() const {
 		return Device {phdev, device};

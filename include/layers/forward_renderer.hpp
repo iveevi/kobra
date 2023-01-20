@@ -24,7 +24,7 @@ struct ForwardRenderer {
 	vk::raii::Device *device = nullptr;
 	vk::raii::PhysicalDevice *phdev = nullptr;
 	vk::raii::DescriptorPool *descriptor_pool = nullptr;
-	
+
 	// Vulkan structures
 	vk::raii::RenderPass render_pass = nullptr;
 
@@ -33,6 +33,9 @@ struct ForwardRenderer {
 
 	// Pipeline layout is shared across all fragment shaders
 	vk::raii::PipelineLayout ppl = nullptr;
+
+	// Texture loader
+	TextureLoader *loader = nullptr;
 
 	vk::Extent2D extent = { 0, 0 };
 

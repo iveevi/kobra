@@ -14,7 +14,6 @@
 #include "../../include/ecs.hpp"
 #include "../../include/optix/core.cuh"
 #include "../../include/profiler.hpp"
-#include "../../include/texture_manager.hpp"
 #include "../../include/transform.hpp"
 #include "../../shaders/raster/bindings.h"
 
@@ -40,12 +39,12 @@ static constexpr OptixPipelineCompileOptions ppl_compile_options = {
 	.pipelineLaunchParamsVariableName = "parameters",
 	.usesPrimitiveTypeFlags = (unsigned int) OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE,
 };
-	
+
 static constexpr OptixModuleCompileOptions module_options = {
 	.optLevel = KOBRA_OPTIX_OPTIMIZATION_LEVEL,
 	.debugLevel = KOBRA_OPTIX_DEBUG_LEVEL,
 };
-	
+
 static constexpr OptixPipelineLinkOptions ppl_link_options = {
 	.maxTraceDepth = 10,
 	.debugLevel = KOBRA_OPTIX_DEBUG_LEVEL,
@@ -131,7 +130,7 @@ void GridBasedReservoirs::initialize_optix()
 	CUdeviceptr d_miss_sbt = cuda::make_buffer_ptr(sampling_ms_records);
 
 	sampling_sbt.raygenRecord = d_raygen_sbt;
-	
+
 	sampling_sbt.missRecordBase = d_miss_sbt;
 	sampling_sbt.missRecordCount = sampling_ms_records.size();
 	sampling_sbt.missRecordStrideInBytes = sizeof(MissRecord);
@@ -139,7 +138,7 @@ void GridBasedReservoirs::initialize_optix()
 	// Evaluation stage SBT
 	std::vector <RaygenRecord> eval_rg_records(1);
 	std::vector <MissRecord> eval_ms_records(2);
-	
+
 	optix::pack_header(optix_programs.raygen, eval_rg_records[0]);
 
 	optix::pack_header(optix_programs.miss, eval_ms_records[0]);
@@ -149,7 +148,7 @@ void GridBasedReservoirs::initialize_optix()
 	d_miss_sbt = cuda::make_buffer_ptr(eval_ms_records);
 
 	eval_sbt.raygenRecord = d_raygen_sbt;
-	
+
 	eval_sbt.missRecordBase = d_miss_sbt;
 	eval_sbt.missRecordCount = eval_ms_records.size();
 	eval_sbt.missRecordStrideInBytes = sizeof(MissRecord);
@@ -238,6 +237,7 @@ GridBasedReservoirs::GridBasedReservoirs
 	device = context.device;
 	phdev = context.phdev;
 	descriptor_pool = context.descriptor_pool;
+	m_texture_loader = context.texture_loader;
 	this->extent = extent;
 
 	// Initialize OptiX
@@ -248,10 +248,7 @@ GridBasedReservoirs::GridBasedReservoirs
 void GridBasedReservoirs::set_envmap(const std::string &path)
 {
 	// First load the environment map
-	const auto &map = TextureManager::load_texture(
-		*phdev, *device, path, true // TODO: use dev()
-	);
-
+	const auto &map = m_texture_loader->load_texture(path);
 	launch_params.envmap = cuda::import_vulkan_texture(*device, map);
 	launch_params.has_envmap = true;
 }
@@ -265,12 +262,12 @@ static void update_light_buffers(GridBasedReservoirs &layer,
 {
 	if (layer.host.quad_lights.size() != lights.size()) {
 		layer.host.quad_lights.resize(lights.size());
-	
+
 		auto &quad_lights = layer.host.quad_lights;
 		for (int i = 0; i < lights.size(); i++) {
 			const Light *light = lights[i];
 			const Transform *transform = light_transforms[i];
-			
+
 			glm::vec3 a {-0.5f, 0, -0.5f};
 			glm::vec3 b {0.5f, 0, -0.5f};
 			glm::vec3 c {-0.5f, 0, 0.5f};
@@ -372,9 +369,8 @@ static void update_sbt_data(GridBasedReservoirs &layer,
 		// Import textures if necessary
 		// TODO: method?
 		if (mat.has_albedo()) {
-			const ImageData &diffuse = TextureManager::load_texture(
-				*layer.phdev, *layer.device, mat.albedo_texture
-			);
+			const ImageData &diffuse = layer.m_texture_loader
+				->load_texture(mat.albedo_texture);
 
 			hit_record.data.textures.diffuse
 				= cuda::import_vulkan_texture(*layer.device, diffuse);
@@ -382,9 +378,8 @@ static void update_sbt_data(GridBasedReservoirs &layer,
 		}
 
 		if (mat.has_normal()) {
-			const ImageData &normal = TextureManager::load_texture(
-				*layer.phdev, *layer.device, mat.normal_texture
-			);
+			const ImageData &normal = layer.m_texture_loader
+				->load_texture(mat.normal_texture);
 
 			hit_record.data.textures.normal
 				= cuda::import_vulkan_texture(*layer.device, normal);
@@ -392,9 +387,8 @@ static void update_sbt_data(GridBasedReservoirs &layer,
 		}
 
 		if (mat.has_roughness()) {
-			const ImageData &roughness = TextureManager::load_texture(
-				*layer.phdev, *layer.device, mat.roughness_texture
-			);
+			const ImageData &roughness = layer.m_texture_loader
+				->load_texture(mat.roughness_texture);
 
 			hit_record.data.textures.roughness
 				= cuda::import_vulkan_texture(*layer.device, roughness);

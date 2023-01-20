@@ -134,6 +134,9 @@ class ArmadaRTX {
 	vk::raii::Device *m_device = nullptr;
 	vk::raii::PhysicalDevice *m_phdev = nullptr;
 
+	// Texture loader
+	TextureLoader *m_texture_loader = nullptr;
+
 	// Vulkan structures
 	vk::Extent2D m_extent = {0, 0};
 

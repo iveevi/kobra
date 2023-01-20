@@ -14,7 +14,9 @@ set(COLOR_FLAGS -fdiagnostics-color=always)
 
 # Add flags
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${COLOR_FLAGS}")
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} ${COLOR_FLAGS}")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler \"${COLOR_FLAGS}\"")
+
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcudafe \"--diag_suppress=20012 --diag_suppress=20013 --diag_suppress=20014\"")
 
 # Vulkan
 find_package(Vulkan REQUIRED)

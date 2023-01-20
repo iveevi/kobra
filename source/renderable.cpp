@@ -1,14 +1,14 @@
 // Engine headers
 #include "../include/renderable.hpp"
-#include "../include/texture_manager.hpp"
 #include "../shaders/raster/bindings.h"
 
 namespace kobra {
 
 // Renderable
-Renderable::Renderable(const Device &dev, Mesh *mesh_)
-		: mesh(mesh_)
+Renderable::Renderable(const Context &context, Mesh *mesh_)
+		: m_loader(context.texture_loader), mesh(mesh_)
 {
+	const Device &dev = context.dev();
 	for (size_t i = 0; i < mesh->submeshes.size(); i++) {
 		// Allocate memory for the vertex, index, and uniform buffers
 		vk::DeviceSize vbuf_size = (*mesh)[i].vertices.size() * sizeof(Vertex);
@@ -107,7 +107,7 @@ void Renderable::bind_material
 		if (materials[i].has_normal())
 			normal = materials[i].normal_texture;
 
-		TextureManager::bind(
+		/* TextureManager::bind(
 			*dev.phdev, *dev.device,
 			dset, albedo,
 			// TODO: enum like RasterBindings::eAlbedo
@@ -118,7 +118,11 @@ void Renderable::bind_material
 			*dev.phdev, *dev.device,
 			dset, normal,
 			RASTER_BINDING_NORMAL_MAP
-		);
+		); */
+
+		// TODO: parallelize
+		m_loader->bind(dset, albedo, RASTER_BINDING_ALBEDO_MAP);
+		m_loader->bind(dset, normal, RASTER_BINDING_NORMAL_MAP);
 
 		// Bind material UBO
 		bind_ds(*dev.device, dset, ubo[i],

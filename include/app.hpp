@@ -88,6 +88,8 @@ protected:
 
 	DepthBuffer				depth_buffer = nullptr;
 
+	TextureLoader				m_texture_loader;
+
 	// Syncro objects
 	struct FrameData {
 		vk::raii::Semaphore		present_completed = nullptr;

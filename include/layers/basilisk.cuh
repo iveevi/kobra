@@ -41,6 +41,8 @@ struct Basilisk {
 	vk::raii::PhysicalDevice *phdev = nullptr;
 	vk::raii::DescriptorPool *descriptor_pool = nullptr;
 
+	TextureLoader *m_texture_loader = nullptr;
+
 	// CUDA launch stream
 	CUstream optix_stream = 0;
 

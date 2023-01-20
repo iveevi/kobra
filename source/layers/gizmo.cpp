@@ -19,7 +19,7 @@ struct PushConstants {
 };
 
 // Create rasterizer for translate gizmo
-static Renderable *make_translate_rasterizer(const Device &dev)
+static Renderable *make_translate_rasterizer(Context &context)
 {
 	Submesh cone_x = Submesh::cone();
 	Submesh cone_y = Submesh::cone();
@@ -88,7 +88,7 @@ static Renderable *make_translate_rasterizer(const Device &dev)
 	}};
 
 	// Create a rasterizer
-	return new Renderable(dev, mesh);
+	return new Renderable(context, mesh);
 }
 
 // Get model matrix for scaling gizmo
@@ -107,7 +107,7 @@ static Transform get_scale_model(const Transform &origin,
 }
 
 // Create a gizmo layer
-Gizmo Gizmo::make(const Context &context)
+Gizmo Gizmo::make(Context &context)
 {
 	// Layer to return
 	Gizmo layer;
@@ -157,7 +157,7 @@ Gizmo Gizmo::make(const Context &context)
 	layer.pipeline = make_graphics_pipeline(grp_info);
 
 	// Create rasterizers for each gizmo
-	layer.translate = make_translate_rasterizer(context.dev());
+	layer.translate = make_translate_rasterizer(context);
 
 	// Return
 	return layer;

@@ -1,7 +1,6 @@
 // Engine headers
 #include "../../include/layers/forward_renderer.hpp"
 #include "../../include/renderable.hpp"
-#include "../../include/texture_manager.hpp"
 #include "../../shaders/raster/bindings.h"
 #include "../../include/ecs.hpp"
 
@@ -46,7 +45,9 @@ ForwardRenderer::ForwardRenderer(const Context &context)
 	device = context.device;
 	phdev = context.phdev;
 	descriptor_pool = context.descriptor_pool;
-	
+
+	loader = context.texture_loader;
+
 	extent = context.extent;
 
 	// Create the render pass
@@ -69,8 +70,8 @@ ForwardRenderer::ForwardRenderer(const Context &context)
 	auto shaders = make_shader_modules(
 		*device,
 		{
-			KOBRA_SHADERS_DIR "/bin/raster/vertex.spv",
-			KOBRA_SHADERS_DIR "/bin/raster/color_frag.spv"
+			KOBRA_SHADERS_DIR "/vertex_vert.spv",
+			KOBRA_SHADERS_DIR "/color_frag.spv"
 		}
 	);
 
@@ -150,18 +151,8 @@ static void configure_dset(ForwardRenderer &layer,
 		if (materials[i].has_normal())
 			normal = materials[i].normal_texture;
 
-		TextureManager::bind(
-			*layer.phdev, *layer.device,
-			d, albedo,
-			// TODO: enum like RasterBindings::eAlbedo
-			RASTER_BINDING_ALBEDO_MAP
-		);
-
-		TextureManager::bind(
-			*layer.phdev, *layer.device,
-			d, normal,
-			RASTER_BINDING_NORMAL_MAP
-		);
+		layer.loader->bind(d, albedo, RASTER_BINDING_ALBEDO_MAP);
+		layer.loader->bind(d, normal, RASTER_BINDING_NORMAL_MAP);
 
 		// Bind material UBO
 		bind_ds(*layer.device, d, ubo[i],
@@ -181,7 +172,7 @@ void ForwardRenderer::render(const ECS &ecs,
 {
 	// Apply the rendering area
 	ra.apply(cmd, extent);
-	
+
 	// Clear colors
 	// FIXME: seriously make a method from clering values...
 	std::array <vk::ClearValue, 2> clear_values {
@@ -211,7 +202,7 @@ void ForwardRenderer::render(const ECS &ecs,
 		},
 		vk::SubpassContents::eInline
 	);
-	
+
 	// Preprocess the entities
 	std::vector <const Renderable *> rasterizers;
 	std::vector <const Transform *> rasterizer_transforms;
@@ -240,7 +231,7 @@ void ForwardRenderer::render(const ECS &ecs,
 				configure_dset(*this, dsets[rasterizer], rasterizer);
 			}
 		}
-		
+
 		if (ecs.exists <Light> (i)) {
 			const auto *light = &ecs.get <Light> (i);
 			const auto *transform = &ecs.get <Transform> (i);
@@ -249,10 +240,10 @@ void ForwardRenderer::render(const ECS &ecs,
 			light_transforms.push_back(transform);
 		}
 	}
-	
+
 	// Update the data
 	// TODO: update only when needed, and update lights...
-	
+
 	// Bind pipeline
 	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
 

@@ -15,7 +15,8 @@ App::App(const vk::raii::PhysicalDevice &phdev_,
 		: phdev(phdev_),
 		window(name_, extent_),
 		extent(extent_),
-		frame_index(0) {
+		frame_index(0)
+{
 	surface = make_surface(window);
 	auto queue_family = find_queue_families(phdev, surface);
 
@@ -110,6 +111,9 @@ BaseApp::BaseApp(const vk::raii::PhysicalDevice &phdev_,
 		vk::Format::eD32Sfloat,
 		extent
 	};
+
+	// Initialize the texture loader
+	m_texture_loader = std::move(TextureLoader {get_device()});
 
 	// Create render pass
 	// TODO: we dont need to create a base render pass (whos gonna
@@ -266,6 +270,7 @@ Context BaseApp::get_context()
 		.extent = extent,
 		.swapchain_format = swapchain.format,
 		.depth_format = depth_buffer.format,
+		.texture_loader = &m_texture_loader
 	};
 }
 

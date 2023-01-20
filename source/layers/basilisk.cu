@@ -12,7 +12,6 @@
 #include "../../include/ecs.hpp"
 #include "../../include/layers/basilisk.cuh"
 #include "../../include/optix/core.cuh"
-#include "../../include/texture_manager.hpp"
 #include "../../include/transform.hpp"
 #include "../../shaders/raster/bindings.h"
 #include "../../include/profiler.hpp"
@@ -292,6 +291,7 @@ Basilisk::Basilisk
 		: m_system(system), m_mesh_memory(mesh_memory),
 		device(context.device), phdev(context.phdev),
 		descriptor_pool(context.descriptor_pool),
+		m_texture_loader(context.texture_loader),
 		extent(extent)
 {
 	// Initialize OptiX
@@ -308,10 +308,7 @@ Basilisk::Basilisk
 void Basilisk::set_envmap(const std::string &path)
 {
 	// First load the environment map
-	const auto &map = TextureManager::load_texture(
-		*phdev, *device, path, true
-	);
-
+	const auto &map = m_texture_loader->load_texture(path);
 	launch_params.envmap = cuda::import_vulkan_texture(*device, map);
 	launch_params.has_envmap = true;
 }
@@ -475,9 +472,8 @@ static void update_sbt_data(Basilisk &layer,
 		// Import textures if necessary
 		// TODO: method?
 		if (mat.has_albedo()) {
-			const ImageData &diffuse = TextureManager::load_texture(
-				*layer.phdev, *layer.device, mat.albedo_texture
-			);
+			const ImageData &diffuse = layer.m_texture_loader
+				->load_texture(mat.albedo_texture);
 
 			hit_record.data.textures.diffuse
 				= cuda::import_vulkan_texture(*layer.device, diffuse);
@@ -485,9 +481,8 @@ static void update_sbt_data(Basilisk &layer,
 		}
 
 		if (mat.has_normal()) {
-			const ImageData &normal = TextureManager::load_texture(
-				*layer.phdev, *layer.device, mat.normal_texture
-			);
+			const ImageData &normal = layer.m_texture_loader
+				->load_texture(mat.normal_texture);
 
 			hit_record.data.textures.normal
 				= cuda::import_vulkan_texture(*layer.device, normal);
@@ -495,9 +490,8 @@ static void update_sbt_data(Basilisk &layer,
 		}
 
 		if (mat.has_specular()) {
-			const ImageData &specular = TextureManager::load_texture(
-				*layer.phdev, *layer.device, mat.specular_texture
-			);
+			const ImageData &specular = layer.m_texture_loader
+				->load_texture(mat.specular_texture);
 
 			hit_record.data.textures.specular
 				= cuda::import_vulkan_texture(*layer.device, specular);
@@ -505,9 +499,8 @@ static void update_sbt_data(Basilisk &layer,
 		}
 
 		if (mat.has_emission()) {
-			const ImageData &emission = TextureManager::load_texture(
-				*layer.phdev, *layer.device, mat.emission_texture
-			);
+			const ImageData &emission = layer.m_texture_loader
+				->load_texture(mat.emission_texture);
 
 			hit_record.data.textures.emission
 				= cuda::import_vulkan_texture(*layer.device, emission);
@@ -515,9 +508,8 @@ static void update_sbt_data(Basilisk &layer,
 		}
 
 		if (mat.has_roughness()) {
-			const ImageData &roughness = TextureManager::load_texture(
-				*layer.phdev, *layer.device, mat.roughness_texture
-			);
+			const ImageData &roughness = layer.m_texture_loader
+				->load_texture(mat.roughness_texture);
 
 			hit_record.data.textures.roughness
 				= cuda::import_vulkan_texture(*layer.device, roughness);

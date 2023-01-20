@@ -1,6 +1,5 @@
 // Engine headers
 #include "../../include/layers/raster.hpp"
-#include "../../include/texture_manager.hpp"
 #include "../../shaders/raster/bindings.h"
 
 namespace kobra {
@@ -213,7 +212,7 @@ Raster::Raster(const Context &ctx, const vk::AttachmentLoadOp &load)
 	{
 		auto box = Mesh::box({0, 0, 0}, {0.5, 0.01, 0.5});
 
-		_area_light = new Renderable(_ctx.dev(), new Mesh(box));
+		_area_light = new Renderable(_ctx, new Mesh(box));
 
 		// Setup descriptor set for area light
 		_cached_rasterizers.insert(_area_light);
@@ -242,10 +241,7 @@ void Raster::environment_map(const std::string &path)
 	_skybox.enabled = true;
 
 	// Bind to its descriptor set
-	TextureManager::bind(_ctx.dev(),
-		_skybox.dset, _skybox.path,
-		RASTER_BINDING_SKYBOX
-	);
+	_ctx.texture_loader->bind(_skybox.dset, _skybox.path, RASTER_BINDING_SKYBOX);
 }
 
 ////////////

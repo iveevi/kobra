@@ -12,7 +12,6 @@
 #include "../../include/ecs.hpp"
 #include "../../include/amadeus/armada.cuh"
 #include "../../include/optix/core.cuh"
-#include "../../include/texture_manager.hpp"
 #include "../../include/transform.hpp"
 #include "../../shaders/raster/bindings.h"
 #include "../../include/profiler.hpp"
@@ -29,6 +28,7 @@ ArmadaRTX::ArmadaRTX(const Context &context,
 		const vk::Extent2D &extent)
 		: m_system(system), m_mesh_memory(mesh_memory),
 		m_device(context.device), m_phdev(context.phdev),
+		m_texture_loader(context.texture_loader),
 		m_extent(extent), m_active_attachment()
 {
 	// Start the timer
@@ -45,7 +45,7 @@ ArmadaRTX::ArmadaRTX(const Context &context,
 		extent.width,
 		extent.height
 	};
-	
+
 	params.samples = 0;
 	params.accumulate = true;
 	params.lights.quad_count = 0;
@@ -66,10 +66,7 @@ ArmadaRTX::ArmadaRTX(const Context &context,
 void ArmadaRTX::set_envmap(const std::string &path)
 {
 	// First load the environment map
-	const auto &map = TextureManager::load_texture(
-		*m_phdev, *m_device, path, true
-	);
-
+	const auto &map = m_texture_loader->load_texture(path);
 	m_launch_info.environment_map = cuda::import_vulkan_texture(*m_device, map);
 	m_launch_info.has_environment_map = true;
 }
@@ -198,9 +195,8 @@ void ArmadaRTX::update_sbt_data
 		// Import textures if necessary
 		// TODO: method?
 		if (mat.has_albedo()) {
-			const ImageData &diffuse = TextureManager::load_texture(
-				*m_phdev, *m_device, mat.albedo_texture
-			);
+			const ImageData &diffuse = m_texture_loader
+				->load_texture(mat.albedo_texture);
 
 			hit_record.data.textures.diffuse
 				= cuda::import_vulkan_texture(*m_device, diffuse);
@@ -208,9 +204,8 @@ void ArmadaRTX::update_sbt_data
 		}
 
 		if (mat.has_normal()) {
-			const ImageData &normal = TextureManager::load_texture(
-				*m_phdev, *m_device, mat.normal_texture
-			);
+			const ImageData &normal = m_texture_loader
+				->load_texture(mat.normal_texture);
 
 			hit_record.data.textures.normal
 				= cuda::import_vulkan_texture(*m_device, normal);
@@ -218,9 +213,8 @@ void ArmadaRTX::update_sbt_data
 		}
 
 		if (mat.has_specular()) {
-			const ImageData &specular = TextureManager::load_texture(
-				*m_phdev, *m_device, mat.specular_texture
-			);
+			const ImageData &specular = m_texture_loader
+				->load_texture(mat.specular_texture);
 
 			hit_record.data.textures.specular
 				= cuda::import_vulkan_texture(*m_device, specular);
@@ -228,9 +222,8 @@ void ArmadaRTX::update_sbt_data
 		}
 
 		if (mat.has_emission()) {
-			const ImageData &emission = TextureManager::load_texture(
-				*m_phdev, *m_device, mat.emission_texture
-			);
+			const ImageData &emission = m_texture_loader
+				->load_texture(mat.emission_texture);
 
 			hit_record.data.textures.emission
 				= cuda::import_vulkan_texture(*m_device, emission);
@@ -238,9 +231,8 @@ void ArmadaRTX::update_sbt_data
 		}
 
 		if (mat.has_roughness()) {
-			const ImageData &roughness = TextureManager::load_texture(
-				*m_phdev, *m_device, mat.roughness_texture
-			);
+			const ImageData &roughness = m_texture_loader
+				->load_texture(mat.roughness_texture);
 
 			hit_record.data.textures.roughness
 				= cuda::import_vulkan_texture(*m_device, roughness);

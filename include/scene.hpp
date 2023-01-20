@@ -19,7 +19,7 @@ struct Scene {
 
 	// Saving and loading
 	void save(const std::string &);
-	void load(const Device &, const std::string &);
+	void load(const Context &, const std::string &);
 };
 
 }

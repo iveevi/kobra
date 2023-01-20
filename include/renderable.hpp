@@ -15,6 +15,7 @@ namespace kobra {
 // Renderable component, consisting of a reference to a mesh, and the submesh
 // properties; all memory related to the mesh is managed by other layers
 class Renderable {
+	TextureLoader *m_loader = nullptr;
 public:
 	// Information for a single submesh
 	struct Renderlet {
@@ -22,7 +23,7 @@ public:
 	};
 
 	std::vector <Renderlet> m_renderlets;
-public:
+
 	// Push constants
 	// TODO: remove from here... these should be managed by the layers
 	struct PushConstants {
@@ -80,7 +81,7 @@ public:
 	Renderable() = delete;
 
 	// Constructor initializes the buffers
-	Renderable(const Device &, Mesh *);
+	Renderable(const Context &, Mesh *);
 
 	// Properties
 	size_t size() const {

@@ -157,7 +157,7 @@ struct MotionCapture : public kobra::BaseApp {
 			),
 			framer(get_context()) {
 		// Load scene and camera
-		scene.load(get_device(), scene_path);
+		scene.load(get_context(), scene_path);
 
 		// TODO: save mesh source...
 		// scene.save("scene.kobra");

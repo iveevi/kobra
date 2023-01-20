@@ -31,7 +31,7 @@ struct Gizmo {
 	Renderable *translate;
 
 	// Create a gizmo layer
-	static Gizmo make(const Context &);
+	static Gizmo make(Context &);
 
 	// TODO: pass extent instead of storing it
 	
