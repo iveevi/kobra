@@ -106,11 +106,11 @@ BaseApp::BaseApp(const vk::raii::PhysicalDevice &phdev_,
 		: App(phdev_, name_, extent_, extensions)
 {
 	// Create the depth buffer
-	depth_buffer = DepthBuffer {
+	depth_buffer = std::move(DepthBuffer {
 		phdev, device,
 		vk::Format::eD32Sfloat,
 		extent
-	};
+	});
 
 	// Initialize the texture loader
 	m_texture_loader = std::move(TextureLoader {get_device()});

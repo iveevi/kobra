@@ -143,7 +143,7 @@ target_link_libraries(kobra
 
 # Set executable sources -- Stress
 add_executable(stress
-	experimental/stress.cpp
+	experimental/stress.cu
 	${ImGui_SOURCES}
 	${ImPlot_SOURCES}
 	${Glslang_SOURCES}
@@ -218,11 +218,11 @@ set_target_properties(optix_shaders PROPERTIES
 )
 
 # Fake target to copy shader outputs to bin folder
-file(GLOB_RECURSE OPTIX_BINARIES ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/optix_shaders.dir/*.ptx)
-
 add_custom_target(
 	optix_shaders_copy
-	COMMAND ${CMAKE_COMMAND} -E copy ${OPTIX_BINARIES} ${CMAKE_BINARY_DIR}/bin/ptx
+	COMMAND ${CMAKE_COMMAND} -E copy_directory
+		${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/optix_shaders.dir/source/optix
+		${CMAKE_BINARY_DIR}/bin/ptx
 	DEPENDS optix_shaders
 )
 

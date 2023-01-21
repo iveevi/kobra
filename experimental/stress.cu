@@ -3,6 +3,8 @@
 #include "../include/scene.hpp"
 #include "../include/project.hpp"
 #include "../include/layers/forward_renderer.hpp"
+#include "../include/amadeus/armada.cuh"
+#include "../include/amadeus/path_tracer.cuh"
 
 int main()
 {
@@ -17,15 +19,15 @@ int main()
 	auto predicate = [&extensions](const vk::raii::PhysicalDevice &dev) {
 		return kobra::physical_device_able(dev, extensions);
 	};
-	
+
 	vk::raii::PhysicalDevice phdev = kobra::pick_physical_device(predicate);
 
-	struct StressApp : public kobra::BaseApp {
+	struct StressApp1 : public kobra::BaseApp {
 		kobra::Scene scene;
 		kobra::Entity camera;
 		kobra::layers::ForwardRenderer forward_renderer;
 
-		StressApp(const vk::raii::PhysicalDevice &phdev,
+		StressApp1(const vk::raii::PhysicalDevice &phdev,
 				const std::vector <const char *> extensions)
 				: kobra::BaseApp {
 					phdev, "Stress Test",
@@ -54,7 +56,30 @@ int main()
 		}
 	};
 
-	StressApp app {
+	struct StressApp2 : public kobra::BaseApp {
+		kobra::Scene scene;
+		kobra::Entity camera;
+
+		std::shared_ptr <kobra::layers::MeshMemory> mesh_memory;
+
+		std::shared_ptr <kobra::amadeus::System> system;
+		std::shared_ptr <kobra::amadeus::ArmadaRTX> armada;
+
+		StressApp2(const vk::raii::PhysicalDevice &phdev,
+				const std::vector <const char *> extensions)
+				: kobra::BaseApp {
+					phdev, "Stress Test",
+					vk::Extent2D {500, 500},
+					extensions
+				} {
+			mesh_memory = std::make_shared <kobra::layers::MeshMemory> (get_context());
+			system = std::make_shared <kobra::amadeus::System> ();
+			armada = std::make_shared <kobra::amadeus::ArmadaRTX>
+				(get_context(), system, mesh_memory, vk::Extent2D {500, 500});
+		}
+	};
+
+	StressApp1 app {
 		phdev,
 		{VK_KHR_SWAPCHAIN_EXTENSION_NAME},
 	};
