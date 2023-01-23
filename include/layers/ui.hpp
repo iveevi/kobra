@@ -38,7 +38,8 @@ public:
 	// Constructor
 	UI(const Context &context,
 			const Window &window,
-			const vk::raii::Queue &queue) {
+			const vk::raii::Queue &queue,
+			const std::pair <std::string, size_t> font) {
 		// TODO: just get the graphics queue from the device...
 
 		// Assume that ImGUI is initialized, including context and backend...
@@ -83,7 +84,10 @@ public:
 		
 		ImGui_ImplVulkan_Init(&init_info, *render_pass);
 		
-		// Load fonts
+		// Load font
+		ImGuiIO &io = ImGui::GetIO();
+		io.Fonts->AddFontFromFileTTF(font.first.c_str(), font.second);
+
 		command_now(*device, *command_pool,
 			[&](const vk::raii::CommandBuffer &cmd) {
 				ImGui_ImplVulkan_CreateFontsTexture(*cmd);
@@ -92,6 +96,11 @@ public:
 		
 		// Destroy CPU-side resources
 		ImGui_ImplVulkan_DestroyFontUploadObjects();
+	}
+
+	// Destructor
+	~UI() {
+		ImGui_ImplVulkan_Shutdown();
 	}
 
 	// Render ImGUI
@@ -154,23 +163,6 @@ public:
 	// Add attachments
 	void attach(std::shared_ptr <ui::ImGuiAttachment> attachment) {
 		attachments.emplace_back(attachment);
-	}
-
-	// Set font
-	void set_font(const std::string &path, float size) {
-		ImGuiIO &io = ImGui::GetIO();
-		io.Fonts->Clear();
-		io.Fonts->AddFontFromFileTTF(path.c_str(), size);
-
-		// Rebuild font texture
-		command_now(*device, *command_pool,
-			[&](const vk::raii::CommandBuffer &cmd) {
-				ImGui_ImplVulkan_CreateFontsTexture(*cmd);
-			}
-		);
-
-		// Destroy CPU-side resources
-		ImGui_ImplVulkan_DestroyFontUploadObjects();
 	}
 };
 

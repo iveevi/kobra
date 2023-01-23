@@ -53,9 +53,9 @@ struct MotionCapture : public kobra::BaseApp {
 	kobra::Scene scene;
 
 	// Necessary layers
-	kobra::layers::Denoiser denoiser;
+	// kobra::layers::Denoiser denoiser;
 	kobra::layers::Framer framer;
-	kobra::layers::UI ui;
+	// std::shared_ptr <kobra::layers::UI> ui;
 	
 	std::shared_ptr <kobra::layers::MeshMemory> mesh_memory;
 	std::shared_ptr <kobra::amadeus::System> amadeus;
@@ -67,7 +67,7 @@ struct MotionCapture : public kobra::BaseApp {
 	std::vector <uint8_t> b_traced_cpu;
 
 	// Threads
-	std::thread *compute_thread = nullptr;
+	// std::thread *compute_thread = nullptr;
 
 	kobra::Timer compute_timer;
 	float compute_time;
@@ -82,7 +82,7 @@ struct MotionCapture : public kobra::BaseApp {
 	static constexpr vk::Extent2D raytracing_extent = {1000, 1000};
 	static constexpr vk::Extent2D rendering_extent = {1920, 1080};
 
-	struct GPUUsageMonitor : kobra::ui::ImGuiAttachment {
+	/* struct GPUUsageMonitor : kobra::ui::ImGuiAttachment {
 		void render() {
 			// TODO: graph memory usage over time
 			nvmlDevice_t device;
@@ -97,8 +97,8 @@ struct MotionCapture : public kobra::BaseApp {
 			ImGui::Begin("GPU Usage");
 			ImGui::Text("GPU usage: %d%%", utilization.gpu);
 			ImGui::Text("Memory used: %llu/%llu MiB",
-				memory.used/(1024ull * 1024ull),
-				memory.total/(1024ull * 1024ull)
+				memory.used/(1024 * 1024),
+				memory.total/(1024 * 1024)
 			);
 
 			ImGui::End();
@@ -146,7 +146,7 @@ struct MotionCapture : public kobra::BaseApp {
 		}
 	};
 
-	std::shared_ptr <CaptureInterface> capture_interface;
+	std::shared_ptr <CaptureInterface> capture_interface; */
 
 	MotionCapture(const vk::raii::PhysicalDevice &phdev,
 			const std::vector <const char *> &extensions,
@@ -191,40 +191,40 @@ struct MotionCapture : public kobra::BaseApp {
 		
 		armada_rtx->set_envmap(KOBRA_DIR "/resources/skies/background_1.jpg");
 
-		// Create the denoiser layer
+		/* Create the denoiser layer
 		denoiser = kobra::layers::Denoiser::make(
 			extent,
 			kobra::layers::Denoiser::eNormal
 				| kobra::layers::Denoiser::eAlbedo
-		);
+		); */
 			
 		// Input callbacks
 		io.mouse_events.subscribe(mouse_callback, this);
 		io.keyboard_events.subscribe(keyboard_callback, this);
 		
-		// Initialize ImGUI
+		/* Initialize ImGUI
 		// TODO: ui/core method (initialize)
 		ImGui::CreateContext();
 		ImPlot::CreateContext();
 
 		ImGui_ImplGlfw_InitForVulkan(window.handle, true);
 
-		ui = kobra::layers::UI(get_context(), window, graphics_queue);
-		ui.set_font(KOBRA_DIR "/resources/fonts/NotoSans.ttf", 30);
+		ui = std::make_shared <kobra::layers::UI> (get_context(), window, graphics_queue);
+		// ui->set_font(KOBRA_DIR "/resources/fonts/NotoSans.ttf", 30);
 
 		capture_interface = std::make_shared <CaptureInterface> ();
 
-		ui.attach(capture_interface);
-		ui.attach(std::make_shared <GPUUsageMonitor> ());
-		ui.attach(std::make_shared <kobra::ui::FramerateAttachment> (
+		ui->attach(capture_interface);
+		ui->attach(std::make_shared <GPUUsageMonitor> ());
+		ui->attach(std::make_shared <kobra::ui::FramerateAttachment> (
 			[&]() {
 				return 1.0f/compute_time;
 			}
 		));
 
-		capture_interface->m_parent = this;
+		capture_interface->m_parent = this; */
 		
-		// NOTE: we need this precomputation step to load all the
+		/* NOTE: we need this precomputation step to load all the
 		// resources before rendering; we need some system to allocate
 		// queues so that we dont need to do this...
 		armada_rtx->render(
@@ -238,7 +238,8 @@ struct MotionCapture : public kobra::BaseApp {
 			&MotionCapture::path_trace_kernel, this
 		);
 		
-		KOBRA_LOG_FILE(kobra::Log::INFO) << "Launched path tracing thread\n";
+		KOBRA_LOG_FILE(kobra::Log::INFO) << "Launched path tracing
+		thread\n"; */
 
 		// Allocate buffers
 		size_t size = armada_rtx->size();
@@ -249,22 +250,29 @@ struct MotionCapture : public kobra::BaseApp {
 
 	// Destructor
 	~MotionCapture() {
-		// Wait for compute thread to finish
+		/* Wait for compute thread to finish
 		if (compute_thread) {
 			// Send kill signal
 			kill = true;
 			compute_thread->join();
 			delete compute_thread;
-		}
+		} */
+
+		device.waitIdle();
+
+		/* ui.reset();
+
+		ImGui_ImplGlfw_Shutdown();
+		ImGui::DestroyContext(); */
 	}
 
 	// Path tracing kernel
 	int integrator = 0;
 
 	void path_trace_kernel() {	
-		compute_timer.start();
+		/* compute_timer.start();
 
-		while (!kill) {	
+		while (!kill) {	 */
 			// Wait for the latest capture if any
 			/* while (!capture_now) {
 				std::cout << "\twaiting for capture, capture_now: " << std::boolalpha << capture_now << "\n";
@@ -294,9 +302,11 @@ struct MotionCapture : public kobra::BaseApp {
 			}); */
 
 			compute_time = compute_timer.lap()/1e6;
-			if (capture_interface->m_captured_samples >= 0)
-				capture_now = (--capture_interface->m_captured_samples <= 0);
-		}
+			/* if (capture_interface->m_captured_samples >= 0)
+				capture_now =
+				(--capture_interface->m_captured_samples <= 0);
+				*/
+		// }
 	}
 
 	float time = 0.0f;
@@ -358,6 +368,8 @@ struct MotionCapture : public kobra::BaseApp {
 
 		// Now trace and render
 		cmd.begin({});
+			path_trace_kernel();
+
 			vk::Extent2D rtx_extent = armada_rtx->extent();
 
 			kobra::cuda::hdr_to_ldr(
@@ -385,8 +397,10 @@ struct MotionCapture : public kobra::BaseApp {
 				{{420, 0}, {1080 + 420, 1080}}
 			);
 
-			ui.render(cmd, framebuffer, extent);
+			// ui->render(cmd, framebuffer, extent);
 		cmd.end();
+
+		/*
 
 #ifdef RECORD
 
@@ -416,7 +430,7 @@ struct MotionCapture : public kobra::BaseApp {
 		}
 
 		// Update time (fixed)
-		time += 1/60.0f;
+		time += 1/60.0f; */
 	}
 
 	// Mouse callback

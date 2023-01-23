@@ -63,6 +63,11 @@ public:
 		for (auto &handler : handlers)
 			handler.first(handler.second, event);
 	}
+
+	// Clear all handlers
+	void clear() {
+		handlers.clear();
+	}
 };
 
 // Aliases
