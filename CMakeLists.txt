@@ -80,7 +80,7 @@ include_directories(
 	${ImageMagick_INCLUDE_DIRS}
 )
 
-# Sources
+# Common sources
 set(ImGui_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/imgui/imgui.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/imgui/imgui_draw.cpp
@@ -119,14 +119,11 @@ set(Kobra_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/source/amadeus/armada.cu
 )
 
+# Create object library for the shared source
+add_library(Kobra_COMMON OBJECT ${Kobra_SOURCES} ${ImGui_SOURCES} ${ImPlot_SOURCES} ${Glslang_SOURCES})
+
 # Set executable sources -- Kobra
-add_executable(kobra
-	main.cu
-	${ImGui_SOURCES}
-	${ImPlot_SOURCES}
-	${Glslang_SOURCES}
-	${Kobra_SOURCES}
-)
+add_executable(kobra main.cu $<TARGET_OBJECTS:Kobra_COMMON>)
 
 target_link_libraries(kobra
 	${Vulkan_LIBRARIES}
@@ -142,13 +139,7 @@ target_link_libraries(kobra
 # TODO: create a shared library of library facilities
 
 # Set executable sources -- Stress
-add_executable(stress
-	experimental/stress.cu
-	${ImGui_SOURCES}
-	${ImPlot_SOURCES}
-	${Glslang_SOURCES}
-	${Kobra_SOURCES}
-)
+add_executable(stress experimental/stress.cu $<TARGET_OBJECTS:Kobra_COMMON>)
 
 target_link_libraries(stress
 	${Vulkan_LIBRARIES}
