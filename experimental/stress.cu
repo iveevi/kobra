@@ -138,8 +138,8 @@ int main()
 			);
 
 			// Mouse callbacks
-			/* io.mouse_events.subscribe(
-				[](void *us, const kobra::io::MouseEvent &event) {
+			io.mouse_events.subscribe(
+				[&](void *us, const kobra::io::MouseEvent &event) {
 					static const int pan_button = GLFW_MOUSE_BUTTON_RIGHT;
 
 					static const float sensitivity = 0.001f;
@@ -149,13 +149,6 @@ int main()
 
 					static float yaw = 0.0f;
 					static float pitch = 0.0f;
-
-					// auto *app = static_cast <StressApp2 *> (us);
-					// auto &transform = app->camera.get <kobra::Transform> ();
-
-					auto *aggregate = static_cast <Aggregate *> (us);
-					auto *transform = aggregate->transform;
-					// auto *alt_down = aggregate->alt_down;
 
 					// Deltas and directions
 					float dx = event.xpos - px;
@@ -171,11 +164,11 @@ int main()
 					else if (event.action == GLFW_RELEASE && is_drag_button)
 						dragging = false;
 
-					// bool is_alt_down = input->is_key_down(GLFW_KEY_LEFT_ALT);
-					// if (!alt_dragging && is_alt_down)
-					//	alt_dragging = true;
-					// else if (alt_dragging && !is_alt_down)
-					//	alt_dragging = false;
+					bool is_alt_down = io.input->is_key_down(GLFW_KEY_LEFT_ALT);
+					if (!alt_dragging && is_alt_down)
+						alt_dragging = true;
+					else if (alt_dragging && !is_alt_down)
+						alt_dragging = false;
 
 					// Pan only when dragging
 					if (dragging | alt_dragging) {
@@ -187,8 +180,9 @@ int main()
 						if (pitch < -89.0f)
 							pitch = -89.0f;
 
-						transform->rotation.x = pitch;
-						transform->rotation.y = yaw;
+						kobra::Transform &transform = camera.get <kobra::Transform> ();
+						transform.rotation.x = pitch;
+						transform.rotation.y = yaw;
 					}
 
 					// Update previous position
@@ -196,8 +190,8 @@ int main()
 					py = event.ypos;
 				},
 				// TODO: free this in the destructor
-				new Aggregate {&camera.get <kobra::Transform> ()}
-			); */
+				this
+			);
 		}
 
 		~StressApp2() {
@@ -219,8 +213,6 @@ int main()
 		
 		void record(const vk::raii::CommandBuffer &cmd,
 				const vk::raii::Framebuffer &framebuffer) override {
-			io.input.is_key_down(GLFW_KEY_LEFT_ALT);
-
 			cmd.begin({});
 				armada->render(
 					scene.ecs,

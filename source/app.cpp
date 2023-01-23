@@ -35,11 +35,14 @@ App::App(const vk::raii::PhysicalDevice &phdev_,
 	// TODO: store memory requirements
 
 	// Initialize IO info
-	io.input = io::Input(window.handle);
+	io.input = new io::Input(window.handle);
 }
 
 // Virtual destructor
-App::~App() {}
+App::~App()
+{
+	delete io.input;
+}
 
 // Run application
 void App::run()

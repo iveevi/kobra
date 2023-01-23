@@ -53,10 +53,10 @@ struct MotionCapture : public kobra::BaseApp {
 	kobra::Scene scene;
 
 	// Necessary layers
-	// kobra::layers::Denoiser denoiser;
+	kobra::layers::Denoiser denoiser;
 	kobra::layers::Framer framer;
-	// std::shared_ptr <kobra::layers::UI> ui;
-	
+	std::shared_ptr <kobra::layers::UI> ui;
+
 	std::shared_ptr <kobra::layers::MeshMemory> mesh_memory;
 	std::shared_ptr <kobra::amadeus::System> amadeus;
 
@@ -67,8 +67,6 @@ struct MotionCapture : public kobra::BaseApp {
 	std::vector <uint8_t> b_traced_cpu;
 
 	// Threads
-	// std::thread *compute_thread = nullptr;
-
 	kobra::Timer compute_timer;
 	float compute_time;
 
@@ -82,7 +80,7 @@ struct MotionCapture : public kobra::BaseApp {
 	static constexpr vk::Extent2D raytracing_extent = {1000, 1000};
 	static constexpr vk::Extent2D rendering_extent = {1920, 1080};
 
-	/* struct GPUUsageMonitor : kobra::ui::ImGuiAttachment {
+	struct GPUUsageMonitor : kobra::ui::ImGuiAttachment {
 		void render() {
 			// TODO: graph memory usage over time
 			nvmlDevice_t device;
@@ -146,7 +144,7 @@ struct MotionCapture : public kobra::BaseApp {
 		}
 	};
 
-	std::shared_ptr <CaptureInterface> capture_interface; */
+	std::shared_ptr <CaptureInterface> capture_interface;
 
 	MotionCapture(const vk::raii::PhysicalDevice &phdev,
 			const std::vector <const char *> &extensions,
@@ -178,7 +176,7 @@ struct MotionCapture : public kobra::BaseApp {
 			"Path Tracer",
 			std::make_shared <kobra::amadeus::PathTracer> ()
 		);
-		
+
 		armada_rtx->attach(
 			"ReSTIR",
 			std::make_shared <kobra::amadeus::ReSTIR> ()
@@ -188,7 +186,7 @@ struct MotionCapture : public kobra::BaseApp {
 			"RePG",
 			std::make_shared <kobra::amadeus::RePG> ()
 		);
-		
+
 		armada_rtx->set_envmap(KOBRA_DIR "/resources/skies/background_1.jpg");
 
 		/* Create the denoiser layer
@@ -197,20 +195,24 @@ struct MotionCapture : public kobra::BaseApp {
 			kobra::layers::Denoiser::eNormal
 				| kobra::layers::Denoiser::eAlbedo
 		); */
-			
+		
 		// Input callbacks
 		io.mouse_events.subscribe(mouse_callback, this);
 		io.keyboard_events.subscribe(keyboard_callback, this);
-		
-		/* Initialize ImGUI
+
+		// Initialize ImGUI
 		// TODO: ui/core method (initialize)
 		ImGui::CreateContext();
 		ImPlot::CreateContext();
 
 		ImGui_ImplGlfw_InitForVulkan(window.handle, true);
 
-		ui = std::make_shared <kobra::layers::UI> (get_context(), window, graphics_queue);
-		// ui->set_font(KOBRA_DIR "/resources/fonts/NotoSans.ttf", 30);
+		std::pair <std::string, size_t> font {
+			KOBRA_DIR "/resources/fonts/NotoSans.ttf", 30
+		};
+
+		ui = std::make_shared <kobra::layers::UI>
+				(get_context(), window, graphics_queue, font);
 
 		capture_interface = std::make_shared <CaptureInterface> ();
 
@@ -222,7 +224,7 @@ struct MotionCapture : public kobra::BaseApp {
 			}
 		));
 
-		capture_interface->m_parent = this; */
+		capture_interface->m_parent = this;
 		
 		/* NOTE: we need this precomputation step to load all the
 		// resources before rendering; we need some system to allocate
@@ -232,14 +234,7 @@ struct MotionCapture : public kobra::BaseApp {
 			camera.get <kobra::Camera> (),
 			camera.get <kobra::Transform> (),
 			false 
-		);
-
-		compute_thread = new std::thread(
-			&MotionCapture::path_trace_kernel, this
-		);
-		
-		KOBRA_LOG_FILE(kobra::Log::INFO) << "Launched path tracing
-		thread\n"; */
+		); */
 
 		// Allocate buffers
 		size_t size = armada_rtx->size();
@@ -250,20 +245,11 @@ struct MotionCapture : public kobra::BaseApp {
 
 	// Destructor
 	~MotionCapture() {
-		/* Wait for compute thread to finish
-		if (compute_thread) {
-			// Send kill signal
-			kill = true;
-			compute_thread->join();
-			delete compute_thread;
-		} */
-
 		device.waitIdle();
 
-		/* ui.reset();
-
+		ui.reset();
 		ImGui_ImplGlfw_Shutdown();
-		ImGui::DestroyContext(); */
+		ImGui::DestroyContext();
 	}
 
 	// Path tracing kernel
@@ -302,10 +288,8 @@ struct MotionCapture : public kobra::BaseApp {
 			}); */
 
 			compute_time = compute_timer.lap()/1e6;
-			/* if (capture_interface->m_captured_samples >= 0)
-				capture_now =
-				(--capture_interface->m_captured_samples <= 0);
-				*/
+			if (capture_interface->m_captured_samples >= 0)
+				capture_now = (--capture_interface->m_captured_samples <= 0);
 		// }
 	}
 
@@ -341,26 +325,26 @@ struct MotionCapture : public kobra::BaseApp {
 
 		if (!lock_motion) {
 			// TODO: method...
-			if (io.input.is_key_down(GLFW_KEY_W)) {
+			if (io.input->is_key_down(GLFW_KEY_W)) {
 				transform.move(forward * speed);
 				events.push(true);
-			} else if (io.input.is_key_down(GLFW_KEY_S)) {
+			} else if (io.input->is_key_down(GLFW_KEY_S)) {
 				transform.move(-forward * speed);
 				events.push(true);
 			}
 
-			if (io.input.is_key_down(GLFW_KEY_A)) {
+			if (io.input->is_key_down(GLFW_KEY_A)) {
 				transform.move(-right * speed);
 				events.push(true);
-			} else if (io.input.is_key_down(GLFW_KEY_D)) {
+			} else if (io.input->is_key_down(GLFW_KEY_D)) {
 				transform.move(right * speed);
 				events.push(true);
 			}
 
-			if (io.input.is_key_down(GLFW_KEY_E)) {
+			if (io.input->is_key_down(GLFW_KEY_E)) {
 				transform.move(up * speed);
 				events.push(true);
-			} else if (io.input.is_key_down(GLFW_KEY_Q)) {
+			} else if (io.input->is_key_down(GLFW_KEY_Q)) {
 				transform.move(-up * speed);
 				events.push(true);
 			}
@@ -397,10 +381,8 @@ struct MotionCapture : public kobra::BaseApp {
 				{{420, 0}, {1080 + 420, 1080}}
 			);
 
-			// ui->render(cmd, framebuffer, extent);
+			ui->render(cmd, framebuffer, extent);
 		cmd.end();
-
-		/*
 
 #ifdef RECORD
 
@@ -430,7 +412,7 @@ struct MotionCapture : public kobra::BaseApp {
 		}
 
 		// Update time (fixed)
-		time += 1/60.0f; */
+		time += 1/60.0f;
 	}
 
 	// Mouse callback
@@ -462,7 +444,7 @@ struct MotionCapture : public kobra::BaseApp {
 		else if (event.action == GLFW_RELEASE && is_drag_button)
 			dragging = false;
 
-		bool is_alt_down = app.io.input.is_key_down(GLFW_KEY_LEFT_ALT);
+		bool is_alt_down = app.io.input->is_key_down(GLFW_KEY_LEFT_ALT);
 		if (!alt_dragging && is_alt_down)
 			alt_dragging = true;
 		else if (alt_dragging && !is_alt_down)

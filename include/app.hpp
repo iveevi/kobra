@@ -18,7 +18,7 @@ public:
 	struct IO {
 		io::MouseEventQueue	mouse_events;
 		io::KeyboardEventQueue	keyboard_events;
-		io::Input		input;
+		io::Input		*input;
 	};
 protected:
 	// Stored window info

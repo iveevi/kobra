@@ -19,7 +19,7 @@ public:
 	static constexpr int MAX_KEYS = 256;
 private:
 	// Associated window
-	GLFWwindow *	window;
+	GLFWwindow *	window = nullptr;
 	int		states[MAX_KEYS];
 	
 	// Every time a key state is requested,
@@ -30,7 +30,7 @@ private:
 	}
 public:
 	// Default constructor
-	Input() {}
+	Input() = default;
 
 	// Constructor needs window
 	Input(GLFWwindow *window) : window(window) {
