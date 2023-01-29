@@ -1,5 +1,6 @@
 project(kobra CXX CUDA)
 project(stress CXX)
+project(editor CXX)
 
 # CXX options
 set(CMAKE_CXX_STANDARD 17)
@@ -142,6 +143,20 @@ target_link_libraries(kobra
 add_executable(stress experimental/stress.cu $<TARGET_OBJECTS:Kobra_COMMON>)
 
 target_link_libraries(stress
+	${Vulkan_LIBRARIES}
+	glfw
+	glslang
+	SPIRV
+	assimp
+	nvidia-ml
+	${OpenCV_LIBS}
+	${ImageMagick_LIBRARIES}
+)
+
+# Set executable sources -- Stress
+add_executable(editor editor.cu $<TARGET_OBJECTS:Kobra_COMMON>)
+
+target_link_libraries(editor
 	${Vulkan_LIBRARIES}
 	glfw
 	glslang

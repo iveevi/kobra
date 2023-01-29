@@ -4,7 +4,7 @@
 #define MAX_DEPTH 2
 
 using kobra::amadeus::Reservoir;
-using kobra::amadeus::Sample;
+using kobra::amadeus::DirectLightingSample;
 
 extern "C"
 {
@@ -184,7 +184,7 @@ extern "C" __global__ void __closesthit__()
 
 	if (primary) {
 		// Resample the light sources
-		Reservoir <Sample> &reservoir = parameters.reservoirs[rp->index];
+		Reservoir <DirectLightingSample> &reservoir = parameters.reservoirs[rp->index];
 		reservoir.reset();
 
 		for (int i = 0; i < 8; i++) {
@@ -203,7 +203,7 @@ extern "C" __global__ void __closesthit__()
 			float pdf = fls.pdf;
 
 			reservoir.update(
-				Sample {
+				DirectLightingSample {
 					.Le = fls.Le,
 					.normal = fls.normal,
 					.point = fls.point,
@@ -214,7 +214,7 @@ extern "C" __global__ void __closesthit__()
 		}
 
 		// Compute direct lighting
-		Sample sample = reservoir.data;
+		DirectLightingSample sample = reservoir.data;
 
 		float3 D = sample.point - surface_hit.x;
 		float d = length(D);

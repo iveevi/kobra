@@ -55,7 +55,7 @@ int main()
 					scene.ecs,
 					camera.get <kobra::Camera> (),
 					camera.get <kobra::Transform> (),
-					cmd, framebuffer
+					cmd, framebuffer, extent
 				);
 			cmd.end();
 		}
@@ -189,7 +189,6 @@ int main()
 					px = event.xpos;
 					py = event.ypos;
 				},
-				// TODO: free this in the destructor
 				this
 			);
 		}

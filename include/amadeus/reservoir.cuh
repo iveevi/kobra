@@ -75,7 +75,7 @@ struct Reservoir {
 };
 
 // TODO: refactor to direct sample
-struct Sample {
+struct DirectLightingSample {
 	float3 Le;
 	float3 normal;
 	float3 point;

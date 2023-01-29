@@ -113,6 +113,9 @@ protected:
 
 	// Generate aux structures
 	Context get_context();
+
+	// Recreate swapchain
+	void recreate_swapchain();
 public:
 	// Constructor
 	BaseApp(const vk::raii::PhysicalDevice &,
@@ -126,6 +129,9 @@ public:
 
 	// Possbily override a termination function
 	virtual void terminate();
+
+	// Possibly override a resize function
+	virtual void resize(const vk::Extent2D &);
 
 	// Present frame
 	void present();

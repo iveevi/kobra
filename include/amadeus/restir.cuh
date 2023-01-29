@@ -20,8 +20,8 @@ struct ReSTIR_Parameters : ArmadaLaunchInfo {
 	OptixTraversableHandle traversable;
 
 	// Reservoirs
-	Reservoir <Sample> *current;
-	Reservoir <Sample> *previous;
+	Reservoir <DirectLightingSample> *current;
+	Reservoir <DirectLightingSample> *previous;
 	cuda::Material *materials;
 	glm::vec4 *intermediate;
 	glm::vec4 *auxiliary;
@@ -202,7 +202,7 @@ public:
 
 	void load() override {
 		// Allocate the reservoirs and indirect buffer
-		std::vector <Reservoir <Sample>> reservoirs(m_extent.width * m_extent.height);
+		std::vector <Reservoir <DirectLightingSample>> reservoirs(m_extent.width * m_extent.height);
 		m_parameters.current = cuda::make_buffer(reservoirs);
 		m_parameters.previous = cuda::make_buffer(reservoirs);
 		m_parameters.materials = cuda::alloc <cuda::Material> (m_extent.width * m_extent.height);

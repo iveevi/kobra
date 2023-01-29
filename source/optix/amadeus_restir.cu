@@ -4,7 +4,7 @@
 #define MAX_DEPTH 2
 
 using kobra::amadeus::Reservoir;
-using kobra::amadeus::Sample;
+using kobra::amadeus::DirectLightingSample;
 
 extern "C"
 {
@@ -147,9 +147,9 @@ extern "C" __global__ void __raygen__initial()
 
 // Calculate target function for reservoir
 KCUDA_INLINE KCUDA_DEVICE
-float target(const Reservoir <Sample> &reservoir, const SurfaceHit &hit)
+float target(const Reservoir <DirectLightingSample> &reservoir, const SurfaceHit &hit)
 {
-	const Sample &sample = reservoir.data;
+	const DirectLightingSample &sample = reservoir.data;
 
 	float3 D = sample.point - hit.x;
 	float d = length(D);
@@ -163,9 +163,9 @@ float target(const Reservoir <Sample> &reservoir, const SurfaceHit &hit)
 }
 
 KCUDA_INLINE KCUDA_DEVICE
-float occluded_target(const Reservoir <Sample> &reservoir, const SurfaceHit &hit)
+float occluded_target(const Reservoir <DirectLightingSample> &reservoir, const SurfaceHit &hit)
 {
-	const Sample &sample = reservoir.data;
+	const DirectLightingSample &sample = reservoir.data;
 
 	float3 D = sample.point - hit.x;
 	float d = length(D);
@@ -221,7 +221,7 @@ extern "C" __global__ void __raygen__temporal()
 	const int index = idx.x + idx.y * parameters.resolution.x;
 
 	// Get current and previous frame reservoirs
-	Reservoir <Sample> &current = parameters.current[index];
+	Reservoir <DirectLightingSample> &current = parameters.current[index];
 
 	// If current reservoir is empty, skip resampling
 	float3 direct = make_float3(0.0f);
@@ -243,10 +243,10 @@ extern "C" __global__ void __raygen__temporal()
 
 		// Find reprojected index
 		int pindex = reproject(index, position);
-		Reservoir <Sample> *previous = (pindex >= 0) ? &parameters.previous[pindex] : nullptr;
+		Reservoir <DirectLightingSample> *previous = (pindex >= 0) ? &parameters.previous[pindex] : nullptr;
 
 		// Merge current and previous frame reservoirs
-		Reservoir <Sample> merged(parameters.auxiliary[index]);
+		Reservoir <DirectLightingSample> merged(parameters.auxiliary[index]);
 
 		float t_current = occluded_target(current, hit);
 		merged.update(current.data, t_current * current.W * current.M);
@@ -338,13 +338,13 @@ extern "C" __global__ void __raygen__spatial()
 	};
 
 	// Get current reservoir
-	Reservoir <Sample> current = parameters.current[index];
+	Reservoir <DirectLightingSample> current = parameters.current[index];
 
 	// If current reservoir is empty, skip resampling
 	float3 direct = make_float3(0.0f);
 	if (current.size() > 0) {
 		// Merge current and previous frame reservoirs
-		Reservoir <Sample> merged(parameters.auxiliary[index]);
+		Reservoir <DirectLightingSample> merged(parameters.auxiliary[index]);
 
 		float t_current = target(current, hit);
 		merged.update(current.data, t_current * current.W * current.M);
@@ -358,7 +358,7 @@ extern "C" __global__ void __raygen__spatial()
 		int count = 0;
 		for (int i = 0; i < SAMPLES; i++) {
 			int index0 = sample_spatial_neighborhood(index, merged.seed, 30);
-			Reservoir <Sample> neighbor = parameters.current[index0];
+			Reservoir <DirectLightingSample> neighbor = parameters.current[index0];
 
 			float t_neighbor = occluded_target(neighbor, hit);
 
@@ -402,7 +402,7 @@ extern "C" __global__ void __raygen__spatial()
 		current = merged;
 
 		// Shading
-		Sample sample = current.data;
+		DirectLightingSample sample = current.data;
 		float3 point = sample.point;
 		float3 D = point - hit.x;
 		float d = length(D);
@@ -474,7 +474,7 @@ extern "C" __global__ void __closesthit__initial()
 
 	if (primary) {
 		// Resample the light sources
-		Reservoir <Sample> &reservoir = parameters.current[rp->index];
+		Reservoir <DirectLightingSample> &reservoir = parameters.current[rp->index];
 		reservoir.reset();
 
 		for (int i = 0; i < 32; i++) {
@@ -493,7 +493,7 @@ extern "C" __global__ void __closesthit__initial()
 			float pdf = fls.pdf;
 
 			reservoir.update(
-				Sample {
+				DirectLightingSample{
 					.Le = fls.Le,
 					.normal = fls.normal,
 					.point = fls.point,
@@ -504,7 +504,7 @@ extern "C" __global__ void __closesthit__initial()
 		}
 
 		// Compute direct lighting
-		Sample sample = reservoir.data;
+		DirectLightingSample sample = reservoir.data;
 
 		float3 D = sample.point - surface_hit.x;
 		float d = length(D);

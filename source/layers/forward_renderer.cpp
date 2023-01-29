@@ -48,7 +48,7 @@ ForwardRenderer::ForwardRenderer(const Context &context)
 
 	loader = context.texture_loader;
 
-	extent = context.extent;
+	// extent = context.extent;
 
 	// Create the render pass
 	render_pass = make_render_pass(
@@ -168,6 +168,7 @@ void ForwardRenderer::render(const ECS &ecs,
 		const Transform &camera_transform,
 		const vk::raii::CommandBuffer &cmd,
 		const vk::raii::Framebuffer &framebuffer,
+		const vk::Extent2D &extent,
 		const RenderArea &ra)
 {
 	// Apply the rendering area

@@ -37,7 +37,7 @@ struct ForwardRenderer {
 	// Texture loader
 	TextureLoader *loader = nullptr;
 
-	vk::Extent2D extent = { 0, 0 };
+	// vk::Extent2D extent = { 0, 0 };
 
 	// Descriptor set bindings
 	static const std::vector <DSLB> dsl_bindings;
@@ -61,6 +61,7 @@ struct ForwardRenderer {
 		const Transform &,
 		const vk::raii::CommandBuffer &,
 		const vk::raii::Framebuffer &,
+		const vk::Extent2D &,
 		const RenderArea & = RenderArea::full());
 };
 

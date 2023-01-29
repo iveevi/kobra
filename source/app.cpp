@@ -184,6 +184,9 @@ BaseApp::BaseApp(const vk::raii::PhysicalDevice &phdev_,
 // Possbily override a termination function
 void BaseApp::terminate() {}
 
+// Possbily override a resize function
+void BaseApp::resize(const vk::Extent2D &) {}
+
 // Present frame
 // TODO: add a present method in backend
 void BaseApp::present()
@@ -214,7 +217,15 @@ void BaseApp::present()
 		*frames[frame_index].present_completed
 	);
 
-	KOBRA_ASSERT(result == vk::Result::eSuccess, "Failed to acquire next image");
+	// KOBRA_ASSERT(result == vk::Result::eSuccess, "Failed to acquire next image");
+	if (result == vk::Result::eErrorOutOfDateKHR) {
+		// TODO: need to also resize if the callback to glfw ran:
+		// some drivers wont return error out of date
+		recreate_swapchain();
+		return;
+	} else if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
+		throw std::runtime_error("Failed to acquire next image");
+	}
 
 	// Wait for the previous frame to finish rendering
 	while (vk::Result(device.waitForFences(
@@ -246,9 +257,12 @@ void BaseApp::present()
 		image_index
 	};
 
-	result = present_queue.presentKHR(present_info);
-
-	KOBRA_ASSERT(result == vk::Result::eSuccess, "Failed to present image");
+	try {
+		result = present_queue.presentKHR(present_info);
+	} catch (const vk::OutOfDateKHRError &e) {
+		recreate_swapchain();
+		return;
+	}
 }
 
 // Overload frame function
@@ -275,6 +289,48 @@ Context BaseApp::get_context()
 		.depth_format = depth_buffer.format,
 		.texture_loader = &m_texture_loader
 	};
+}
+
+void BaseApp::recreate_swapchain()
+{
+	// Update the current extent
+	int width = 0;
+	int height = 0;
+	
+	glfwGetFramebufferSize(window.handle, &width, &height);
+	while (width == 0 || height == 0) {
+		glfwGetFramebufferSize(window.handle, &width, &height);
+		glfwWaitEvents();
+	}
+
+	window.extent.width = width;
+	window.extent.height = height;
+	extent = window.extent;
+
+	// Wait for the device to be idle
+	device.waitIdle();
+
+	// Recreate the swapchain
+	auto queue_family = find_queue_families(phdev, surface);
+	swapchain = Swapchain {phdev, device, surface, window.extent,
+		queue_family, &swapchain.swapchain};
+
+	// Recreate the frame and depth buffers
+	depth_buffer = std::move(DepthBuffer {
+		phdev, device,
+		vk::Format::eD32Sfloat,
+		extent
+	});
+
+	framebuffers = make_framebuffers(device,
+		render_pass,
+		swapchain.image_views,
+		&depth_buffer.view,
+		extent
+	);
+
+	// Call possibly overriden resize function
+	resize(extent);
 }
 
 }

@@ -19,7 +19,7 @@ struct RePG_Parameters : ArmadaLaunchInfo {
 	OptixTraversableHandle traversable;
 	
 	// Resampling
-	Reservoir <Sample> *reservoirs;
+	Reservoir <DirectLightingSample> *reservoirs;
 	cuda::Material *materials;
 };
 
@@ -140,7 +140,7 @@ public:
 
 	void load() override {
 		// Allocate the reservoirs and indirect buffer
-		std::vector <Reservoir <Sample>> reservoirs(m_extent.width * m_extent.height);
+		std::vector <Reservoir <DirectLightingSample>> reservoirs(m_extent.width * m_extent.height);
 		m_parameters.reservoirs = cuda::make_buffer(reservoirs);
 		m_parameters.materials = cuda::alloc <cuda::Material> (m_extent.width * m_extent.height);
 	}
