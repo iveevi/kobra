@@ -28,7 +28,7 @@ Objectifier make_layer(const Context &context)
 		vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eColorAttachment
 			| vk::ImageUsageFlagBits::eTransferSrc,
-		vk::ImageLayout::eUndefined,
+		// vk::ImageLayout::eUndefined,
 		vk::MemoryPropertyFlagBits::eDeviceLocal,
 		vk::ImageAspectFlagBits::eColor
 	);

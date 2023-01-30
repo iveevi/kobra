@@ -442,7 +442,7 @@ struct ImageData {
 	vk::Extent2D		extent;
 	vk::ImageTiling		tiling;
 	vk::ImageUsageFlags	usage;
-	vk::ImageLayout  	layout;
+	vk::ImageLayout  	layout = vk::ImageLayout::eUndefined;
 	vk::MemoryPropertyFlags	properties;
 	vk::ImageAspectFlags	aspect_mask;
 	vk::raii::Image		image = nullptr;
@@ -456,7 +456,7 @@ struct ImageData {
 			const vk::Extent2D &ext_,
 			vk::ImageTiling tiling_,
 			vk::ImageUsageFlags usage_,
-			vk::ImageLayout initial_layout_,
+			// vk::ImageLayout initial_layout_,
 			vk::MemoryPropertyFlags memory_properties_,
 			vk::ImageAspectFlags aspect_mask_,
 			bool external_ = false)
@@ -464,7 +464,7 @@ struct ImageData {
 			extent {ext_},
 			tiling {tiling_},
 			usage {usage_},
-			layout {initial_layout_},
+			// layout {vk::ImageLayout::eUndefined},
 			properties {memory_properties_},
 			aspect_mask {aspect_mask_} {
 		vk::ImageCreateInfo image_info {
@@ -613,7 +613,7 @@ struct ImageData {
 			vk::Extent2D(1, 1),
 			vk::ImageTiling::eOptimal,
 			vk::ImageUsageFlagBits::eSampled,
-			vk::ImageLayout::eUndefined,
+			// vk::ImageLayout::eUndefined,
 			vk::MemoryPropertyFlagBits::eDeviceLocal,
 			vk::ImageAspectFlagBits::eColor
 		);
@@ -1010,7 +1010,7 @@ struct DepthBuffer : public ImageData {
 				fmt, extent,
 				vk::ImageTiling::eOptimal,
 				vk::ImageUsageFlagBits::eDepthStencilAttachment,
-				vk::ImageLayout::eUndefined,
+				// vk::ImageLayout::eUndefined,
 				vk::MemoryPropertyFlagBits::eDeviceLocal,
 				vk::ImageAspectFlagBits::eDepth) {}
 

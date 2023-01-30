@@ -192,6 +192,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	vk::raii::ShaderModule opt_irradiance_computer = std::move(*irradiance_computer.compile(device));
 
 	// Create a compute pipeline
+	// TODO: create a class to make this much easier...
 	vk::raii::DescriptorSetLayout irradiance_dsl =
 		kobra::make_descriptor_set_layout(
 			device, IRRADIANCE_COMPUTER_LAYOUT_BINDINGS
@@ -249,8 +250,6 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 		vk::Extent2D {width, height},
 		vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled,
-		vk::ImageLayout::eUndefined, // TODO: the layout field is
-					   // useless...
 		vk::MemoryPropertyFlagBits::eDeviceLocal,
 		vk::ImageAspectFlagBits::eColor
 	};
@@ -327,7 +326,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	);
 
 	// Create the image viewer
-	// TODO: store all result images in a vector
+	// TODO: instead, insert into the texture loader...
 	m_irradiance_maps.emplace_back(std::move(irradiance_map));
 	
 	std::vector <kobra::ImageData *> images {
@@ -434,6 +433,15 @@ void Editor::resize(const vk::Extent2D &extent)
 		
 void Editor::mouse_callback(void *us, const kobra::io::MouseEvent &event)
 {
+	static const int select_button = GLFW_MOUSE_BUTTON_LEFT;
+
+	// Check if selecting
+	if (event.action == GLFW_PRESS && event.button == select_button) {
+		Editor *editor = static_cast <Editor *> (us);
+		std::cout << "Selecting!" << std::endl;
+	}
+
+	// Panning around
 	static const int pan_button = GLFW_MOUSE_BUTTON_RIGHT;
 
 	static const float sensitivity = 0.001f;

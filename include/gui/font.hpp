@@ -207,7 +207,6 @@ class Font {
 				vk::ImageTiling::eOptimal,
 				vk::ImageUsageFlagBits::eSampled
 					| vk::ImageUsageFlagBits::eTransferDst,
-				vk::ImageLayout::ePreinitialized,
 				vk::MemoryPropertyFlagBits::eDeviceLocal,
 				vk::ImageAspectFlagBits::eColor
 			);

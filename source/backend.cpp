@@ -801,7 +801,7 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 		extent,
 		tiling,
 		usage,
-		vk::ImageLayout::eUndefined,
+		// vk::ImageLayout::eUndefined,
 		memory_properties,
 		aspect_mask, external
 	);
@@ -885,7 +885,7 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 		extent,
 		tiling,
 		usage,
-		vk::ImageLayout::eUndefined,
+		// vk::ImageLayout::eUndefined,
 		memory_properties,
 		aspect_mask, external
 	);

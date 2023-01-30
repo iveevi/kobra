@@ -76,7 +76,7 @@ Framer::Framer(const Context &context)
 		vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eSampled
 			| vk::ImageUsageFlagBits::eTransferDst,
-		vk::ImageLayout::eUndefined,
+		// vk::ImageLayout::eUndefined,
 		vk::MemoryPropertyFlagBits::eDeviceLocal,
 		vk::ImageAspectFlagBits::eColor
 	);
@@ -120,7 +120,7 @@ void Framer::resize_callback(const RawImage &frame)
 		vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eSampled
 			| vk::ImageUsageFlagBits::eTransferDst,
-		vk::ImageLayout::eUndefined,
+		// vk::ImageLayout::eUndefined,
 		vk::MemoryPropertyFlagBits::eDeviceLocal,
 		vk::ImageAspectFlagBits::eColor
 	);
