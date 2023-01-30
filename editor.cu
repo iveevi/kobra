@@ -8,22 +8,32 @@
 #include "../include/project.hpp"
 #include "../include/scene.hpp"
 #include "../include/shader_program.hpp"
+#include "../include/ui/attachment.hpp"
+
+// Forward declarations
+struct ImageViewer;
 
 struct Editor : public kobra::BaseApp {
 	kobra::Scene m_scene;
 	kobra::Entity m_camera;
+
 	kobra::layers::ForwardRenderer m_forward_renderer;
-	kobra::layers::ImageRenderer m_image_renderer;
 	kobra::layers::Objectifier m_objectifier;
 
+	std::shared_ptr <kobra::layers::UI> m_ui;
+
+	std::shared_ptr <ImageViewer> m_image_viewer;
+
+	std::vector <kobra::ImageData> m_irradiance_maps;
+
 	Editor(const vk::raii::PhysicalDevice &, const std::vector <const char *> &);
+	~Editor();
 
 	void record(const vk::raii::CommandBuffer &, const vk::raii::Framebuffer &);
 	void resize(const vk::Extent2D &);
 
 	static void mouse_callback(void *, const kobra::io::MouseEvent &);
 };
-
 
 int main()
 {
@@ -46,6 +56,48 @@ int main()
 
 	editor.run();
 }
+
+// Image viewer UI attachment
+struct ImageViewer : public kobra::ui::ImGuiAttachment {
+	std::vector <kobra::ImageData *> m_images;
+	std::vector <vk::DescriptorSet> m_descriptor_sets;
+	int m_current_image = 0;
+
+	ImageViewer(const kobra::Context &context, const std::vector <kobra::ImageData *> &images)
+		: m_images {images}
+	{
+		for (const auto &image : m_images) {
+			// Make sure layout is shader read only
+			if (image->layout != vk::ImageLayout::eShaderReadOnlyOptimal) {
+				kobra::command_now(*context.device, *context.command_pool,
+					[&](const vk::raii::CommandBuffer &cmd) {
+						image->transition_layout(
+							cmd,
+							vk::ImageLayout::eShaderReadOnlyOptimal
+						);
+					}
+				);
+			}
+
+			vk::raii::Sampler sampler = make_sampler(*context.device, *image);
+			m_descriptor_sets.push_back(
+				ImGui_ImplVulkan_AddTexture(
+					static_cast <VkSampler> (*sampler),
+					static_cast <VkImageView> (*image->view),
+					static_cast <VkImageLayout> (image->layout)
+				)
+			);
+		}
+	}
+
+	void render() override {
+		ImGui::Begin("Image Viewer");
+		ImGui::SetWindowSize(ImVec2(500, 500), ImGuiCond_FirstUseEver);
+		ImGui::Image(m_descriptor_sets[m_current_image], ImVec2(500, 500), ImVec2(0, 1), ImVec2(1, 0));
+		ImGui::SliderInt("Image", &m_current_image, 0, m_images.size() - 1);
+		ImGui::End();
+	}
+};
 
 constexpr const char *irradiance_computer_str = R"(
 #version 450
@@ -79,6 +131,24 @@ void main()
 }
 )";
 
+struct Irradiance_PushConstants {
+	float roughness;
+	int width;
+	int height;
+};
+
+static const std::vector <kobra::DescriptorSetLayoutBinding>
+	IRRADIANCE_COMPUTER_LAYOUT_BINDINGS {
+	{
+		0, vk::DescriptorType::eCombinedImageSampler,
+		1, vk::ShaderStageFlagBits::eCompute
+	},
+	{
+		1, vk::DescriptorType::eStorageImage,
+		1, vk::ShaderStageFlagBits::eCompute
+	},
+};
+
 // Editor implementation
 Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 		const std::vector <const char *> &extensions)
@@ -90,17 +160,29 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 {
 	// Load all the layers
 	m_forward_renderer = kobra::layers::ForwardRenderer(get_context());
-	m_image_renderer = kobra::layers::ImageRenderer(get_context());
 
+	ImGui::CreateContext();
+	ImGui_ImplGlfw_InitForVulkan(window.handle, true);
+
+	auto font = std::make_pair(KOBRA_DIR "/resources/fonts/NotoSans.ttf", 12);
+	m_ui = std::make_shared <kobra::layers::UI> (
+		get_context(), window,
+		graphics_queue, font
+	);
+
+	// Load scene
 	kobra::Project project = kobra::Project::load(".kobra/project");
 	m_scene.load(get_context(), project.scene);
-	
+
+	// TODO: Create a camera somewhere outside...
+	// plus icons for lights and cameras
 	m_camera = m_scene.ecs.get_entity("Camera");
 	m_camera.get <kobra::Camera> ().aspect = 1.5f;
 	
 	// Mouse callbacks
 	io.mouse_events.subscribe(mouse_callback, this);
 
+	// IRRADIANCE MIP MAP CREATION...
 	// Load the compute shader
 	kobra::ShaderProgram irradiance_computer {
 		irradiance_computer_str,
@@ -109,8 +191,164 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 
 	vk::raii::ShaderModule opt_irradiance_computer = std::move(*irradiance_computer.compile(device));
 
+	// Create a compute pipeline
+	vk::raii::DescriptorSetLayout irradiance_dsl =
+		kobra::make_descriptor_set_layout(
+			device, IRRADIANCE_COMPUTER_LAYOUT_BINDINGS
+		);
+
+	vk::raii::DescriptorSet irradiance_ds = std::move(
+		vk::raii::DescriptorSets {
+			device, {
+				*descriptor_pool,
+				*irradiance_dsl
+			}
+		}.front()
+	);
+
+	vk::PushConstantRange irradiance_pcr {
+		vk::ShaderStageFlagBits::eCompute,
+		0, sizeof(Irradiance_PushConstants)
+	};
+
+	vk::raii::PipelineLayout irradiance_ppl {
+		device,
+		{{}, *irradiance_dsl, irradiance_pcr}
+	};
+
+	vk::raii::Pipeline irradiance_pipeline {
+		device,
+		nullptr,
+		vk::ComputePipelineCreateInfo {
+			{},
+			vk::PipelineShaderStageCreateInfo {
+				{},
+				vk::ShaderStageFlagBits::eCompute,
+				*opt_irradiance_computer,
+				"main"
+			},
+			*irradiance_ppl
+		}
+	};
+
 	// Load environment map
-	m_texture_loader.load_texture(KOBRA_DIR "/resources/skies/background_1.jpg");
+	// TODO: load HDR...
+	kobra::ImageData &environment_map = m_texture_loader
+		.load_texture(KOBRA_DIR "/resources/skies/background_1.jpg");
+
+	vk::raii::Sampler environment_sampler =
+		kobra::make_sampler(device, environment_map);
+
+	// Create destination images
+	uint32_t width = environment_map.extent.width;
+	uint32_t height = environment_map.extent.height;
+
+	kobra::ImageData irradiance_map {
+		phdev, device,
+		vk::Format::eR32G32B32A32Sfloat,
+		vk::Extent2D {width, height},
+		vk::ImageTiling::eOptimal,
+		vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled,
+		vk::ImageLayout::eUndefined, // TODO: the layout field is
+					   // useless...
+		vk::MemoryPropertyFlagBits::eDeviceLocal,
+		vk::ImageAspectFlagBits::eColor
+	};
+	
+	// Make sure all the images are in the right layout
+	kobra::command_now(device, command_pool,
+		[&](const vk::raii::CommandBuffer &cmd) {
+			std::cout << "Transitioning environment map layout...\n";
+			irradiance_map.transition_layout(cmd, vk::ImageLayout::eGeneral);
+		}
+	);
+
+	// Bind the images to the descriptor set
+	std::array <vk::DescriptorImageInfo, 2> image_infos {
+		vk::DescriptorImageInfo {
+			*environment_sampler,
+			*environment_map.view,
+			vk::ImageLayout::eShaderReadOnlyOptimal
+		},
+		vk::DescriptorImageInfo {
+			nullptr,
+			*irradiance_map.view,
+			vk::ImageLayout::eGeneral
+		}
+	};
+
+	std::array <vk::WriteDescriptorSet, 2> writes {
+		vk::WriteDescriptorSet {
+			*irradiance_ds,
+			0, 0, 1,
+			vk::DescriptorType::eCombinedImageSampler,
+			&image_infos[0]
+		},
+		vk::WriteDescriptorSet {
+			*irradiance_ds,
+			1, 0, 1,
+			vk::DescriptorType::eStorageImage,
+			&image_infos[1]
+		}
+	};
+
+	device.updateDescriptorSets(writes, {});
+
+	Irradiance_PushConstants push_constants {
+		0.5,
+		int(environment_map.extent.width),
+		int(environment_map.extent.height)
+	};
+
+	// Execute the compute shader
+	// TODO: include a version which is async (returns a fence to wait)
+	kobra::command_now(device, command_pool,
+		[&](const vk::raii::CommandBuffer &cmd) {
+			std::cout << "Generating irradiance map...\n";
+			cmd.bindPipeline(
+				vk::PipelineBindPoint::eCompute,
+				*irradiance_pipeline
+			);
+
+			cmd.pushConstants <Irradiance_PushConstants> (
+				*irradiance_ppl,
+				vk::ShaderStageFlagBits::eCompute,
+				0, push_constants
+			);
+
+			cmd.bindDescriptorSets(
+				vk::PipelineBindPoint::eCompute,
+				*irradiance_ppl,
+				0, {*irradiance_ds}, {}
+			);
+
+			cmd.dispatch(width, height, 1);
+		}
+	);
+
+	// Create the image viewer
+	// TODO: store all result images in a vector
+	m_irradiance_maps.emplace_back(std::move(irradiance_map));
+	
+	std::vector <kobra::ImageData *> images {
+		&environment_map,
+		&m_irradiance_maps.back()
+	};
+
+	m_image_viewer = std::make_shared <ImageViewer> (get_context(), images);
+
+	// Attach UI layers
+	m_ui->attach(m_image_viewer);
+}
+
+Editor::~Editor()
+{
+	device.waitIdle();
+
+	// TODO: method for total destruction
+	ImGui_ImplVulkan_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+	ImGui::DestroyContext();
 }
 
 void Editor::record(const vk::raii::CommandBuffer &cmd,
@@ -185,16 +423,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 			cmd, framebuffer, window.extent
 		);
 
-		m_image_renderer.render(
-			m_texture_loader.load_texture(
-				KOBRA_DIR "/resources/skies/background_1.jpg"
-			),
-			kobra::RenderContext {
-				cmd, framebuffer,
-				window.extent,
-				{{100, 100}, {300, 300}}
-			}
-		);
+		m_ui->render(cmd, framebuffer, window.extent);
 	cmd.end();
 }
 

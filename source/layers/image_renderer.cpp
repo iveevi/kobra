@@ -8,7 +8,7 @@ namespace layers {
 // Descriptor layout
 static const std::vector <DescriptorSetLayoutBinding>
 	DESCRIPTOR_SET_LAYOUT_BINDINGS {
-	DSLB {
+	{
 		0,
 		vk::DescriptorType::eCombinedImageSampler,
 		1, vk::ShaderStageFlagBits::eFragment

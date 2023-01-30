@@ -15,7 +15,7 @@ TextureLoader::TextureLoader(const Device &device)
 }
 
 // Load a texture
-const ImageData &TextureLoader::load_texture(const std::string &path)
+ImageData &TextureLoader::load_texture(const std::string &path)
 {
 	if (m_image_map.find(path) != m_image_map.end()) {
 		size_t index = m_image_map[path];
@@ -51,12 +51,12 @@ const ImageData &TextureLoader::load_texture(const std::string &path)
 
 	m_images.emplace_back(std::move(img));
 	m_image_map[path] = m_images.size() - 1;
-	const ImageData &ret = m_images.back();
+	ImageData &ret = m_images.back();
 
 	return ret;
 }
 
-const vk::raii::Sampler &TextureLoader::load_sampler(const std::string &path)
+vk::raii::Sampler &TextureLoader::load_sampler(const std::string &path)
 {
 	// TODO: lock guard instead
 	if (m_samplers.find(path) != m_samplers.end()) {
@@ -69,7 +69,7 @@ const vk::raii::Sampler &TextureLoader::load_sampler(const std::string &path)
 	);
 
 	m_samplers.insert({path, std::move(sampler)});
-	const vk::raii::Sampler &ret = m_samplers.at(path);
+	vk::raii::Sampler &ret = m_samplers.at(path);
 	return ret;
 }
 

@@ -98,11 +98,6 @@ public:
 		ImGui_ImplVulkan_DestroyFontUploadObjects();
 	}
 
-	// Destructor
-	~UI() {
-		ImGui_ImplVulkan_Shutdown();
-	}
-
 	// Render ImGUI
 	void render(const vk::raii::CommandBuffer &cmd,
 			const vk::raii::Framebuffer &framebuffer,
