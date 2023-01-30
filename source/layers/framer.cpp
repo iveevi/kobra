@@ -108,7 +108,7 @@ Framer::Framer(const Context &context)
 }
 
 // Resize callback
-void Framer::resize_callback(const Image &frame)
+void Framer::resize_callback(const RawImage &frame)
 {
 	// Resize resources
 	m_result_buffer.resize(frame.size());
@@ -136,7 +136,7 @@ void Framer::resize_callback(const Image &frame)
 
 // Render to the presentable framebuffer
 void Framer::render
-		(const Image &frame,
+		(const RawImage &frame,
 		const vk::raii::CommandBuffer &cmd,
 		const vk::raii::Framebuffer &framebuffer,
 		const vk::Extent2D &extent,

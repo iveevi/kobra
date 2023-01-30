@@ -1142,7 +1142,7 @@ inline std::vector <vk::raii::Framebuffer> make_framebuffers
 		{}, *render_pass,
 		(depth_image_view == nullptr) ? 1u : 2u,
 		attachments,
-		extent.width, extent.height,1
+		extent.width, extent.height, 1
 	};
 
 	std::vector <vk::raii::Framebuffer> framebuffers;

@@ -87,9 +87,9 @@ _compile_out glsl_to_spriv(const std::string &source, const vk::ShaderStageFlagB
 
 // Constructor
 ShaderProgram::ShaderProgram
-		(const std::string &file,
+		(const std::string &source,
 		const vk::ShaderStageFlagBits &shader_type)
-		: m_file(file), m_shader_type(shader_type) {}
+		: m_source(source), m_shader_type(shader_type) {}
 
 // Compile shader
 std::optional <vk::raii::ShaderModule> ShaderProgram::compile
@@ -100,18 +100,10 @@ std::optional <vk::raii::ShaderModule> ShaderProgram::compile
 		return std::nullopt;
 
 	// Check that file exists
-	if (!std::filesystem::exists(m_file)) {
-		KOBRA_LOG_FUNC(Log::ERROR) << "Shader file does not exist: " << m_file << std::endl;
-		m_failed = true;
-		return std::nullopt;
-	}
-
 	glslang::InitializeProcess();
 
-	std::string source = common::read_file(m_file);
-
 	// Compile shader
-	_compile_out out = glsl_to_spriv(source, vk::ShaderStageFlagBits::eFragment);
+	_compile_out out = glsl_to_spriv(m_source, m_shader_type);
 	if (!out.log.empty()) {
 		KOBRA_LOG_FUNC(Log::ERROR) << "Shader compilation failed:\n"
 			<< out.log << std::endl;

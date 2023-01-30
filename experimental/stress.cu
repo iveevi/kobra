@@ -28,7 +28,7 @@ int main()
 
 	vk::raii::PhysicalDevice phdev = kobra::pick_physical_device(predicate);
 
-	struct StressApp1 : public kobra::BaseApp {
+	/* struct StressApp1 : public kobra::BaseApp {
 		kobra::Scene scene;
 		kobra::Entity camera;
 		kobra::layers::ForwardRenderer forward_renderer;
@@ -59,9 +59,9 @@ int main()
 				);
 			cmd.end();
 		}
-	};
+	}; */
 
-	struct StressApp2 : public kobra::BaseApp {
+	/* struct StressApp2 : public kobra::BaseApp {
 		kobra::Scene scene;
 		kobra::Entity camera;
 
@@ -242,20 +242,20 @@ int main()
 						.height = rtx_extent.height,
 						.channels = 4
 					},
-					cmd, framebuffer, extent
+					cmd, framebuffer, window.extent
 				);
 			
-				ui->render(cmd, framebuffer, extent);
+				ui->render(cmd, framebuffer, window.extent);
 			cmd.end();
 		}
-	};
+	}; */
 
-	StressApp1 app1 {
+	/* StressApp1 app1 {
 		phdev,
 		{VK_KHR_SWAPCHAIN_EXTENSION_NAME},
-	};
+	}; */
 	
-	StressApp2 app2 {
+	/* StressApp2 app2 {
 		phdev, {
 			VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 			VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
@@ -263,5 +263,5 @@ int main()
 		}
 	};
 
-	app2.run();
+	app2.run(); */
 }

@@ -39,7 +39,7 @@ class Framer {
 	vk::raii::Sampler m_result_sampler = nullptr;
 
 	// Private helper functions
-	void resize_callback(const Image &);
+	void resize_callback(const RawImage &);
 
 	// Static member variables
 	static const std::vector <DescriptorSetLayoutBinding>
@@ -54,7 +54,7 @@ public:
 	// Render image frame to screen
 	// TODO: pack command buffer, frame buffer and render area into a struct
 	// (layer struct...) and use as the first argument
-	void render(const Image &,
+	void render(const RawImage &,
 		const vk::raii::CommandBuffer &,
 		const vk::raii::Framebuffer &,
 		const vk::Extent2D &,

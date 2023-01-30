@@ -3,14 +3,23 @@
 
 // Standard headers
 #include <cstdint>
+#include <filesystem>
+#include <iostream>
 #include <vector>
 
+// ImageMagick headers
+#include <ImageMagick-7/Magick++.h>
+
 // STB headers
+#include <stb/stb_image.h>
 #include <stb/stb_image_write.h>
+
+// Engine headers
+#include "core.hpp"
 
 namespace kobra {
 
-struct Image {
+struct RawImage {
 	std::vector <uint8_t> data;
 
 	uint32_t width;
@@ -28,6 +37,9 @@ struct Image {
 		);
 	}
 };
+
+// Load an image
+byte *load_texture(const std::filesystem::path &, int &, int &, int &);
 
 }
 

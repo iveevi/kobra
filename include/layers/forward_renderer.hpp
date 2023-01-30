@@ -8,6 +8,7 @@
 // Engine headers
 #include "../backend.hpp"
 #include "../vertex.hpp"
+#include "../lights.hpp"
 
 namespace kobra {
 
@@ -56,7 +57,12 @@ struct ForwardRenderer {
 
 	// TODO: add extra and default shader pograms here...
 	// TODO: parameters into a struct
-	void render(const ECS &,
+	struct Parameters {
+		std::vector <std::tuple <const Renderable *, const Transform *>> renderables;
+		std::vector <std::tuple <const Light *, const Transform *>> lights;
+	};
+
+	void render(const Parameters &, // const ECS &,
 		const Camera &,
 		const Transform &,
 		const vk::raii::CommandBuffer &,

@@ -35,9 +35,6 @@ protected:
 	// Application name
 	std::string			name;
 
-	// Dimensions
-	vk::Extent2D			extent;
-
 	// Frame information
 	Timer				frame_timer;
 	double				frame_time = 0.0;

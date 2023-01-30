@@ -163,7 +163,9 @@ static void configure_dset(ForwardRenderer &layer,
 }
 
 // Render a given scene wrt a given camera
-void ForwardRenderer::render(const ECS &ecs,
+void ForwardRenderer::render
+		(const Parameters &parameters,
+		// const ECS &ecs,
 		const Camera &camera,
 		const Transform &camera_transform,
 		const vk::raii::CommandBuffer &cmd,
@@ -204,41 +206,15 @@ void ForwardRenderer::render(const ECS &ecs,
 		vk::SubpassContents::eInline
 	);
 
-	// Preprocess the entities
-	std::vector <const Renderable *> rasterizers;
-	std::vector <const Transform *> rasterizer_transforms;
+	for (const auto &[renderable, _] : parameters.renderables) {
+		if (dsets.find(renderable) == dsets.end()) {
+			dsets[renderable] = serve_dset(
+				*this, // TODO: change signature
+				renderable->materials.size()
+			);
 
-	std::vector <const Light *> lights;
-	std::vector <const Transform *> light_transforms;
-
-	for (int i = 0; i < ecs.size(); i++) {
-		// TODO: one unifying renderer component, with options for
-		// raytracing, etc
-		if (ecs.exists <Renderable> (i)) {
-			const auto *rasterizer = &ecs.get <Renderable> (i);
-			const auto *transform = &ecs.get <Transform> (i);
-
-			rasterizers.push_back(rasterizer);
-			rasterizer_transforms.push_back(transform);
-
-			// If not it the dsets dictionary, create it
-			if (dsets.find(rasterizer) == dsets.end()) {
-				dsets[rasterizer] = serve_dset(
-					*this, // TODO: change signature
-					rasterizer->materials.size()
-				);
-
-				// Configure the dset
-				configure_dset(*this, dsets[rasterizer], rasterizer);
-			}
-		}
-
-		if (ecs.exists <Light> (i)) {
-			const auto *light = &ecs.get <Light> (i);
-			const auto *transform = &ecs.get <Transform> (i);
-
-			lights.push_back(light);
-			light_transforms.push_back(transform);
+			// Configure the dset
+			configure_dset(*this, dsets[renderable], renderable);
 		}
 	}
 
@@ -255,14 +231,14 @@ void ForwardRenderer::render(const ECS &ecs,
 	pc.perspective = camera.perspective_matrix();
 	pc.view_position = camera_transform.position;
 
-	int count = rasterizers.size();
+	int count = parameters.renderables.size();
 	for (int i = 0; i < count; i++) {
-		pc.model = rasterizer_transforms[i]->matrix();
+		pc.model = std::get <1> (parameters.renderables[i])->matrix();
 
-		const Renderable &rasterizer = *rasterizers[i];
-		ForwardRenderer::RenderableDset &dset = dsets[rasterizers[i]];
+		const Renderable *renderable = std::get <0> (parameters.renderables[i]);
+		ForwardRenderer::RenderableDset &dset = dsets[renderable];
 
-		int submesh_count = rasterizers[i]->size();
+		int submesh_count = renderable->size();
 		for (int j = 0; j < submesh_count; j++) {
 			// Push constants
 			cmd.pushConstants <Renderable::PushConstants> (*ppl,
@@ -270,9 +246,9 @@ void ForwardRenderer::render(const ECS &ecs,
 				0, pc
 			);
 
-			// Bind buffers
-			cmd.bindVertexBuffers(0, *rasterizer.get_vertex_buffer(j).buffer, {0});
-			cmd.bindIndexBuffer(*rasterizer.get_index_buffer(j).buffer,
+			// Bind buffers?>
+			cmd.bindVertexBuffers(0, *renderable->get_vertex_buffer(j).buffer, {0});
+			cmd.bindIndexBuffer(*renderable->get_index_buffer(j).buffer,
 				0, vk::IndexType::eUint32
 			);
 
@@ -282,7 +258,7 @@ void ForwardRenderer::render(const ECS &ecs,
 			);
 
 			// Draw
-			cmd.drawIndexed(rasterizer.get_index_count(j), 1, 0, 0, 0);
+			cmd.drawIndexed(renderable->get_index_count(j), 1, 0, 0, 0);
 		}
 	}
 

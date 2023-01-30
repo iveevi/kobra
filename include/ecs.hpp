@@ -84,6 +84,8 @@ class ECS {
 	// TODO: combine with _constructor
 	template <class T>
 	struct _ref {
+		using Return = void;
+
 		static T &ref(ECS *, int) {
 			throw std::runtime_error(
 				"_ref::ref() not implemented for type: "
@@ -135,10 +137,25 @@ public:
 		return _ref <T> ::get(this, i);
 	}
 
-	// Existence check
-	template <class T>
+	// Multiple existence check
+	template <class T, class ... Ts>
 	bool exists(int i) const {
-		return _ref <T> ::exists(this, i);
+		if constexpr (sizeof ... (Ts) == 0)
+			return _ref <T> ::exists(this, i);
+		else
+			return _ref <T> ::exists(this, i) && exists <Ts...> (i);
+	}
+
+	// Extract tuples of components from all entities
+	template <class ... Ts>
+	std::vector <std::tuple <const Ts *...>> tuples() const {
+		std::vector <std::tuple <const Ts *...>> ret;
+		for (int i = 0; i < size(); i++) {
+			if (exists <Ts...> (i))
+				ret.push_back(std::make_tuple(&get <Ts> (i) ...));
+		}
+
+		return ret;
 	}
 
 	// Add a component
@@ -173,6 +190,23 @@ public:
 	// Create a new entity
 	Entity &make_entity(const std::string &name = "Entity");
 
+	// Iterators
+	Archetype <Entity>::iterator begin() {
+		return entities.begin();
+	}
+
+	Archetype <Entity>::iterator end() {
+		return entities.end();
+	}
+
+	Archetype <Entity>::const_iterator begin() const {
+		return entities.begin();
+	}
+
+	Archetype <Entity>::const_iterator end() const {
+		return entities.end();
+	}
+
 	// Display info for one component
 	template <class T>
 	void info() const;
@@ -200,6 +234,8 @@ KOBRA_MAKE_SHARED(Renderable, RenderablePtr);
 #define KOBRA_REF(T, Array)					\
 	template <>						\
 	struct ECS::_ref <T> {					\
+		using Return = T;				\
+								\
 		static T &ref(ECS *ecs, int i) {		\
 			return ecs->Array[i];			\
 		}						\
@@ -223,6 +259,8 @@ KOBRA_REF(Transform, transforms);
 #define KOBRA_RET_SHARED(T, Ret, Array)				\
 	template <>						\
 	struct ECS::_ref <T> {					\
+		using Return = Ret;				\
+								\
 		static Ret &ref(ECS *ecs, int i) {		\
 			return ecs->Array[i];			\
 		}						\
@@ -298,10 +336,10 @@ public:
 	}
 
 	// Existence check
-	template <class T>
+	template <class ... Ts>
 	bool exists() const {
 		_assert();
-		return ecs->exists <T> (id);
+		return ecs->exists <Ts...> (id);
 	}
 
 	// Add a component

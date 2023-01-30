@@ -2,7 +2,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 
 // Engine headers
-#include "../include/texture.hpp"
+#include "../include/image.hpp"
 #include "../include/logger.hpp"
 
 namespace kobra {

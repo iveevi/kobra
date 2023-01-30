@@ -18,9 +18,9 @@ namespace kobra {
 // Custom shader programs
 class ShaderProgram {
 private:
-	vk::ShaderStageFlagBits	m_shader_type;
-	std::string m_file;
 	bool m_failed = false;
+	std::string m_source;
+	vk::ShaderStageFlagBits	m_shader_type;
 public:
 	// Default constructor
 	ShaderProgram() = default;

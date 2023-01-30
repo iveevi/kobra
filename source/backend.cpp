@@ -6,7 +6,7 @@
 // Engine headers
 #include "../include/backend.hpp"
 #include "../include/core.hpp"
-#include "../include/texture.hpp"
+#include "../include/image.hpp"
 
 namespace kobra {
 

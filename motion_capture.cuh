@@ -36,7 +36,6 @@
 #include "include/optix/options.cuh"
 #include "include/optix/parameters.cuh"
 #include "include/scene.hpp"
-#include "include/texture.hpp"
 #include "include/ui/attachment.hpp"
 #include "include/ui/framerate.hpp"
 #include "include/layers/mesh_memory.hpp"
@@ -370,18 +369,18 @@ struct MotionCapture : public kobra::BaseApp {
 
 			// TODO: import CUDA to Vulkan and render straight to the image
 			framer.render(
-				kobra::Image {
+				kobra::RawImage {
 					.data = b_traced_cpu,
 					.width = rtx_extent.width,
 					.height = rtx_extent.height,
 					.channels = 4
 				},
-				cmd, framebuffer, extent,
+				cmd, framebuffer, window.extent,
 				// TODO: embed in a docked ImGui window
 				{{420, 0}, {1080 + 420, 1080}}
 			);
 
-			ui->render(cmd, framebuffer, extent);
+			ui->render(cmd, framebuffer, window.extent);
 		cmd.end();
 
 #ifdef RECORD

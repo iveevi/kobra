@@ -14,7 +14,6 @@ App::App(const vk::raii::PhysicalDevice &phdev_,
 		const std::vector <const char *> &extensions)
 		: phdev(phdev_),
 		window(name_, extent_),
-		extent(extent_),
 		frame_index(0)
 {
 	surface = make_surface(window);
@@ -84,7 +83,10 @@ void App::terminate_now()
 // Protected methods
 coordinates::Screen App::coordinates(float x, float y)
 {
-	return coordinates::Screen {x, y, extent.width, extent.height};
+	return coordinates::Screen {
+		x, y,
+		window.extent.width, window.extent.height
+	};
 }
 
 Device App::get_device()
@@ -112,7 +114,7 @@ BaseApp::BaseApp(const vk::raii::PhysicalDevice &phdev_,
 	depth_buffer = std::move(DepthBuffer {
 		phdev, device,
 		vk::Format::eD32Sfloat,
-		extent
+		window.extent
 	});
 
 	// Initialize the texture loader
@@ -131,7 +133,7 @@ BaseApp::BaseApp(const vk::raii::PhysicalDevice &phdev_,
 		render_pass,
 		swapchain.image_views,
 		&depth_buffer.view,
-		extent
+		window.extent
 	);
 
 	// Create command pool
@@ -284,7 +286,7 @@ Context BaseApp::get_context()
 		.command_pool = &command_pool,
 		.descriptor_pool = &descriptor_pool,
 		.sync_queue = &sync_queue,
-		.extent = extent,
+		.extent = window.extent,
 		.swapchain_format = swapchain.format,
 		.depth_format = depth_buffer.format,
 		.texture_loader = &m_texture_loader
@@ -305,7 +307,6 @@ void BaseApp::recreate_swapchain()
 
 	window.extent.width = width;
 	window.extent.height = height;
-	extent = window.extent;
 
 	// Wait for the device to be idle
 	device.waitIdle();
@@ -319,18 +320,18 @@ void BaseApp::recreate_swapchain()
 	depth_buffer = std::move(DepthBuffer {
 		phdev, device,
 		vk::Format::eD32Sfloat,
-		extent
+		window.extent
 	});
 
 	framebuffers = make_framebuffers(device,
 		render_pass,
 		swapchain.image_views,
 		&depth_buffer.view,
-		extent
+		window.extent
 	);
 
 	// Call possibly overriden resize function
-	resize(extent);
+	resize(window.extent);
 }
 
 }
