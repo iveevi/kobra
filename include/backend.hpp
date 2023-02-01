@@ -281,14 +281,11 @@ vk::raii::CommandBuffer make_command_buffer(const vk::raii::Device &,
 		const vk::raii::CommandPool &);
 
 // Execute a command buffer immediately
-inline void command_now
-		(const vk::raii::Device &device,
+inline void submit_now(const vk::raii::Device &device,
+		const vk::raii::Queue &queue,
 		const vk::raii::CommandPool &command_pool,
 		const std::function <void (const vk::raii::CommandBuffer &)> &command)
 {
-	// TODO: get queue from queue system...
-
-	vk::raii::Queue queue {device, 0, 0};
 	vk::raii::CommandBuffer command_buffer = make_command_buffer(device, command_pool);
 
 	command_buffer.begin({});
@@ -296,18 +293,69 @@ inline void command_now
 	command_buffer.end();
 
 	// Submit and wait
-	// TODO: return fence
+	float timeout = std::numeric_limits <float>::max();
 
+	vk::raii::Fence fence {device, vk::FenceCreateFlags {}};
 	queue.submit(
 		vk::SubmitInfo {
 			0, nullptr, nullptr,
 			1, &*command_buffer,
 			0, nullptr
 		},
-		nullptr
+		*fence
+	);
+	
+	while (device.waitForFences({*fence}, true, timeout) == vk::Result::eTimeout);
+}
+
+inline vk::raii::Fence submit(const vk::raii::Device &device,
+		const vk::raii::Queue &queue,
+		const vk::raii::CommandPool &command_pool,
+		const std::function <void (const vk::raii::CommandBuffer &)> &command,
+		float timeout = std::numeric_limits <float>::max())
+{
+	vk::raii::CommandBuffer command_buffer = make_command_buffer(device, command_pool);
+
+	command_buffer.begin({});
+	command(command_buffer);
+	command_buffer.end();
+
+	// Submit and wait
+	vk::raii::Fence fence {device, vk::FenceCreateFlags {}};
+	queue.submit(
+		vk::SubmitInfo {
+			0, nullptr, nullptr,
+			1, &*command_buffer,
+			0, nullptr
+		},
+		*fence
 	);
 
-	queue.waitIdle();
+	return fence;
+}
+
+inline vk::raii::Fence submit(const vk::raii::Device &device,
+		const vk::raii::Queue &queue,
+		const vk::raii::CommandBuffer &command_buffer,
+		const std::function <void (const vk::raii::CommandBuffer &)> &command,
+		float timeout = std::numeric_limits <float>::max())
+{
+	command_buffer.begin({});
+	command(command_buffer);
+	command_buffer.end();
+
+	// Submit and wait
+	vk::raii::Fence fence {device, vk::FenceCreateFlags {}};
+	queue.submit(
+		vk::SubmitInfo {
+			0, nullptr, nullptr,
+			1, &*command_buffer,
+			0, nullptr
+		},
+		*fence
+	);
+
+	return fence;
 }
 
 // Pick a surface format

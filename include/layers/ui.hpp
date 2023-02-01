@@ -88,7 +88,8 @@ public:
 		ImGuiIO &io = ImGui::GetIO();
 		io.Fonts->AddFontFromFileTTF(font.first.c_str(), font.second);
 
-		command_now(*device, *command_pool,
+		vk::raii::Queue temp_queue {*device, 0, 0};
+		submit_now(*device, temp_queue, *command_pool,
 			[&](const vk::raii::CommandBuffer &cmd) {
 				ImGui_ImplVulkan_CreateFontsTexture(*cmd);
 			}
