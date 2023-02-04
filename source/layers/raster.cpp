@@ -495,7 +495,7 @@ void Raster::_initialize_skybox()
 		_skybox.ppl
 	};
 
-/*
+	/*
 		_skybox.ppl, pipeline_cache,
 		true, true,
 		vk::CullModeFlagBits::eNone

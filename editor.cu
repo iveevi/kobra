@@ -161,14 +161,29 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 		KOBRA_LOG_FUNC(kobra::Log::INFO) << "Waiting for irradiance map to be computed...\n";
 	}
 
-	KOBRA_LOG_FUNC(kobra::Log::OK) << "Irradiance computations done!\n";
+	/* KOBRA_LOG_FUNC(kobra::Log::OK) << "Irradiance computations done!\n";
 
 	for (int i = 0; i < MIP_LEVELS; i++)
 		images.emplace_back(&m_irradiance_computer.irradiance_maps[i]);
 	m_image_viewer = std::make_shared <ImageViewer> (get_context(), images);
 
 	// Attach UI layers
-	m_ui->attach(m_image_viewer);
+	m_ui->attach(m_image_viewer); */
+
+	// Configure the forward renderer
+	m_forward_renderer.add_pipeline(
+		"environment",
+		KOBRA_DIR "/source/shaders/environment_lighter.frag",
+		{
+			kobra::DescriptorSetLayoutBinding {
+				5, vk::DescriptorType::eCombinedImageSampler,
+				5, vk::ShaderStageFlagBits::eFragment
+			}
+		},
+		[&](const vk::raii::DescriptorSet &descriptor_set) {
+			m_irradiance_computer.bind(device, descriptor_set, 5);
+		}
+	);
 }
 
 Editor::~Editor()
@@ -243,6 +258,8 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 	kobra::layers::ForwardRenderer::Parameters params {
 		.renderables = renderables_transforms,
 		.lights = lights_transforms,
+		.pipeline_package = "environment",
+		.environment_map = KOBRA_DIR "/resources/skies/background_1.jpg"
 	};
 
 	cmd.begin({});

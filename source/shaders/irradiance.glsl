@@ -10,6 +10,7 @@ layout (push_constant) uniform PushConstants {
 	int height;
 } push_constants;
 
+// TODO: header file (then use in the other shaders)
 const float M_PI = 3.1415926535897932384626433832795;
 
 vec3 uv_to_dir(vec2 uv)

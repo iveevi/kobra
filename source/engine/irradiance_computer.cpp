@@ -24,6 +24,41 @@ static const std::vector <kobra::DescriptorSetLayoutBinding>
 
 IrradianceComputer::IrradianceComputer(int _mips) : mips(_mips) {}
 
+void IrradianceComputer::bind(const vk::raii::Device &device, const vk::raii::DescriptorSet &dset, uint32_t binding)
+{
+	// First create the samplers
+	if (m_samplers.size() != mips) {
+		m_samplers.clear();
+
+		for (int i = 0; i < mips; i++) {
+			m_samplers.emplace_back(
+				kobra::make_sampler(device, irradiance_maps[i])
+			);
+		}
+	}
+
+	// Create image descrtiptors
+	std::vector <vk::DescriptorImageInfo> image_infos;
+	for (int i = 0; i < mips; i++) {
+		image_infos.emplace_back(
+			*m_samplers[i],
+			*irradiance_maps[i].view,
+			vk::ImageLayout::eShaderReadOnlyOptimal
+		);
+	}
+
+	// Create the descriptor write
+	vk::WriteDescriptorSet irradiance_dset_write {
+		*dset,
+		binding, 0, (uint32_t) image_infos.size(),
+		vk::DescriptorType::eCombinedImageSampler,
+		image_infos.data()
+	};
+
+	// Update the descriptor set
+	device.updateDescriptorSets(irradiance_dset_write, nullptr);
+}
+
 vk::raii::Fence IrradianceComputer::compute(const kobra::Context &context, const kobra::ImageData &environment_map)
 {
 	const vk::raii::PhysicalDevice &phdev = *context.phdev;
@@ -154,6 +189,9 @@ vk::raii::Fence IrradianceComputer::compute(const kobra::Context &context, const
 	return kobra::submit(device, temp_queue, m_command_buffer,
 		[&](const vk::raii::CommandBuffer &cmd) {
 			std::cout << "Generating irradiance map...\n";
+			// TODO: one kernel, all mips, share the random numbers
+			// but compute all samples idependently... (keep sample
+			// count high...)
 			for (int i = 0; i < mips; i++) {
 				Irradiance_PushConstants push_constants {
 					i/float(mips - 1),
@@ -186,6 +224,10 @@ vk::raii::Fence IrradianceComputer::compute(const kobra::Context &context, const
 
 				std::cout << "\tMip level " << i << " done.\n";
 			}
+			
+			std::cout << "Transitioning irradiance map layout...\n";
+			for (auto &irradiance_map : irradiance_maps)
+				irradiance_map.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
 		}
 	);
 }

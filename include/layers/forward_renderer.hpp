@@ -3,6 +3,7 @@
 
 // Standard headers
 #include <map>
+#include <optional>
 #include <vector>
 
 // Engine headers
@@ -20,55 +21,98 @@ class Renderable;
 
 namespace layers {
 
-struct ForwardRenderer {
+class ForwardRenderer {
+public:
+	using RenderableDset = std::vector <vk::raii::DescriptorSet>;
+
+	// Pipeline package
+	struct PipelinePackage {
+		vk::raii::Pipeline pipeline = nullptr;
+		vk::raii::PipelineLayout ppl = nullptr;
+		vk::raii::DescriptorSetLayout dsl = nullptr;
+
+		// TODO: also an update function?
+		// TODO: alias to simplify...
+		std::function <void (const vk::raii::DescriptorSet &)> configure_dset = nullptr;
+
+		std::map <const Renderable *, RenderableDset> dsets;
+	};
+
 	// Critical Vulkan structures
 	vk::raii::Device *device = nullptr;
 	vk::raii::PhysicalDevice *phdev = nullptr;
 	vk::raii::DescriptorPool *descriptor_pool = nullptr;
-
-	// Vulkan structures
 	vk::raii::RenderPass render_pass = nullptr;
-
-	// TODO: map of pipelines, for each rasterizer...
-	vk::raii::Pipeline pipeline = nullptr;
-
-	// Pipeline layout is shared across all fragment shaders
-	vk::raii::PipelineLayout ppl = nullptr;
 
 	// Texture loader
 	TextureLoader *loader = nullptr;
 
-	// vk::Extent2D extent = { 0, 0 };
-
-	// Descriptor set bindings
-	static const std::vector <DSLB> dsl_bindings;
-
-	// Descriptor set layout
-	vk::raii::DescriptorSetLayout dsl = nullptr;
-
-	// Descriptor sets
-	using RenderableDset = std::vector <vk::raii::DescriptorSet>;
-
-	std::map <const Renderable *, RenderableDset> dsets;
+	// Pipeline package maps
+	std::map <std::string, PipelinePackage> pipeline_packages;
 
 	// Constructors
 	ForwardRenderer() = default;
 	ForwardRenderer(const Context &);
 
-	// TODO: add extra and default shader pograms here...
-	// TODO: parameters into a struct
+	// Create a new pipeline package
+	void add_pipeline(
+		const std::string &,
+		const std::string &,
+		const std::vector <DescriptorSetLayoutBinding> & = {},
+		const std::function <void (const vk::raii::DescriptorSet &)> & = nullptr
+	);
+
+	// Parameters for rendering
 	struct Parameters {
 		std::vector <std::tuple <const Renderable *, const Transform *>> renderables;
 		std::vector <std::tuple <const Light *, const Transform *>> lights;
+		std::string pipeline_package = BUILTIN_PIPELINE_PACKAGE;
+		std::string environment_map = "";
 	};
 
-	void render(const Parameters &, // const ECS &,
+	void render(const Parameters &,
 		const Camera &,
 		const Transform &,
 		const vk::raii::CommandBuffer &,
 		const vk::raii::Framebuffer &,
 		const vk::Extent2D &,
-		const RenderArea & = RenderArea::full());
+		const RenderArea & = RenderArea::full()
+	);
+private:
+	static constexpr char BUILTIN_PIPELINE_PACKAGE[] = "__builtin__";
+
+	// Environment mapping resources
+	struct {
+		vk::raii::DescriptorSet dset = nullptr;
+		vk::raii::DescriptorSetLayout dsl = nullptr;
+		vk::raii::Pipeline pipeline = nullptr;
+		vk::raii::PipelineLayout ppl = nullptr;
+
+		BufferData vbo = nullptr;
+		BufferData ibo = nullptr;
+
+		std::string environment_map = "";
+
+		bool initialized = false;
+	} m_skybox;
+
+	// Methods
+	std::optional <PipelinePackage> make_pipline_package(
+		const std::string &,
+		const std::string &,
+		const std::vector <DescriptorSetLayoutBinding> &,
+		const std::function <void (const vk::raii::DescriptorSet &)> &
+	);
+
+	RenderableDset make_renderable_dset(PipelinePackage &, uint32_t);
+
+	void configure_renderable_dset(
+		const PipelinePackage &,
+		const ForwardRenderer::RenderableDset &,
+		const Renderable *
+	);
+
+	void configure_environment_map(const std::string &);
 };
 
 }

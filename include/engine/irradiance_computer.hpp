@@ -16,6 +16,8 @@ public:
 
 	IrradianceComputer() = default;
 	IrradianceComputer(int);
+	
+	void bind(const vk::raii::Device &, const vk::raii::DescriptorSet &, uint32_t);
 
 	vk::raii::Fence compute(const kobra::Context &, const kobra::ImageData &);
 private:
@@ -25,6 +27,9 @@ private:
 	vk::raii::Pipeline m_irradiance_pipeline = nullptr;
 	vk::raii::PipelineLayout m_irradiance_ppl = nullptr;
 	vk::raii::Sampler m_environment_sampler = nullptr;
+
+	// Cached samplers
+	std::vector <vk::raii::Sampler> m_samplers;
 };
 
 }

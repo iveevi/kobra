@@ -1,3 +1,7 @@
+// Standard headers
+#include <regex>
+
+// Engine headers
 #include "../include/shader_program.hpp"
 
 namespace kobra {
@@ -50,25 +54,70 @@ inline EShLanguage translate_shader_stage(const vk::ShaderStageFlagBits &stage)
 	return EShLangVertex;
 }
 
+// Includer class
+static constexpr const char KOBRA_SHADER_INCLUDE_DIR[] = KOBRA_DIR "/source/shaders/";
+
+std::string replace_includes(const std::string &source)
+{
+	std::string out = "";
+	std::string line;
+
+	std::istringstream stream(source);
+	while (std::getline(stream, line)) {
+		// Check if line is an include but not commented out
+		if (line.find("#include") != std::string::npos &&
+				line.find("//") == std::string::npos) {
+			// Get the include path
+			std::regex regex("#include \"(.*)\"");
+			std::smatch match;
+			std::regex_search(line, match, regex);
+
+			// Check that the regex matched
+			if (match.size() != 2) {
+				KOBRA_LOG_FUNC(Log::ERROR)
+					<< "Failed to match regex for include: "
+					<< line << std::endl;
+				continue;
+			}
+
+			// Read the file
+			std::string path = KOBRA_SHADER_INCLUDE_DIR + match[1].str();
+			std::string source = common::read_file(path);
+
+			// Replace the include with the file contents
+			out += replace_includes(source);
+		} else {
+			out += line + "\n";
+		}
+	}
+
+	return out;
+}
+
 _compile_out glsl_to_spriv(const std::string &source, const vk::ShaderStageFlagBits &shader_type)
 {
+	std::string source_copy = replace_includes(source);
+
 	// Output
 	_compile_out out;
 
 	// Compile shader
 	EShLanguage stage = translate_shader_stage(shader_type);
 
-	const char * shaderStrings[1];
-	shaderStrings[0] = source.data();
+	const char *shaderStrings[1];
+	shaderStrings[0] = source_copy.data();
 
-	glslang::TShader shader( stage );
-	shader.setStrings( shaderStrings, 1 );
+	glslang::TShader shader(stage);
+	shader.setStrings(shaderStrings, 1);
 
 	// Enable SPIR-V and Vulkan rules when parsing GLSL
 	EShMessages messages = (EShMessages) (EShMsgSpvRules | EShMsgVulkanRules);
-
-	if (!shader.parse( &glslang::DefaultTBuiltInResource, 100, false, messages)) {
+	// ShaderIncluder includer;
+	if (!shader.parse(&glslang::DefaultTBuiltInResource,
+			450, false, messages)) {
 		out.log = shader.getInfoLog();
+		// TODO: pass source to the compile_out struct
+		// std::cout << "Fully processed source:\n" << source_copy << std::endl;
 		return out;
 	}
 
