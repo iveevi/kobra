@@ -2,8 +2,9 @@
 #define SHADER_PROGRAM_H_
 
 // Standard headers
-#include <thread>
 #include <filesystem>
+#include <map>
+#include <thread>
 
 // Glslang and SPIRV-Tools
 #include <glslang/SPIRV/GlslangToSpv.h>
@@ -29,7 +30,8 @@ public:
 	ShaderProgram(const std::string &, const vk::ShaderStageFlagBits &);
 
 	// Compile shader
-	std::optional <vk::raii::ShaderModule> compile(const vk::raii::Device &);
+	std::optional <vk::raii::ShaderModule>
+	compile(const vk::raii::Device &, const std::map <std::string, std::string> & = {});
 };
 
 }

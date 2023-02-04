@@ -10,6 +10,7 @@ namespace kobra {
 struct _compile_out {
 	std::vector <unsigned int> 	spirv = {};
 	std::string			log = "";
+	std::string			source = "";
 };
 
 // Compiling shaders
@@ -57,8 +58,14 @@ inline EShLanguage translate_shader_stage(const vk::ShaderStageFlagBits &stage)
 // Includer class
 static constexpr const char KOBRA_SHADER_INCLUDE_DIR[] = KOBRA_DIR "/source/shaders/";
 
-std::string replace_includes(const std::string &source)
+std::string preprocess
+		(const std::string &source,
+		const std::map <std::string, std::string> &defines)
 {
+	// Defines contains string values to be relpaced
+	// e.g. if {"VERSION", "450"} is in defines, then
+	// "${VERSION}" will be replaced with "450"
+
 	std::string out = "";
 	std::string line;
 
@@ -85,7 +92,25 @@ std::string replace_includes(const std::string &source)
 			std::string source = common::read_file(path);
 
 			// Replace the include with the file contents
-			out += replace_includes(source);
+			out += preprocess(source, defines);
+
+			// TODO: allow simoultaneous features
+			// e.g. add the includes file lines into the stream...
+		} else if (line.find("${") != std::string::npos) {
+			// Replace the define
+			for (auto &define : defines) {
+				std::string key = "${" + define.first + "}";
+				std::string value = define.second;
+
+				// Replace all instances of the key with the value
+				size_t pos = 0;
+				while ((pos = line.find(key, pos)) != std::string::npos) {
+					line.replace(pos, key.length(), value);
+					pos += value.length();
+				}
+			}
+
+			out += line + "\n";
 		} else {
 			out += line + "\n";
 		}
@@ -94,9 +119,12 @@ std::string replace_includes(const std::string &source)
 	return out;
 }
 
-_compile_out glsl_to_spriv(const std::string &source, const vk::ShaderStageFlagBits &shader_type)
+_compile_out glsl_to_spriv
+		(const std::string &source,
+		const std::map <std::string, std::string> &defines,
+		const vk::ShaderStageFlagBits &shader_type)
 {
-	std::string source_copy = replace_includes(source);
+	std::string source_copy = preprocess(source, defines);
 
 	// Output
 	_compile_out out;
@@ -116,8 +144,7 @@ _compile_out glsl_to_spriv(const std::string &source, const vk::ShaderStageFlagB
 	if (!shader.parse(&glslang::DefaultTBuiltInResource,
 			450, false, messages)) {
 		out.log = shader.getInfoLog();
-		// TODO: pass source to the compile_out struct
-		// std::cout << "Fully processed source:\n" << source_copy << std::endl;
+		out.source = source_copy;
 		return out;
 	}
 
@@ -142,7 +169,8 @@ ShaderProgram::ShaderProgram
 
 // Compile shader
 std::optional <vk::raii::ShaderModule> ShaderProgram::compile
-		(const vk::raii::Device &device)
+		(const vk::raii::Device &device,
+		const std::map <std::string, std::string> &defines)
 {
 	// If has failed before, don't try again
 	if (m_failed)
@@ -152,10 +180,12 @@ std::optional <vk::raii::ShaderModule> ShaderProgram::compile
 	glslang::InitializeProcess();
 
 	// Compile shader
-	_compile_out out = glsl_to_spriv(m_source, m_shader_type);
+	_compile_out out = glsl_to_spriv(m_source, defines, m_shader_type);
 	if (!out.log.empty()) {
-		KOBRA_LOG_FUNC(Log::ERROR) << "Shader compilation failed:\n"
-			<< out.log << std::endl;
+		// TODO: show the errornous line(s)
+		KOBRA_LOG_FUNC(Log::ERROR)
+			<< "Shader compilation failed:\n" << out.log
+			<< "\nSource:\n" << out.source << "\n";
 
 		m_failed = true;
 		return std::nullopt;
