@@ -124,6 +124,9 @@ public:
 	// Requires a record function
 	virtual void record(const vk::raii::CommandBuffer &, const vk::raii::Framebuffer &) = 0;
 
+	// Possibly override an after-present function
+	virtual void after_present();
+
 	// Possbily override a termination function
 	virtual void terminate();
 

@@ -183,6 +183,9 @@ BaseApp::BaseApp(const vk::raii::PhysicalDevice &phdev_,
 	present_queue = vk::raii::Queue {device, queue_family.present, 0};
 }
 
+// Possbily override an after-present function
+void BaseApp::after_present() {}
+
 // Possbily override a termination function
 void BaseApp::terminate() {}
 
@@ -263,8 +266,10 @@ void BaseApp::present()
 		result = present_queue.presentKHR(present_info);
 	} catch (const vk::OutOfDateKHRError &e) {
 		recreate_swapchain();
-		return;
 	}
+
+	// Afer present actions
+	after_present();
 }
 
 // Overload frame function

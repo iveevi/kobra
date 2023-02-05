@@ -28,7 +28,7 @@ IrradianceComputer::IrradianceComputer
 	// TODO: read from a metadata file with records number of samples...
 	// For now assume if the cache exists, it has the max number of samples
 
-	// TODO: caching system
+	// TODO: caching system, implement in the editor layer...
 	/* Check if the cache exists
 	if (!cache_prefix.empty()) {
 		for (int i = 0; i < mips; i++) {

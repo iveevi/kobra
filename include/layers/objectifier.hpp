@@ -16,32 +16,55 @@ namespace layers {
 // This layer takes care of rendering entities
 // 	into an image where we can query individual
 // 	objects (i.e. for picking)
-struct Objectifier {
-	// Pixels are simple 32-bit integers
-	ImageData image = nullptr;
-	BufferData staging_buffer = nullptr;
-	DepthBuffer depth_buffer = nullptr;
+class Objectifier {
+public:
+	Objectifier() = default;
+	Objectifier(const Context &);
 
-	vk::raii::RenderPass render_pass = nullptr;
-	vk::raii::Framebuffer framebuffer = nullptr;
-	
-	vk::raii::Pipeline pipeline = nullptr;
-	vk::raii::PipelineLayout ppl = nullptr;
-};
-
-// TODO: an additional layer for rasterizing for the editor
-// 	i.e. lights will be shown as sprites, etc
-
-// Create an objectifier layer
-Objectifier make_layer(const Context &);
-
-// Render entities and download the image
-// TODO: pack args into a struct?
-void render(Objectifier &,
+	// Render entities and download the image
+	// TODO: pack args into a struct?
+	void render(
 		const vk::raii::CommandBuffer &,
 		const ECS &,
 		const Camera &,
-		const Transform &);
+		const Transform &
+	);
+	
+	// Composite a highlighting effect
+	void composite_highlight(
+		const vk::raii::CommandBuffer &,
+		const vk::raii::Framebuffer &,
+		const vk::Extent2D &,
+		const ECS &,
+		const Camera &,
+		const Transform &,
+		const std::pair <uint32_t, uint32_t> &
+	);
+
+	// Query object at a given pixel
+	std::pair <uint32_t, uint32_t> query(uint32_t, uint32_t);
+private:
+	// Pixels are simple 32-bit integers
+	struct {
+		ImageData image = nullptr;
+		DepthBuffer depth_buffer = nullptr;
+
+		vk::raii::RenderPass render_pass = nullptr;
+		vk::raii::Framebuffer framebuffer = nullptr;
+		
+		vk::raii::Pipeline pipeline = nullptr;
+		vk::raii::PipelineLayout ppl = nullptr;
+
+		BufferData staging_buffer = nullptr;
+		std::vector <uint32_t> staging_data;
+	} rendering;
+
+	struct {
+		vk::raii::RenderPass render_pass = nullptr;
+		vk::raii::Pipeline pipeline = nullptr;
+		vk::raii::PipelineLayout ppl = nullptr;
+	} compositing;
+};
 
 }
 

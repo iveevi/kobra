@@ -828,6 +828,8 @@ public:
 
 		// Download data
 		size_t size_ = dat.size() * sizeof(T);
+		KOBRA_ASSERT(size_ <= size, "Buffer size is smaller than data size");
+
 		void *ptr = memory.mapMemory(0, size);
 		memcpy(dat.data(), ptr, size_);
 		memory.unmapMemory();

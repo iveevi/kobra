@@ -15,6 +15,9 @@
 struct ImageViewer;
 struct ProgressBar;
 
+// TODO: logging attachment
+// TODO: info tab that shows logging and framerate...
+
 struct Editor : public kobra::BaseApp {
 	kobra::Scene m_scene;
 	kobra::Entity m_camera;
@@ -30,13 +33,25 @@ struct Editor : public kobra::BaseApp {
 	kobra::engine::IrradianceComputer m_irradiance_computer;
 	bool m_saved_irradiance = false;
 
+	struct Request {
+		double x;
+		double y;
+	};
+
+	std::queue <Request> request_queue;
+	std::pair <int, int> m_selection = {-1, -1};
+
 	Editor(const vk::raii::PhysicalDevice &, const std::vector <const char *> &);
 	~Editor();
 
-	void record(const vk::raii::CommandBuffer &, const vk::raii::Framebuffer &);
-	void resize(const vk::Extent2D &);
+	void record(const vk::raii::CommandBuffer &, const vk::raii::Framebuffer&) override;
+	void resize(const vk::Extent2D &) override;
+	void after_present() override;
 
 	static void mouse_callback(void *, const kobra::io::MouseEvent &);
+
+	// TODO: frustrum culling structure to cull once per pass (store status
+	// in a map) and then is passed to other layers for rendering
 };
 
 int main()
@@ -148,6 +163,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 
 	// Load all the layers
 	m_forward_renderer = kobra::layers::ForwardRenderer(get_context());
+	m_objectifier = kobra::layers::Objectifier(get_context());
 
 	ImGui::CreateContext();
 	ImGui_ImplGlfw_InitForVulkan(window.handle, true);
@@ -279,8 +295,6 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 			cmd, framebuffer, window.extent
 		);
 
-		m_ui->render(cmd, framebuffer, window.extent);
-
 		m_irradiance_computer.sample(cmd);
 		/* if (m_irradiance_computer.sample(cmd)
 				&& !m_irradiance_computer.cached
@@ -296,12 +310,65 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 		// TODO: progress bar...
 		// std::cout << "Sample count: " << m_irradiance_computer.samples << std::endl;
 		m_progress_bar->m_progress = m_irradiance_computer.samples/128.0f;
+
+		// Handle requests
+		std::optional <Request> selection_request;
+		while (!request_queue.empty()) {
+			Request request = request_queue.front();
+			request_queue.pop();
+
+			selection_request = request;
+		}
+
+		if (selection_request) {
+			m_objectifier.render(
+				cmd,
+				// TODO: pass extent...
+				m_scene.ecs,
+				m_camera.get <kobra::Camera> (),
+				m_camera.get <kobra::Transform> ()
+			);
+
+			request_queue.push(*selection_request);
+		}
+
+		// If there is a selection, highlight it
+		if (m_selection.first >= 0 && m_selection.second >= 0) {
+			std::cout << "Highlighting selection: " << m_selection.first << ", " << m_selection.second << std::endl;
+
+			m_objectifier.composite_highlight(
+				cmd, framebuffer, window.extent,
+				m_scene.ecs,
+				m_camera.get <kobra::Camera> (),
+				m_camera.get <kobra::Transform> (),
+				m_selection
+			);
+		}
+
+		// Render the UI last
+		m_ui->render(cmd, framebuffer, window.extent);
 	cmd.end();
+
+	// TODO: after present actions...
 }
 
 void Editor::resize(const vk::Extent2D &extent)
 {
 	m_camera.get <kobra::Camera> ().aspect = extent.width / (float) extent.height;
+	// TODO: resize the objectifier...
+}
+
+void Editor::after_present()
+{
+	if (!request_queue.empty()) {
+		// TODO: ideally should only be one type of request per after_present
+		Request request = request_queue.front();
+		request_queue.pop();
+
+		auto ids = m_objectifier.query(request.x, request.y);
+		std::cout << "Selected id: " << ids.first << ", " << ids.second << std::endl;
+		m_selection = {int(ids.first) - 1, int(ids.second) - 1};
+	}
 }
 
 void Editor::mouse_callback(void *us, const kobra::io::MouseEvent &event)
@@ -310,8 +377,8 @@ void Editor::mouse_callback(void *us, const kobra::io::MouseEvent &event)
 
 	// Check if selecting
 	if (event.action == GLFW_PRESS && event.button == select_button) {
-		// Editor *editor = static_cast <Editor *> (us);
-		std::cout << "Selecting!" << std::endl;
+		Editor *editor = static_cast <Editor *> (us);
+		editor->request_queue.push({event.xpos, event.ypos});
 	}
 
 	// Panning around
