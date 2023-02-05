@@ -13,6 +13,7 @@
 
 // Forward declarations
 struct ImageViewer;
+struct ProgressBar;
 
 struct Editor : public kobra::BaseApp {
 	kobra::Scene m_scene;
@@ -24,8 +25,10 @@ struct Editor : public kobra::BaseApp {
 	std::shared_ptr <kobra::layers::UI> m_ui;
 
 	std::shared_ptr <ImageViewer> m_image_viewer;
+	std::shared_ptr <ProgressBar> m_progress_bar;
 
 	kobra::engine::IrradianceComputer m_irradiance_computer;
+	bool m_saved_irradiance = false;
 
 	Editor(const vk::raii::PhysicalDevice &, const std::vector <const char *> &);
 	~Editor();
@@ -64,9 +67,11 @@ struct ImageViewer : public kobra::ui::ImGuiAttachment {
 	std::vector <vk::DescriptorSet> m_descriptor_sets;
 	int m_current_image = 0;
 
-	ImageViewer(const kobra::Context &context, const std::vector <kobra::ImageData *> &images)
-		: m_images {images}
+	ImageViewer(const kobra::Context &context, const std::vector <const kobra::ImageData *> &images)
 	{
+		for (const auto &image : images)
+			m_images.push_back(const_cast <kobra::ImageData *> (image));
+
 		for (const auto &image : m_images) {
 			// Make sure layout is shader read only
 			if (image->layout != vk::ImageLayout::eShaderReadOnlyOptimal) {
@@ -101,6 +106,22 @@ struct ImageViewer : public kobra::ui::ImGuiAttachment {
 	}
 };
 
+// Progress bar UI Attachment
+struct ProgressBar : public kobra::ui::ImGuiAttachment {
+	std::string m_title;
+	float m_progress = 0.0f;
+
+	ProgressBar(const std::string &title)
+		: m_title {title} {}
+
+	void render() override {
+		ImGui::Begin(m_title.c_str());
+		ImGui::SetWindowSize(ImVec2(500, 100), ImGuiCond_FirstUseEver);
+		ImGui::ProgressBar(m_progress);
+		ImGui::End();
+	}
+};
+
 // Editor implementation
 Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 		const std::vector <const char *> &extensions)
@@ -111,15 +132,17 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 		}
 {
 	int MIP_LEVELS = 5;
-	std::vector <kobra::ImageData *> images;
 
 	// Load environment map
 	// TODO: load HDR...
 	kobra::ImageData &environment_map = m_texture_loader
 		.load_texture(KOBRA_DIR "/resources/skies/background_1.jpg");
 
-	m_irradiance_computer = kobra::engine::IrradianceComputer
-			(get_context(), environment_map, MIP_LEVELS, 1024);
+	m_irradiance_computer = kobra::engine::IrradianceComputer(
+		get_context(), environment_map,
+		MIP_LEVELS, 128,
+		"irradiance_maps"
+	);
 
 	KOBRA_LOG_FUNC(kobra::Log::WARN) << "Starting irradiance computations...\n";
 
@@ -148,12 +171,15 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	io.mouse_events.subscribe(mouse_callback, this);
 
 	// Create the image viewer
+	std::vector <const kobra::ImageData *> images;
 	for (int i = 0; i < MIP_LEVELS; i++)
-		images.emplace_back(&m_irradiance_computer.irradiance_maps[i]);
+		images.emplace_back(m_irradiance_computer.irradiance_maps[i]);
 
 	// Attach UI layers
 	m_image_viewer = std::make_shared <ImageViewer> (get_context(), images);
+	m_progress_bar = std::make_shared <ProgressBar> ("Irradiance Computation Progress");
 	m_ui->attach(m_image_viewer);
+	m_ui->attach(m_progress_bar);
 
 	// Configure the forward renderer
 	m_forward_renderer.add_pipeline(
@@ -256,7 +282,20 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 		m_ui->render(cmd, framebuffer, window.extent);
 
 		m_irradiance_computer.sample(cmd);
-		std::cout << "Sample count: " << m_irradiance_computer.samples << std::endl;
+		/* if (m_irradiance_computer.sample(cmd)
+				&& !m_irradiance_computer.cached
+				&& !m_saved_irradiance) {
+			m_irradiance_computer.save_irradiance_maps(
+				get_context(),
+				"irradiance_maps"
+			);
+
+			m_saved_irradiance = true;
+		} */
+
+		// TODO: progress bar...
+		// std::cout << "Sample count: " << m_irradiance_computer.samples << std::endl;
+		m_progress_bar->m_progress = m_irradiance_computer.samples/128.0f;
 	cmd.end();
 }
 

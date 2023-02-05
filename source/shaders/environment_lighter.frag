@@ -33,8 +33,14 @@ void main()
 	env_uv.y = asin(L.y) / M_PI + 0.5;
 
 	// Compute final color
-	int mip = int(clamp(MIPS * mat.roughness, 0, MIPS - 1));
 	diffuse *= texture(irradiance_maps[MIPS - 1], env_uv).rgb;
-	specular *= texture(irradiance_maps[mip], env_uv).rgb;
+
+	int mip_low = int(floor(MIPS * mat.roughness));
+	int mip_high = int(clamp(ceil(MIPS * mat.roughness), 0, MIPS - 1));
+
+	vec3 irr_low = texture(irradiance_maps[mip_low], env_uv).rgb;
+	vec3 irr_high = texture(irradiance_maps[mip_high], env_uv).rgb;
+
+	specular *= mix(irr_low, irr_high, MIPS * mat.roughness - float(mip_low));
 	fragment = vec4(diffuse + specular, 1.0);
 }
