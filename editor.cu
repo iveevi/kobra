@@ -112,19 +112,16 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 {
 	int MIP_LEVELS = 5;
 	std::vector <kobra::ImageData *> images;
-	vk::raii::Fence irradiance_fence = nullptr;
 
-	{
-		// Load environment map
-		// TODO: load HDR...
-		kobra::ImageData &environment_map = m_texture_loader
-			.load_texture(KOBRA_DIR "/resources/skies/background_1.jpg");
+	// Load environment map
+	// TODO: load HDR...
+	kobra::ImageData &environment_map = m_texture_loader
+		.load_texture(KOBRA_DIR "/resources/skies/background_1.jpg");
 
-		m_irradiance_computer = kobra::engine::IrradianceComputer(MIP_LEVELS);
+	m_irradiance_computer = kobra::engine::IrradianceComputer
+			(get_context(), environment_map, MIP_LEVELS, 1024);
 
-		KOBRA_LOG_FUNC(kobra::Log::WARN) << "Starting irradiance computations...\n";
-		irradiance_fence = m_irradiance_computer.compute(get_context(), environment_map);
-	}
+	KOBRA_LOG_FUNC(kobra::Log::WARN) << "Starting irradiance computations...\n";
 
 	// Load all the layers
 	m_forward_renderer = kobra::layers::ForwardRenderer(get_context());
@@ -151,24 +148,12 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	io.mouse_events.subscribe(mouse_callback, this);
 
 	// Create the image viewer
-	// TODO: instead, insert into the texture loader...
-	// m_irradiance_maps.emplace_back(std::move(irradiance_map));
-
-	// Wait for irradiance map to be computed
-	KOBRA_LOG_FUNC(kobra::Log::WARN) << "Waiting for irradiance computations...\n";
-	while (device.waitForFences({*irradiance_fence}, true, 1.0f)
-			== vk::Result::eTimeout) {
-		KOBRA_LOG_FUNC(kobra::Log::INFO) << "Waiting for irradiance map to be computed...\n";
-	}
-
-	/* KOBRA_LOG_FUNC(kobra::Log::OK) << "Irradiance computations done!\n";
-
 	for (int i = 0; i < MIP_LEVELS; i++)
 		images.emplace_back(&m_irradiance_computer.irradiance_maps[i]);
-	m_image_viewer = std::make_shared <ImageViewer> (get_context(), images);
 
 	// Attach UI layers
-	m_ui->attach(m_image_viewer); */
+	m_image_viewer = std::make_shared <ImageViewer> (get_context(), images);
+	m_ui->attach(m_image_viewer);
 
 	// Configure the forward renderer
 	m_forward_renderer.add_pipeline(
@@ -232,9 +217,6 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 	auto renderables_transforms = m_scene.ecs.tuples <kobra::Renderable, kobra::Transform> ();
 	auto lights_transforms = m_scene.ecs.tuples <kobra::Light, kobra::Transform> ();
 
-	// std::cout << "renderables_transforms size: " << renderables_transforms.size() << std::endl;
-	// std::cout << "lights_transforms size: " << lights_transforms.size() << std::endl;
-
 	auto ecs = m_scene.ecs;
 
 	for (int i = 0; i < ecs.size(); i++) {
@@ -259,8 +241,9 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 		.renderables = renderables_transforms,
 		.lights = lights_transforms,
 		.pipeline_package = "environment",
-		.environment_map = KOBRA_DIR "/resources/skies/background_1.jpg"
 	};
+
+	params.environment_map = KOBRA_DIR "/resources/skies/background_1.jpg";
 
 	cmd.begin({});
 		m_forward_renderer.render(
@@ -271,6 +254,9 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 		);
 
 		m_ui->render(cmd, framebuffer, window.extent);
+
+		m_irradiance_computer.sample(cmd);
+		std::cout << "Sample count: " << m_irradiance_computer.samples << std::endl;
 	cmd.end();
 }
 
@@ -285,7 +271,7 @@ void Editor::mouse_callback(void *us, const kobra::io::MouseEvent &event)
 
 	// Check if selecting
 	if (event.action == GLFW_PRESS && event.button == select_button) {
-		Editor *editor = static_cast <Editor *> (us);
+		// Editor *editor = static_cast <Editor *> (us);
 		std::cout << "Selecting!" << std::endl;
 	}
 

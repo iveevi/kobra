@@ -6,8 +6,12 @@ namespace engine {
 
 struct Irradiance_PushConstants {
 	float roughness;
+	int samples;
 	int width;
 	int height;
+	int sparsity;
+	int sparsity_index;
+	int max_samples;
 };
 
 static const std::vector <kobra::DescriptorSetLayoutBinding>
@@ -20,54 +24,19 @@ static const std::vector <kobra::DescriptorSetLayoutBinding>
 		1, vk::DescriptorType::eStorageImage,
 		1, vk::ShaderStageFlagBits::eCompute
 	},
+	{
+		2, vk::DescriptorType::eStorageBuffer,
+		1, vk::ShaderStageFlagBits::eCompute
+	}
 };
 
-IrradianceComputer::IrradianceComputer(int _mips) : mips(_mips) {}
-
-void IrradianceComputer::bind(const vk::raii::Device &device, const vk::raii::DescriptorSet &dset, uint32_t binding)
-{
-	// First create the samplers
-	if (m_samplers.size() != mips) {
-		m_samplers.clear();
-
-		for (int i = 0; i < mips; i++) {
-			m_samplers.emplace_back(
-				kobra::make_sampler(device, irradiance_maps[i])
-			);
-		}
-	}
-
-	// Create image descrtiptors
-	std::vector <vk::DescriptorImageInfo> image_infos;
-	for (int i = 0; i < mips; i++) {
-		image_infos.emplace_back(
-			*m_samplers[i],
-			*irradiance_maps[i].view,
-			vk::ImageLayout::eShaderReadOnlyOptimal
-		);
-	}
-
-	// Create the descriptor write
-	vk::WriteDescriptorSet irradiance_dset_write {
-		*dset,
-		binding, 0, (uint32_t) image_infos.size(),
-		vk::DescriptorType::eCombinedImageSampler,
-		image_infos.data()
-	};
-
-	// Update the descriptor set
-	device.updateDescriptorSets(irradiance_dset_write, nullptr);
-}
-
-vk::raii::Fence IrradianceComputer::compute(const kobra::Context &context, const kobra::ImageData &environment_map)
+IrradianceComputer::IrradianceComputer(const Context &context, const ImageData &environment_map, int _mips, int max)
+		: mips(_mips), samples(0), m_max_samples(max), m_sparsity(3), m_sparsity_index(0)
 {
 	const vk::raii::PhysicalDevice &phdev = *context.phdev;
 	const vk::raii::Device &device = *context.device;
 	const vk::raii::CommandPool &command_pool = *context.command_pool;
 	const vk::raii::DescriptorPool &descriptor_pool = *context.descriptor_pool;
-
-	// TODO: queue system
-	vk::raii::Queue temp_queue {device, 0, 0};
 
 	// IRRADIANCE MIP MAP CREATION...
 	// Load the compute shader
@@ -140,14 +109,21 @@ vk::raii::Fence IrradianceComputer::compute(const kobra::Context &context, const
 			vk::MemoryPropertyFlagBits::eDeviceLocal,
 			vk::ImageAspectFlagBits::eColor
 		);
+
+		m_weight_buffers.emplace_back(
+			phdev, device,
+			4 * sizeof(float) * width * height,
+			vk::BufferUsageFlagBits::eStorageBuffer,
+			vk::MemoryPropertyFlagBits::eHostVisible
+				| vk::MemoryPropertyFlagBits::eHostCoherent
+		);
 	}
 
 	// Make sure all the images are in the right layout
-	kobra::submit_now(device, temp_queue, command_pool,
+	kobra::submit_now(device, vk::raii::Queue {device, 0, 0}, command_pool,
 		[&](const vk::raii::CommandBuffer &cmd) {
-			std::cout << "Transitioning environment map layout...\n";
 			for (auto &irradiance_map : irradiance_maps)
-				irradiance_map.transition_layout(cmd, vk::ImageLayout::eGeneral);
+				irradiance_map.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
 		}
 	);
 
@@ -166,7 +142,14 @@ vk::raii::Fence IrradianceComputer::compute(const kobra::Context &context, const
 			}
 		};
 
-		std::array <vk::WriteDescriptorSet, 2> writes {
+		std::vector <vk::DescriptorBufferInfo> buffer_infos {
+			vk::DescriptorBufferInfo {
+				*m_weight_buffers[i].buffer,
+				0, VK_WHOLE_SIZE
+			}
+		};
+
+		std::array <vk::WriteDescriptorSet, 3> writes {
 			vk::WriteDescriptorSet {
 				*m_irradiance_dsets[i],
 				0, 0, 1,
@@ -178,58 +161,111 @@ vk::raii::Fence IrradianceComputer::compute(const kobra::Context &context, const
 				1, 0, 1,
 				vk::DescriptorType::eStorageImage,
 				&image_infos[1]
+			},
+			vk::WriteDescriptorSet {
+				*m_irradiance_dsets[i],
+				2, 0, 1,
+				vk::DescriptorType::eStorageBuffer,
+				nullptr,&buffer_infos[0]
 			}
 		};
 
 		device.updateDescriptorSets(writes, {});
 	}
+}
 
-	// Execute the compute shader
-	m_command_buffer = make_command_buffer(device, command_pool);
-	return kobra::submit(device, temp_queue, m_command_buffer,
-		[&](const vk::raii::CommandBuffer &cmd) {
-			std::cout << "Generating irradiance map...\n";
-			// TODO: one kernel, all mips, share the random numbers
-			// but compute all samples idependently... (keep sample
-			// count high...)
-			for (int i = 0; i < mips; i++) {
-				Irradiance_PushConstants push_constants {
-					i/float(mips - 1),
-					int(irradiance_maps[i].extent.width),
-					int(irradiance_maps[i].extent.height)
-				};
+void IrradianceComputer::bind(const vk::raii::Device &device, const vk::raii::DescriptorSet &dset, uint32_t binding)
+{
+	// First create the samplers
+	if (m_samplers.size() != mips) {
+		m_samplers.clear();
 
-				cmd.bindPipeline(
-					vk::PipelineBindPoint::eCompute,
-					*m_irradiance_pipeline
-				);
-
-				cmd.pushConstants <Irradiance_PushConstants> (
-					*m_irradiance_ppl,
-					vk::ShaderStageFlagBits::eCompute,
-					0, push_constants
-				);
-
-				cmd.bindDescriptorSets(
-					vk::PipelineBindPoint::eCompute,
-					*m_irradiance_ppl,
-					0, {*m_irradiance_dsets[i]}, {}
-				);
-
-				cmd.dispatch(
-					irradiance_maps[i].extent.width,
-					irradiance_maps[i].extent.height,
-					1
-				);
-
-				std::cout << "\tMip level " << i << " done.\n";
-			}
-			
-			std::cout << "Transitioning irradiance map layout...\n";
-			for (auto &irradiance_map : irradiance_maps)
-				irradiance_map.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
+		for (int i = 0; i < mips; i++) {
+			m_samplers.emplace_back(
+				kobra::make_sampler(device, irradiance_maps[i])
+			);
 		}
-	);
+	}
+
+	// Create image descrtiptors
+	std::vector <vk::DescriptorImageInfo> image_infos;
+	for (int i = 0; i < mips; i++) {
+		image_infos.emplace_back(
+			*m_samplers[i],
+			*irradiance_maps[i].view,
+			vk::ImageLayout::eShaderReadOnlyOptimal
+		);
+	}
+
+	// Create the descriptor write
+	vk::WriteDescriptorSet irradiance_dset_write {
+		*dset,
+		binding, 0, (uint32_t) image_infos.size(),
+		vk::DescriptorType::eCombinedImageSampler,
+		image_infos.data()
+	};
+
+	// Update the descriptor set
+	device.updateDescriptorSets(irradiance_dset_write, nullptr);
+}
+
+void IrradianceComputer::sample(const vk::raii::CommandBuffer &cmd)
+{
+	if (samples > m_max_samples)
+		return;
+
+	for (auto &irradiance_map : irradiance_maps)
+		irradiance_map.transition_layout(cmd, vk::ImageLayout::eGeneral);
+
+	// TODO: one kernel, all mips, share the random numbers
+	// but compute all samples idependently... (keep sample
+	// count high...)
+	for (int i = 0; i < mips; i++) {
+		if (samples > 0 && i == 0)
+			continue;
+
+		Irradiance_PushConstants push_constants {
+			i/float(mips - 1),
+			int(samples),
+			int(irradiance_maps[i].extent.width),
+			int(irradiance_maps[i].extent.height),
+			m_sparsity,
+			m_sparsity_index,
+			m_max_samples
+		};
+
+		cmd.bindPipeline(
+			vk::PipelineBindPoint::eCompute,
+			*m_irradiance_pipeline
+		);
+
+		cmd.pushConstants <Irradiance_PushConstants> (
+			*m_irradiance_ppl,
+			vk::ShaderStageFlagBits::eCompute,
+			0, push_constants
+		);
+
+		cmd.bindDescriptorSets(
+			vk::PipelineBindPoint::eCompute,
+			*m_irradiance_ppl,
+			0, {*m_irradiance_dsets[i]}, {}
+		);
+
+		cmd.dispatch(
+			irradiance_maps[i].extent.width,
+			irradiance_maps[i].extent.height,
+			1
+		);
+	}
+
+	for (auto &irradiance_map : irradiance_maps)
+		irradiance_map.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
+
+	m_sparsity_index++;
+	if (m_sparsity_index >= m_sparsity) {
+		m_sparsity_index = 0;
+		samples++;
+	}
 }
 
 }

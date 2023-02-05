@@ -3,12 +3,20 @@
 layout (binding = 0) uniform sampler2D environment_map;
 layout (binding = 1) writeonly uniform image2D irradiance_map;
 
+layout (binding = 2) buffer Weight {
+	vec4 weights[];
+};
+
 // Push constants
 layout (push_constant) uniform PushConstants {
 	float roughness;
+	int samples;
 	int width;
 	int height;
-} push_constants;
+	int sparsity;
+	int sparsity_index;
+	int max_samples;
+};
 
 // TODO: header file (then use in the other shaders)
 const float M_PI = 3.1415926535897932384626433832795;
@@ -104,25 +112,53 @@ float d_ggx(float dotNH, float roughness)
 	return alpha2 / (M_PI * denom * denom); 
 }
 
+uvec3 pcg3d(uvec3 v)
+{
+	v = v * 1664525u + 1013904223u;
+	v.x += v.y * v.z;
+	v.y += v.z * v.x;
+	v.z += v.x * v.y;
+	v ^= v >> 16u;
+	v.x += v.y * v.z;
+	v.y += v.z * v.x;
+	v.z += v.x * v.y;
+	return v;
+}
+
+vec3 random3(vec3 f)
+{
+	return uintBitsToFloat((pcg3d(floatBitsToUint(f)) & 0x007FFFFFu) | 0x3F800000u) - 1.0;
+}
+
 void main()
 {
 	// Get the uv coordinates of the pixel
 	ivec2 coords = ivec2(gl_GlobalInvocationID.xy);
-	vec2 uv = vec2(coords) / vec2(push_constants.width, push_constants.height);
+	int buffer_index = coords.y * width + coords.x;
+	if (buffer_index % sparsity != sparsity_index)
+		return;
+
+	vec2 uv = vec2(coords) / vec2(width, height);
 
 	vec3 N = uv_to_dir(uv);
 
 	vec3 R = N;
 	vec3 V = N;
 
-	float roughness = push_constants.roughness;
-
 	float totalWeight = 0.0;   
 	vec3 prefilteredColor = vec3(0.0);
-	int totalSamples = max(int(250.0f * roughness), 1);
-	for(uint i = 0u; i < totalSamples; ++i) {
+	int totalSamples = 1;
+	
+	float pTotalWeight = weights[buffer_index].a;	
+	vec3 pColor = weights[buffer_index].rgb;
+	vec3 seed = fract(pColor + vec3(uv, 0.0));
+	
+	for(uint i = 0; i < totalSamples; ++i) {
 		// generate sample vector towards the alignment of the specular lobe
-		vec2 Xi = hammersleySequence(i, totalSamples);
+		// vec2 Xi = hammersleySequence(i + samples, max_samples);
+		
+		vec2 Xi = fract(random3(seed + vec3(i + samples, 0.0, 0.0)).xy);
+
 		vec3 H = importanceSampleGGX(Xi, N, roughness);
 		float dotHV = dot(H, V);
 		vec3 L = normalize(2.0 * dotHV * H - V);
@@ -138,8 +174,13 @@ void main()
 			totalWeight += dotNL;
 		}
 	}
-	vec3 color = prefilteredColor / totalWeight;
+
+	// Store total weight	
+	totalWeight += pTotalWeight;
+	prefilteredColor += pColor;
+	vec3 color = prefilteredColor/ totalWeight;
+	weights[buffer_index] = vec4(prefilteredColor, totalWeight);
 
 	// Write the color to the irradiance map
-	imageStore(irradiance_map, coords, vec4(color, 1) + vec4(0, 0, 0, 0.0));
+	imageStore(irradiance_map, coords, vec4(color, totalWeight));
 }
