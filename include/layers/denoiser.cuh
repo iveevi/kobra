@@ -27,6 +27,7 @@ struct Denoiser {
 	cuda::BufferData scratch;
 
 	// Result of the denoiser
+	// TODO: keep private, make methods...
 	CUdeviceptr result;
 
 	// Options

@@ -142,6 +142,12 @@ void Framer::render
 		const vk::Extent2D &extent,
 		const RenderArea &ra)
 {
+	if (!m_sync_queue) {
+		// TODO: remove the default constructor, force pointer
+		KOBRA_LOG_FUNC(Log::ERROR) << "Framer: null sync queue, was the framer initialized?\n";
+		throw std::runtime_error("Framer: null sync queue");
+	}
+
 	// Upload data to the buffer
 	// TODO: also allow resize... pass an image struct instead
 	bool skip_frame = false;

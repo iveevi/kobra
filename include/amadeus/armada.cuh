@@ -61,9 +61,9 @@ struct ArmadaLaunchInfo {
 	// Output buffers (color + AOV)
 	struct {
 		glm::vec4 *color;
-		glm::vec3 *normal;
-		glm::vec3 *albedo;
-		glm::vec3 *position;
+		glm::vec4 *normal;
+		glm::vec4 *albedo;
+		glm::vec4 *position;
 	} buffers;
 
 	cudaTextureObject_t environment_map;
@@ -216,15 +216,15 @@ public:
 		return m_launch_info.buffers.color;
 	}
 
-	glm::vec3 *normal_buffer() {
+	glm::vec4 *normal_buffer() {
 		return m_launch_info.buffers.normal;
 	}
 
-	glm::vec3 *albedo_buffer() {
+	glm::vec4 *albedo_buffer() {
 		return m_launch_info.buffers.albedo;
 	}
 
-	glm::vec3 *position_buffer() {
+	glm::vec4 *position_buffer() {
 		return m_launch_info.buffers.position;
 	}
 

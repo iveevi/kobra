@@ -470,8 +470,11 @@ vk::raii::DeviceMemory allocate_device_memory(const vk::raii::Device &device,
 		const vk::MemoryPropertyFlags &properties,
 		bool external)
 {
-	uint32_t type_index = find_memory_type(memory_properties,
-			memory_requirements.memoryTypeBits, properties);
+	uint32_t type_index = find_memory_type(
+		memory_properties,
+		memory_requirements.memoryTypeBits,
+		properties
+	);
 
 	vk::MemoryAllocateInfo alloc_info {
 		memory_requirements.size, type_index

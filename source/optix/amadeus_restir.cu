@@ -23,7 +23,7 @@ struct RayPacket {
 	float3	seed;
 
 	float	ior;
-	
+
 	int	depth;
 	int	index;
 };
@@ -31,14 +31,14 @@ struct RayPacket {
 // TODO: Move to common
 static KCUDA_INLINE KCUDA_HOST_DEVICE
 void make_ray(uint3 idx,
-		 float3 &origin,
-		 float3 &direction,
-		 float3 &seed)
+		float3 &origin,
+		float3 &direction,
+		float3 &seed)
 {
 	const float3 U = to_f3(parameters.camera.ax_u);
 	const float3 V = to_f3(parameters.camera.ax_v);
 	const float3 W = to_f3(parameters.camera.ax_w);
-	
+
 	/* Jittered halton
 	int xoff = rand(parameters.image_width, seed);
 	int yoff = rand(parameters.image_height, seed);
@@ -49,10 +49,10 @@ void make_ray(uint3 idx,
 	radius = sqrt(xoffset * xoffset + yoffset * yoffset)/sqrt(0.5f); */
 
 	pcg3f(seed);
-	
+
 	// float xoffset = (fract(seed.x) - 0.5f);
 	// float yoffset = (fract(seed.y) - 0.5f);
-	
+
 	// TODO: store offsets for each pixel
 	float xoffset = -0.5f;
 	float yoffset = -0.5f;
@@ -100,7 +100,7 @@ extern "C" __global__ void __raygen__initial()
 		.depth = 0,
 		.index = index,
 	};
-	
+
 	// Trace ray and generate contribution
 	unsigned int i0, i1;
 	pack_pointer(&rp, i0, i1);
@@ -133,16 +133,16 @@ extern "C" __global__ void __raygen__initial()
 	// Check for NaNs
 	if (isnan(color.x) || isnan(color.y) || isnan(color.z))
 		color = {1, 0, 1, 1};
-	
+
 	// Store color into intermediate buffer
 	parameters.intermediate[index] = color;
 	parameters.auxiliary[index] = {rp.seed.x, rp.seed.y, rp.seed.z, 1.0f};
 
 	// Accumulate and store necessary data
 	auto &buffers = parameters.buffers;
-	accumulate(buffers.normal[index], normal);
-	accumulate(buffers.albedo[index], albedo);
-	buffers.position[index] = position;
+	accumulate(buffers.normal[index], {normal, 0.0f});
+	accumulate(buffers.albedo[index], {albedo, 0.0f});
+	buffers.position[index] = {position, 0.0f};
 }
 
 // Calculate target function for reservoir
@@ -225,7 +225,7 @@ extern "C" __global__ void __raygen__temporal()
 
 	// If current reservoir is empty, skip resampling
 	float3 direct = make_float3(0.0f);
-	
+
 	glm::vec3 position = parameters.buffers.position[index];
 
 	if (current.size() > 0) {
@@ -260,13 +260,13 @@ extern "C" __global__ void __raygen__temporal()
 			merged.update(previous->data, t_previous * previous->W * previous->M);
 			N += (t_previous > 0) * previous->M;
 		}
-		
+
 		// Resample merged reservoir
 		merged.M = N;
 		float t_merged = target(merged, hit);
 		merged.resample(t_merged);
 		current = merged;
-		
+
 		/* Shading
 		Sample sample = current.data;
 		float3 point = sample.point;
@@ -448,7 +448,7 @@ extern "C" __global__ void __closesthit__initial()
 	// TODO: use more complex shadow bias functions
 	// TODO: an easier check for transmissive objects
 	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
-	
+
 	// Construct SurfaceHit instance for lighting calculations
 	SurfaceHit surface_hit {
 		.mat = material,
@@ -480,7 +480,7 @@ extern "C" __global__ void __closesthit__initial()
 		for (int i = 0; i < 32; i++) {
 			// Sample the light sources
 			FullLightSample fls = sample_direct(lc, surface_hit, rp->seed);
-		
+
 			// Compute lighting
 			float3 D = fls.point - surface_hit.x;
 			float d = length(D);
@@ -544,7 +544,7 @@ extern "C" __global__ void __closesthit__initial()
 	// TODO: boolean member for toggling russian roulette
 	rp->ior = material.refraction;
 	rp->depth++;
-	
+
 	// Trace the next ray
 	float3 indirect = make_float3(0.0f);
 	if (pdf > 0) {

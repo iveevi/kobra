@@ -124,9 +124,9 @@ extern "C" __global__ void __raygen__()
 	// Accumulate and store necessary data
 	auto &buffers = parameters.buffers;
 	accumulate(buffers.color[index], color);
-	accumulate(buffers.normal[index], normal);
-	accumulate(buffers.albedo[index], albedo);
-	buffers.position[index] = position;
+	accumulate(buffers.normal[index], {normal, 0.0f});
+	accumulate(buffers.albedo[index], {albedo, 0.0f});
+	buffers.position[index] = {position, 0.0f};
 }
 
 // Closest hit kernel

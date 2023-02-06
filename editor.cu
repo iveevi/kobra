@@ -10,6 +10,11 @@
 #include "../include/shader_program.hpp"
 #include "../include/ui/attachment.hpp"
 #include "../include/engine/irradiance_computer.hpp"
+#include "../include/amadeus/armada.cuh"
+#include "../include/amadeus/path_tracer.cuh"
+#include "../include/layers/framer.hpp"
+#include "../include/cuda/color.cuh"
+#include "../include/layers/denoiser.cuh"
 
 // Forward declarations
 struct ImageViewer;
@@ -17,6 +22,7 @@ struct ProgressBar;
 
 // TODO: logging attachment
 // TODO: info tab that shows logging and framerate...
+// TODO: viewport attachment
 
 struct Editor : public kobra::BaseApp {
 	kobra::Scene m_scene;
@@ -32,6 +38,27 @@ struct Editor : public kobra::BaseApp {
 
 	kobra::engine::IrradianceComputer m_irradiance_computer;
 	bool m_saved_irradiance = false;
+
+	// Renderers
+	struct {
+		std::shared_ptr <kobra::amadeus::System> system;
+		std::shared_ptr <kobra::layers::MeshMemory> mesh_memory;
+
+		kobra::amadeus::ArmadaRTX armada_rtx;
+		kobra::layers::Denoiser denoiser;
+		kobra::layers::Framer framer;
+
+		std::mutex movement_mutex;
+		std::queue <uint32_t> movement;
+
+		int mode = 0;
+	} m_renderers;
+
+	// Buffers
+	struct {
+		CUdeviceptr traced;
+		std::vector <uint8_t> traced_cpu;
+	} m_buffers;
 
 	struct Request {
 		double x;
@@ -49,6 +76,7 @@ struct Editor : public kobra::BaseApp {
 	void after_present() override;
 
 	static void mouse_callback(void *, const kobra::io::MouseEvent &);
+	static void keyboard_callback(void *, const kobra::io::KeyboardEvent &);
 
 	// TODO: frustrum culling structure to cull once per pass (store status
 	// in a map) and then is passed to other layers for rendering
@@ -69,8 +97,11 @@ int main()
 	vk::raii::PhysicalDevice phdev = kobra::pick_physical_device(predicate);
 
 	Editor editor {
-		phdev,
-		{VK_KHR_SWAPCHAIN_EXTENSION_NAME},
+		phdev, {
+			VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+			VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
+			VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
+		},
 	};
 
 	editor.run();
@@ -146,6 +177,8 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 			extensions
 		}
 {
+	// TODO: constructor should be loaded very fast, everything else should
+	// be loaded as needed...
 	int MIP_LEVELS = 5;
 
 	// Load environment map
@@ -183,18 +216,21 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	m_camera = m_scene.ecs.get_entity("Camera");
 	m_camera.get <kobra::Camera> ().aspect = 1.5f;
 
-	// Mouse callbacks
+	// IO callbacks
 	io.mouse_events.subscribe(mouse_callback, this);
+	io.keyboard_events.subscribe(keyboard_callback, this);
 
-	// Create the image viewer
+	/* Create the image viewer
 	std::vector <const kobra::ImageData *> images;
 	for (int i = 0; i < MIP_LEVELS; i++)
-		images.emplace_back(m_irradiance_computer.irradiance_maps[i]);
+		images.emplace_back(m_irradiance_computer.irradiance_maps[i]); */
+
+	// TODO: irradiance computer load from cache...
 
 	// Attach UI layers
-	m_image_viewer = std::make_shared <ImageViewer> (get_context(), images);
+	// m_image_viewer = std::make_shared <ImageViewer> (get_context(), images);
 	m_progress_bar = std::make_shared <ProgressBar> ("Irradiance Computation Progress");
-	m_ui->attach(m_image_viewer);
+	// m_ui->attach(m_image_viewer);
 	m_ui->attach(m_progress_bar);
 
 	// Configure the forward renderer
@@ -211,6 +247,38 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 			m_irradiance_computer.bind(device, descriptor_set, 5);
 		}
 	);
+
+	// Load all the renderers
+	m_renderers.system = std::make_shared <kobra::amadeus::System> ();
+	m_renderers.mesh_memory = std::make_shared <kobra::layers::MeshMemory> (get_context());
+
+	constexpr vk::Extent2D raytracing_extent = {1000, 1000};
+	m_renderers.armada_rtx = kobra::amadeus::ArmadaRTX(
+		get_context(), m_renderers.system,
+		m_renderers.mesh_memory, raytracing_extent
+	);
+
+	m_renderers.armada_rtx.attach(
+		"Path Tracer",
+		std::make_shared <kobra::amadeus::PathTracer> ()
+	);
+
+	m_renderers.armada_rtx.set_envmap(KOBRA_DIR "/resources/skies/background_1.jpg");
+
+	// Create the denoiser layer
+	m_renderers.denoiser = kobra::layers::Denoiser::make(
+		raytracing_extent,
+		kobra::layers::Denoiser::eNone
+		// kobra::layers::Denoiser::eNormal
+		//	| kobra::layers::Denoiser::eAlbedo
+	);
+
+	m_renderers.framer = kobra::layers::Framer(get_context());
+
+	// Allocate necessary buffers
+	size_t size = m_renderers.armada_rtx.size();
+	m_buffers.traced = kobra::cuda::alloc(size * sizeof(uint32_t));
+	m_buffers.traced_cpu.resize(size);
 }
 
 Editor::~Editor()
@@ -235,20 +303,35 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 	glm::vec3 right = transform.right();
 	glm::vec3 up = transform.up();
 
-	if (io.input->is_key_down(GLFW_KEY_W))
+	bool moved = false;
+	if (io.input->is_key_down(GLFW_KEY_W)) {
 		transform.move(forward * speed);
-	else if (io.input->is_key_down(GLFW_KEY_S))
+		moved = true;
+	} else if (io.input->is_key_down(GLFW_KEY_S)) {
 		transform.move(-forward * speed);
+		moved = true;
+	}
 
-	if (io.input->is_key_down(GLFW_KEY_A))
+	if (io.input->is_key_down(GLFW_KEY_A)) {
 		transform.move(-right * speed);
-	else if (io.input->is_key_down(GLFW_KEY_D))
+		moved = true;
+	} else if (io.input->is_key_down(GLFW_KEY_D)) {
 		transform.move(right * speed);
+		moved = true;
+	}
 
-	if (io.input->is_key_down(GLFW_KEY_E))
+	if (io.input->is_key_down(GLFW_KEY_E)) {
 		transform.move(up * speed);
-	else if (io.input->is_key_down(GLFW_KEY_Q))
+		moved = true;
+	} else if (io.input->is_key_down(GLFW_KEY_Q)) {
 		transform.move(-up * speed);
+		moved = true;
+	}
+
+	if (moved) {
+		std::lock_guard <std::mutex> lock(m_renderers.movement_mutex);
+		m_renderers.movement.push(0);
+	}
 
 	std::vector <const kobra::Renderable *> renderables;
 	std::vector <const kobra::Transform *> renderable_transforms;
@@ -288,12 +371,64 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 	params.environment_map = KOBRA_DIR "/resources/skies/background_1.jpg";
 
 	cmd.begin({});
-		m_forward_renderer.render(
-			params,
-			m_camera.get <kobra::Camera> (),
-			m_camera.get <kobra::Transform> (),
-			cmd, framebuffer, window.extent
-		);
+		// TODO: also see the normal and albedo and depth buffers from
+		// deferred renderer
+		// TODO: drop down menu for selecting the renderer
+		if (m_renderers.mode) {
+			bool accumulate = m_renderers.movement.empty();
+			
+			{
+				// Clear queue
+				std::lock_guard <std::mutex> lock(m_renderers.movement_mutex);
+				m_renderers.movement = std::queue <uint32_t> ();
+			}
+
+			m_renderers.armada_rtx.render(
+				m_scene.ecs,
+				m_camera.get <kobra::Camera> (),
+				m_camera.get <kobra::Transform> (),
+				accumulate
+			);
+			
+			// TODO:enable/disable denoiser
+			kobra::layers::denoise(m_renderers.denoiser, {
+				.color = (CUdeviceptr) m_renderers.armada_rtx.color_buffer(),
+				.normal = (CUdeviceptr) m_renderers.armada_rtx.normal_buffer(),
+				.albedo = (CUdeviceptr) m_renderers.armada_rtx.albedo_buffer()
+			});
+			
+			vk::Extent2D rtx_extent = m_renderers.armada_rtx.extent();
+
+			kobra::cuda::hdr_to_ldr(
+				(float4 *) m_renderers.denoiser.result,
+				(uint32_t *) m_buffers.traced,
+				rtx_extent.width, rtx_extent.height,
+				kobra::cuda::eTonemappingACES
+			);
+
+			kobra::cuda::copy(
+				m_buffers.traced_cpu, m_buffers.traced,
+				m_renderers.armada_rtx.size() * sizeof(uint32_t)
+			);
+
+			// TODO: import CUDA to Vulkan and render straight to the image
+			m_renderers.framer.render(
+				kobra::RawImage {
+					.data = m_buffers.traced_cpu,
+					.width = rtx_extent.width,
+					.height = rtx_extent.height,
+					.channels = 4
+				},
+				cmd, framebuffer, window.extent
+			);
+		} else {
+			m_forward_renderer.render(
+				params,
+				m_camera.get <kobra::Camera> (),
+				m_camera.get <kobra::Transform> (),
+				cmd, framebuffer, window.extent
+			);
+		}
 
 		m_irradiance_computer.sample(cmd);
 		/* if (m_irradiance_computer.sample(cmd)
@@ -334,8 +469,6 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 
 		// If there is a selection, highlight it
 		if (m_selection.first >= 0 && m_selection.second >= 0) {
-			std::cout << "Highlighting selection: " << m_selection.first << ", " << m_selection.second << std::endl;
-
 			m_objectifier.composite_highlight(
 				cmd, framebuffer, window.extent,
 				m_scene.ecs,
@@ -366,7 +499,6 @@ void Editor::after_present()
 		request_queue.pop();
 
 		auto ids = m_objectifier.query(request.x, request.y);
-		std::cout << "Selected id: " << ids.first << ", " << ids.second << std::endl;
 		m_selection = {int(ids.first) - 1, int(ids.second) - 1};
 	}
 }
@@ -426,9 +558,21 @@ void Editor::mouse_callback(void *us, const kobra::io::MouseEvent &event)
 		kobra::Transform &transform = editor->m_camera.get <kobra::Transform> ();
 		transform.rotation.x = pitch;
 		transform.rotation.y = yaw;
+	
+		std::lock_guard <std::mutex> lock(editor->m_renderers.movement_mutex);
+		editor->m_renderers.movement.push(0);
 	}
 
 	// Update previous position
 	px = event.xpos;
 	py = event.ypos;
+}
+
+void Editor::keyboard_callback(void *us, const kobra::io::KeyboardEvent &event)
+{
+	Editor *editor = static_cast <Editor *> (us);
+	if (event.action == GLFW_PRESS) {
+		if (event.key == GLFW_KEY_TAB)
+			editor->m_renderers.mode = !editor->m_renderers.mode;
+	}
 }

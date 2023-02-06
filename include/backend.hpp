@@ -49,29 +49,29 @@ struct Device {
 using SyncTask = std::pair <std::string, std::function <void ()>>;
 
 class SyncQueue {
-	std::queue <SyncTask>	_handlers;
-	std::mutex			_mutex;
+	std::queue <SyncTask>	m_handlers;
+	std::mutex		m_mutex;
 public:
 	SyncQueue() = default;
 
 	void push(const SyncTask &task) {
-		std::lock_guard <std::mutex> lock(_mutex);
-		_handlers.push(task);
+		std::lock_guard <std::mutex> lock(m_mutex);
+		m_handlers.push(task);
 	}
 
 	void do_pop(bool log = true) {
-		std::lock_guard <std::mutex> lock(_mutex);
-		if (!_handlers.empty()) {
+		std::lock_guard <std::mutex> lock(m_mutex);
+		if (!m_handlers.empty()) {
 			if (log)
-				std::cout << "SyncQueue: " << _handlers.front().first << std::endl;
-			_handlers.front().second();
-			_handlers.pop();
+				std::cout << "SyncQueue: " << m_handlers.front().first << std::endl;
+			m_handlers.front().second();
+			m_handlers.pop();
 		}
 	}
 
 	size_t size() {
-		std::lock_guard <std::mutex> lock(_mutex);
-		return _handlers.size();
+		std::lock_guard <std::mutex> lock(m_mutex);
+		return m_handlers.size();
 	}
 };
 

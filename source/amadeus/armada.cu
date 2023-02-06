@@ -57,9 +57,9 @@ ArmadaRTX::ArmadaRTX(const Context &context,
 	int size = extent.width * extent.height;
 
 	params.buffers.color = cuda::alloc <glm::vec4> (size);
-	params.buffers.normal = cuda::alloc <glm::vec3> (size);
-	params.buffers.albedo = cuda::alloc <glm::vec3> (size);
-	params.buffers.position = cuda::alloc <glm::vec3> (size);
+	params.buffers.normal = cuda::alloc <glm::vec4> (size);
+	params.buffers.albedo = cuda::alloc <glm::vec4> (size);
+	params.buffers.position = cuda::alloc <glm::vec4> (size);
 }
 
 // Set the environment map
@@ -81,7 +81,7 @@ void ArmadaRTX::update_light_buffers
 	// TODO: lighting system equivalent of System
 	if (m_host.quad_lights.size() != lights.size()) {
 		m_host.quad_lights.resize(lights.size());
-	
+
 		auto &quad_lights = m_host.quad_lights;
 		for (int i = 0; i < lights.size(); i++) {
 			const Light *light = lights[i];
