@@ -2,7 +2,7 @@
 #include "../include/logger.hpp"
 
 namespace kobra {
-	
+
 static std::string time()
 {
 	auto t = std::time(0);
@@ -14,7 +14,7 @@ static std::string time()
 
 // TODO: some system to avoid repeating the same message
 // over and over (CLI and GUI logger)?
-std::ostream &logger(const std::string &source, Log level, const std::string &header, bool source_is_loc)
+detail::LogStream &logger(const std::string &source, Log level, const std::string &header, bool source_is_loc)
 {
 	std::string h = header;
 
@@ -37,7 +37,7 @@ std::ostream &logger(const std::string &source, Log level, const std::string &he
 		else
 			std::cerr << termcolor::blue;
 	}
-	
+
 	std::cerr << "[" << time() << std::setw(10) << h << "] "
 		<< termcolor::reset;
 
@@ -45,9 +45,16 @@ std::ostream &logger(const std::string &source, Log level, const std::string &he
 	if (!source_is_loc)
 		stripped = function_name(stripped);
 
-	std::cerr << termcolor::italic << termcolor::cyan
+	detail::main_stream << termcolor::italic << termcolor::cyan
 		<< "[" << stripped << "] " << termcolor::reset;
-	return std::cerr;
+
+	return detail::main_stream;
+}
+
+namespace detail {
+
+std::map <void *, LogHandler> log_handlers;
+LogStream main_stream(std::cerr);
 
 }
 

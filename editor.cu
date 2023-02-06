@@ -19,6 +19,8 @@
 // Forward declarations
 struct ImageViewer;
 struct ProgressBar;
+struct InfoTab;
+struct MaterialEditor;
 
 // TODO: logging attachment
 // TODO: info tab that shows logging and framerate...
@@ -35,6 +37,8 @@ struct Editor : public kobra::BaseApp {
 
 	std::shared_ptr <ImageViewer> m_image_viewer;
 	std::shared_ptr <ProgressBar> m_progress_bar;
+	std::shared_ptr <InfoTab> m_info_tab;
+	std::shared_ptr <MaterialEditor> m_material_editor;
 
 	kobra::engine::IrradianceComputer m_irradiance_computer;
 	bool m_saved_irradiance = false;
@@ -161,9 +165,131 @@ struct ProgressBar : public kobra::ui::ImGuiAttachment {
 		: m_title {title} {}
 
 	void render() override {
+		// Set font size
 		ImGui::Begin(m_title.c_str());
 		ImGui::SetWindowSize(ImVec2(500, 100), ImGuiCond_FirstUseEver);
 		ImGui::ProgressBar(m_progress);
+		ImGui::End();
+	}
+};
+
+// Info UI Attachment
+struct InfoTab : public kobra::ui::ImGuiAttachment {
+	std::vector <std::string> m_lines;
+	std::string m_message;
+
+	InfoTab() {
+		// Attach logger handler
+		kobra::add_log_handler(this,
+			[&](const char *str, std::streamsize n) {
+				m_message += std::string(str, n);
+
+				std::string message_remainder = m_message;
+				for (size_t i = 0; i < m_message.size(); i++) {
+					if (m_message[i] == '\n') {
+						m_lines.push_back(m_message.substr(0, i));
+						message_remainder = m_message.substr(i + 1);
+					}
+				}
+			}
+		);
+	}
+
+	~InfoTab() {
+		kobra::remove_log_handler(this);
+	}
+
+	void render() override {
+		// Output and performance tabs
+		ImGui::Begin("Info");
+
+		ImGui::SetWindowSize(ImVec2(500, 500), ImGuiCond_FirstUseEver);
+
+		// TODO: dock for framerate and performance
+		ImGui::Text("Output");
+		ImGui::Separator();
+
+		for (const auto &line : m_lines)
+			ImGui::Text(line.c_str());
+
+		ImGui::End();
+	}
+};
+
+// Material editor UI attachment
+class MaterialEditor : public kobra::ui::ImGuiAttachment {
+	kobra::Material *m_prev_material = nullptr;
+
+	vk::DescriptorSet m_diffuse_set;
+	vk::DescriptorSet m_normal_set;
+
+	kobra::TextureLoader *m_texture_loader = nullptr;
+
+	vk::DescriptorSet imgui_allocate_image(const std::string &path) {
+		const kobra::ImageData &image = m_texture_loader->load_texture(path);
+		const vk::raii::Sampler &sampler = m_texture_loader->load_sampler(path);
+
+		return ImGui_ImplVulkan_AddTexture(
+			static_cast <VkSampler> (*sampler),
+			static_cast <VkImageView> (*image.view),
+			static_cast <VkImageLayout> (image.layout)
+		);
+	}
+public:
+	kobra::Material *m_material = nullptr;
+
+	MaterialEditor() = delete;
+	MaterialEditor(const kobra::Context &context)
+			: m_texture_loader {context.texture_loader} {}
+
+	void render() override {
+		if (!m_material)
+			return;
+
+		ImGui::Begin("Material Editor");
+		ImGui::SetWindowSize(ImVec2(500, 500), ImGuiCond_FirstUseEver);
+
+		// For starters, print material data
+		ImGui::Text("Material data:");
+		ImGui::Separator();
+
+		glm::vec3 diffuse = m_material->diffuse;
+		glm::vec3 specular = m_material->specular;
+		glm::vec3 ambient = m_material->ambient;
+		glm::vec3 emission = m_material->emission;
+
+		ImGui::Text("Albedo: %f, %f, %f", diffuse.r, diffuse.g, diffuse.b);
+		ImGui::Text("Specular: %f, %f, %f", specular.r, specular.g, specular.b);
+		ImGui::Text("Ambient: %f, %f, %f", ambient.r, ambient.g, ambient.b);
+		ImGui::Text("Emission: %f, %f, %f", emission.r, emission.g, emission.b);
+
+		ImGui::Separator();
+
+		bool is_not_loaded = m_prev_material != m_material;
+		m_prev_material = m_material;
+
+		if (m_material->has_albedo()) {
+			ImGui::Text("Diffuse Texture:");
+
+			std::string diffuse_path = m_material->albedo_texture;
+			if (is_not_loaded)
+				m_diffuse_set = imgui_allocate_image(diffuse_path);
+
+			ImGui::Image(m_diffuse_set, ImVec2(256, 256));
+			ImGui::Separator();
+		}
+
+		if (m_material->has_normal()) {
+			ImGui::Text("Normal Texture:");
+
+			std::string normal_path = m_material->normal_texture;
+			if (is_not_loaded)
+				m_normal_set = imgui_allocate_image(normal_path);
+
+			ImGui::Image(m_normal_set, ImVec2(256, 256));
+			ImGui::Separator();
+		}
+
 		ImGui::End();
 	}
 };
@@ -201,7 +327,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	ImGui::CreateContext();
 	ImGui_ImplGlfw_InitForVulkan(window.handle, true);
 
-	auto font = std::make_pair(KOBRA_DIR "/resources/fonts/NotoSans.ttf", 12);
+	auto font = std::make_pair(KOBRA_DIR "/resources/fonts/NotoSans.ttf", 18);
 	m_ui = std::make_shared <kobra::layers::UI> (
 		get_context(), window,
 		graphics_queue, font
@@ -230,8 +356,13 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	// Attach UI layers
 	// m_image_viewer = std::make_shared <ImageViewer> (get_context(), images);
 	m_progress_bar = std::make_shared <ProgressBar> ("Irradiance Computation Progress");
+	m_info_tab = std::make_shared <InfoTab> ();
+	m_material_editor = std::make_shared <MaterialEditor> (get_context());
+
 	// m_ui->attach(m_image_viewer);
 	m_ui->attach(m_progress_bar);
+	m_ui->attach(m_info_tab);
+	m_ui->attach(m_material_editor);
 
 	// Configure the forward renderer
 	m_forward_renderer.add_pipeline(
@@ -376,7 +507,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 		// TODO: drop down menu for selecting the renderer
 		if (m_renderers.mode) {
 			bool accumulate = m_renderers.movement.empty();
-			
+
 			{
 				// Clear queue
 				std::lock_guard <std::mutex> lock(m_renderers.movement_mutex);
@@ -389,14 +520,14 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 				m_camera.get <kobra::Transform> (),
 				accumulate
 			);
-			
+
 			// TODO:enable/disable denoiser
 			kobra::layers::denoise(m_renderers.denoiser, {
 				.color = (CUdeviceptr) m_renderers.armada_rtx.color_buffer(),
 				.normal = (CUdeviceptr) m_renderers.armada_rtx.normal_buffer(),
 				.albedo = (CUdeviceptr) m_renderers.armada_rtx.albedo_buffer()
 			});
-			
+
 			vk::Extent2D rtx_extent = m_renderers.armada_rtx.extent();
 
 			kobra::cuda::hdr_to_ldr(
@@ -500,6 +631,16 @@ void Editor::after_present()
 
 		auto ids = m_objectifier.query(request.x, request.y);
 		m_selection = {int(ids.first) - 1, int(ids.second) - 1};
+
+		// Update the material editor
+		if (m_selection.first < 0 || m_selection.second < 0) {
+			m_material_editor->m_material = nullptr;
+		} else {
+			kobra::Renderable &renderable = m_scene.ecs
+				.get <kobra::Renderable> (m_selection.first);
+
+			m_material_editor->m_material = &renderable.materials[m_selection.second];
+		}
 	}
 }
 
@@ -558,7 +699,7 @@ void Editor::mouse_callback(void *us, const kobra::io::MouseEvent &event)
 		kobra::Transform &transform = editor->m_camera.get <kobra::Transform> ();
 		transform.rotation.x = pitch;
 		transform.rotation.y = yaw;
-	
+
 		std::lock_guard <std::mutex> lock(editor->m_renderers.movement_mutex);
 		editor->m_renderers.movement.push(0);
 	}

@@ -92,9 +92,9 @@ void TextureLoader::bind(const vk::raii::DescriptorSet &dset, const std::string 
 
 	vk::WriteDescriptorSet dset_write {
 		*dset,
-			binding, 0,
-			vk::DescriptorType::eCombinedImageSampler,
-			descriptor
+		binding, 0,
+		vk::DescriptorType::eCombinedImageSampler,
+		descriptor
 	};
 
 	m_device.device->updateDescriptorSets(dset_write, nullptr);

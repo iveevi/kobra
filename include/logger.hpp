@@ -5,8 +5,10 @@
 #include <chrono>
 #include <cmath>
 #include <fstream>
+#include <functional>
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <mutex>
 #include <set>
 #include <sstream>
@@ -38,7 +40,75 @@ inline std::string function_name(const std::string &pretty)
 // Macros for logging
 enum class Log {OK, ERROR, WARN, INFO, AUTO};
 
-std::ostream &logger(const std::string &, Log level, const std::string & = "", bool = false);
+// Logging handlers
+using LogHandler = std::function <void (const char *, std::streamsize)>;
+
+namespace detail {
+
+// Global log handlers
+extern std::map <void *, LogHandler> log_handlers;
+	
+// Custom streambuf for piping logging
+class LogStreamBuf : public std::basic_streambuf <char> {
+public:
+	LogStreamBuf(std::streambuf *sb) : main_stream(sb) {}
+protected:
+	std::streambuf *main_stream;
+
+	int_type overflow(int_type c) override {
+		if (c == traits_type::eof()) {
+			return traits_type::not_eof(c);
+		} else {
+			// Convert char to string
+			std::string s;
+			s += c;
+
+			// Send to main stream
+			main_stream->sputc(c);
+
+			return c;
+		}
+	}
+
+	std::streamsize xsputn(const char *s, std::streamsize n) override {
+		// Convert char to string
+		std::string str(s, n);
+
+		// Send to main stream
+		main_stream->sputn(s, n);
+
+		// Send to log handlers
+		for (auto &h : log_handlers)
+			h.second(s, n);
+
+		return n;
+	}
+};
+
+// Custom stream for piping logging
+class LogStream : public std::basic_ostream <char> {
+public:
+	LogStream(std::ostream &os) : std::basic_ostream <char> (new LogStreamBuf(os.rdbuf())) {}
+};
+
+extern LogStream main_stream;
+
+}
+
+// Add a log handler
+inline void add_log_handler(void *user, LogHandler handler)
+{
+	detail::log_handlers[user] = handler;
+}
+
+// Remove a log handler
+inline void remove_log_handler(void *user)
+{
+	detail::log_handlers.erase(user);
+}
+
+// Logging function
+detail::LogStream &logger(const std::string &, Log level, const std::string & = "", bool = false);
 
 }
 

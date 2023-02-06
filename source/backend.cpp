@@ -823,12 +823,7 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 	// Copy the data
 	buffer.upload(data, size);
 
-	// First transition the image to the transfer destination layout
-	transition_image_layout(cmd,
-		*img.image, img.format,
-		vk::ImageLayout::eUndefined,
-		vk::ImageLayout::eTransferDstOptimal
-	);
+	img.transition_layout(cmd, vk::ImageLayout::eTransferDstOptimal);
 
 	// Copy the buffer to the image
 	copy_data_to_image(cmd,
@@ -836,12 +831,8 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 		img.format, width, height
 	);
 
-	// Transition the image to the shader read layout
-	transition_image_layout(cmd,
-		*img.image, img.format,
-		vk::ImageLayout::eTransferDstOptimal,
-		vk::ImageLayout::eShaderReadOnlyOptimal
-	);
+	// TODO: transition_image_layout should go to the detail namespace...
+	img.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
 
 	return img;
 }
@@ -866,10 +857,6 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 	int width;
 	int height;
 	int channels;
-
-	/* stbi_set_flip_vertically_on_load(true);
-	byte *data = stbi_load(filename.c_str(), &width, &height, &channels, 4);
-	KOBRA_ASSERT(data, "Failed to load texture image"); */
 
 	byte *data = load_texture(filename, width, height, channels);
 
@@ -907,12 +894,7 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 	// Copy the data
 	buffer.upload(data, size);
 
-	// First transition the image to the transfer destination layout
-	transition_image_layout(cmd,
-		*img.image, img.format,
-		vk::ImageLayout::eUndefined,
-		vk::ImageLayout::eTransferDstOptimal
-	);
+	img.transition_layout(cmd, vk::ImageLayout::eTransferDstOptimal);
 
 	// Copy the buffer to the image
 	copy_data_to_image(cmd,
@@ -920,12 +902,7 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 		img.format, width, height
 	);
 
-	// Transition the image to the shader read layout
-	transition_image_layout(cmd,
-		*img.image, img.format,
-		vk::ImageLayout::eTransferDstOptimal,
-		vk::ImageLayout::eShaderReadOnlyOptimal
-	);
+	img.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
 
 	return img;
 }
