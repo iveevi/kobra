@@ -9,14 +9,14 @@ extern "C"
 
 static KCUDA_INLINE KCUDA_HOST_DEVICE
 void make_ray(uint3 idx,
-		 float3 &origin,
-		 float3 &direction,
-		 float3 &seed)
+		float3 &origin,
+		float3 &direction,
+		float3 &seed)
 {
 	const float3 U = parameters.cam_u;
 	const float3 V = parameters.cam_v;
 	const float3 W = parameters.cam_w;
-	
+
 	/* Jittered halton
 	int xoff = rand(parameters.image_width, seed);
 	int yoff = rand(parameters.image_height, seed);
@@ -27,7 +27,7 @@ void make_ray(uint3 idx,
 	radius = sqrt(xoffset * xoffset + yoffset * yoffset)/sqrt(0.5f); */
 
 	pcg3f(seed);
-	
+
 	float xoffset = (fract(seed.x) - 0.5f);
 	float yoffset = (fract(seed.y) - 0.5f);
 
@@ -76,7 +76,7 @@ extern "C" __global__ void __raygen__samples()
 		.depth = 0,
 		.index = index,
 	};
-	
+
 	// Trace ray and generate contribution
 	unsigned int i0, i1;
 	pack_pointer(&rp, i0, i1);
@@ -133,7 +133,7 @@ extern "C" __global__ void __closesthit__samples()
 	// TODO: use more complex shadow bias functions
 	// TODO: an easier check for transmissive objects
 	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
-	
+
 	// Construct SurfaceHit instance for lighting calculations
 	SurfaceHit surface_hit {
 		.mat = material,
@@ -157,9 +157,9 @@ extern "C" __global__ void __closesthit__samples()
 
 	// Create a reservoir for the sample
 	Reservoir &reservoir = gb_ris.new_samples[rp->index];
-	
+
 	FullLightSample fls = sample_direct(lc, surface_hit, rp->seed);
-	
+
 	// Compute lighting
 	float3 D = fls.point - surface_hit.x;
 	float d = length(D);
@@ -213,7 +213,7 @@ extern "C" __global__ void __raygen__eval()
 		.depth = 0,
 		.index = index,
 	};
-	
+
 	// Trace ray and generate contribution
 	unsigned int i0, i1;
 	pack_pointer(&rp, i0, i1);
@@ -286,7 +286,7 @@ extern "C" __global__ void __closesthit__eval()
 	// TODO: use more complex shadow bias functions
 	// TODO: an easier check for transmissive objects
 	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
-	
+
 	// Construct SurfaceHit instance for lighting calculations
 	SurfaceHit surface_hit {
 		.mat = material,
@@ -336,7 +336,7 @@ extern "C" __global__ void __closesthit__eval()
 
 			int cell = ix + iy * dim + iz * dim * dim;
 			int mod = (ix + iy + iz) % 2;
-			
+
 			int cell_size = gb_ris.cell_sizes[cell];
 
 			float min_dist = 1e10f;
@@ -406,7 +406,7 @@ extern "C" __global__ void __closesthit__eval()
 				);
 
 				sum += Li * W;
-				
+
 				float target = target_function(Li);
 				float w = reservoir.count * target * W;
 
@@ -434,7 +434,7 @@ extern "C" __global__ void __closesthit__eval()
 		// Get reservoirs
 		int cell = ix + iy * dim + iz * dim * dim;
 		int mod = (ix + iy + iz) % 2;
-		
+
 		auto &gb_ris = parameters.gb_ris;
 		int cell_size = gb_ris.cell_sizes[cell];
 
@@ -502,7 +502,7 @@ extern "C" __global__ void __closesthit__eval()
 			);
 
 			sum += Li * W;
-			
+
 			float target = target_function(Li);
 			float w = reservoir.count * target * W;
 
@@ -542,7 +542,7 @@ extern "C" __global__ void __closesthit__eval()
 	rp->ior = material.refraction;
 	rp->pdf *= pdf;
 	rp->depth++;
-	
+
 	// Trace the next ray
 	float3 indirect = make_float3(0.0f);
 	if (pdf > 0) {
@@ -559,7 +559,7 @@ extern "C" __global__ void __closesthit__eval()
 	rp->value = direct;
 	if (pdf > 0)
 		rp->value += T * indirect;
-	
+
 	rp->position = make_float4(x, 1);
 	rp->normal = n;
 	rp->albedo = material.diffuse;

@@ -20,7 +20,7 @@ struct RayPacket {
 	float3	seed;
 
 	float	ior;
-	
+
 	int	depth;
 };
 
@@ -33,7 +33,7 @@ void make_ray(uint3 idx,
 	const float3 U = to_f3(parameters.camera.ax_u);
 	const float3 V = to_f3(parameters.camera.ax_v);
 	const float3 W = to_f3(parameters.camera.ax_w);
-	
+
 	/* Jittered halton
 	int xoff = rand(parameters.image_width, seed);
 	int yoff = rand(parameters.image_height, seed);

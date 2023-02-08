@@ -105,7 +105,7 @@ static Mesh make_skybox()
 	};
 
 	return std::vector <Submesh> {
-		Submesh {vertices, indices, Material {}}
+		Submesh {vertices, indices, 0}
 	};
 }
 

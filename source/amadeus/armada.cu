@@ -86,7 +86,7 @@ void ArmadaRTX::update_light_buffers
 		for (int i = 0; i < lights.size(); i++) {
 			const Light *light = lights[i];
 			const Transform *transform = light_transforms[i];
-			
+
 			glm::vec3 a {-0.5f, 0, -0.5f};
 			glm::vec3 b {0.5f, 0, -0.5f};
 			glm::vec3 c {-0.5f, 0, 0.5f};
@@ -115,8 +115,9 @@ void ArmadaRTX::update_light_buffers
 	std::vector <std::pair <const Submesh *, int>> emissive_submeshes;
 	for (int i = 0; i < submeshes.size(); i++) {
 		const Submesh *submesh = submeshes[i];
-		if (glm::length(submesh->material.emission) > 0
-				|| submesh->material.has_emission()) {
+		const Material &material = Material::all[submesh->material_index];
+		if (glm::length(material.emission) > 0
+				|| material.has_emission()) {
 			emissive_submeshes.push_back({submesh, i});
 			emissive_count += submesh->triangles();
 		}
@@ -126,6 +127,7 @@ void ArmadaRTX::update_light_buffers
 		for (const auto &pr : emissive_submeshes) {
 			const Submesh *submesh = pr.first;
 			const Transform *transform = submesh_transforms[pr.second];
+			const Material &material = Material::all[submesh->material_index];
 
 			for (int i = 0; i < submesh->triangles(); i++) {
 				uint32_t i0 = submesh->indices[i * 3 + 0];
@@ -141,7 +143,7 @@ void ArmadaRTX::update_light_buffers
 						cuda::to_f3(a),
 						cuda::to_f3(b - a),
 						cuda::to_f3(c - a),
-						cuda::to_f3(submesh->material.emission)
+						cuda::to_f3(material.emission)
 						// TODO: what if material has
 						// textured emission?
 					}
@@ -169,9 +171,7 @@ void ArmadaRTX::update_sbt_data
 	m_host.hit_records.clear();
 	for (int i = 0; i < submesh_count; i++) {
 		const Submesh *submesh = submeshes[i];
-
-		// Material
-		Material mat = submesh->material;
+		const Material &mat = Material::all[submesh->material_index];
 
 		// TODO: no need for a separate material??
 		cuda::Material material;

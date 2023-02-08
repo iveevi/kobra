@@ -15,8 +15,12 @@ void main()
 	vec3 specular = mat.specular;
 	vec3 n = normal;
 
-	if (mat.has_albedo_texture > 0.5)
-		diffuse = texture(albedo_texture, uv).rgb;
+	if (mat.has_albedo_texture > 0.5) {
+		vec4 full_diffuse = texture(albedo_texture, uv);
+		if (full_diffuse.a < 0.5)
+			discard;
+		diffuse = full_diffuse.rgb;
+	}
 
 	if (mat.has_normal_texture > 0.5) {
 		n = texture(normal_texture, uv).rgb;

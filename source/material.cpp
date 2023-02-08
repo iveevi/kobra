@@ -7,6 +7,9 @@
 
 namespace kobra {
 
+// Global material list
+std::vector <Material> Material::all;
+
 // Properties
 bool Material::has_albedo() const
 {

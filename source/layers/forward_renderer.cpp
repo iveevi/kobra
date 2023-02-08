@@ -9,6 +9,22 @@ namespace kobra {
 
 namespace layers {
 
+// Push constants
+struct PushConstants {
+	float		time;
+
+	alignas(16)
+	glm::mat4	model;
+	glm::mat4	view;
+	glm::mat4	perspective;
+
+	alignas(16)
+	glm::vec3	view_position;
+
+	// TODO: reorganize this
+	float		highlight;
+};
+
 //////////////////////
 // Static variables //
 //////////////////////
@@ -124,23 +140,24 @@ void ForwardRenderer::configure_renderable_dset
 		const ForwardRenderer::RenderableDset &dset,
 		const Renderable *rasterizer)
 {
-	assert(dset.size() == rasterizer->materials.size());
+	assert(dset.size() == rasterizer->material_indices.size());
 
-	auto &materials = rasterizer->materials;
+	auto &materials = rasterizer->material_indices;
 	auto &ubo = rasterizer->ubo;
 
 	for (size_t i = 0; i < dset.size(); ++i) {
 		auto &d = dset[i];
-		auto &m = rasterizer->materials[i];
+		uint32_t material_index = rasterizer->material_indices[i];
+		const Material &m = Material::all[material_index];
 
 		// Bind the textures
 		std::string albedo = "blank";
-		if (materials[i].has_albedo())
-			albedo = materials[i].albedo_texture;
+		if (m.has_albedo())
+			albedo = m.albedo_texture;
 
 		std::string normal = "blank";
-		if (materials[i].has_normal())
-			normal = materials[i].normal_texture;
+		if (m.has_normal())
+			normal = m.normal_texture;
 
 		loader->bind(d, albedo, RASTER_BINDING_ALBEDO_MAP);
 		loader->bind(d, normal, RASTER_BINDING_NORMAL_MAP);
@@ -218,7 +235,7 @@ void ForwardRenderer::render
 		if (dsets.find(renderable) == dsets.end()) {
 			dsets[renderable] = make_renderable_dset(
 				pipeline_package,
-				renderable->materials.size()
+				renderable->material_indices.size()
 			);
 
 			// Configure the dset
@@ -233,7 +250,7 @@ void ForwardRenderer::render
 	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline_package.pipeline);
 
 	// Prepare push constants
-	Renderable::PushConstants pc;
+	PushConstants pc;
 
 	pc.view = camera.view_matrix(camera_transform);
 	pc.perspective = camera.perspective_matrix();
@@ -249,7 +266,7 @@ void ForwardRenderer::render
 		int submesh_count = renderable->size();
 		for (int j = 0; j < submesh_count; j++) {
 			// Push constants
-			cmd.pushConstants <Renderable::PushConstants> (
+			cmd.pushConstants <PushConstants> (
 				*pipeline_package.ppl,
 				vk::ShaderStageFlagBits::eVertex,
 				0, pc
@@ -280,7 +297,7 @@ void ForwardRenderer::render
 		}
 
 		// Push constants
-		cmd.pushConstants <Renderable::PushConstants> (
+		cmd.pushConstants <PushConstants> (
 			*pipeline_package.ppl,
 			vk::ShaderStageFlagBits::eVertex,
 			0, pc
@@ -352,7 +369,7 @@ ForwardRenderer::make_pipline_package
 	//
 	vk::PushConstantRange push_constants {
 		vk::ShaderStageFlagBits::eVertex,
-		0, sizeof(Renderable::PushConstants)
+		0, sizeof(PushConstants)
 	};
 
 	// Pipeline layout
@@ -442,7 +459,7 @@ static Mesh make_skybox()
 	};
 
 	return std::vector <Submesh> {
-		Submesh {vertices, indices, Material {}}
+		Submesh {vertices, indices, 0}
 	};
 }
 
@@ -459,9 +476,10 @@ void ForwardRenderer::configure_environment_map(const std::string &path)
 			*device,
 			{
 				DSLB {
-					RASTER_BINDING_SKYBOX, // TODO: be more
-							       // conservative
-							       // (e.g. 0)
+					RASTER_BINDING_SKYBOX,
+					// TODO: be more conversative with
+					// binginds (e.g. set to 0 in this
+					// case...)
 					vk::DescriptorType::eCombinedImageSampler,
 					1, vk::ShaderStageFlagBits::eFragment
 				}
@@ -479,7 +497,7 @@ void ForwardRenderer::configure_environment_map(const std::string &path)
 		// Push constants
 		vk::PushConstantRange push_constants {
 			vk::ShaderStageFlagBits::eVertex,
-			0, sizeof(Renderable::PushConstants)
+			0, sizeof(PushConstants)
 		};
 
 		// Pipeline layout

@@ -295,7 +295,8 @@ static void update_light_buffers(GridBasedReservoirs &layer,
 	std::vector <std::pair <const Submesh *, int>> emissive_submeshes;
 	for (int i = 0; i < submeshes.size(); i++) {
 		const Submesh *submesh = submeshes[i];
-		if (glm::length(submesh->material.emission) > 0) {
+		const Material &material = Material::all[submesh->material_index];
+		if (glm::length(material.emission) > 0) {
 			emissive_submeshes.push_back({submesh, i});
 			emissive_count += submesh->triangles();
 		}
@@ -305,6 +306,7 @@ static void update_light_buffers(GridBasedReservoirs &layer,
 		for (const auto &pr : emissive_submeshes) {
 			const Submesh *submesh = pr.first;
 			const Transform *transform = submesh_transforms[pr.second];
+			const Material &material = Material::all[submesh->material_index];
 
 			for (int i = 0; i < submesh->triangles(); i++) {
 				uint32_t i0 = submesh->indices[i * 3 + 0];
@@ -320,7 +322,7 @@ static void update_light_buffers(GridBasedReservoirs &layer,
 						cuda::to_f3(a),
 						cuda::to_f3(b - a),
 						cuda::to_f3(c - a),
-						cuda::to_f3(submesh->material.emission)
+						cuda::to_f3(material.emission)
 					}
 				);
 			}
@@ -346,7 +348,7 @@ static void update_sbt_data(GridBasedReservoirs &layer,
 		const Submesh *submesh = submeshes[i];
 
 		// Material
-		Material mat = submesh->material;
+		const Material &mat = Material::all[submesh->material_index];
 
 		cuda::Material material;
 		material.diffuse = cuda::to_f3(mat.diffuse);
@@ -362,7 +364,7 @@ static void update_sbt_data(GridBasedReservoirs &layer,
 
 		hit_record.data.model = submesh_transforms[i]->matrix();
 		hit_record.data.material = material;
-		
+
 		hit_record.data.triangles = cachelets[i].m_cuda_triangles;
 		hit_record.data.vertices = cachelets[i].m_cuda_vertices;
 
@@ -405,7 +407,7 @@ static void update_sbt_data(GridBasedReservoirs &layer,
 
 	// Update the SBT
 	CUdeviceptr d_hit_records = cuda::make_buffer_ptr(sampling_hit_records);
-	
+
 	layer.sampling_sbt.hitgroupRecordBase = d_hit_records;
 	layer.sampling_sbt.hitgroupRecordCount = sampling_hit_records.size();
 	layer.sampling_sbt.hitgroupRecordStrideInBytes = sizeof(HitRecord);
@@ -417,7 +419,7 @@ static void update_sbt_data(GridBasedReservoirs &layer,
 	layer.eval_sbt.hitgroupRecordStrideInBytes = sizeof(HitRecord);
 
 	layer.launch_params.instances = submesh_count;
-	
+
 	KOBRA_LOG_FILE(Log::INFO) << "Updated SBT with " << submesh_count
 		<< " submeshes, for total of " << sampling_hit_records.size() << " hit records\n";
 }
@@ -441,7 +443,7 @@ void GridBasedReservoirs::preprocess_scene
 		p_camera = launch_params.camera;
 		first_frame = false;
 	}
-	
+
 	auto uvw = kobra::uvw_frame(camera, transform);
 
 	launch_params.cam_u = cuda::to_f3(uvw.u);

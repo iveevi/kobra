@@ -5,8 +5,9 @@
 namespace kobra {
 
 // Renderable
+// TODO: pass subindices of the mesh to render (default = all)
 Renderable::Renderable(const Context &context, Mesh *mesh_)
-		: m_loader(context.texture_loader), mesh(mesh_)
+		: mesh(mesh_)
 {
 	const Device &dev = context.dev();
 	for (size_t i = 0; i < mesh->submeshes.size(); i++) {
@@ -40,7 +41,8 @@ Renderable::Renderable(const Context &context, Mesh *mesh_)
 		index_buffer[i].upload((*mesh)[i].indices);
 
 		// UBO
-		kobra::Material mat = (*mesh)[i].material;
+		// kobra::Material mat = (*mesh)[i].material;
+		kobra::Material mat = Material::all[(*mesh)[i].material_index];
 
 		UBO ubo_data {
 			.diffuse = mat.diffuse,
@@ -60,81 +62,7 @@ Renderable::Renderable(const Context &context, Mesh *mesh_)
 
 		// Other data
 		index_count.push_back((*mesh)[i].indices.size());
-		materials.push_back((*mesh)[i].material);
-	}
-}
-
-void Renderable::draw(const vk::raii::CommandBuffer &cmd,
-		const vk::raii::PipelineLayout &ppl,
-		PushConstants &pc) const
-{
-	// TODO: parameter for which submeshes to draw
-	pc.highlight = highlight ? 1.0f : 0.0f;
-	for (size_t i = 0; i < materials.size(); i++) {
-		// Bind and render
-		cmd.bindDescriptorSets(
-			vk::PipelineBindPoint::eGraphics,
-			*ppl, 0, *_dsets[i], {}
-		);
-
-		cmd.pushConstants <PushConstants> (*ppl,
-			vk::ShaderStageFlagBits::eVertex,
-			0, pc
-		);
-
-		cmd.bindVertexBuffers(0, *vertex_buffer[i].buffer, {0});
-		cmd.bindIndexBuffer(*index_buffer[i].buffer, 0, vk::IndexType::eUint32);
-
-		cmd.drawIndexed(index_count[i], 1, 0, 0, 0);
-	}
-}
-
-void Renderable::bind_material
-		(const Device &dev,
-		const BufferData &lights_buffer,
-		const std::function <vk::raii::DescriptorSet ()> &server) const
-{
-	_dsets.clear();
-	for (int i = 0; i < materials.size(); i++) {
-		_dsets.emplace_back(server());
-
-		auto &dset = _dsets.back();
-		std::string albedo = "blank";
-		if (materials[i].has_albedo())
-			albedo = materials[i].albedo_texture;
-
-		std::string normal = "blank";
-		if (materials[i].has_normal())
-			normal = materials[i].normal_texture;
-
-		/* TextureManager::bind(
-			*dev.phdev, *dev.device,
-			dset, albedo,
-			// TODO: enum like RasterBindings::eAlbedo
-			RASTER_BINDING_ALBEDO_MAP
-		);
-
-		TextureManager::bind(
-			*dev.phdev, *dev.device,
-			dset, normal,
-			RASTER_BINDING_NORMAL_MAP
-		); */
-
-		// TODO: parallelize
-		m_loader->bind(dset, albedo, RASTER_BINDING_ALBEDO_MAP);
-		m_loader->bind(dset, normal, RASTER_BINDING_NORMAL_MAP);
-
-		// Bind material UBO
-		bind_ds(*dev.device, dset, ubo[i],
-			vk::DescriptorType::eUniformBuffer,
-			RASTER_BINDING_UBO
-		);
-
-		// Bind lights buffer
-		bind_ds(*dev.device, dset, lights_buffer,
-			vk::DescriptorType::eUniformBuffer,
-			RASTER_BINDING_POINT_LIGHTS
-		);
+		material_indices.push_back((*mesh)[i].material_index);
 	}
 }
 

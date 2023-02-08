@@ -43,7 +43,6 @@ std::string component_string()
 
 KOBRA_COMPONENT_STRING(Camera)
 KOBRA_COMPONENT_STRING(Light)
-KOBRA_COMPONENT_STRING(Material)
 KOBRA_COMPONENT_STRING(Mesh)
 KOBRA_COMPONENT_STRING(Renderable)
 KOBRA_COMPONENT_STRING(Transform)
@@ -58,11 +57,10 @@ using Archetype = std::vector <T>;
 class ECS {
 	Archetype <CameraPtr>		cameras;
 	Archetype <LightPtr>		lights;
-	Archetype <MaterialPtr>		materials;
 	Archetype <MeshPtr>		meshes;
 	Archetype <RenderablePtr>	rasterizers;
 	Archetype <Transform>		transforms;
-	
+
 	Archetype <Entity>		entities;
 
 	std::unordered_map <std::string, int>
@@ -225,7 +223,6 @@ public:
 
 KOBRA_MAKE_SHARED(Camera, CameraPtr);
 KOBRA_MAKE_SHARED(Light, LightPtr);
-KOBRA_MAKE_SHARED(Material, MaterialPtr);
 KOBRA_MAKE_SHARED(Mesh, MeshPtr);
 KOBRA_MAKE_SHARED(Renderable, RenderablePtr);
 
@@ -280,7 +277,6 @@ KOBRA_REF(Transform, transforms);
 
 KOBRA_RET_SHARED(Camera, CameraPtr, cameras);
 KOBRA_RET_SHARED(Light, LightPtr, lights);
-KOBRA_RET_SHARED(Material, MaterialPtr, materials);
 KOBRA_RET_SHARED(Mesh, MeshPtr, meshes);
 KOBRA_RET_SHARED(Renderable, RenderablePtr, rasterizers);
 

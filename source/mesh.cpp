@@ -96,7 +96,7 @@ BoundingBox Submesh::bbox(const Transform &transform) const
 {
 	// TODO: multithread
 	glm::mat4 m = transform.matrix();
-	
+
 	// Create a bounding box
 	BoundingBox box {
 		.min = glm::vec3(std::numeric_limits <float>::max()),
@@ -811,7 +811,7 @@ static Submesh process_mesh(aiMesh *mesh, const aiScene *scene, const std::strin
 	Material mat;
 
 	aiMaterial *material = scene->mMaterials[mesh->mMaterialIndex];
-	
+
 	// Get diffuse
 	aiString path;
 	if (material->GetTexture(aiTextureType_DIFFUSE, 0, &path) == AI_SUCCESS) {
@@ -842,7 +842,11 @@ static Submesh process_mesh(aiMesh *mesh, const aiScene *scene, const std::strin
 	mat.shininess = shininess;
 	mat.roughness = 1 - shininess/1000.0f;
 
-	return Submesh {vertices, indices, mat};
+	// Push the material to the material list
+	uint32_t mat_index = Material::all.size();
+	Material::all.push_back(mat);
+
+	return Submesh {vertices, indices, mat_index};
 }
 
 static Mesh process_node(aiNode *node, const aiScene *scene, const std::string &dir)
@@ -910,7 +914,7 @@ std::optional <Mesh> load_mesh(const std::string &path)
 
 	// Loader
 	tinyobj::ObjReader reader;
-	
+
 	{
 		KOBRA_PROFILE_TASK(Loading mesh: reading file);
 
@@ -1109,14 +1113,18 @@ std::optional <Mesh> load_mesh(const std::string &path)
 								mat.emission_texture = common::resolve_path(
 									m.emissive_texname, {reader_config.mtl_search_path}
 								);
-								
+
 								mat.type = eEmissive;
 							}
 						}
 
+						// Push the material
+						uint32_t mat_index = Material::all.size();
+						Material::all.push_back(mat);
+
 						// Add submesh
 						submeshes_mutex.lock();
-						submeshes.push_back(Submesh {vertices, indices, mat});
+						submeshes.push_back(Submesh {vertices, indices, mat_index});
 						submeshes_mutex.unlock();
 
 						// Clear the vertices and indices
@@ -1154,13 +1162,13 @@ std::optional <Mesh> Mesh::load(const std::string &path)
 		KOBRA_LOG_FUNC(Log::ERROR) << "Could not open file: " << path << std::endl;
 		return {};
 	}
-	
-	// Check if cached
+
+	/* Check if cached
 	// TODO: central filesystem manager for caching, etc
 	std::string filename = ".kobra/cached/" + common::get_filename(path) + ".cache";
 	// TODO: create this directory if it doesn't exist
 	if (common::file_exists(filename))
-		return Mesh::cache_load(filename);
+		return Mesh::cache_load(filename); */
 
 	// Load the mesh
 	// TODO: use filesystem C++
@@ -1173,7 +1181,7 @@ std::optional <Mesh> Mesh::load(const std::string &path)
 		opt = tinyobjloader::load_mesh(path);
 	else
 		opt = assimp::load_mesh(path);
-	
+
 	if (!opt.has_value()) {
 		KOBRA_LOG_FUNC(Log::ERROR) << "Could not load mesh: " << path << std::endl;
 		return {};
@@ -1187,12 +1195,14 @@ std::optional <Mesh> Mesh::load(const std::string &path)
 		<< m.triangles() << "), from " << path << std::endl;
 
 	// Cache the mesh
-	Mesh::cache_save(m, filename);
-	
+	// Mesh::cache_save(m, filename);
+
 	return m;
 }
 
-// Cache mesh data to file
+/* Cache mesh data to file
+// TODO: cache load entire files, store materials in a separate file
+// TODO: cache dir per scene
 void Mesh::cache_save(const Mesh &mesh, const std::string &path)
 {
 	// TODO: ensure that the directory is created
@@ -1205,7 +1215,7 @@ void Mesh::cache_save(const Mesh &mesh, const std::string &path)
 	// Write data offsets
 	uint32_t offset = file.tellp();
 	offset += sizeof(uint32_t) * num_submeshes;
-	
+
 	for (const Submesh &submesh : mesh.submeshes) {
 		file.write((char *) &offset, sizeof(uint32_t));
 
@@ -1395,7 +1405,7 @@ std::optional <Mesh> Mesh::cache_load(const std::string &path)
 
 			// Create the submesh
 			submeshes_mutex.lock();
-			
+
 			submeshes.push_back(
 				Submesh {
 					vertices, indices,
@@ -1415,6 +1425,6 @@ std::optional <Mesh> Mesh::cache_load(const std::string &path)
 	}
 
 	return Mesh {submeshes};
-}
+} */
 
 }

@@ -23,16 +23,19 @@ public:
 	// Data
 	VertexList	vertices;
 	Indices		indices;
-	Material	material;
+	uint32_t	material_index = 0;
+	// Material	material;
 
 	// Constructors
+	// TODO: remove this constructor...
 	Submesh(const VertexList &vs, const Indices &is,
-			const Material &mat = Material(),
+			uint32_t mat_index = 0,
+			// const Material &mat = Material(),
 			bool calculate_tangents = true)
-			: vertices(vs), indices(is), material(mat) {
-		// Process the vertex data
+			: vertices(vs), indices(is), material_index(mat_index) {
+		/* Process the vertex data
 		if (calculate_tangents)
-			_process_vertex_data();
+			_process_vertex_data(); */
 	}
 
 	// Number of triangles
@@ -78,7 +81,7 @@ public:
 
 	// Submesh modifiers
 	static void transform(Submesh &, const Transform &);
-	
+
 	// Submesh factories
 	static Submesh sphere(int = 16, int = 16);
 	static Submesh cylinder(int = 32);
@@ -152,7 +155,7 @@ public:
 	static Mesh sphere(const glm::vec3 &, float, int = 16, int = 16);
 
 	static std::optional <Mesh> load(const std::string &);
-	
+
 	// Caching
 	static void cache_save(const Mesh &, const std::string &);
 	static std::optional <Mesh> cache_load(const std::string &);

@@ -24,10 +24,6 @@ normal_texture: %s
 roughness_texture: %s
 )";
 
-static constexpr char rasterizer_format[]
-= R"(mode: %s
-)";
-
 static const std::array <std::string, 4> rasterizer_modes {
 	"Phong",
 	"Normal",
@@ -64,29 +60,9 @@ static void save_transform(const Transform &transform, std::ofstream &fout)
 	);
 }
 
-static void save_material(const Material &mat, std::ofstream &fout)
+static void save_renderable(const Renderable &renderable, std::ofstream &fout)
 {
-	fout << "\n[MATERIAL]\n";
-	fout << common::sprintf(material_format,
-		mat.diffuse.r, mat.diffuse.g, mat.diffuse.b,
-		mat.specular.r, mat.specular.g, mat.specular.b,
-		mat.emission.r, mat.emission.g, mat.emission.b,
-		mat.ambient.r, mat.ambient.g, mat.ambient.b,
-		mat.shininess,
-		mat.roughness,
-		mat.refraction,
-		mat.albedo_texture.empty() ? "0" : mat.albedo_texture.c_str(),
-		mat.normal_texture.empty() ? "0" : mat.normal_texture.c_str()
-	);
-	fout << "shading_type: " << shading_str(mat.type) << "\n";
-}
-
-static void save_rasterizer(const Renderable &rasterizer, std::ofstream &fout)
-{
-	fout << "\n[RASTERIZER]\n";
-	fout << common::sprintf(rasterizer_format,
-		rasterizer_modes[rasterizer.mode].c_str()
-	);
+	fout << "\n[RENDERABLE]\n";
 }
 
 static void save_light(const Light &light, std::ofstream &fout)
@@ -140,14 +116,11 @@ static void save_components(const Entity &e, std::ofstream &fout)
 	// Case by case...
 	save_transform(e.get <Transform> (), fout);
 
-	if (e.exists <Material> ())
-		save_material(e.get <Material> (), fout);
-
 	if (e.exists <Mesh> ())
 		save_mesh(e.get <Mesh> (), fout);
 
 	if (e.exists <Renderable> ())
-		save_rasterizer(e.get <Renderable> (), fout);
+		save_renderable(e.get <Renderable> (), fout);
 
 	if (e.exists <Light> ())
 		save_light(e.get <Light> (), fout);
@@ -232,7 +205,7 @@ void load_transform(Entity &e, std::ifstream &fin)
 	);
 }
 
-void load_material(Entity &e, std::ifstream &fin)
+/* void load_material(Entity &e, std::ifstream &fin)
 {
 	static char buf_albedo[1024];
 	static char buf_normal[1024];
@@ -284,7 +257,9 @@ void load_material(Entity &e, std::ifstream &fin)
 		for (auto &submesh : e.get <Mesh> ().submeshes)
 			submesh.material = material;
 	}
-}
+
+	// TODO: materials in a separate system from meshes, entities, etc.
+} */
 
 void load_mesh(Entity &e, std::ifstream &fin)
 {
@@ -364,15 +339,15 @@ void load_mesh(Entity &e, std::ifstream &fin)
 		e.add <Mesh> (submeshes);
 	}
 
-	// If material exists, override its material
+	/* If material exists, override its material
 	if (e.exists <Material> ()) {
 		Material &material = e.get <Material> ();
 		for (auto &submesh : e.get <Mesh> ().submeshes)
 			submesh.material = material;
-	}
+	} */
 }
 
-void load_rasterizer(Entity &e, std::ifstream &fin, const Context &context)
+void load_renderable(Entity &e, std::ifstream &fin, const Context &context)
 {
 	static char buf_mode[1024];
 
@@ -383,25 +358,6 @@ void load_rasterizer(Entity &e, std::ifstream &fin, const Context &context)
 	}
 
 	e.add <Renderable> (context, &e.get <Mesh> ());
-
-	// Read mode
-	std::string line;
-	std::getline(fin, line);
-
-	sscanf(line.c_str(), "mode: %[^\n]", buf_mode);
-
-	// Get index
-	int index = 0;
-	while (rasterizer_modes[index] != buf_mode)
-		index++;
-
-	if (index >= rasterizer_modes.size()) {
-		KOBRA_LOG_FUNC(Log::WARN) << "Unknown rasterizer mode: " << buf_mode << std::endl;
-		return;
-	}
-
-	// Set mode
-	e.get <Renderable> ().mode = RasterMode(index);
 }
 
 void load_camera(Entity &e, std::ifstream &fin)
@@ -451,18 +407,18 @@ std::string load_components(Entity &e, std::ifstream &fin, const Context &contex
 			continue;
 		}
 
-		if (header == "[MATERIAL]") {
+		/* if (header == "[MATERIAL]") {
 			load_material(e, fin);
 			continue;
-		}
+		} */
 
 		if (header == "[MESH]") {
 			load_mesh(e, fin);
 			continue;
 		}
 
-		if (header == "[RASTERIZER]") {
-			load_rasterizer(e, fin, context);
+		if (header == "[RENDERABLE]") {
+			load_renderable(e, fin, context);
 			continue;
 		}
 

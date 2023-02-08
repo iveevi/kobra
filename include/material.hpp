@@ -56,9 +56,11 @@ struct Material {
 
 	// Serialize to GPU buffer
 	void serialize(std::vector <aligned_vec4> &) const;
-};
 
-using MaterialPtr = std::shared_ptr <Material>;
+	// Global material list
+	// TODO: one list per scene
+	static std::vector <Material> all;
+};
 
 }
 

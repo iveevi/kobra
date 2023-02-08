@@ -109,6 +109,9 @@ file(GLOB Kobra_LAYERS_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/source/layers/*.cpp)
 file(GLOB Kobra_IO_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/source/io/*.cpp)
 file(GLOB Kobra_ENGINE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/source/engine/*.cpp)
 
+# Exclude raster.cpp
+list(REMOVE_ITEM Kobra_LAYERS_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/source/layers/raster.cpp)
+
 set(Kobra_SOURCES
 	${Kobra_GENERIC_SOURCES}
 	${Kobra_LAYERS_SOURCES}

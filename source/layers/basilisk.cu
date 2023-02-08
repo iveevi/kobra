@@ -78,7 +78,7 @@ static void initialize_optix(Basilisk &layer)
 
 	// Allocate a stream for the layer
 	CUDA_CHECK(cudaStreamCreate(&layer.optix_stream));
-	
+
 	// Pipeline configuration
 	OptixPipelineCompileOptions ppl_compile_options = {};
 
@@ -99,10 +99,10 @@ static void initialize_optix(Basilisk &layer)
 #endif
 
 	ppl_compile_options.pipelineLaunchParamsVariableName = "parameters";
-	
+
 	ppl_compile_options.usesPrimitiveTypeFlags =
 		OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE;
-	
+
 	ppl_compile_options.traversableGraphFlags =
 		OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING;
 
@@ -136,7 +136,7 @@ static void initialize_optix(Basilisk &layer)
 			&layer.optix_module
 		)
 	);
-	
+
 	std::string restir_file = common::read_file(OPTIX_RESTIR_PTX_FILE);
 	OPTIX_CHECK_LOG(
 		optixModuleCreateFromPTX(
@@ -147,7 +147,7 @@ static void initialize_optix(Basilisk &layer)
 			&layer.optix_restir_module
 		)
 	);
-	
+
 	std::string voxel_file = common::read_file(OPTIX_VOXEL_PTX_FILE);
 	OPTIX_CHECK_LOG(
 		optixModuleCreateFromPTX(
@@ -176,7 +176,7 @@ static void initialize_optix(Basilisk &layer)
 	ppl_link_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_NONE;
 
 #endif
-		
+
 	layer.optix_pipeline = optix::link_optix_pipeline(
 		layer.optix_context,
 		{
@@ -204,7 +204,7 @@ static void initialize_optix(Basilisk &layer)
 	CUdeviceptr d_miss_sbt = cuda::make_buffer_ptr(ms_records);
 
 	layer.optix_sbt.raygenRecord = d_raygen_sbt;
-	
+
 	layer.optix_sbt.missRecordBase = d_miss_sbt;
 	layer.optix_sbt.missRecordCount = ms_records.size();
 	layer.optix_sbt.missRecordStrideInBytes = sizeof(MissRecord);
@@ -322,7 +322,7 @@ static void update_light_buffers(Basilisk &layer,
 {
 	if (layer.host.quad_lights.size() != lights.size()) {
 		layer.host.quad_lights.resize(lights.size());
-	
+
 		auto &quad_lights = layer.host.quad_lights;
 		for (int i = 0; i < lights.size(); i++) {
 			const Light *light = lights[i];
@@ -355,8 +355,9 @@ static void update_light_buffers(Basilisk &layer,
 	std::vector <std::pair <const Submesh *, int>> emissive_submeshes;
 	for (int i = 0; i < submeshes.size(); i++) {
 		const Submesh *submesh = submeshes[i];
-		if (glm::length(submesh->material.emission) > 0
-				|| submesh->material.has_emission()) {
+		const Material &material = Material::all[submesh->material_index];
+		if (glm::length(material.emission) > 0
+				|| material.has_emission()) {
 			emissive_submeshes.push_back({submesh, i});
 			emissive_count += submesh->triangles();
 		}
@@ -366,6 +367,7 @@ static void update_light_buffers(Basilisk &layer,
 		for (const auto &pr : emissive_submeshes) {
 			const Submesh *submesh = pr.first;
 			const Transform *transform = submesh_transforms[pr.second];
+			const Material &material = Material::all[submesh->material_index];
 
 			for (int i = 0; i < submesh->triangles(); i++) {
 				uint32_t i0 = submesh->indices[i * 3 + 0];
@@ -381,7 +383,7 @@ static void update_light_buffers(Basilisk &layer,
 						cuda::to_f3(a),
 						cuda::to_f3(b - a),
 						cuda::to_f3(c - a),
-						cuda::to_f3(submesh->material.emission)
+						cuda::to_f3(material.emission)
 						// TODO: what if material has
 						// textured emission?
 					}
@@ -448,7 +450,7 @@ static void update_sbt_data(Basilisk &layer,
 		const Submesh *submesh = submeshes[i];
 
 		// Material
-		Material mat = submesh->material;
+		const Material &mat = Material::all[submesh->material_index];
 
 		// TODO: no need for a separate material??
 		cuda::Material material;
@@ -519,20 +521,20 @@ static void update_sbt_data(Basilisk &layer,
 		// Push back
 		optix::pack_header(layer.optix_programs.hit, hit_record);
 		hit_records.push_back(hit_record);
-		
+
 		optix::pack_header(layer.optix_programs.hit_restir, hit_record);
 		hit_records.push_back(hit_record);
 
 		optix::pack_header(layer.optix_programs.hit_restir_pt, hit_record);
 		hit_records.push_back(hit_record);
-	
+
 		optix::pack_header(layer.optix_programs.hit_voxel, hit_record);
 		hit_records.push_back(hit_record);
 	}
 
 	// Update the SBT
 	CUdeviceptr d_hit_records = cuda::make_buffer_ptr(hit_records);
-	
+
 	layer.optix_sbt.hitgroupRecordBase = d_hit_records;
 	layer.optix_sbt.hitgroupRecordCount = hit_records.size();
 	layer.optix_sbt.hitgroupRecordStrideInBytes = sizeof(HitRecord);

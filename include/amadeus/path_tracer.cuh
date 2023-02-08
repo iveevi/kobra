@@ -71,7 +71,7 @@ class PathTracer : public AttachmentRTX {
 			program_options,
 			program_groups
 		);
-	
+
 		m_pipeline = optix::link_optix_pipeline(
 			optix_context,
 			{

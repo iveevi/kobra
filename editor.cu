@@ -639,7 +639,8 @@ void Editor::after_present()
 			kobra::Renderable &renderable = m_scene.ecs
 				.get <kobra::Renderable> (m_selection.first);
 
-			m_material_editor->m_material = &renderable.materials[m_selection.second];
+			uint32_t material_index = renderable.material_indices[m_selection.second];
+			m_material_editor->m_material = &kobra::Material::all[material_index];
 		}
 	}
 }
