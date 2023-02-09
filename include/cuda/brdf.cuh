@@ -334,8 +334,10 @@ float3 brdf(const SurfaceHit &sh, float3 wi, Shading out)
 {
 	// TODO: diffuse should be in conjunction with the material
 	// TODO: plus specular lobe in either case...
+	// TODO: Implement PBRT specular transmission with Tr...
+	// also fresnel transmission and microfacet transmission
 	if (out & Shading::eTransmission)
-		return SpecularTransmission::brdf(sh.mat, sh.n, wi, sh.wo, sh.entering, out);
+		return sh.mat.diffuse/M_PI + SpecularTransmission::brdf(sh.mat, sh.n, wi, sh.wo, sh.entering, out);
 	
 	return sh.mat.diffuse/M_PI + GGX::brdf(sh.mat, sh.n, wi, sh.wo, sh.entering, out);
 }

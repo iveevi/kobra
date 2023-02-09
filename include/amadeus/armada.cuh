@@ -260,7 +260,7 @@ public:
 
 	// Set depth
 	void set_depth(int depth) {
-		KOBRA_ASSERT(depth > 0 && depth <= 10, "Depth must be between 1 and 10");
+		KOBRA_ASSERT(depth >= 0 && depth <= 10, "Depth must be between 0 and 10");
 		m_launch_info.max_depth = depth;
 	}
 

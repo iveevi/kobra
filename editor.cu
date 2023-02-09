@@ -23,6 +23,8 @@ struct InfoTab;
 struct MaterialEditor;
 struct RTXRenderer;
 
+// TODO: add updated (emissive) materials as lights...
+
 // TODO: logging attachment
 // TODO: info tab that shows logging and framerate...
 // TODO: viewport attachment
@@ -225,6 +227,9 @@ class MaterialEditor : public kobra::ui::ImGuiAttachment {
 	vk::DescriptorSet m_diffuse_set;
 	vk::DescriptorSet m_normal_set;
 
+	glm::vec3 emission_base = glm::vec3(0.0f);
+	float emission_strength = 0.0f;
+
 	Editor *m_editor = nullptr;
 	kobra::TextureLoader *m_texture_loader = nullptr;
 
@@ -252,6 +257,10 @@ public:
 			return;
 		}
 
+		// Check if it is a new material
+		bool is_not_loaded = m_prev_material_index != material_index;
+		m_prev_material_index = material_index;
+
 		// For starters, print material data
 		ImGui::Text("Material data:");
 		ImGui::Separator();
@@ -261,12 +270,20 @@ public:
 		glm::vec3 diffuse = material->diffuse;
 		glm::vec3 specular = material->specular;
 		glm::vec3 ambient = material->ambient;
-		glm::vec3 emission = material->emission;
 		float roughness = material->roughness;
-		
-		float intensity = glm::length(emission);
-		if (intensity > 0.0f)
-			emission /= intensity;
+
+		// Decompose the emission if it is not loaded
+		if (is_not_loaded) {
+			emission_base = glm::vec3(0.0f);
+			emission_strength = 0.0f;
+
+			// If any component is greater than 1, normalize it
+			glm::vec3 emission = material->emission;
+			if (emission.r > 1.0f || emission.g > 1.0f || emission.b > 1.0f) {
+				emission_strength = glm::length(emission);
+				emission_base = emission / emission_strength;
+			}
+		}
 
 		bool updated_material = false;
 
@@ -281,18 +298,15 @@ public:
 		}
 
 		// TODO: remove ambient from material
-	
-		// TODO: use an HSL color picker + intensity slider
-		if (ImGui::ColorEdit3("Emission", &emission.r)) {
-			if (glm::length(emission) > 0.0f && intensity < 1e-6) {
-				intensity = glm::length(emission);
-				emission /= intensity;
-			}
 
-			material->emission = intensity * emission;
+		// TODO: use an HSL color picker + intensity slider
+		if (ImGui::ColorEdit3("Emission", &emission_base.r)) {
+			material->emission = emission_strength * emission_base;
 			updated_material = true;
-		} else if (ImGui::SliderFloat("Intensity", &intensity, 0.0f, 1000.0f)) {
-			material->emission = intensity * emission;
+		}
+
+		if (ImGui::SliderFloat("Intensity", &emission_strength, 0.0f, 1000.0f)) {
+			material->emission = emission_strength * emission_base;
 			updated_material = true;
 		}
 
@@ -303,10 +317,18 @@ public:
 			updated_material = true;
 		}
 
-		ImGui::Separator();
+		// Transmission index of refraction
+		if (ImGui::SliderFloat("IOR", &material->refraction, 1.0f, 3.0f))
+			updated_material = true;
 
-		bool is_not_loaded = m_prev_material_index != material_index;
-		m_prev_material_index = material_index;
+		// TODO: option for transmission
+		bool transmission = (material->type == eTransmission);
+		if (ImGui::Checkbox("Transmission", &transmission)) {
+			material->type = transmission ? eTransmission : eDiffuse;
+			updated_material = true;
+		}
+
+		ImGui::Separator();
 
 		if (material->has_albedo()) {
 			ImGui::Text("Diffuse Texture:");
@@ -356,7 +378,7 @@ public:
 		ImGui::Begin("RTX Renderer");
 
 		// Setting the path depth
-		if (ImGui::SliderInt("Path Depth", &m_path_depth, 1, 10)) {
+		if (ImGui::SliderInt("Path Depth", &m_path_depth, 0, 10)) {
 			m_editor->m_renderers.armada_rtx->set_depth(m_path_depth);
 			std::lock_guard <std::mutex> lock_guard
 				(m_editor->m_renderers.movement_mutex);
@@ -810,7 +832,9 @@ void Editor::keyboard_callback(void *us, const kobra::io::KeyboardEvent &event)
 	if (event.action == GLFW_PRESS) {
 		if (event.key == GLFW_KEY_TAB)
 			editor->m_renderers.mode = !editor->m_renderers.mode;
-		if (event.key == GLFW_KEY_ESCAPE)
+		if (event.key == GLFW_KEY_ESCAPE) {
 			editor->m_selection = {-1, -1};
+			editor->m_material_editor->material_index = -1;
+		}
 	}
 }
