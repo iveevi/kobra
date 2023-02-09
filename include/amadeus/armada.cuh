@@ -41,7 +41,7 @@ class ArmadaRTX;
 // Armada RTX basic launch parameters
 struct ArmadaLaunchInfo {
 	glm::vec2 resolution;
-	
+
 	struct Camera {
 		glm::vec3 center;
 
@@ -92,12 +92,12 @@ static constexpr OptixPipelineCompileOptions ppl_compile_options = {
 	.pipelineLaunchParamsVariableName = "parameters",
 	.usesPrimitiveTypeFlags = (unsigned int) OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE,
 };
-	
+
 static constexpr OptixModuleCompileOptions module_options = {
 	.optLevel = KOBRA_OPTIX_OPTIMIZATION_LEVEL,
 	.debugLevel = KOBRA_OPTIX_DEBUG_LEVEL,
 };
-	
+
 static constexpr OptixPipelineLinkOptions ppl_link_options = {
 	.maxTraceDepth = 10,
 	.debugLevel = KOBRA_OPTIX_DEBUG_LEVEL,
@@ -112,7 +112,7 @@ public:
 
 	// Attaching and unloading
 	virtual void attach(const ArmadaRTX &) = 0;
-	
+
 	virtual void load() = 0;
 	virtual void unload() = 0;
 
@@ -151,6 +151,7 @@ class ArmadaRTX {
 		std::vector <optix::QuadLight> quad_lights;
 		std::vector <optix::TriangleLight> tri_lights;
 		std::vector <HitRecord> hit_records;
+		std::vector <cuda::_material> materials;
 
 		// Update state for the hit records
 		long long int last_updated;
@@ -189,6 +190,8 @@ class ArmadaRTX {
 		const std::vector <const Transform *> &
 	);
 
+	void update_materials(const std::set <uint32_t> &);
+
 	struct preprocess_update {
 		std::optional <OptixTraversableHandle> handle;
 		std::vector <HitRecord> *hit_records;
@@ -223,7 +226,7 @@ public:
 	const std::vector <HitRecord> &hit_records() const {
 		return m_host.hit_records;
 	}
-	
+
 	// Buffer accessors
 	glm::vec4 *color_buffer() {
 		return m_launch_info.buffers.color;
@@ -253,6 +256,12 @@ public:
 
 	void activate(const std::string &name) {
 		m_active_attachment = name;
+	}
+
+	// Set depth
+	void set_depth(int depth) {
+		KOBRA_ASSERT(depth > 0 && depth <= 10, "Depth must be between 1 and 10");
+		m_launch_info.max_depth = depth;
 	}
 
 	// Methods

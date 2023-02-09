@@ -62,20 +62,35 @@ struct Material {
 	static std::vector <Material> all;
 	
 	// Management daemon
-	static struct {
-		using Pinger = std::function <void ()>;
+	static struct Daemon {
+		using Addresses = std::set <uint32_t>;
+		using Pinger = std::function <void (void *, const Addresses &)>;
 
-		std::vector <bool> m_dirty;
-		std::vector <Pinger> m_pingers;
+		struct PingData {
+			void *user;
+			Pinger pinger;
+			Addresses indices;
+		};
 
-		void ping_at(const Pinger &pinger) {
-			m_pingers.push_back(pinger);
+		std::vector <PingData> m_pingers;
+
+		void ping_at(void *user, const Pinger &pinger) {
+			m_pingers.push_back({user, pinger, {}});
 		}
 
 		void update(uint32_t index) {
-			m_dirty[index] = true;
+			for (auto &pinger : m_pingers)
+				pinger.indices.insert(index);
+		}
+
+		// Call at the end of each frame
+		void ping_all() {
 			for (auto &pinger : m_pingers) {
-				pinger();
+				if (pinger.indices.empty())
+					continue;
+
+				pinger.pinger(pinger.user, pinger.indices);
+				pinger.indices.clear();
 			}
 		}
 	} daemon;

@@ -65,6 +65,14 @@ ArmadaRTX::ArmadaRTX(const Context &context,
 	params.buffers.normal = cuda::alloc <glm::vec4> (size);
 	params.buffers.albedo = cuda::alloc <glm::vec4> (size);
 	params.buffers.position = cuda::alloc <glm::vec4> (size);
+
+	// Add self to the material system ping list
+	Material::daemon.ping_at(this,
+		[](void *user, const std::set <uint32_t> &materials) {
+			ArmadaRTX *armada = (ArmadaRTX *) user;
+			armada->update_materials(materials);
+		}
+	);
 }
 
 // Set the environment map
@@ -178,76 +186,45 @@ void ArmadaRTX::update_sbt_data
 		const Submesh *submesh = submeshes[i];
 		const Material &mat = Material::all[submesh->material_index];
 
-		/* TODO: no need for a separate material??
-		cuda::Material material;
-		material.diffuse = cuda::to_f3(mat.diffuse);
-		material.specular = cuda::to_f3(mat.specular);
-		material.emission = cuda::to_f3(mat.emission);
-		material.ambient = cuda::to_f3(mat.ambient);
-		material.shininess = mat.shininess;
-		material.roughness = mat.roughness;
-		material.refraction = mat.refraction;
-		material.type = mat.type; */
-
 		HitRecord hit_record {};
 
 		hit_record.data.model = submesh_transforms[i]->matrix();
-		// hit_record.data.material = material;
 		hit_record.data.material_index = submesh->material_index;
 
 		hit_record.data.triangles = cachelets[i].m_cuda_triangles;
 		hit_record.data.vertices = cachelets[i].m_cuda_vertices;
 
-		/* Import textures if necessary
-		// TODO: method?
-		if (mat.has_albedo()) {
-			const ImageData &diffuse = m_texture_loader
-				->load_texture(mat.albedo_texture);
-
-			hit_record.data.textures.diffuse
-				= cuda::import_vulkan_texture(*m_device, diffuse);
-			hit_record.data.textures.has_diffuse = true;
-		}
-
-		if (mat.has_normal()) {
-			const ImageData &normal = m_texture_loader
-				->load_texture(mat.normal_texture);
-
-			hit_record.data.textures.normal
-				= cuda::import_vulkan_texture(*m_device, normal);
-			hit_record.data.textures.has_normal = true;
-		}
-
-		if (mat.has_specular()) {
-			const ImageData &specular = m_texture_loader
-				->load_texture(mat.specular_texture);
-
-			hit_record.data.textures.specular
-				= cuda::import_vulkan_texture(*m_device, specular);
-			hit_record.data.textures.has_specular = true;
-		}
-
-		if (mat.has_emission()) {
-			const ImageData &emission = m_texture_loader
-				->load_texture(mat.emission_texture);
-
-			hit_record.data.textures.emission
-				= cuda::import_vulkan_texture(*m_device, emission);
-			hit_record.data.textures.has_emission = true;
-		}
-
-		if (mat.has_roughness()) {
-			const ImageData &roughness = m_texture_loader
-				->load_texture(mat.roughness_texture);
-
-			hit_record.data.textures.roughness
-				= cuda::import_vulkan_texture(*m_device, roughness);
-			hit_record.data.textures.has_roughness = true;
-		} */
-
 		// Push back
 		m_host.hit_records.push_back(hit_record);
 	}
+}
+
+void ArmadaRTX::update_materials(const std::set <uint32_t> &material_indices)
+{
+	for (uint32_t mat_index : material_indices) {
+		const Material &material = Material::all[mat_index];
+		cuda::_material &mat = m_host.materials[mat_index];
+
+		// Copy basic data
+		mat.diffuse = cuda::to_f3(material.diffuse);
+		mat.specular = cuda::to_f3(material.specular);
+		mat.emission = cuda::to_f3(material.emission);
+		mat.ambient = cuda::to_f3(material.ambient);
+		mat.shininess = material.shininess;
+		mat.roughness = material.roughness;
+		mat.refraction = material.refraction;
+		mat.type = material.type;
+
+		// TODO: textures
+	}
+
+	// Copy to GPU
+	// TODO: only copy subregions
+	cudaMemcpy(m_launch_info.materials,
+		m_host.materials.data(),
+		m_host.materials.size() * sizeof(cuda::_material),
+		cudaMemcpyHostToDevice
+	);
 }
 
 // Preprocess scene data
@@ -354,7 +331,8 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 	// Generate material buffer if needed
 	if (!m_launch_info.materials) {
 		std::cout << "Generating material buffer" << std::endl;
-		std::vector <cuda::_material> materials; // TODO: keep in host
+
+		m_host.materials.clear();
 		for (const Material &material : Material::all) {
 			cuda::_material mat;
 
@@ -414,10 +392,10 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 				mat.textures.has_roughness = true;
 			}
 
-			materials.push_back(mat);
+			m_host.materials.push_back(mat);
 		}
 
-		m_launch_info.materials = cuda::make_buffer(materials);
+		m_launch_info.materials = cuda::make_buffer(m_host.materials);
 	}
 
 	// Send hit records to attachment if needed

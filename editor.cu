@@ -21,6 +21,7 @@ struct ImageViewer;
 struct ProgressBar;
 struct InfoTab;
 struct MaterialEditor;
+struct RTXRenderer;
 
 // TODO: logging attachment
 // TODO: info tab that shows logging and framerate...
@@ -47,8 +48,8 @@ struct Editor : public kobra::BaseApp {
 	struct {
 		std::shared_ptr <kobra::amadeus::System> system;
 		std::shared_ptr <kobra::layers::MeshMemory> mesh_memory;
+		std::shared_ptr <kobra::amadeus::ArmadaRTX> armada_rtx;
 
-		kobra::amadeus::ArmadaRTX armada_rtx;
 		kobra::layers::Denoiser denoiser;
 		kobra::layers::Framer framer;
 
@@ -56,6 +57,7 @@ struct Editor : public kobra::BaseApp {
 		std::queue <uint32_t> movement;
 
 		int mode = 0;
+		bool denoise = true;
 	} m_renderers;
 
 	// Buffers
@@ -218,11 +220,12 @@ struct InfoTab : public kobra::ui::ImGuiAttachment {
 
 // Material editor UI attachment
 class MaterialEditor : public kobra::ui::ImGuiAttachment {
-	kobra::Material *m_prev_material = nullptr;
+	int m_prev_material_index = 0;
 
 	vk::DescriptorSet m_diffuse_set;
 	vk::DescriptorSet m_normal_set;
 
+	Editor *m_editor = nullptr;
 	kobra::TextureLoader *m_texture_loader = nullptr;
 
 	vk::DescriptorSet imgui_allocate_image(const std::string &path) {
@@ -236,42 +239,79 @@ class MaterialEditor : public kobra::ui::ImGuiAttachment {
 		);
 	}
 public:
-	kobra::Material *m_material = nullptr;
+	int material_index = -1;
 
 	MaterialEditor() = delete;
-	MaterialEditor(const kobra::Context &context)
-			: m_texture_loader {context.texture_loader} {}
+	MaterialEditor(Editor *editor, kobra::TextureLoader *texture_loader)
+			: m_editor {editor}, m_texture_loader {texture_loader} {}
 
 	void render() override {
-		if (!m_material)
-			return;
-
 		ImGui::Begin("Material Editor");
-		ImGui::SetWindowSize(ImVec2(500, 500), ImGuiCond_FirstUseEver);
+		if (material_index < 0) {
+			ImGui::End();
+			return;
+		}
 
 		// For starters, print material data
 		ImGui::Text("Material data:");
 		ImGui::Separator();
 
-		glm::vec3 diffuse = m_material->diffuse;
-		glm::vec3 specular = m_material->specular;
-		glm::vec3 ambient = m_material->ambient;
-		glm::vec3 emission = m_material->emission;
+		kobra::Material *material = &kobra::Material::all[material_index];
 
-		ImGui::Text("Albedo: %f, %f, %f", diffuse.r, diffuse.g, diffuse.b);
-		ImGui::Text("Specular: %f, %f, %f", specular.r, specular.g, specular.b);
-		ImGui::Text("Ambient: %f, %f, %f", ambient.r, ambient.g, ambient.b);
-		ImGui::Text("Emission: %f, %f, %f", emission.r, emission.g, emission.b);
+		glm::vec3 diffuse = material->diffuse;
+		glm::vec3 specular = material->specular;
+		glm::vec3 ambient = material->ambient;
+		glm::vec3 emission = material->emission;
+		float roughness = material->roughness;
+		
+		float intensity = glm::length(emission);
+		if (intensity > 0.0f)
+			emission /= intensity;
+
+		bool updated_material = false;
+
+		if (ImGui::ColorEdit3("Diffuse", &diffuse.r)) {
+			material->diffuse = diffuse;
+			updated_material = true;
+		}
+
+		if (ImGui::ColorEdit3("Specular", &specular.r)) {
+			material->specular = specular;
+			updated_material = true;
+		}
+
+		// TODO: remove ambient from material
+	
+		// TODO: use an HSL color picker + intensity slider
+		if (ImGui::ColorEdit3("Emission", &emission.r)) {
+			if (glm::length(emission) > 0.0f && intensity < 1e-6) {
+				intensity = glm::length(emission);
+				emission /= intensity;
+			}
+
+			material->emission = intensity * emission;
+			updated_material = true;
+		} else if (ImGui::SliderFloat("Intensity", &intensity, 0.0f, 1000.0f)) {
+			material->emission = intensity * emission;
+			updated_material = true;
+		}
+
+		// TODO: emission intensity
+
+		if (ImGui::SliderFloat("Roughness", &roughness, 0.0f, 1.0f)) {
+			material->roughness = std::max(roughness, 0.001f);
+			updated_material = true;
+		}
 
 		ImGui::Separator();
 
-		bool is_not_loaded = m_prev_material != m_material;
-		m_prev_material = m_material;
+		bool is_not_loaded = m_prev_material_index != material_index;
+		m_prev_material_index = material_index;
 
-		if (m_material->has_albedo()) {
+		if (material->has_albedo()) {
 			ImGui::Text("Diffuse Texture:");
 
-			std::string diffuse_path = m_material->albedo_texture;
+			std::string diffuse_path = material->albedo_texture;
 			if (is_not_loaded)
 				m_diffuse_set = imgui_allocate_image(diffuse_path);
 
@@ -279,16 +319,52 @@ public:
 			ImGui::Separator();
 		}
 
-		if (m_material->has_normal()) {
+		if (material->has_normal()) {
 			ImGui::Text("Normal Texture:");
 
-			std::string normal_path = m_material->normal_texture;
+			std::string normal_path = material->normal_texture;
 			if (is_not_loaded)
 				m_normal_set = imgui_allocate_image(normal_path);
 
 			ImGui::Image(m_normal_set, ImVec2(256, 256));
 			ImGui::Separator();
 		}
+
+		// Notify the daemon that the material has been updated
+		if (updated_material) {
+			kobra::Material::daemon.update(material_index);
+			std::lock_guard <std::mutex> lock_guard
+				(m_editor->m_renderers.movement_mutex);
+			m_editor->m_renderers.movement.push(0);
+		}
+
+		ImGui::End();
+	}
+};
+
+// RTX Renderer UI attachment
+class RTXRenderer : public kobra::ui::ImGuiAttachment {
+	Editor *m_editor = nullptr;
+	int m_path_depth = 0;
+public:
+	RTXRenderer() = delete;
+	RTXRenderer(Editor *editor) : m_editor {editor}, m_path_depth {2} {
+		m_editor->m_renderers.armada_rtx->set_depth(m_path_depth);
+	}
+
+	void render() override {
+		ImGui::Begin("RTX Renderer");
+
+		// Setting the path depth
+		if (ImGui::SliderInt("Path Depth", &m_path_depth, 1, 10)) {
+			m_editor->m_renderers.armada_rtx->set_depth(m_path_depth);
+			std::lock_guard <std::mutex> lock_guard
+				(m_editor->m_renderers.movement_mutex);
+			m_editor->m_renderers.movement.push(0);
+		}
+
+		// Checkboxes for enabling/disabling denoising
+		ImGui::Checkbox("Denoise", &m_editor->m_renderers.denoise);
 
 		ImGui::End();
 	}
@@ -353,17 +429,6 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 
 	// TODO: irradiance computer load from cache...
 
-	// Attach UI layers
-	// m_image_viewer = std::make_shared <ImageViewer> (get_context(), images);
-	m_progress_bar = std::make_shared <ProgressBar> ("Irradiance Computation Progress");
-	m_info_tab = std::make_shared <InfoTab> ();
-	m_material_editor = std::make_shared <MaterialEditor> (get_context());
-
-	// m_ui->attach(m_image_viewer);
-	m_ui->attach(m_progress_bar);
-	m_ui->attach(m_info_tab);
-	m_ui->attach(m_material_editor);
-
 	// Configure the forward renderer
 	m_forward_renderer.add_pipeline(
 		"environment",
@@ -384,17 +449,17 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	m_renderers.mesh_memory = std::make_shared <kobra::layers::MeshMemory> (get_context());
 
 	constexpr vk::Extent2D raytracing_extent = {1000, 1000};
-	m_renderers.armada_rtx = kobra::amadeus::ArmadaRTX(
+	m_renderers.armada_rtx = std::make_shared <kobra::amadeus::ArmadaRTX> (
 		get_context(), m_renderers.system,
 		m_renderers.mesh_memory, raytracing_extent
 	);
 
-	m_renderers.armada_rtx.attach(
+	m_renderers.armada_rtx->attach(
 		"Path Tracer",
 		std::make_shared <kobra::amadeus::PathTracer> ()
 	);
 
-	m_renderers.armada_rtx.set_envmap(KOBRA_DIR "/resources/skies/background_1.jpg");
+	m_renderers.armada_rtx->set_envmap(KOBRA_DIR "/resources/skies/background_1.jpg");
 
 	// Create the denoiser layer
 	m_renderers.denoiser = kobra::layers::Denoiser::make(
@@ -407,9 +472,21 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	m_renderers.framer = kobra::layers::Framer(get_context());
 
 	// Allocate necessary buffers
-	size_t size = m_renderers.armada_rtx.size();
+	size_t size = m_renderers.armada_rtx->size();
 	m_buffers.traced = kobra::cuda::alloc(size * sizeof(uint32_t));
 	m_buffers.traced_cpu.resize(size);
+
+	// Attach UI layers
+	// m_image_viewer = std::make_shared <ImageViewer> (get_context(), images);
+	m_progress_bar = std::make_shared <ProgressBar> ("Irradiance Computation Progress");
+	m_info_tab = std::make_shared <InfoTab> ();
+	m_material_editor = std::make_shared <MaterialEditor> (this, &m_texture_loader);
+
+	// m_ui->attach(m_image_viewer);
+	m_ui->attach(m_progress_bar);
+	m_ui->attach(m_info_tab);
+	m_ui->attach(m_material_editor);
+	m_ui->attach(std::make_shared <RTXRenderer> (this));
 }
 
 Editor::~Editor()
@@ -514,24 +591,28 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 				m_renderers.movement = std::queue <uint32_t> ();
 			}
 
-			m_renderers.armada_rtx.render(
+			m_renderers.armada_rtx->render(
 				m_scene.ecs,
 				m_camera.get <kobra::Camera> (),
 				m_camera.get <kobra::Transform> (),
 				accumulate
 			);
 
-			// TODO:enable/disable denoiser
-			kobra::layers::denoise(m_renderers.denoiser, {
-				.color = (CUdeviceptr) m_renderers.armada_rtx.color_buffer(),
-				.normal = (CUdeviceptr) m_renderers.armada_rtx.normal_buffer(),
-				.albedo = (CUdeviceptr) m_renderers.armada_rtx.albedo_buffer()
-			});
+			float4 *buffer = (float4 *) m_renderers.armada_rtx->color_buffer();
+			if (m_renderers.denoise) {
+				kobra::layers::denoise(m_renderers.denoiser, {
+					.color = (CUdeviceptr) m_renderers.armada_rtx->color_buffer(),
+					.normal = (CUdeviceptr) m_renderers.armada_rtx->normal_buffer(),
+					.albedo = (CUdeviceptr) m_renderers.armada_rtx->albedo_buffer()
+				});
 
-			vk::Extent2D rtx_extent = m_renderers.armada_rtx.extent();
+				buffer = (float4 *) m_renderers.denoiser.result;
+			}
+
+			vk::Extent2D rtx_extent = m_renderers.armada_rtx->extent();
 
 			kobra::cuda::hdr_to_ldr(
-				(float4 *) m_renderers.denoiser.result,
+				buffer,
 				(uint32_t *) m_buffers.traced,
 				rtx_extent.width, rtx_extent.height,
 				kobra::cuda::eTonemappingACES
@@ -539,7 +620,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 
 			kobra::cuda::copy(
 				m_buffers.traced_cpu, m_buffers.traced,
-				m_renderers.armada_rtx.size() * sizeof(uint32_t)
+				m_renderers.armada_rtx->size() * sizeof(uint32_t)
 			);
 
 			// TODO: import CUDA to Vulkan and render straight to the image
@@ -634,19 +715,26 @@ void Editor::after_present()
 
 		// Update the material editor
 		if (m_selection.first < 0 || m_selection.second < 0) {
-			m_material_editor->m_material = nullptr;
+			m_material_editor->material_index = -1;
 		} else {
 			kobra::Renderable &renderable = m_scene.ecs
 				.get <kobra::Renderable> (m_selection.first);
 
 			uint32_t material_index = renderable.material_indices[m_selection.second];
-			m_material_editor->m_material = &kobra::Material::all[material_index];
+			m_material_editor->material_index = material_index;
 		}
 	}
+
+	// Ping all systems using materials
+	kobra::Material::daemon.ping_all();
 }
 
 void Editor::mouse_callback(void *us, const kobra::io::MouseEvent &event)
 {
+	// Skip if on ImGui
+	if (ImGui::GetIO().WantCaptureMouse)
+		return;
+
 	static const int select_button = GLFW_MOUSE_BUTTON_LEFT;
 
 	// Check if selecting
@@ -674,18 +762,24 @@ void Editor::mouse_callback(void *us, const kobra::io::MouseEvent &event)
 	static bool dragging = false;
 	static bool alt_dragging = false;
 
-	bool is_drag_button = (event.button == pan_button);
-	if (event.action == GLFW_PRESS && is_drag_button)
-		dragging = true;
-	else if (event.action == GLFW_RELEASE && is_drag_button)
-		dragging = false;
-
 	Editor *editor = static_cast <Editor *> (us);
+	bool is_drag_button = (event.button == pan_button);
+	if (event.action == GLFW_PRESS && is_drag_button) {
+		dragging = true;
+		glfwSetInputMode(editor->window.handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	} else if (event.action == GLFW_RELEASE && is_drag_button) {
+		dragging = false;
+		glfwSetInputMode(editor->window.handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+	}
+
 	bool is_alt_down = editor->io.input->is_key_down(GLFW_KEY_LEFT_ALT);
-	if (!alt_dragging && is_alt_down)
+	if (!alt_dragging && is_alt_down) {
 		alt_dragging = true;
-	else if (alt_dragging && !is_alt_down)
+		glfwSetInputMode(editor->window.handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	} else if (alt_dragging && !is_alt_down) {
 		alt_dragging = false;
+		glfwSetInputMode(editor->window.handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+	}
 
 	// Pan only when dragging
 	if (dragging | alt_dragging) {
@@ -716,5 +810,7 @@ void Editor::keyboard_callback(void *us, const kobra::io::KeyboardEvent &event)
 	if (event.action == GLFW_PRESS) {
 		if (event.key == GLFW_KEY_TAB)
 			editor->m_renderers.mode = !editor->m_renderers.mode;
+		if (event.key == GLFW_KEY_ESCAPE)
+			editor->m_selection = {-1, -1};
 	}
 }
