@@ -16,22 +16,15 @@ struct Hit {
 	glm::mat4 model;
 
 	// Mesh data
-	// glm::vec2		*texcoords;
-	glm::uvec3		*triangles;
-	
-	/* glm::vec3		*vertices;
-
-	glm::vec3 		*normals;
-	glm::vec3		*tangents;
-	glm::vec3		*bitangents; */
-
 	Vertex			*vertices;
+	glm::uvec3		*triangles;
 
 	// Auto UV mapping parameters
 	BoundingBox		bbox;
 
 	// Material and textures
 	cuda::Material		material;
+	uint32_t		material_index;
 
 	struct {
 		cudaTextureObject_t	diffuse;

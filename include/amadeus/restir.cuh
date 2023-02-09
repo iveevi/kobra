@@ -22,10 +22,10 @@ struct ReSTIR_Parameters : ArmadaLaunchInfo {
 	// Reservoirs
 	Reservoir <DirectLightingSample> *current;
 	Reservoir <DirectLightingSample> *previous;
-	cuda::Material *materials;
+	cuda::Material *materials_buffer;
 	glm::vec4 *intermediate;
 	glm::vec4 *auxiliary;
-	
+
 	// Previous camera (for temporal reprojection)
 	Camera previous_camera;
 };
@@ -103,7 +103,7 @@ class ReSTIR : public AttachmentRTX {
 			program_options,
 			program_groups
 		);
-	
+
 		// Create the pipelines
 		m_pipeline_initial = optix::link_optix_pipeline(
 			optix_context,
@@ -205,7 +205,7 @@ public:
 		std::vector <Reservoir <DirectLightingSample>> reservoirs(m_extent.width * m_extent.height);
 		m_parameters.current = cuda::make_buffer(reservoirs);
 		m_parameters.previous = cuda::make_buffer(reservoirs);
-		m_parameters.materials = cuda::alloc <cuda::Material> (m_extent.width * m_extent.height);
+		m_parameters.materials_buffer = cuda::alloc <cuda::Material> (m_extent.width * m_extent.height);
 		m_parameters.intermediate = cuda::alloc <glm::vec4> (m_extent.width * m_extent.height);
 		m_parameters.auxiliary = cuda::alloc <glm::vec4> (m_extent.width * m_extent.height);
 	}
@@ -214,7 +214,7 @@ public:
 		// Free the reservoirs
 		cuda::free(m_parameters.current);
 		cuda::free(m_parameters.previous);
-		cuda::free(m_parameters.materials);
+		cuda::free(m_parameters.materials_buffer);
 		cuda::free(m_parameters.intermediate);
 		cuda::free(m_parameters.auxiliary);
 	}
@@ -223,18 +223,21 @@ public:
 	void render(const ArmadaRTX *armada_rtx,
 			const ArmadaLaunchInfo &launch_info,
 			const std::optional <OptixTraversableHandle> &handle,
+			std::vector <HitRecord> *hit_records,
 			const vk::Extent2D &extent) override {
 		// Check if hit groups need to be updated, and update them if necessary
-		if (m_sbt_initial.hitgroupRecordCount != armada_rtx->hit_records().size()) {
-			std::vector <HitgroupRecord> hit_records = armada_rtx->hit_records();
-
-			for (auto &hitgroup_record : hit_records)
+		if (hit_records) {
+			for (auto &hitgroup_record : *hit_records)
 				optix::pack_header(m_closest_hit, hitgroup_record);
 
+			// Free old buffer
+			if (m_sbt_initial.hitgroupRecordBase)
+				cuda::free(m_sbt_initial.hitgroupRecordBase);
+
 			// Update the SBT
-			m_sbt_initial.hitgroupRecordBase = cuda::make_buffer_ptr(hit_records);
-			m_sbt_initial.hitgroupRecordStrideInBytes = sizeof(HitgroupRecord);
-			m_sbt_initial.hitgroupRecordCount = hit_records.size();
+			m_sbt_initial.hitgroupRecordBase = cuda::make_buffer_ptr(*hit_records);
+			m_sbt_initial.hitgroupRecordStrideInBytes = sizeof(HitRecord);
+			m_sbt_initial.hitgroupRecordCount = hit_records->size();
 		}
 
 		// Copy the parameters and launch
@@ -283,7 +286,7 @@ public:
 			);
 
 			CUDA_SYNC_CHECK();
-		
+
 			// Swap for next iteration
 			// TODO: indicate whether to shade or not
 			std::swap(m_parameters.current, m_parameters.previous);

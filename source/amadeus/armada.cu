@@ -34,6 +34,9 @@ ArmadaRTX::ArmadaRTX(const Context &context,
 	// Start the timer
 	m_timer.start();
 
+	// Initialize the host state
+	m_host.last_updated = 0;
+
 	// Initialize TLAS state
 	m_tlas.null = true;
 	m_tlas.last_updated = 0;
@@ -50,6 +53,7 @@ ArmadaRTX::ArmadaRTX(const Context &context,
 	params.accumulate = true;
 	params.lights.quad_count = 0;
 	params.lights.tri_count = 0;
+	params.materials = nullptr;
 	params.environment_map = 0;
 	params.has_environment_map = false;
 
@@ -188,6 +192,7 @@ void ArmadaRTX::update_sbt_data
 
 		hit_record.data.model = submesh_transforms[i]->matrix();
 		hit_record.data.material = material;
+		hit_record.data.material_index = submesh->material_index;
 
 		hit_record.data.triangles = cachelets[i].m_cuda_triangles;
 		hit_record.data.vertices = cachelets[i].m_cuda_vertices;
@@ -245,20 +250,19 @@ void ArmadaRTX::update_sbt_data
 }
 
 // Preprocess scene data
-
 // TODO: get rid of this method..
-std::optional <OptixTraversableHandle>
-ArmadaRTX::preprocess_scene
+ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 		(const ECS &ecs,
 		const Camera &camera,
 		const Transform &transform)
 {
 	// To return
 	std::optional <OptixTraversableHandle> handle;
+	std::vector <HitRecord> *hit_records = nullptr;
 
 	// Set viewing position
 	m_launch_info.camera.center = transform.position;
-	
+
 	auto uvw = kobra::uvw_frame(camera, transform);
 
 	m_launch_info.camera.ax_u = uvw.u;
@@ -291,7 +295,7 @@ ArmadaRTX::preprocess_scene
 			rasterizers.push_back(rasterizer);
 			rasterizer_transforms.push_back(transform);
 		}
-		
+
 		if (ecs.exists <Light> (i)) {
 			const auto *light = &ecs.get <Light> (i);
 			const auto *transform = &ecs.get <Transform> (i);
@@ -301,11 +305,10 @@ ArmadaRTX::preprocess_scene
 		}
 	}
 
-	// Update data if necessary 
+	// Update data if necessary
 	if (updated || m_tlas.null) {
 		// Load the list of all submeshes
-		std::vector <layers::MeshMemory::Cachelet> cachelets; // TODO: redo this
-							      // method...
+		std::vector <layers::MeshMemory::Cachelet> cachelets; // TODO: redo this method...
 		std::vector <const Submesh *> submeshes;
 		std::vector <const Transform *> submesh_transforms;
 
@@ -333,6 +336,8 @@ ArmadaRTX::preprocess_scene
 		);
 
 		update_sbt_data(cachelets, submeshes, submesh_transforms);
+		// hit_records = &m_host.hit_records;
+		m_host.last_updated = clock();
 
 		// Reset the number of samples stored
 		m_launch_info.samples = 0;
@@ -344,10 +349,87 @@ ArmadaRTX::preprocess_scene
 		// Update the status
 		updated = true;
 	}
-		
+
+	// Generate material buffer if needed
+	if (!m_launch_info.materials) {
+		std::cout << "Generating material buffer" << std::endl;
+		std::vector <cuda::_material> materials; // TODO: keep in host
+		for (const Material &material : Material::all) {
+			cuda::_material mat;
+
+			// Scalar/vector values
+			mat.diffuse = cuda::to_f3(material.diffuse);
+			mat.specular = cuda::to_f3(material.specular);
+			mat.emission = cuda::to_f3(material.emission);
+			mat.ambient = cuda::to_f3(material.ambient);
+			mat.shininess = material.shininess;
+			mat.roughness = material.roughness;
+			mat.refraction = material.refraction;
+			mat.type = material.type;
+
+			// Textures
+			if (material.has_albedo()) {
+				const ImageData &diffuse = m_texture_loader
+					->load_texture(material.albedo_texture);
+
+				mat.textures.diffuse
+					= cuda::import_vulkan_texture(*m_device, diffuse);
+				mat.textures.has_diffuse = true;
+			}
+
+			if (material.has_normal()) {
+				const ImageData &normal = m_texture_loader
+					->load_texture(material.normal_texture);
+
+				mat.textures.normal
+					= cuda::import_vulkan_texture(*m_device, normal);
+				mat.textures.has_normal = true;
+			}
+
+			if (material.has_specular()) {
+				const ImageData &specular = m_texture_loader
+					->load_texture(material.specular_texture);
+
+				mat.textures.specular
+					= cuda::import_vulkan_texture(*m_device, specular);
+				mat.textures.has_specular = true;
+			}
+
+			if (material.has_emission()) {
+				const ImageData &emission = m_texture_loader
+					->load_texture(material.emission_texture);
+
+				mat.textures.emission
+					= cuda::import_vulkan_texture(*m_device, emission);
+				mat.textures.has_emission = true;
+			}
+
+			if (material.has_roughness()) {
+				const ImageData &roughness = m_texture_loader
+					->load_texture(material.roughness_texture);
+
+				mat.textures.roughness
+					= cuda::import_vulkan_texture(*m_device, roughness);
+				mat.textures.has_roughness = true;
+			}
+
+			materials.push_back(mat);
+		}
+
+		m_launch_info.materials = cuda::make_buffer(materials);
+	}
+
+	// Send hit records to attachment if needed
+	long long int attachment_time = m_host.times[m_previous_attachment];
+	if (attachment_time < m_host.last_updated) {
+		// Send the hit records
+		hit_records = &m_host.hit_records;
+		m_host.times[m_previous_attachment] = m_host.last_updated;
+	}
+
 	// Create acceleration structure for the attachment if needed
 	// assuming that there is currently a valid attachment
-	long long int attachment_time = m_tlas.times[m_previous_attachment];
+	attachment_time = m_tlas.times[m_previous_attachment];
 	if (attachment_time < m_tlas.last_updated) {
 		// Create the acceleration structure
 		m_tlas.times[m_previous_attachment] = m_tlas.last_updated;
@@ -357,7 +439,7 @@ ArmadaRTX::preprocess_scene
 		);
 	}
 
-	return handle;
+	return {handle, hit_records};
 }
 
 // Path tracing computation
@@ -381,7 +463,7 @@ void ArmadaRTX::render(const ECS &ecs,
 		m_attachments[m_previous_attachment]->load();
 	}
 
-	auto handle = preprocess_scene(ecs, camera, transform);
+	auto out = preprocess_scene(ecs, camera, transform);
 
 	// Reset the accumulation state if needed
 	if (!accumulate)
@@ -389,7 +471,7 @@ void ArmadaRTX::render(const ECS &ecs,
 
 	// Invoke render for current attachment
 	auto &attachment = m_attachments[m_previous_attachment];
-	attachment->render(this, m_launch_info, handle, m_extent);
+	attachment->render(this, m_launch_info, out.handle, out.hit_records, m_extent);
 
 	// Increment number of samples
 	m_launch_info.samples++;

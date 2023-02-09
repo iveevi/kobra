@@ -44,7 +44,7 @@ void make_ray(uint3 idx,
 	radius = sqrt(xoffset * xoffset + yoffset * yoffset)/sqrt(0.5f); */
 
 	pcg3f(seed);
-	
+
 	float xoffset = (fract(seed.x) - 0.5f);
 	float yoffset = (fract(seed.y) - 0.5f);
 
@@ -87,7 +87,7 @@ extern "C" __global__ void __raygen__()
 		.ior = 1.0f,
 		.depth = 0,
 	};
-	
+
 	// Trace ray and generate contribution
 	unsigned int i0, i1;
 	pack_pointer(&rp, i0, i1);
@@ -134,7 +134,7 @@ extern "C" __global__ void __closesthit__()
 {
 	// Load all necessary data
 	LOAD_RAYPACKET();
-	LOAD_INTERSECTION_DATA();
+	LOAD_INTERSECTION_DATA(parameters);
 
 	bool primary = (rp->depth == 0);
 
@@ -142,7 +142,7 @@ extern "C" __global__ void __closesthit__()
 	// TODO: use more complex shadow bias functions
 	// TODO: an easier check for transmissive objects
 	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
-	
+
 	// Construct SurfaceHit instance for lighting calculations
 	SurfaceHit surface_hit {
 		.mat = material,
@@ -180,7 +180,7 @@ extern "C" __global__ void __closesthit__()
 	// TODO: boolean member for toggling russian roulette
 	rp->ior = material.refraction;
 	rp->depth++;
-	
+
 	// Trace the next ray
 	float3 indirect = make_float3(0.0f);
 	if (pdf > 0) {

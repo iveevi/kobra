@@ -44,7 +44,7 @@ class System {
                         std::vector <Instance>
                 > instances;
         } m_cache;
-	
+
         // Build GAS for an instance
         void build_gas(Instance &instance) {
                 // Build acceleration structures

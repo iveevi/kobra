@@ -18,7 +18,6 @@ class PathTracer : public AttachmentRTX {
 	// SBT record types
 	using RaygenRecord = optix::Record <int>;
 	using MissRecord = optix::Record <int>;
-	using HitgroupRecord = optix::Record <optix::Hit>;
 
 	// Pipeline related information
 	OptixModule m_module;
@@ -129,18 +128,21 @@ public:
 	void render(const ArmadaRTX *armada_rtx,
 			const ArmadaLaunchInfo &launch_info,
 			const std::optional <OptixTraversableHandle> &handle,
+			std::vector <HitRecord> *hit_records,
 			const vk::Extent2D &extent) override {
 		// Check if hit groups need to be updated, and update them if necessary
-		if (m_sbt.hitgroupRecordCount != armada_rtx->hit_records().size()) {
-			std::vector <HitgroupRecord> hit_records = armada_rtx->hit_records();
-
-			for (auto &hitgroup_record : hit_records)
+		if (hit_records) {
+			for (auto &hitgroup_record : *hit_records)
 				optix::pack_header(m_closest_hit, hitgroup_record);
 
+			// Free old buffer
+			if (m_sbt.hitgroupRecordBase)
+				cuda::free(m_sbt.hitgroupRecordBase);
+
 			// Update the SBT
-			m_sbt.hitgroupRecordBase = cuda::make_buffer_ptr(hit_records);
-			m_sbt.hitgroupRecordStrideInBytes = sizeof(HitgroupRecord);
-			m_sbt.hitgroupRecordCount = hit_records.size();
+			m_sbt.hitgroupRecordBase = cuda::make_buffer_ptr(*hit_records);
+			m_sbt.hitgroupRecordStrideInBytes = sizeof(HitRecord);
+			m_sbt.hitgroupRecordCount = hit_records->size();
 		}
 
 		// Copy the parameters and launch

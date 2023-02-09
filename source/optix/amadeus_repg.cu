@@ -23,7 +23,7 @@ struct RayPacket {
 	float3	seed;
 
 	float	ior;
-	
+
 	int	depth;
 	int	index;
 };
@@ -39,7 +39,7 @@ void make_ray(uint3 idx,
 	const float3 U = to_f3(parameters.camera.ax_u);
 	const float3 V = to_f3(parameters.camera.ax_v);
 	const float3 W = to_f3(parameters.camera.ax_w);
-	
+
 	/* Jittered halton
 	int xoff = rand(parameters.image_width, seed);
 	int yoff = rand(parameters.image_height, seed);
@@ -50,7 +50,7 @@ void make_ray(uint3 idx,
 	radius = sqrt(xoffset * xoffset + yoffset * yoffset)/sqrt(0.5f); */
 
 	pcg3f(seed);
-	
+
 	float xoffset = (fract(seed.x) - 0.5f);
 	float yoffset = (fract(seed.y) - 0.5f);
 
@@ -94,7 +94,7 @@ extern "C" __global__ void __raygen__()
 		.depth = 0,
 		.index = index,
 	};
-	
+
 	// Trace ray and generate contribution
 	unsigned int i0, i1;
 	pack_pointer(&rp, i0, i1);
@@ -150,7 +150,7 @@ extern "C" __global__ void __closesthit__()
 {
 	// Load all necessary data
 	LOAD_RAYPACKET();
-	LOAD_INTERSECTION_DATA();
+	LOAD_INTERSECTION_DATA(parameters);
 
 	bool primary = (rp->depth == 0);
 
@@ -158,7 +158,7 @@ extern "C" __global__ void __closesthit__()
 	// TODO: use more complex shadow bias functions
 	// TODO: an easier check for transmissive objects
 	x += (material.type == Shading::eTransmission ? -1 : 1) * n * eps;
-	
+
 	// Construct SurfaceHit instance for lighting calculations
 	SurfaceHit surface_hit {
 		.mat = material,
@@ -167,7 +167,7 @@ extern "C" __global__ void __closesthit__()
 		.wo = wo,
 		.x = x,
 	};
-	
+
 	auto &lights = parameters.lights;
 
 	LightingContext lc {
@@ -190,7 +190,7 @@ extern "C" __global__ void __closesthit__()
 		for (int i = 0; i < 8; i++) {
 			// Sample the light sources
 			FullLightSample fls = sample_direct(lc, surface_hit, rp->seed);
-		
+
 			// Compute lighting
 			float3 D = fls.point - surface_hit.x;
 			float d = length(D);
@@ -235,7 +235,7 @@ extern "C" __global__ void __closesthit__()
 		reservoir.W *= 1.0f - occluded;
 
 		// Save material
-		parameters.materials[rp->index] = material;
+		parameters.materials_buffer[rp->index] = material;
 
 		// Compute direct lighting
 		direct = Li * reservoir.W;
@@ -289,9 +289,9 @@ extern "C" __global__ void __closesthit__()
 	rp->value = {mod, mod, mod};
 
 	rp->value = colors[interleaved % 8]; */
-	
+
 	// Initial resampling in this kernel, then accumulate in another
-	
+
 	// Update values
 	rp->value = direct;
 	rp->position = make_float4(x, 1);

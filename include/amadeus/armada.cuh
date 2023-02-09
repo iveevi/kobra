@@ -32,6 +32,10 @@ class Renderable;
 
 namespace amadeus {
 
+// Aliases
+using HitRecord = optix::Record <optix::Hit>;
+
+
 // Forward declarations
 class ArmadaRTX;
 
@@ -65,6 +69,9 @@ struct ArmadaLaunchInfo {
 		glm::vec4 *albedo;
 		glm::vec4 *position;
 	} buffers;
+
+	// List of materials
+	cuda::_material *materials;
 
 	cudaTextureObject_t environment_map;
 	bool has_environment_map;
@@ -114,6 +121,7 @@ public:
 		const ArmadaRTX *,
 		const ArmadaLaunchInfo &,
 		const std::optional <OptixTraversableHandle> &,
+		std::vector <HitRecord> *,
 		const vk::Extent2D &
 	) = 0;
 
@@ -123,9 +131,6 @@ public:
 
 // Armada RTX for real-time, physically-based raytracing methods
 class ArmadaRTX {
-	// Aliases
-	using HitRecord = optix::Record <optix::Hit>;
-
 	// Raytracing backend
 	std::shared_ptr <System> m_system;
 	std::shared_ptr <layers::MeshMemory> m_mesh_memory;
@@ -146,6 +151,10 @@ class ArmadaRTX {
 		std::vector <optix::QuadLight> quad_lights;
 		std::vector <optix::TriangleLight> tri_lights;
 		std::vector <HitRecord> hit_records;
+
+		// Update state for the hit records
+		long long int last_updated;
+		std::map <std::string, long long int> times;
 	} m_host;
 
 	// Timer
@@ -180,8 +189,12 @@ class ArmadaRTX {
 		const std::vector <const Transform *> &
 	);
 
-	std::optional <OptixTraversableHandle>
-	preprocess_scene(const ECS &, const Camera &, const Transform &);
+	struct preprocess_update {
+		std::optional <OptixTraversableHandle> handle;
+		std::vector <HitRecord> *hit_records;
+	};
+
+	preprocess_update preprocess_scene(const ECS &, const Camera &, const Transform &);
 public:
 	// Default constructor
 	ArmadaRTX() = default;
@@ -233,6 +246,7 @@ public:
 		KOBRA_LOG_FUNC(Log::OK) << "Attaching attachment " << name << std::endl;
 		m_attachments[name] = attachment;
 		m_attachments[name]->attach(*this);
+		m_host.times[name] = 0;
 		m_tlas.times[name] = 0;
 		m_active_attachment = name;
 	}

@@ -1,5 +1,7 @@
 #version 450
 
+layout (local_size_x = 16, local_size_y = 16) in;
+
 layout (binding = 0) uniform sampler2D environment_map;
 
 layout (binding = 1) writeonly uniform image2D irradiance_maps[${MIP_MAPS}];

@@ -68,6 +68,10 @@ endif()
 # Macros
 add_compile_definitions(KOBRA_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 
+# Macros for ImageMagick
+add_compile_definitions(MAGICKCORE_QUANTUM_DEPTH=16)
+add_compile_definitions(MAGICKCORE_HDRI_ENABLE=0)
+
 # Include directories
 include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty

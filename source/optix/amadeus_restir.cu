@@ -230,7 +230,7 @@ extern "C" __global__ void __raygen__temporal()
 
 	if (current.size() > 0) {
 		// Reconstruct surface intersection information
-		Material material = parameters.materials[index];
+		Material material = parameters.materials_buffer[index];
 		glm::vec3 normal = parameters.buffers.normal[index];
 		glm::vec3 wo = glm::normalize(parameters.camera.center - position);
 
@@ -325,7 +325,7 @@ extern "C" __global__ void __raygen__spatial()
 	const int index = idx.x + idx.y * parameters.resolution.x;
 
 	// Reconstruct surface intersection information
-	Material material = parameters.materials[index];
+	Material material = parameters.materials_buffer[index];
 	glm::vec3 position = parameters.buffers.position[index];
 	glm::vec3 normal = parameters.buffers.normal[index];
 	glm::vec3 wo = glm::normalize(parameters.camera.center - position);
@@ -366,7 +366,7 @@ extern "C" __global__ void __raygen__spatial()
 				merged.update(neighbor.data, t_neighbor * neighbor.W * neighbor.M);
 
 			// Reconstruct neighbor surface intersection information
-			Material material0 = parameters.materials[index0];
+			Material material0 = parameters.materials_buffer[index0];
 			glm::vec3 position0 = parameters.buffers.position[index0];
 			glm::vec3 normal0 = parameters.buffers.normal[index0];
 
@@ -440,7 +440,7 @@ extern "C" __global__ void __closesthit__initial()
 {
 	// Load all necessary data
 	LOAD_RAYPACKET();
-	LOAD_INTERSECTION_DATA();
+	LOAD_INTERSECTION_DATA(parameters);
 
 	bool primary = (rp->depth == 0);
 
@@ -525,7 +525,7 @@ extern "C" __global__ void __closesthit__initial()
 		reservoir.W *= 1.0f - occluded;
 
 		// Save material
-		parameters.materials[rp->index] = material;
+		parameters.materials_buffer[rp->index] = material;
 	} else {
 		direct = material.emission + Ld(lc, surface_hit, rp->seed);
 	}

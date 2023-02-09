@@ -186,6 +186,7 @@ struct MotionCapture : public kobra::BaseApp {
 			std::make_shared <kobra::amadeus::RePG> ()
 		);
 
+		armada_rtx->activate("Path Tracer");
 		armada_rtx->set_envmap(KOBRA_DIR "/resources/skies/background_1.jpg");
 
 		/* Create the denoiser layer
@@ -194,7 +195,7 @@ struct MotionCapture : public kobra::BaseApp {
 			kobra::layers::Denoiser::eNormal
 				| kobra::layers::Denoiser::eAlbedo
 		); */
-		
+
 		// Input callbacks
 		io.mouse_events.subscribe(mouse_callback, this);
 		io.keyboard_events.subscribe(keyboard_callback, this);
@@ -224,7 +225,7 @@ struct MotionCapture : public kobra::BaseApp {
 		));
 
 		capture_interface->m_parent = this;
-		
+
 		/* NOTE: we need this precomputation step to load all the
 		// resources before rendering; we need some system to allocate
 		// queues so that we dont need to do this...
@@ -232,7 +233,7 @@ struct MotionCapture : public kobra::BaseApp {
 			scene.ecs,
 			camera.get <kobra::Camera> (),
 			camera.get <kobra::Transform> (),
-			false 
+			false
 		); */
 
 		// Allocate buffers
@@ -254,7 +255,7 @@ struct MotionCapture : public kobra::BaseApp {
 	// Path tracing kernel
 	int integrator = 0;
 
-	void path_trace_kernel() {	
+	void path_trace_kernel() {
 		/* compute_timer.start();
 
 		while (!kill) {	 */
@@ -267,8 +268,7 @@ struct MotionCapture : public kobra::BaseApp {
 			// Also check our events
 			events_mutex.lock();
 			if (!events.empty())
-				accumulate = false; // Means that camera direction
-						    // changed
+				accumulate = false; // Means that camera state changed
 
 			events = std::queue <bool> (); // Clear events
 			events_mutex.unlock();
@@ -279,7 +279,7 @@ struct MotionCapture : public kobra::BaseApp {
 				camera.get <kobra::Transform> (),
 				accumulate
 			);
-			
+
 			/* kobra::layers::denoise(denoiser, {
 				.color = grid_based.color_buffer(),
 				.normal = grid_based.normal_buffer(),
@@ -315,7 +315,7 @@ struct MotionCapture : public kobra::BaseApp {
 
 		// TODO: motion method
 		float speed = 20.0f * frame_time;
-		
+
 		glm::vec3 forward = transform.forward();
 		glm::vec3 right = transform.right();
 		glm::vec3 up = transform.up();
@@ -432,7 +432,7 @@ struct MotionCapture : public kobra::BaseApp {
 		// Deltas and directions
 		float dx = event.xpos - px;
 		float dy = event.ypos - py;
-		
+
 		// Check if panning
 		static bool dragging = false;
 		static bool alt_dragging = false;
@@ -472,7 +472,7 @@ struct MotionCapture : public kobra::BaseApp {
 		px = event.xpos;
 		py = event.ypos;
 	}
-	
+
 	// Keyboard callback
 	static void keyboard_callback(void *us, const kobra::io::KeyboardEvent &event) {
 		auto &app = *static_cast <MotionCapture *> (us);
@@ -484,7 +484,7 @@ struct MotionCapture : public kobra::BaseApp {
 			// Execute mode map function
 			if (app.mode_map.count(key) > 0) {
 				app.mode_map.at(key)();
-			
+
 				// Add to event queue
 				app.events_mutex.lock();
 				app.events.push(true);

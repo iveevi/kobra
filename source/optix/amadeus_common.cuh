@@ -24,7 +24,7 @@ static const float eps = 1e-3f;
 // Generic lighting context
 struct LightingContext {
 	OptixTraversableHandle handle;
-	
+
 	QuadLight *quads;
 	TriangleLight *triangles;
 	int quad_count;
@@ -151,27 +151,39 @@ static __device__ float3 calculate_normal
 
 // Calculate relevant material data for a hit
 KCUDA_INLINE __device__
-void calculate_material(Hit *hit_data, Material &mat, glm::uvec3 triangle, glm::vec2 uv)
+Material calculate_material(const _material &mat, glm::vec2 uv)
 {
-	if (hit_data->textures.has_diffuse) {
-		float4 d4 = tex2D <float4> (hit_data->textures.diffuse, uv.x, uv.y);
-		mat.diffuse = make_float3(d4);
+	Material material;
+	material.diffuse = mat.diffuse;
+	material.specular = mat.specular;
+	material.emission = mat.emission;
+	material.ambient = mat.ambient;
+	material.shininess = mat.shininess;
+	material.roughness = mat.roughness;
+	material.refraction = mat.refraction;
+	material.type = mat.type;
+
+	if (mat.textures.has_diffuse) {
+		float4 d4 = tex2D <float4> (mat.textures.diffuse, uv.x, uv.y);
+		material.diffuse = make_float3(d4);
 	}
 
-	if (hit_data->textures.has_specular) {
-		float4 s4 = tex2D <float4> (hit_data->textures.specular, uv.x, uv.y);
-		mat.specular = make_float3(s4);
+	if (mat.textures.has_specular) {
+		float4 s4 = tex2D <float4> (mat.textures.specular, uv.x, uv.y);
+		material.specular = make_float3(s4);
 	}
 
-	if (hit_data->textures.has_emission) {
-		float4 e4 = tex2D <float4> (hit_data->textures.emission, uv.x, uv.y);
-		mat.emission = make_float3(e4);
+	if (mat.textures.has_emission) {
+		float4 e4 = tex2D <float4> (mat.textures.emission, uv.x, uv.y);
+		material.emission = make_float3(e4);
 	}
 
-	if (hit_data->textures.has_roughness) {
-		float4 r4 = tex2D <float4> (hit_data->textures.roughness, uv.x, uv.y);
-		mat.roughness = r4.x;
+	if (mat.textures.has_roughness) {
+		float4 r4 = tex2D <float4> (mat.textures.roughness, uv.x, uv.y);
+		material.roughness = r4.x;
 	}
+
+	return material;
 }
 
 // Check shadow visibility
@@ -350,7 +362,7 @@ FullLightSample sample_direct(const LightingContext &lc, const SurfaceHit &sh, S
 		float4 env = tex2D <float4> (lc.envmap, u, v);
 
 		float pdf = 1.0f/(4.0f * M_PI * total_lights);
-		
+
 		// Copy information
 		sample.Le = make_float3(env);
 		sample.normal = -wi;
@@ -475,7 +487,7 @@ void trace(OptixTraversableHandle handle, int hit_program, int stride, float3 or
 		return;							\
 	}
 
-#define LOAD_INTERSECTION_DATA()					\
+#define LOAD_INTERSECTION_DATA(parameters)				\
 	Hit *hit = reinterpret_cast <Hit *>				\
 		(optixGetSbtDataPointer());				\
 									\
@@ -489,8 +501,8 @@ void trace(OptixTraversableHandle handle, int hit_program, int stride, float3 or
 	glm::vec2 uv = interpolate(uv_a, uv_b, uv_c, bary);		\
 	uv.y = 1 - uv.y;						\
 									\
-	Material material = hit->material;				\
-	calculate_material(hit, material, triangle, uv);		\
+	_material mat = parameters.materials[hit->material_index];	\
+	Material material = calculate_material(mat, uv);		\
 									\
 	bool entering;							\
 	float3 wo = -optixGetWorldRayDirection();			\

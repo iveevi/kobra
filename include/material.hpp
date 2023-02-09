@@ -60,6 +60,25 @@ struct Material {
 	// Global material list
 	// TODO: one list per scene
 	static std::vector <Material> all;
+	
+	// Management daemon
+	static struct {
+		using Pinger = std::function <void ()>;
+
+		std::vector <bool> m_dirty;
+		std::vector <Pinger> m_pingers;
+
+		void ping_at(const Pinger &pinger) {
+			m_pingers.push_back(pinger);
+		}
+
+		void update(uint32_t index) {
+			m_dirty[index] = true;
+			for (auto &pinger : m_pingers) {
+				pinger();
+			}
+		}
+	} daemon;
 };
 
 }

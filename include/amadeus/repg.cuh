@@ -17,10 +17,10 @@ struct Cell {
 struct RePG_Parameters : ArmadaLaunchInfo {
 	// Scene traversal
 	OptixTraversableHandle traversable;
-	
+
 	// Resampling
 	Reservoir <DirectLightingSample> *reservoirs;
-	cuda::Material *materials;
+	cuda::Material *materials_buffer;
 };
 
 // TODO: resampling and shadow rays done in another stream
@@ -31,7 +31,7 @@ class RePG : public AttachmentRTX {
 	using RaygenRecord = optix::Record <int>;
 	using MissRecord = optix::Record <int>;
 	using HitgroupRecord = optix::Record <optix::Hit>;
-	
+
 	vk::Extent2D m_extent;
 
 	// Pipeline related information
@@ -85,7 +85,7 @@ class RePG : public AttachmentRTX {
 			program_options,
 			program_groups
 		);
-	
+
 		m_pipeline = optix::link_optix_pipeline(
 			optix_context,
 			{
@@ -142,31 +142,34 @@ public:
 		// Allocate the reservoirs and indirect buffer
 		std::vector <Reservoir <DirectLightingSample>> reservoirs(m_extent.width * m_extent.height);
 		m_parameters.reservoirs = cuda::make_buffer(reservoirs);
-		m_parameters.materials = cuda::alloc <cuda::Material> (m_extent.width * m_extent.height);
+		m_parameters.materials_buffer = cuda::alloc <cuda::Material> (m_extent.width * m_extent.height);
 	}
 
 	void unload() override {
 		// Free the reservoirs
 		cuda::free(m_parameters.reservoirs);
-		cuda::free(m_parameters.materials);
+		cuda::free(m_parameters.materials_buffer);
 	}
 
 	// Rendering
 	void render(const ArmadaRTX *armada_rtx,
 			const ArmadaLaunchInfo &launch_info,
 			const std::optional <OptixTraversableHandle> &handle,
+			std::vector <HitRecord> *hit_records,
 			const vk::Extent2D &extent) override {
 		// Check if hit groups need to be updated, and update them if necessary
-		if (m_sbt.hitgroupRecordCount != armada_rtx->hit_records().size()) {
-			std::vector <HitgroupRecord> hit_records = armada_rtx->hit_records();
-
-			for (auto &hitgroup_record : hit_records)
+		if (hit_records) {
+			for (auto &hitgroup_record : *hit_records)
 				optix::pack_header(m_closest_hit, hitgroup_record);
 
+			// Free old buffer
+			if (m_sbt.hitgroupRecordBase)
+				cuda::free(m_sbt.hitgroupRecordBase);
+
 			// Update the SBT
-			m_sbt.hitgroupRecordBase = cuda::make_buffer_ptr(hit_records);
-			m_sbt.hitgroupRecordStrideInBytes = sizeof(HitgroupRecord);
-			m_sbt.hitgroupRecordCount = hit_records.size();
+			m_sbt.hitgroupRecordBase = cuda::make_buffer_ptr(*hit_records);
+			m_sbt.hitgroupRecordStrideInBytes = sizeof(HitRecord);
+			m_sbt.hitgroupRecordCount = hit_records->size();
 		}
 
 		// Copy the parameters and launch

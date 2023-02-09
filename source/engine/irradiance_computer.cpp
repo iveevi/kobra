@@ -355,11 +355,9 @@ bool IrradianceComputer::sample(const vk::raii::CommandBuffer &cmd)
 		0, {*m_irradiance_dset}, {}
 	);
 
-	cmd.dispatch(
-		irradiance_maps[0]->extent.width,
-		irradiance_maps[0]->extent.height,
-		1
-	);
+	int work_group_x = (irradiance_maps[0]->extent.width + 15) / 16;
+	int work_group_y = (irradiance_maps[0]->extent.height + 15) / 16;
+	cmd.dispatch(work_group_x, work_group_y, 1);
 
 	for (auto &irradiance_map : m_irradiance_maps)
 		irradiance_map.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
