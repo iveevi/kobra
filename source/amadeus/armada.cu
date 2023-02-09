@@ -49,6 +49,7 @@ ArmadaRTX::ArmadaRTX(const Context &context,
 		extent.height
 	};
 
+	params.max_depth = 10;
 	params.samples = 0;
 	params.accumulate = true;
 	params.lights.quad_count = 0;
@@ -177,7 +178,7 @@ void ArmadaRTX::update_sbt_data
 		const Submesh *submesh = submeshes[i];
 		const Material &mat = Material::all[submesh->material_index];
 
-		// TODO: no need for a separate material??
+		/* TODO: no need for a separate material??
 		cuda::Material material;
 		material.diffuse = cuda::to_f3(mat.diffuse);
 		material.specular = cuda::to_f3(mat.specular);
@@ -186,18 +187,18 @@ void ArmadaRTX::update_sbt_data
 		material.shininess = mat.shininess;
 		material.roughness = mat.roughness;
 		material.refraction = mat.refraction;
-		material.type = mat.type;
+		material.type = mat.type; */
 
 		HitRecord hit_record {};
 
 		hit_record.data.model = submesh_transforms[i]->matrix();
-		hit_record.data.material = material;
+		// hit_record.data.material = material;
 		hit_record.data.material_index = submesh->material_index;
 
 		hit_record.data.triangles = cachelets[i].m_cuda_triangles;
 		hit_record.data.vertices = cachelets[i].m_cuda_vertices;
 
-		// Import textures if necessary
+		/* Import textures if necessary
 		// TODO: method?
 		if (mat.has_albedo()) {
 			const ImageData &diffuse = m_texture_loader
@@ -242,7 +243,7 @@ void ArmadaRTX::update_sbt_data
 			hit_record.data.textures.roughness
 				= cuda::import_vulkan_texture(*m_device, roughness);
 			hit_record.data.textures.has_roughness = true;
-		}
+		} */
 
 		// Push back
 		m_host.hit_records.push_back(hit_record);

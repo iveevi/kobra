@@ -122,10 +122,10 @@ set(Kobra_SOURCES
 	${Kobra_IO_SOURCES}
 	${Kobra_ENGINE_SOURCES}
 	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/core.cu
-	${CMAKE_CURRENT_SOURCE_DIR}/source/layers/basilisk.cu
+	# ${CMAKE_CURRENT_SOURCE_DIR}/source/layers/basilisk.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/source/layers/denoiser.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/source/layers/mesh_memory_cuda.cu
-	${CMAKE_CURRENT_SOURCE_DIR}/source/layers/wssr_grid.cu
+	# ${CMAKE_CURRENT_SOURCE_DIR}/source/layers/wssr_grid.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/source/amadeus/armada.cu
 )
 
@@ -214,10 +214,10 @@ add_dependencies(kobra glsl_shaders)
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/bin/ptx)
 
 file(GLOB_RECURSE OPTIX_SHADERS
-	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/basilisk_rt.cu
-	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/basilisk_restir.cu
-	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/basilisk_voxel.cu
-	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/wssr_grid.cu
+	# ${CMAKE_CURRENT_SOURCE_DIR}/source/optix/basilisk_rt.cu
+	# ${CMAKE_CURRENT_SOURCE_DIR}/source/optix/basilisk_restir.cu
+	# ${CMAKE_CURRENT_SOURCE_DIR}/source/optix/basilisk_voxel.cu
+	# ${CMAKE_CURRENT_SOURCE_DIR}/source/optix/wssr_grid.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/amadeus_path_tracer.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/amadeus_restir.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/amadeus_repg.cu

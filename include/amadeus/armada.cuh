@@ -35,7 +35,6 @@ namespace amadeus {
 // Aliases
 using HitRecord = optix::Record <optix::Hit>;
 
-
 // Forward declarations
 class ArmadaRTX;
 
@@ -76,9 +75,10 @@ struct ArmadaLaunchInfo {
 	cudaTextureObject_t environment_map;
 	bool has_environment_map;
 
-	int samples;
 	bool accumulate;
 	float time;
+	int max_depth;
+	int samples;
 };
 
 // TODO: organize better, e.g. put into attachment method

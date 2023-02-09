@@ -72,7 +72,7 @@ float3 calculate_intersection(Hit *hit, glm::uvec3 triangle, float2 bary)
 
 // Calculate hit normal
 static __device__ float3 calculate_normal
-		(Hit *hit_data, glm::uvec3 triangle,
+		(Hit *hit_data, const _material &mat, glm::uvec3 triangle,
 		float2 bary, glm::vec2 uv, bool &entering)
 {
 	glm::vec3 a = hit_data->vertices[triangle.x].position;
@@ -111,8 +111,8 @@ static __device__ float3 calculate_normal
 
 	normal = normalize(normal);
 
-	if (hit_data->textures.has_normal) {
-		float4 n4 = tex2D <float4> (hit_data->textures.normal, uv.x, uv.y);
+	if (mat.textures.has_normal) {
+		float4 n4 = tex2D <float4> (mat.textures.normal, uv.x, uv.y);
 		float3 n = 2 * make_float3(n4.x, n4.y, n4.z) - 1;
 
 		// Tangent and bitangent
@@ -477,41 +477,41 @@ void trace(OptixTraversableHandle handle, int hit_program, int stride, float3 or
 	);
 }
 
-#define LOAD_RAYPACKET()						\
-	RayPacket *rp;							\
-	unsigned int i0 = optixGetPayload_0();				\
-	unsigned int i1 = optixGetPayload_1();				\
-	rp = unpack_pointer <RayPacket> (i0, i1);			\
-	if (rp->depth > MAX_DEPTH) {					\
-		rp->value = make_float3(0.0f);				\
-		return;							\
+#define LOAD_RAYPACKET(parameters)						\
+	RayPacket *rp;								\
+	unsigned int i0 = optixGetPayload_0();					\
+	unsigned int i1 = optixGetPayload_1();					\
+	rp = unpack_pointer <RayPacket> (i0, i1);				\
+	if (rp->depth > parameters.max_depth) {					\
+		rp->value = make_float3(0.0f);					\
+		return;								\
 	}
 
-#define LOAD_INTERSECTION_DATA(parameters)				\
-	Hit *hit = reinterpret_cast <Hit *>				\
-		(optixGetSbtDataPointer());				\
-									\
-	float2 bary = optixGetTriangleBarycentrics();			\
-	int primitive_index = optixGetPrimitiveIndex();			\
-	glm::uvec3 triangle = hit->triangles[primitive_index];		\
-									\
-	glm::vec2 uv_a = hit->vertices[triangle.x].tex_coords;		\
-	glm::vec2 uv_b = hit->vertices[triangle.y].tex_coords;		\
-	glm::vec2 uv_c = hit->vertices[triangle.z].tex_coords;		\
-	glm::vec2 uv = interpolate(uv_a, uv_b, uv_c, bary);		\
-	uv.y = 1 - uv.y;						\
-									\
-	_material mat = parameters.materials[hit->material_index];	\
-	Material material = calculate_material(mat, uv);		\
-									\
-	bool entering;							\
-	float3 wo = -optixGetWorldRayDirection();			\
-	float3 n = calculate_normal(hit, triangle, bary, uv, entering);	\
-	float3 x = calculate_intersection(hit, triangle, bary);		\
-									\
-	if (isnan(n.x) || isnan(n.y) || isnan(n.z)) {			\
-		rp->value = make_float3(0.0f);				\
-		return;							\
+#define LOAD_INTERSECTION_DATA(parameters)					\
+	Hit *hit = reinterpret_cast <Hit *>					\
+		(optixGetSbtDataPointer());					\
+										\
+	float2 bary = optixGetTriangleBarycentrics();				\
+	int primitive_index = optixGetPrimitiveIndex();				\
+	glm::uvec3 triangle = hit->triangles[primitive_index];			\
+										\
+	glm::vec2 uv_a = hit->vertices[triangle.x].tex_coords;			\
+	glm::vec2 uv_b = hit->vertices[triangle.y].tex_coords;			\
+	glm::vec2 uv_c = hit->vertices[triangle.z].tex_coords;			\
+	glm::vec2 uv = interpolate(uv_a, uv_b, uv_c, bary);			\
+	uv.y = 1 - uv.y;							\
+										\
+	_material mat = parameters.materials[hit->material_index];		\
+	Material material = calculate_material(mat, uv);			\
+										\
+	bool entering;								\
+	float3 wo = -optixGetWorldRayDirection();				\
+	float3 n = calculate_normal(hit, mat, triangle, bary, uv, entering);	\
+	float3 x = calculate_intersection(hit, triangle, bary);			\
+										\
+	if (isnan(n.x) || isnan(n.y) || isnan(n.z)) {				\
+		rp->value = make_float3(0.0f);					\
+		return;								\
 	}
 
 #endif

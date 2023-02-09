@@ -1,8 +1,6 @@
 #include "../../include/amadeus/restir.cuh"
 #include "amadeus_common.cuh"
 
-#define MAX_DEPTH 2
-
 using kobra::amadeus::Reservoir;
 using kobra::amadeus::DirectLightingSample;
 
@@ -439,7 +437,7 @@ extern "C" __global__ void __raygen__spatial()
 extern "C" __global__ void __closesthit__initial()
 {
 	// Load all necessary data
-	LOAD_RAYPACKET();
+	LOAD_RAYPACKET(parameters);
 	LOAD_INTERSECTION_DATA(parameters);
 
 	bool primary = (rp->depth == 0);
@@ -563,7 +561,7 @@ extern "C" __global__ void __closesthit__initial()
 // Miss kernels
 extern "C" __global__ void __miss__()
 {
-	LOAD_RAYPACKET();
+	LOAD_RAYPACKET(parameters);
 
 	// Get direction
 	const float3 ray_direction = optixGetWorldRayDirection();
