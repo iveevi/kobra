@@ -425,8 +425,13 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	m_forward_renderer = kobra::layers::ForwardRenderer(get_context());
 	m_objectifier = kobra::layers::Objectifier(get_context());
 
+	// Configure ImGui
 	ImGui::CreateContext();
 	ImGui_ImplGlfw_InitForVulkan(window.handle, true);
+
+	ImGuiIO &imgui_io = ImGui::GetIO();
+	imgui_io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+	imgui_io.ConfigWindowsMoveFromTitleBarOnly = true;
 
 	auto font = std::make_pair(KOBRA_DIR "/resources/fonts/NotoSans.ttf", 18);
 	m_ui = std::make_shared <kobra::layers::UI> (
