@@ -388,6 +388,9 @@ public:
 		// Checkboxes for enabling/disabling denoising
 		ImGui::Checkbox("Denoise", &m_editor->m_renderers.denoise);
 
+		// TODO: roussian roulette, different integrators, and loading
+		// RTX attachments
+
 		ImGui::End();
 	}
 };

@@ -52,7 +52,9 @@ ArmadaRTX::ArmadaRTX(const Context &context,
 	params.max_depth = 10;
 	params.samples = 0;
 	params.accumulate = true;
+	params.lights.quad_lights = nullptr;
 	params.lights.quad_count = 0;
+	params.lights.tri_lights = nullptr;
 	params.lights.tri_count = 0;
 	params.materials = nullptr;
 	params.environment_map = 0;
@@ -84,15 +86,105 @@ void ArmadaRTX::set_envmap(const std::string &path)
 	m_launch_info.has_environment_map = true;
 }
 
+void ArmadaRTX::update_triangle_light_buffers
+		(const std::set <_instance_ref> &emissive_submeshes_to_update)
+{
+	// TODO: share this setup with the rasterizers (another layer for
+	// material buffer updates? or use the same daemon?)
+	if (m_host.tri_lights.size() != m_host.emissive_count) {
+		if (m_launch_info.lights.tri_lights) {
+			// TODO: free this buffer only when rendering is
+			// complete...
+			cuda::free(m_launch_info.lights.tri_lights);
+			m_launch_info.lights.tri_lights = nullptr;
+			m_launch_info.lights.tri_count = 0;
+		}
+
+		m_host.tri_lights.clear();
+		m_host.emissive_submesh_offsets.clear();
+
+		if (m_host.emissive_count <= 0)
+			return;
+
+		for (const auto &pr : m_host.emissive_submeshes) {
+			const Submesh *submesh = pr.submesh;
+			const Transform *transform = pr.transform;
+
+			const Material &material = Material::all[submesh->material_index];
+
+			m_host.emissive_submesh_offsets[submesh] = m_host.tri_lights.size();
+			for (int i = 0; i < submesh->triangles(); i++) {
+				uint32_t i0 = submesh->indices[i * 3 + 0];
+				uint32_t i1 = submesh->indices[i * 3 + 1];
+				uint32_t i2 = submesh->indices[i * 3 + 2];
+
+				glm::vec3 a = transform->apply(submesh->vertices[i0].position);
+				glm::vec3 b = transform->apply(submesh->vertices[i1].position);
+				glm::vec3 c = transform->apply(submesh->vertices[i2].position);
+
+				// TODO: cache cuda textures
+				m_host.tri_lights.push_back(
+					optix::TriangleLight {
+						cuda::to_f3(a),
+						cuda::to_f3(b - a),
+						cuda::to_f3(c - a),
+						cuda::to_f3(material.emission)
+						// TODO: what if material has
+						// textured emission?
+					}
+				);
+			}
+		}
+
+		std::cout << "# of triangle lights: " << m_host.tri_lights.size() << "\n";
+
+		m_launch_info.lights.tri_lights = cuda::make_buffer(m_host.tri_lights);
+		m_launch_info.lights.tri_count = m_host.tri_lights.size();
+
+		// TODO: display logging in UI as well (add log routing)
+		KOBRA_LOG_FUNC(Log::INFO) << "Uploaded " << m_host.tri_lights.size()
+			<< " triangle lights to the GPU\n";
+	} else if (emissive_submeshes_to_update.size() > 0) {
+		size_t subrange_min = std::numeric_limits <size_t>::max();
+		size_t subrange_max = 0;
+
+		for (const auto &pr : emissive_submeshes_to_update) {
+			const Submesh *submesh = pr.submesh;
+			const Transform *transform = pr.transform;
+
+			const Material &material = Material::all[submesh->material_index];
+
+			size_t offset = m_host.emissive_submesh_offsets[submesh];
+			for (int i = 0; i < submesh->triangles(); i++) {
+				// TODO: check if transforms have changed; if so
+				// then also update the triangle light position
+				m_host.tri_lights[offset + i].intensity =
+					cuda::to_f3(material.emission);
+			}
+
+			subrange_min = std::min(subrange_min, offset);
+			subrange_max = std::max(subrange_max, offset + submesh->triangles());
+		}
+
+		cudaMemcpy(
+			&m_launch_info.lights.tri_lights[subrange_min],
+			&m_host.tri_lights[subrange_min],
+			(subrange_max - subrange_min) * sizeof(optix::TriangleLight),
+			cudaMemcpyHostToDevice
+		);
+	}
+}
+
 // Update the light buffers if needed
-void ArmadaRTX::update_light_buffers
+void ArmadaRTX::update_quad_light_buffers
 		(const std::vector <const Light *> &lights,
-		const std::vector <const Transform *> &light_transforms,
-		const std::vector <const Submesh *> &submeshes,
-		const std::vector <const Transform *> &submesh_transforms)
+		const std::vector <const Transform *> &light_transforms)
 {
 	// TODO: lighting system equivalent of System
 	if (m_host.quad_lights.size() != lights.size()) {
+		if (m_launch_info.lights.quad_lights)
+			cuda::free(m_launch_info.lights.quad_lights);
+
 		m_host.quad_lights.resize(lights.size());
 
 		auto &quad_lights = m_host.quad_lights;
@@ -119,57 +211,6 @@ void ArmadaRTX::update_light_buffers
 
 		KOBRA_LOG_FUNC(Log::INFO) << "Uploaded " << quad_lights.size()
 			<< " quad lights to the GPU\n";
-	}
-
-	// Count number of emissive submeshes
-	int emissive_count = 0;
-
-	// TODO: compute before hand
-	std::vector <std::pair <const Submesh *, int>> emissive_submeshes;
-	for (int i = 0; i < submeshes.size(); i++) {
-		const Submesh *submesh = submeshes[i];
-		const Material &material = Material::all[submesh->material_index];
-		if (glm::length(material.emission) > 0
-				|| material.has_emission()) {
-			emissive_submeshes.push_back({submesh, i});
-			emissive_count += submesh->triangles();
-		}
-	}
-
-	if (m_host.tri_lights.size() != emissive_count) {
-		for (const auto &pr : emissive_submeshes) {
-			const Submesh *submesh = pr.first;
-			const Transform *transform = submesh_transforms[pr.second];
-			const Material &material = Material::all[submesh->material_index];
-
-			for (int i = 0; i < submesh->triangles(); i++) {
-				uint32_t i0 = submesh->indices[i * 3 + 0];
-				uint32_t i1 = submesh->indices[i * 3 + 1];
-				uint32_t i2 = submesh->indices[i * 3 + 2];
-
-				glm::vec3 a = transform->apply(submesh->vertices[i0].position);
-				glm::vec3 b = transform->apply(submesh->vertices[i1].position);
-				glm::vec3 c = transform->apply(submesh->vertices[i2].position);
-
-				m_host.tri_lights.push_back(
-					optix::TriangleLight {
-						cuda::to_f3(a),
-						cuda::to_f3(b - a),
-						cuda::to_f3(c - a),
-						cuda::to_f3(material.emission)
-						// TODO: what if material has
-						// textured emission?
-					}
-				);
-			}
-		}
-
-		m_launch_info.lights.tri_lights = cuda::make_buffer(m_host.tri_lights);
-		m_launch_info.lights.tri_count = m_host.tri_lights.size();
-
-		// TODO: display logging in UI as well (add log routing)
-		KOBRA_LOG_FUNC(Log::INFO) << "Uploaded " << m_host.tri_lights.size()
-			<< " triangle lights to the GPU\n";
 	}
 }
 
@@ -201,9 +242,13 @@ void ArmadaRTX::update_sbt_data
 
 void ArmadaRTX::update_materials(const std::set <uint32_t> &material_indices)
 {
+	std::set <_instance_ref> emissive_submeshes_to_update;
 	for (uint32_t mat_index : material_indices) {
 		const Material &material = Material::all[mat_index];
 		cuda::_material &mat = m_host.materials[mat_index];
+
+		bool was_emissive = (length(mat.emission) > 0.0f)
+				|| mat.textures.has_emission;
 
 		// Copy basic data
 		mat.diffuse = cuda::to_f3(material.diffuse);
@@ -215,7 +260,35 @@ void ArmadaRTX::update_materials(const std::set <uint32_t> &material_indices)
 		mat.refraction = material.refraction;
 		mat.type = material.type;
 
+		bool is_emissive = (length(mat.emission) > 0.0f)
+				|| mat.textures.has_emission;
+
 		// TODO: textures
+
+		const auto &refs = m_host.material_submeshes[mat_index];
+
+		// TODO: check previous state (to see whether to remove from
+		// emissive submeshes)
+		if (is_emissive) {
+			for (const auto &pr : refs) {
+				emissive_submeshes_to_update.insert(pr);
+				if (m_host.emissive_submeshes.find(pr) !=
+						m_host.emissive_submeshes.end())
+					continue;
+
+				m_host.emissive_submeshes.insert(pr);
+				m_host.emissive_count += pr.submesh->triangles();
+			}
+		} else if (was_emissive && !is_emissive) {
+			// Remove from emissive submeshes
+			for (const auto &pr : refs) {
+				m_host.emissive_submeshes.erase(pr);
+				m_host.emissive_count -= pr.submesh->triangles();
+			}
+		}
+
+		// TODO: what if the net change is 0 (with multiple material
+		// emission changes)?
 	}
 
 	// Copy to GPU
@@ -225,6 +298,9 @@ void ArmadaRTX::update_materials(const std::set <uint32_t> &material_indices)
 		m_host.materials.size() * sizeof(cuda::_material),
 		cudaMemcpyHostToDevice
 	);
+
+	// Also update the emissive submeshes if needed
+	update_triangle_light_buffers(emissive_submeshes_to_update);
 }
 
 // Preprocess scene data
@@ -290,6 +366,10 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 		std::vector <const Submesh *> submeshes;
 		std::vector <const Transform *> submesh_transforms;
 
+		// Reserve material-submesh reference structure
+		m_host.material_submeshes.clear();
+		m_host.material_submeshes.resize(Material::all.size());
+
 		for (int i = 0; i < rasterizers.size(); i++) {
 			const Renderable *rasterizer = rasterizers[i];
 			const Transform *transform = rasterizer_transforms[i];
@@ -300,6 +380,10 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 
 			for (int j = 0; j < rasterizer->mesh->submeshes.size(); j++) {
 				const Submesh *submesh = &rasterizer->mesh->submeshes[j];
+				uint32_t material_index = submesh->material_index;
+				m_host.material_submeshes[material_index].insert(
+					{transform, submesh}
+				);
 
 				cachelets.push_back(m_mesh_memory->get(rasterizer, j));
 				submeshes.push_back(submesh);
@@ -307,11 +391,27 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 			}
 		}
 
+		// Count number of emissive submeshes
+		m_host.emissive_count = 0;
+
+		// TODO: compute before hand
+		// std::vector <std::pair <const Submesh *, int>> emissive_submeshes;
+		for (int i = 0; i < submeshes.size(); i++) {
+			const Submesh *submesh = submeshes[i];
+			const Transform *transform = submesh_transforms[i];
+
+			const Material &material = Material::all[submesh->material_index];
+			if (glm::length(material.emission) > 0
+					|| material.has_emission()) {
+				_instance_ref ref {transform, submesh};
+				m_host.emissive_submeshes.insert(ref);
+				m_host.emissive_count += submesh->triangles();
+			}
+		}
+
 		// Update the data
-		update_light_buffers(
-			lights, light_transforms,
-			submeshes, submesh_transforms
-		);
+		update_triangle_light_buffers({});
+		update_quad_light_buffers(lights, light_transforms);
 
 		update_sbt_data(cachelets, submeshes, submesh_transforms);
 		// hit_records = &m_host.hit_records;

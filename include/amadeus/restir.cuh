@@ -225,6 +225,9 @@ public:
 			const std::optional <OptixTraversableHandle> &handle,
 			std::vector <HitRecord> *hit_records,
 			const vk::Extent2D &extent) override {
+		// TODO: store sample light index instead of Le, since lighting
+		// emission could change...
+
 		// Check if hit groups need to be updated, and update them if necessary
 		if (hit_records) {
 			for (auto &hitgroup_record : *hit_records)

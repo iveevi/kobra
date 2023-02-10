@@ -2,10 +2,10 @@
 #define KOBRA_AMADEUS_ARMADA_H_
 
 // Standard headers
+#include <atomic>
 #include <map>
 #include <optional>
 #include <vector>
-#include <atomic>
 
 // OptiX headers
 #include <optix.h>
@@ -147,11 +147,29 @@ class ArmadaRTX {
 
 	// Host buffer analogues
 	// TODO: common algorithm for BVH construction...
+	struct _instance_ref {
+		const Transform *transform = nullptr;
+		const Submesh *submesh = nullptr;
+
+		bool operator <(const _instance_ref &other) const {
+			if (transform != other.transform)
+				return transform < other.transform;
+
+			return submesh < other.submesh;
+		}
+	};
+
 	struct {
 		std::vector <optix::QuadLight> quad_lights;
 		std::vector <optix::TriangleLight> tri_lights;
 		std::vector <HitRecord> hit_records;
+
+		std::set <_instance_ref> emissive_submeshes;
+		std::map <const Submesh *, size_t> emissive_submesh_offsets;
+		int emissive_count = 0;
+
 		std::vector <cuda::_material> materials;
+		std::vector <std::set <_instance_ref>> material_submeshes;
 
 		// Update state for the hit records
 		long long int last_updated;
@@ -177,10 +195,12 @@ class ArmadaRTX {
 	} m_tlas;
 
 	// Private methods
-	void update_light_buffers(
+	void update_triangle_light_buffers(
+		const std::set <_instance_ref> &
+	);
+
+	void update_quad_light_buffers(
 		const std::vector <const Light *> &,
-		const std::vector <const Transform *> &,
-		const std::vector <const Submesh *> &,
 		const std::vector <const Transform *> &
 	);
 
@@ -223,8 +243,11 @@ public:
 		return m_system;
 	}
 
-	const std::vector <HitRecord> &hit_records() const {
-		return m_host.hit_records;
+	std::vector <std::string> attachments() const {
+		std::vector <std::string> names;
+		for (const auto &[name, attachment] : m_attachments)
+			names.push_back(name);
+		return names;
 	}
 
 	// Buffer accessors
