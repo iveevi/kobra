@@ -29,6 +29,7 @@ struct Viewport;
 // TODO: info tab that shows logging and framerate...
 // TODO: viewport attachment
 
+// TODO: only keep the state here...
 struct Editor : public kobra::BaseApp {
 	kobra::Scene m_scene;
 	kobra::Entity m_camera;
@@ -155,6 +156,7 @@ struct InfoTab : public kobra::ui::ImGuiAttachment {
 	std::vector <std::string> m_lines;
 	std::string m_message;
 
+	// TODO: multiple fonts; use monospace for this (e.g. JetBrains Mono)
 	InfoTab() {
 		// Attach logger handler
 		kobra::add_log_handler(this,
@@ -369,6 +371,8 @@ public:
 };
 
 // Viewport UI attachment
+// TODO: keep all viewport editor state in this class
+// e.g. the renderers, etc...
 class Viewport : public kobra::ui::ImGuiAttachment {
 	Editor *m_editor = nullptr;
 	vk::DescriptorSet m_dset;
@@ -380,6 +384,7 @@ public:
 		m_old_aspect = m_editor->m_camera.get <kobra::Camera> ().aspect;
 	}
 
+	// TODO: pass commandbuffer to this function
 	void render() override {
 		ImGui::Begin("Viewport");
 
@@ -436,7 +441,7 @@ public:
 Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 		const std::vector <const char *> &extensions)
 		: kobra::BaseApp {
-			phdev, "Stress Test",
+			phdev, "Kobra Engine",
 			vk::Extent2D {1500, 1000},
 			extensions
 		}
@@ -589,6 +594,17 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	m_ui->attach(m_material_editor);
 	m_ui->attach(std::make_shared <RTXRenderer> (this));
 	m_ui->attach(std::make_shared <Viewport> (this));
+
+	// Load and set the icon
+	std::string icon_path = KOBRA_DIR "/kobra_icon.png";
+	std::cout << "Loading icon from " << icon_path << std::endl;
+
+	GLFWimage icon;
+	stbi_set_flip_vertically_on_load(false);
+	icon.pixels = stbi_load(icon_path.c_str(), &icon.width, &icon.height, nullptr, 4);
+	glfwSetWindowIcon(window.handle, 1, &icon);
+	stbi_image_free(icon.pixels);
+	stbi_set_flip_vertically_on_load(true);
 }
 
 Editor::~Editor()
