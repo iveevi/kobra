@@ -304,7 +304,7 @@ inline void submit_now(const vk::raii::Device &device,
 		},
 		*fence
 	);
-	
+
 	while (device.waitForFences({*fence}, true, timeout) == vk::Result::eTimeout);
 }
 

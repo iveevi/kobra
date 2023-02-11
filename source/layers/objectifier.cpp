@@ -64,6 +64,7 @@ Objectifier::Objectifier(const Context &context)
 	// TODO: resize handler...
 	// TODO: create an editor render layer, and embed the objectifier into
 	// it...
+	rendering.extent = context.extent;
 	rendering.image = ImageData(*context.phdev, *context.device,
 		format, context.extent,
 		vk::ImageTiling::eOptimal,
@@ -142,7 +143,7 @@ Objectifier::Objectifier(const Context &context)
 	rendering.pipeline = make_graphics_pipeline(grp_info1);
 
 	// COMPOSITING RENDER PASS
-	
+
 	// Render pass
 	compositing.render_pass = make_render_pass(
 		*context.device,

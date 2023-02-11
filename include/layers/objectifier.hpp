@@ -29,7 +29,7 @@ public:
 		const Camera &,
 		const Transform &
 	);
-	
+
 	// Composite a highlighting effect
 	void composite_highlight(
 		const vk::raii::CommandBuffer &,
@@ -41,6 +41,10 @@ public:
 		const std::pair <uint32_t, uint32_t> &
 	);
 
+	inline vk::Extent2D query_extent() const {
+		return rendering.extent;
+	}
+
 	// Query object at a given pixel
 	std::pair <uint32_t, uint32_t> query(uint32_t, uint32_t);
 private:
@@ -48,6 +52,7 @@ private:
 	struct {
 		ImageData image = nullptr;
 		DepthBuffer depth_buffer = nullptr;
+		vk::Extent2D extent;
 
 		vk::raii::RenderPass render_pass = nullptr;
 		vk::raii::Framebuffer framebuffer = nullptr;

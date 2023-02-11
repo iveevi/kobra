@@ -216,6 +216,13 @@ void BaseApp::present()
 	// Get the current command buffer
 	const auto &command_buffer = command_buffers[frame_index];
 
+	// Wait for the previous frame to finish rendering
+	while (vk::Result(device.waitForFences(
+		*frames[frame_index].fence,
+		true,
+		std::numeric_limits <uint64_t>::max()
+	)) == vk::Result::eTimeout);
+
 	// Acquire the next image from the swapchain
 	std::tie(result, image_index) = swapchain.swapchain.acquireNextImage(
 		std::numeric_limits <uint64_t>::max(),
@@ -231,13 +238,6 @@ void BaseApp::present()
 	} else if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
 		throw std::runtime_error("Failed to acquire next image");
 	}
-
-	// Wait for the previous frame to finish rendering
-	while (vk::Result(device.waitForFences(
-		*frames[frame_index].fence,
-		true,
-		std::numeric_limits <uint64_t>::max()
-	)) == vk::Result::eTimeout);
 
 	// Then reset the fence
 	device.resetFences(*frames[frame_index].fence);
@@ -303,7 +303,7 @@ void BaseApp::recreate_swapchain()
 	// Update the current extent
 	int width = 0;
 	int height = 0;
-	
+
 	glfwGetFramebufferSize(window.handle, &width, &height);
 	while (width == 0 || height == 0) {
 		glfwGetFramebufferSize(window.handle, &width, &height);
@@ -318,8 +318,38 @@ void BaseApp::recreate_swapchain()
 
 	// Recreate the swapchain
 	auto queue_family = find_queue_families(phdev, surface);
-	swapchain = Swapchain {phdev, device, surface, window.extent,
-		queue_family, &swapchain.swapchain};
+	swapchain = Swapchain {
+		phdev, device, surface, window.extent,
+		queue_family, &swapchain.swapchain
+	};
+
+	// Transition all images to the correct layout
+	submit_now(device, graphics_queue, command_pool,
+		[&](const vk::raii::CommandBuffer &cmd) {
+			std::vector <vk::ImageMemoryBarrier> barriers;
+			for (const vk::Image &image : swapchain.images) {
+				barriers.emplace_back(vk::ImageMemoryBarrier {
+					{},
+					vk::AccessFlagBits::eColorAttachmentWrite,
+					vk::ImageLayout::eUndefined,
+					vk::ImageLayout::ePresentSrcKHR,
+					VK_QUEUE_FAMILY_IGNORED,
+					VK_QUEUE_FAMILY_IGNORED,
+					image,
+					vk::ImageSubresourceRange {
+						vk::ImageAspectFlagBits::eColor,
+						0, 1, 0, 1
+					}
+				});
+			}
+
+			cmd.pipelineBarrier(
+				vk::PipelineStageFlagBits::eTopOfPipe,
+				vk::PipelineStageFlagBits::eColorAttachmentOutput,
+				{}, {}, {}, barriers
+			);
+		}
+	);
 
 	// Recreate the frame and depth buffers
 	depth_buffer = std::move(DepthBuffer {
@@ -328,6 +358,9 @@ void BaseApp::recreate_swapchain()
 		window.extent
 	});
 
+	// TODO: remove the framebuffers from here...
+	// TODO: remove the base app abstraction, and
+	// create a present method in the backend
 	framebuffers = make_framebuffers(device,
 		render_pass,
 		swapchain.image_views,

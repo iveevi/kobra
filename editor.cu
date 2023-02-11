@@ -450,7 +450,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 
 	m_irradiance_computer = kobra::engine::IrradianceComputer(
 		get_context(), environment_map,
-		MIP_LEVELS, 128,
+		MIP_LEVELS, 16,
 		"irradiance_maps"
 	);
 
@@ -510,6 +510,10 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 			m_irradiance_computer.bind(device, descriptor_set, 5);
 		}
 	);
+
+	// TODO: each layer that renders should have its own frmebuffer, or at
+	// least a way to specify the image to render to (and then the layer
+	// creates a framebuffer...)
 
 	// Load all the renderers
 	m_renderers.system = std::make_shared <kobra::amadeus::System> ();
@@ -887,8 +891,12 @@ void Editor::after_present()
 			(request.y - min.y) / (max.y - min.y)
 		};
 
-		fixed.x *= window.extent.width;
-		fixed.y *= window.extent.height;
+		/* fixed.x *= window.extent.width;
+		fixed.y *= window.extent.height; */
+
+		vk::Extent2D extent = m_objectifier.query_extent();
+		fixed.x *= extent.width;
+		fixed.y *= extent.height;
 
 		// TODO: get coordinates of the viewport image...
 		auto ids = m_objectifier.query(fixed.x, fixed.y);
