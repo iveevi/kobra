@@ -14,14 +14,14 @@
 #endif
 
 /* scalar functions used in vector functions */
-#ifndef M_PIf
-#define M_PIf       3.14159265358979323846f
+#ifndef M_PI
+#define M_PI       3.14159265358979323846f
 #endif
-#ifndef M_PI_2f
-#define M_PI_2f     1.57079632679489661923f
+#ifndef M_PI_2
+#define M_PI_2     1.57079632679489661923f
 #endif
-#ifndef M_1_PIf
-#define M_1_PIf     0.318309886183790671538f
+#ifndef M_1_PI
+#define M_1_PI     0.318309886183790671538f
 #endif
 
 

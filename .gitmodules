@@ -34,3 +34,9 @@
 [submodule "thirdparty/implot"]
 	path = thirdparty/implot
 	url = https://github.com/epezent/implot
+[submodule "thirdparty/json"]
+	path = thirdparty/json
+	url = https://github.com/nlohmann/json.git
+[submodule "thirdparty/nativefiledialog-extended"]
+	path = thirdparty/nativefiledialog-extended
+	url = https://github.com/btzy/nativefiledialog-extended

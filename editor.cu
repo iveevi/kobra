@@ -16,9 +16,12 @@
 #include "../include/cuda/color.cuh"
 #include "../include/layers/denoiser.cuh"
 
+#include <nfd.h>
+#include <nlohmann/json.hpp>
+
 // Forward declarations
 struct ProgressBar;
-struct InfoTab;
+struct Console;
 struct MaterialEditor;
 struct RTXRenderer;
 struct Viewport;
@@ -40,7 +43,7 @@ struct Editor : public kobra::BaseApp {
 	std::shared_ptr <kobra::layers::UI> m_ui;
 
 	std::shared_ptr <ProgressBar> m_progress_bar;
-	std::shared_ptr <InfoTab> m_info_tab;
+	std::shared_ptr <Console> m_console;
 	std::shared_ptr <MaterialEditor> m_material_editor;
 
 	kobra::engine::IrradianceComputer m_irradiance_computer;
@@ -152,12 +155,12 @@ struct ProgressBar : public kobra::ui::ImGuiAttachment {
 };
 
 // Info UI Attachment
-struct InfoTab : public kobra::ui::ImGuiAttachment {
+struct Console : public kobra::ui::ImGuiAttachment {
 	std::vector <std::string> m_lines;
 	std::string m_message;
 
 	// TODO: multiple fonts; use monospace for this (e.g. JetBrains Mono)
-	InfoTab() {
+	Console() {
 		// Attach logger handler
 		kobra::add_log_handler(this,
 			[&](const char *str, std::streamsize n) {
@@ -174,13 +177,13 @@ struct InfoTab : public kobra::ui::ImGuiAttachment {
 		);
 	}
 
-	~InfoTab() {
+	~Console() {
 		kobra::remove_log_handler(this);
 	}
 
 	void render() override {
 		// Output and performance tabs
-		ImGui::Begin("Info");
+		ImGui::Begin("Console");
 
 		ImGui::SetWindowSize(ImVec2(500, 500), ImGuiCond_FirstUseEver);
 
@@ -190,6 +193,9 @@ struct InfoTab : public kobra::ui::ImGuiAttachment {
 
 		for (const auto &line : m_lines)
 			ImGui::Text(line.c_str());
+
+		// Always show last line
+		ImGui::SetScrollHereY(1.0f);
 
 		ImGui::End();
 	}
@@ -370,6 +376,73 @@ public:
 	}
 };
 
+void load_attachment(Editor *editor)
+{
+	std::cout << "Loading RTX plugin..." << std::endl;
+
+	std::string current_path = std::filesystem::current_path();
+	nfdchar_t *path = nullptr;
+	nfdfilteritem_t filter = {"RTX Plugin", "json"};
+	nfdresult_t result = NFD_OpenDialog(&path, &filter, 1, current_path.c_str());
+
+	if (result == NFD_OKAY) {
+		std::cout << "Loading " << path << std::endl;
+		std::string contents = kobra::common::read_file(path);
+		nlohmann::json j = nlohmann::json::parse(contents);
+		std::cout << j.dump(4) << std::endl;
+
+		std::cout << "\tname: " << j["name"] << std::endl;
+		std::cout << "\tlibrary: " << j["library"] << std::endl;
+		// TODO: also retrieve the shader and
+		// compile it into an intermediate ptx
+		// (and cache it in the scene dir)
+
+		// Load the library
+		std::string plugin_library = j["library"];
+		std::string plugin_name = j["name"];
+
+		void *handle = dlopen(plugin_library.c_str(), RTLD_LAZY);
+		if (!handle) {
+			std::cerr << "Error: " << dlerror() << std::endl;
+			return;
+		}
+
+		// Load the plugin
+		typedef kobra::amadeus::AttachmentRTX* (*create_t)();
+
+		create_t create = (create_t) dlsym(handle, "load_attachment");
+		if (!create) {
+			std::cerr << "Error: " << dlerror() << std::endl;
+			return;
+		}
+
+		std::cout << "Loading plugin..." << std::endl;
+		kobra::amadeus::AttachmentRTX *plugin = create();
+		std::cout << "Plugin loaded: " << plugin << std::endl;
+		if (!plugin) {
+			KOBRA_LOG_FILE(kobra::Log::ERROR) << "Error: plugin is null\n";
+			dlclose(handle);
+			return;
+		}
+
+		editor->m_renderers.armada_rtx->attach(
+			plugin_name,
+			std::shared_ptr <kobra::amadeus::AttachmentRTX> (plugin)
+		);
+
+		std::cout << "All attachments:" << std::endl;
+		for (auto &attachment : editor->m_renderers.armada_rtx->attachments()) {
+			std::cout << "\t" << attachment << std::endl;
+		}
+
+		dlclose(handle);
+	} else if (result == NFD_CANCEL) {
+		std::cout << "User cancelled" << std::endl;
+	} else {
+		std::cout << "Error: " << NFD_GetError() << std::endl;
+	}
+}
+
 // Viewport UI attachment
 // TODO: keep all viewport editor state in this class
 // e.g. the renderers, etc...
@@ -381,22 +454,34 @@ class Viewport : public kobra::ui::ImGuiAttachment {
 public:
 	Viewport() = delete;
 	Viewport(Editor *editor) : m_editor {editor} {
+		NFD_Init();
 		m_old_aspect = m_editor->m_camera.get <kobra::Camera> ().aspect;
 	}
 
 	// TODO: pass commandbuffer to this function
 	void render() override {
-		ImGui::Begin("Viewport");
+		// TODO: separate attachment for the main menu bar
+		ImGui::Begin("Viewport", nullptr, ImGuiWindowFlags_MenuBar);
+
+		if (ImGui::BeginMenuBar()) {
+			if (ImGui::BeginMenu("Renderers")) {
+				if (ImGui::MenuItem("Path Tracer"))
+					m_editor->m_renderers.mode = 0;
+				if (ImGui::MenuItem("RTX"))
+					m_editor->m_renderers.mode = 1;
+				ImGui::EndMenu();
+			}
+			if (ImGui::Button("Load RTX Plugin")) {
+				// TODO: do this async...
+				load_attachment(m_editor);
+			}
+			ImGui::EndMenuBar();
+		}
 
 		vk::Image image = *m_editor->m_viewport.image.image;
 		if (image == m_old_image) {
 			// Get current window size
-			ImVec2 window_size = ImGui::GetWindowSize();
-
-			// Pad
-			constexpr float padding = 20.0f;
-			window_size.x -= padding;
-			window_size.y -= padding;
+			ImVec2 window_size = ImGui::GetContentRegionAvail();
 
 			// TODO: set the window aspect ratio
 			ImGui::Image(m_dset, window_size);
@@ -585,12 +670,12 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 
 	// Attach UI layers
 	m_progress_bar = std::make_shared <ProgressBar> ("Irradiance Computation Progress");
-	m_info_tab = std::make_shared <InfoTab> ();
+	m_console = std::make_shared <Console> ();
 	m_material_editor = std::make_shared <MaterialEditor> (this, &m_texture_loader);
 
 	// m_ui->attach(m_image_viewer);
 	m_ui->attach(m_progress_bar);
-	m_ui->attach(m_info_tab);
+	m_ui->attach(m_console);
 	m_ui->attach(m_material_editor);
 	m_ui->attach(std::make_shared <RTXRenderer> (this));
 	m_ui->attach(std::make_shared <Viewport> (this));

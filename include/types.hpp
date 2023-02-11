@@ -1,5 +1,4 @@
-#ifndef TYPES_H_
-#define TYPES_H_
+#pragma once
 
 // All possible types of objects
 // TODO: refactor to primitive types
@@ -16,14 +15,6 @@ const int LIGHT_TYPE_AREA		= 0x00000003;
 // Constants
 const int VERTEX_STRIDE			= 5;
 
-// PBR material types
-#ifdef __cplusplus
-
-// Standard headers
-#include <optional>
-#include <sstream>
-#include <string>
-
 enum Shading : int {
 	eNone		= 0,
 	eReflection	= 1 << 0,
@@ -33,6 +24,14 @@ enum Shading : int {
 	eSpecular	= 1 << 4,
 	eEmissive	= 1 << 5,
 };
+
+// PBR material types
+#if defined(__cplusplus) && !defined(KOBRA_OPTIX_SHADER)
+
+// Standard headers
+#include <optional>
+#include <sstream>
+#include <string>
 
 // Is a type of
 inline bool is_type(Shading type, Shading test)
@@ -89,23 +88,5 @@ inline std::optional <Shading> shading_from_str(const std::string &str)
 
 	return static_cast <Shading> (shading);
 }
-
-#else
-
-int SHADING_NONE		= 0;
-int SHADING_REFLECTION		= 1 << 0;
-int SHADING_TRANSMISSION	= 1 << 1;
-int SHADING_DIFFUSE		= 1 << 2;
-int SHADING_GLOSSY		= 1 << 3;
-int SHADING_SPECULAR		= 1 << 4;
-int SHADING_EMISSIVE		= 1 << 5;
-
-// Is a type of
-bool is_type(int type, int test)
-{
-	return (type & test) == test;
-}
-
-#endif
 
 #endif

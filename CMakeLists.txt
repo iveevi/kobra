@@ -1,3 +1,5 @@
+# cmake_minimum_required(VERSION 3.12)
+
 project(kobra CXX CUDA)
 project(stress CXX)
 project(editor CXX)
@@ -53,6 +55,9 @@ else()
     message(FATAL_ERROR "OpenCV not found")
 endif()
 
+# Add NativeFileDialog extended
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/nativefiledialog-extended)
+
 # ImageMagick
 find_package(ImageMagick COMPONENTS Magick++ REQUIRED)
 
@@ -81,6 +86,8 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/imgui
 	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/freetype/include
 	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/imgui/examples
+	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/nativefiledialog-extended/src/include
+	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/json/single_include
 	${OpenCV_INCLUDE_DIRS}
 	${ImageMagick_INCLUDE_DIRS}
 )
@@ -122,15 +129,18 @@ set(Kobra_SOURCES
 	${Kobra_IO_SOURCES}
 	${Kobra_ENGINE_SOURCES}
 	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/core.cu
-	# ${CMAKE_CURRENT_SOURCE_DIR}/source/layers/basilisk.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/source/layers/denoiser.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/source/layers/mesh_memory_cuda.cu
-	# ${CMAKE_CURRENT_SOURCE_DIR}/source/layers/wssr_grid.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/source/amadeus/armada.cu
 )
 
 # Create object library for the shared source
-add_library(Kobra_COMMON OBJECT ${Kobra_SOURCES} ${ImGui_SOURCES} ${ImPlot_SOURCES} ${Glslang_SOURCES})
+add_library(Kobra_COMMON OBJECT
+	${Kobra_SOURCES}
+	${ImGui_SOURCES}
+	${ImPlot_SOURCES}
+	${Glslang_SOURCES}
+)
 
 # Set executable sources -- Kobra
 add_executable(kobra main.cu $<TARGET_OBJECTS:Kobra_COMMON>)
@@ -172,52 +182,20 @@ target_link_libraries(editor
 	SPIRV
 	assimp
 	nvidia-ml
+	nvrtc
 	${OpenCV_LIBS}
 	${ImageMagick_LIBRARIES}
+	nfd
 )
 
 # Extra outputs
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-# Compiling GLSL shaders
-file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/bin/spv)
-
-file(GLOB_RECURSE GLSL_VERTEX_SHADERS ${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.vert)
-file(GLOB_RECURSE GLSL_FRAGMENT_SHADERS ${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.frag)
-
-list(APPEND GLSL_SHADERS ${GLSL_VERTEX_SHADERS} ${GLSL_FRAGMENT_SHADERS})
-
-foreach(SHADER ${GLSL_SHADERS})
-	get_filename_component(FILE_NAME ${SHADER} NAME)
-
-	# Format as shader_{type}.spv
-	string(REGEX REPLACE "(.*)\\.(vert|frag)" "\\1_\\2.spv" OUTPUT_FILE_NAME ${FILE_NAME})
-
-	add_custom_command(
-		OUTPUT ${CMAKE_BINARY_DIR}/bin/spv/${OUTPUT_FILE_NAME}
-		COMMAND glslc ${SHADER} -o ${CMAKE_BINARY_DIR}/bin/spv/${OUTPUT_FILE_NAME}
-		DEPENDS ${SHADER}
-	)
-
-	list(APPEND SPIRV_BINARY_FILES ${CMAKE_BINARY_DIR}/bin/spv/${OUTPUT_FILE_NAME})
-endforeach(SHADER)
-
-# Add as a dependency of the executable
-add_custom_target(
-    glsl_shaders
-    DEPENDS ${SPIRV_BINARY_FILES}
-)
-
-add_dependencies(kobra glsl_shaders)
-
 # Compiling OptiX shaders
+# TODO: compile at run time using NVRTC
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/bin/ptx)
 
 file(GLOB_RECURSE OPTIX_SHADERS
-	# ${CMAKE_CURRENT_SOURCE_DIR}/source/optix/basilisk_rt.cu
-	# ${CMAKE_CURRENT_SOURCE_DIR}/source/optix/basilisk_restir.cu
-	# ${CMAKE_CURRENT_SOURCE_DIR}/source/optix/basilisk_voxel.cu
-	# ${CMAKE_CURRENT_SOURCE_DIR}/source/optix/wssr_grid.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/amadeus_path_tracer.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/amadeus_restir.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/amadeus_repg.cu
@@ -249,3 +227,6 @@ add_custom_target(
 )
 
 add_dependencies(kobra copy_resources)
+
+# Compile plugins as well
+include(cmake/armada_rtx_plugins.cmake)

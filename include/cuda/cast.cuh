@@ -1,7 +1,5 @@
-#ifndef KOBRA_CUDA_CAST_H_
-#define KOBRA_CUDA_CAST_H_
+#pragma once
 
-// GLM headers
 #include <glm/glm.hpp>
 
 namespace kobra {
@@ -24,5 +22,3 @@ uint32_t to_ui32(uchar4 v)
 }
 
 }
-
-#endif
