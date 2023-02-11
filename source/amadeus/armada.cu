@@ -242,6 +242,10 @@ void ArmadaRTX::update_sbt_data
 
 void ArmadaRTX::update_materials(const std::set <uint32_t> &material_indices)
 {
+	// If host buffer is empty, assume the armada is not initialized
+	if (m_host.materials.size() == 0)
+		return;
+
 	std::set <_instance_ref> emissive_submeshes_to_update;
 	for (uint32_t mat_index : material_indices) {
 		const Material &material = Material::all[mat_index];

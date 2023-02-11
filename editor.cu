@@ -88,6 +88,8 @@ struct Editor : public kobra::BaseApp {
 	struct {
 		bool viewport_hovered = false;
 		bool viewport_focused = false;
+		bool dragging = false;
+		bool alt_dragging = false;
 	} m_input;
 
 	Editor(const vk::raii::PhysicalDevice &, const std::vector <const char *> &);
@@ -462,6 +464,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	ImGui::CreateContext();
 	ImGui_ImplGlfw_InitForVulkan(window.handle, true);
 
+	// Docking
 	ImGuiIO &imgui_io = ImGui::GetIO();
 	imgui_io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	imgui_io.ConfigWindowsMoveFromTitleBarOnly = true;
@@ -581,7 +584,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 		const vk::raii::Framebuffer &framebuffer)
 {
 	// Camera movement
-	if (m_input.viewport_focused) {
+	if (m_input.viewport_focused || m_input.dragging || m_input.alt_dragging) {
 		auto &transform = m_camera.get <kobra::Transform> ();
 
 		float speed = 20.0f * frame_time;
@@ -910,12 +913,13 @@ void Editor::after_present()
 void Editor::mouse_callback(void *us, const kobra::io::MouseEvent &event)
 {
 	static const int select_button = GLFW_MOUSE_BUTTON_LEFT;
+	static const int pan_button = GLFW_MOUSE_BUTTON_RIGHT;
 
-	// Check if selecting
-	if (event.action == GLFW_PRESS && event.button == select_button) {
-		Editor *editor = static_cast <Editor *> (us);
-		// TODO: this needs to query the position on the viewport
-		// image...
+	// Check if selecting in the viewport
+	Editor *editor = static_cast <Editor *> (us);
+	if (event.action == GLFW_PRESS
+			&& event.button == select_button
+			&& editor->m_input.viewport_hovered) {
 		editor->request_queue.push({
 			float(event.xpos),
 			float(event.ypos)
@@ -923,8 +927,6 @@ void Editor::mouse_callback(void *us, const kobra::io::MouseEvent &event)
 	}
 
 	// Panning around
-	static const int pan_button = GLFW_MOUSE_BUTTON_RIGHT;
-
 	static const float sensitivity = 0.001f;
 
 	static float px = 0.0f;
@@ -938,10 +940,11 @@ void Editor::mouse_callback(void *us, const kobra::io::MouseEvent &event)
 	float dy = event.ypos - py;
 
 	// Check if panning
-	static bool dragging = false;
-	static bool alt_dragging = false;
+	// static bool dragging = false;
+	// static bool alt_dragging = false;
+	bool &dragging = editor->m_input.dragging;
+	bool &alt_dragging = editor->m_input.alt_dragging;
 
-	Editor *editor = static_cast <Editor *> (us);
 	bool is_drag_button = (event.button == pan_button);
 	if (event.action == GLFW_PRESS && is_drag_button && editor->m_input.viewport_hovered) {
 		dragging = true;
