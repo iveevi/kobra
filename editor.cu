@@ -64,7 +64,9 @@ struct Editor : public kobra::BaseApp {
 	// Viewport
 	struct {
 		kobra::ImageData image = nullptr;
+		vk::raii::Framebuffer framebuffer = nullptr;
 		vk::raii::Sampler sampler = nullptr;
+
 		ImVec2 min = {1/0.0f, 1/0.0f};
 		ImVec2 max = {-1.0f, -1.0f};
 	} m_viewport;
@@ -561,6 +563,21 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 
 	m_viewport.sampler = kobra::make_sampler(device, m_viewport.image);
 
+	// Create the viewport framebuffer
+	std::vector <vk::raii::ImageView> attachments;
+	attachments.emplace_back(std::move(m_viewport.image.view));
+
+	m_viewport.framebuffer = std::move(
+		kobra::make_framebuffers(device,
+			render_pass,
+			attachments,
+			&depth_buffer.view,
+			window.extent
+		).front()
+	);
+
+	m_viewport.image.view = std::move(attachments.front());
+
 	// Attach UI layers
 	m_progress_bar = std::make_shared <ProgressBar> ("Irradiance Computation Progress");
 	m_info_tab = std::make_shared <InfoTab> ();
@@ -718,14 +735,14 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 					.height = rtx_extent.height,
 					.channels = 4
 				},
-				cmd, framebuffer, window.extent
+				cmd, m_viewport.framebuffer, window.extent
 			);
 		} else {
 			m_forward_renderer.render(
 				params,
 				m_camera.get <kobra::Camera> (),
 				m_camera.get <kobra::Transform> (),
-				cmd, framebuffer, window.extent
+				cmd, m_viewport.framebuffer, window.extent
 			);
 		}
 
@@ -771,7 +788,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 			// TODO: only render the selected objetcs...
 			// otherwise computtion becomes very wasted...
 			m_objectifier.composite_highlight(
-				cmd, framebuffer, window.extent,
+				cmd, m_viewport.framebuffer, window.extent,
 				m_scene.ecs,
 				m_camera.get <kobra::Camera> (),
 				m_camera.get <kobra::Transform> (),
@@ -779,32 +796,11 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 			);
 		}
 
-		// Copy framebuffer image to viewport image
-		vk::ImageCopy copy_region {
-			{vk::ImageAspectFlagBits::eColor, 0, 0, 1},
-			{0, 0, 0},
-			{vk::ImageAspectFlagBits::eColor, 0, 0, 1},
-			{0, 0, 0},
-			{window.extent.width, window.extent.height, 1}
-		};
-
-		// Transition layouts
-		vk::ImageMemoryBarrier swapchain_barrier {
-			{},
-			vk::AccessFlagBits::eTransferWrite,
-			vk::ImageLayout::ePresentSrcKHR,
-			vk::ImageLayout::eTransferSrcOptimal,
-			VK_QUEUE_FAMILY_IGNORED,
-			VK_QUEUE_FAMILY_IGNORED,
-			swapchain.images[frame_index],
-			{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}
-		};
-
 		vk::ImageMemoryBarrier viewport_barrier {
 			{},
 			vk::AccessFlagBits::eTransferWrite,
-			m_viewport.image.layout,
-			vk::ImageLayout::eTransferDstOptimal,
+			vk::ImageLayout::ePresentSrcKHR,
+			vk::ImageLayout::eShaderReadOnlyOptimal,
 			VK_QUEUE_FAMILY_IGNORED,
 			VK_QUEUE_FAMILY_IGNORED,
 			*m_viewport.image.image,
@@ -815,33 +811,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 			vk::PipelineStageFlagBits::eTopOfPipe,
 			vk::PipelineStageFlagBits::eTransfer,
 			{}, {}, {},
-			{swapchain_barrier, viewport_barrier}
-		);
-
-		cmd.copyImage(
-			swapchain.images[frame_index],
-			vk::ImageLayout::eTransferSrcOptimal,
-			*m_viewport.image.image,
-			vk::ImageLayout::eTransferDstOptimal,
-			copy_region
-		);
-
-		// Transition layouts back
-		swapchain_barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-		swapchain_barrier.dstAccessMask = vk::AccessFlagBits::eMemoryRead;
-		swapchain_barrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
-		swapchain_barrier.newLayout = vk::ImageLayout::ePresentSrcKHR;
-
-		viewport_barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-		viewport_barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-		viewport_barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
-		viewport_barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-		cmd.pipelineBarrier(
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::PipelineStageFlagBits::eFragmentShader,
-			{}, {}, {},
-			{swapchain_barrier, viewport_barrier}
+			{viewport_barrier}
 		);
 
 		// Render the UI last
@@ -862,6 +832,7 @@ void Editor::resize(const vk::Extent2D &extent)
 	// Resize the viewport image
 	// m_viewport.image.resize(extent); TODO: implement this
 
+	// TODO: resize with the viewport image window in ImGui
 	m_viewport.image = kobra::ImageData(
 		phdev, device,
 		swapchain.format, extent,
@@ -874,6 +845,22 @@ void Editor::resize(const vk::Extent2D &extent)
 	);
 
 	m_viewport.sampler = kobra::make_sampler(device, m_viewport.image);
+
+	// Resize the viewport framebuffer
+	// TODO: move all viewport resources to the viewport attchment...
+	std::vector <vk::raii::ImageView> attachments;
+	attachments.emplace_back(std::move(m_viewport.image.view));
+
+	m_viewport.framebuffer = std::move(
+		kobra::make_framebuffers(device,
+			render_pass,
+			attachments, // TODO: pass vk::ImageViews instead of vk::raii::ImageView
+			&depth_buffer.view,
+			extent
+		).front()
+	);
+
+	m_viewport.image.view = std::move(attachments.front());
 }
 
 void Editor::after_present()
