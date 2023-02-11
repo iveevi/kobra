@@ -39,7 +39,8 @@ public:
 	UI(const Context &context,
 			const Window &window,
 			const vk::raii::Queue &queue,
-			const std::pair <std::string, size_t> font) {
+			const std::pair <std::string, size_t> font,
+			vk::AttachmentLoadOp load_op = vk::AttachmentLoadOp::eLoad) {
 		// TODO: just get the graphics queue from the device...
 
 		// Assume that ImGUI is initialized, including context and backend...
@@ -68,7 +69,7 @@ public:
 		descriptor_pool = kobra::make_descriptor_pool(*device, pool_sizes);
 	
 		render_pass = kobra::make_render_pass(*device,
-			{context.swapchain_format}, {vk::AttachmentLoadOp::eLoad},
+			{context.swapchain_format}, {load_op},
 			context.depth_format, vk::AttachmentLoadOp::eClear
 		);
 
@@ -100,10 +101,15 @@ public:
 	}
 
 	// Render ImGUI
+	struct RenderOptions {
+		bool dockspace;
+	};
+
 	void render(const vk::raii::CommandBuffer &cmd,
 			const vk::raii::Framebuffer &framebuffer,
 			const vk::Extent2D &extent,
-			const RenderArea &ra = RenderArea::full()) {
+			const RenderArea &ra = RenderArea::full(),
+			const RenderOptions &options = RenderOptions {false}) {
 		// Apply the render area
 		ra.apply(cmd, extent);
 
@@ -141,6 +147,10 @@ public:
 
 		// Render ImGUI
 		ImGui::NewFrame();
+
+		// If the dockspace is enabled, create it
+		if (options.dockspace)
+			ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
 
 		for (auto &attachment : attachments)
 			attachment->render();

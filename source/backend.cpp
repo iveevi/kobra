@@ -994,10 +994,11 @@ vk::raii::Pipeline make_graphics_pipeline(const GraphicsPipelineInfo &info)
 	for (int i = 0; i < info.blend_attachments.size(); i++) {
 		vk::PipelineColorBlendAttachmentState color_blend_attachment;
 
+		// TODO: provide more options for configuring color blend attachments
 		color_blend_attachment.colorWriteMask = vk::ColorComponentFlagBits::eR
 				| vk::ColorComponentFlagBits::eG
-				| vk::ColorComponentFlagBits::eB
-				| vk::ColorComponentFlagBits::eA;
+				| vk::ColorComponentFlagBits::eB;
+				// | vk::ColorComponentFlagBits::eA;
 
 		color_blend_attachment.blendEnable = info.blend_attachments[i];
 		color_blend_attachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;

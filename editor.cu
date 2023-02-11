@@ -17,11 +17,11 @@
 #include "../include/layers/denoiser.cuh"
 
 // Forward declarations
-struct ImageViewer;
 struct ProgressBar;
 struct InfoTab;
 struct MaterialEditor;
 struct RTXRenderer;
+struct Viewport;
 
 // TODO: add updated (emissive) materials as lights...
 
@@ -38,7 +38,6 @@ struct Editor : public kobra::BaseApp {
 
 	std::shared_ptr <kobra::layers::UI> m_ui;
 
-	std::shared_ptr <ImageViewer> m_image_viewer;
 	std::shared_ptr <ProgressBar> m_progress_bar;
 	std::shared_ptr <InfoTab> m_info_tab;
 	std::shared_ptr <MaterialEditor> m_material_editor;
@@ -62,6 +61,14 @@ struct Editor : public kobra::BaseApp {
 		bool denoise = true;
 	} m_renderers;
 
+	// Viewport
+	struct {
+		kobra::ImageData image = nullptr;
+		vk::raii::Sampler sampler = nullptr;
+		ImVec2 min = {1/0.0f, 1/0.0f};
+		ImVec2 max = {-1.0f, -1.0f};
+	} m_viewport;
+
 	// Buffers
 	struct {
 		CUdeviceptr traced;
@@ -69,12 +76,19 @@ struct Editor : public kobra::BaseApp {
 	} m_buffers;
 
 	struct Request {
-		double x;
-		double y;
+		float x;
+		float y;
 	};
 
 	std::queue <Request> request_queue;
 	std::pair <int, int> m_selection = {-1, -1};
+
+	// Input state
+	// TODO: bring all other related fields here
+	struct {
+		bool viewport_hovered = false;
+		bool viewport_focused = false;
+	} m_input;
 
 	Editor(const vk::raii::PhysicalDevice &, const std::vector <const char *> &);
 	~Editor();
@@ -114,51 +128,6 @@ int main()
 
 	editor.run();
 }
-
-// Image viewer UI attachment
-struct ImageViewer : public kobra::ui::ImGuiAttachment {
-	std::vector <kobra::ImageData *> m_images;
-	std::vector <vk::DescriptorSet> m_descriptor_sets;
-	int m_current_image = 0;
-
-	ImageViewer(const kobra::Context &context, const std::vector <const kobra::ImageData *> &images)
-	{
-		for (const auto &image : images)
-			m_images.push_back(const_cast <kobra::ImageData *> (image));
-
-		for (const auto &image : m_images) {
-			// Make sure layout is shader read only
-			if (image->layout != vk::ImageLayout::eShaderReadOnlyOptimal) {
-				vk::raii::Queue temp_queue {*context.device, 0, 0};
-				kobra::submit_now(*context.device, temp_queue, *context.command_pool,
-					[&](const vk::raii::CommandBuffer &cmd) {
-						image->transition_layout(
-							cmd,
-							vk::ImageLayout::eShaderReadOnlyOptimal
-						);
-					}
-				);
-			}
-
-			vk::raii::Sampler sampler = make_sampler(*context.device, *image);
-			m_descriptor_sets.push_back(
-				ImGui_ImplVulkan_AddTexture(
-					static_cast <VkSampler> (*sampler),
-					static_cast <VkImageView> (*image->view),
-					static_cast <VkImageLayout> (image->layout)
-				)
-			);
-		}
-	}
-
-	void render() override {
-		ImGui::Begin("Image Viewer");
-		ImGui::SetWindowSize(ImVec2(500, 500), ImGuiCond_FirstUseEver);
-		ImGui::Image(m_descriptor_sets[m_current_image], ImVec2(500, 500), ImVec2(0, 1), ImVec2(1, 0));
-		ImGui::SliderInt("Image", &m_current_image, 0, m_images.size() - 1);
-		ImGui::End();
-	}
-};
 
 // Progress bar UI Attachment
 struct ProgressBar : public kobra::ui::ImGuiAttachment {
@@ -222,7 +191,7 @@ struct InfoTab : public kobra::ui::ImGuiAttachment {
 
 // Material editor UI attachment
 class MaterialEditor : public kobra::ui::ImGuiAttachment {
-	int m_prev_material_index = 0;
+	int m_prev_material_index = -1;
 
 	vk::DescriptorSet m_diffuse_set;
 	vk::DescriptorSet m_normal_set;
@@ -395,6 +364,70 @@ public:
 	}
 };
 
+// Viewport UI attachment
+class Viewport : public kobra::ui::ImGuiAttachment {
+	Editor *m_editor = nullptr;
+	vk::DescriptorSet m_dset;
+	vk::Image m_old_image = nullptr;
+	float m_old_aspect = 0.0f;
+public:
+	Viewport() = delete;
+	Viewport(Editor *editor) : m_editor {editor} {
+		m_old_aspect = m_editor->m_camera.get <kobra::Camera> ().aspect;
+	}
+
+	void render() override {
+		ImGui::Begin("Viewport");
+
+		vk::Image image = *m_editor->m_viewport.image.image;
+		if (image == m_old_image) {
+			// Get current window size
+			ImVec2 window_size = ImGui::GetWindowSize();
+
+			// Pad
+			constexpr float padding = 20.0f;
+			window_size.x -= padding;
+			window_size.y -= padding;
+
+			// TODO: set the window aspect ratio
+			ImGui::Image(m_dset, window_size);
+
+			// Get pixel range of the image
+			ImVec2 image_min = ImGui::GetItemRectMin();
+			ImVec2 image_max = ImGui::GetItemRectMax();
+
+			m_editor->m_input.viewport_focused = ImGui::IsWindowFocused();
+			m_editor->m_input.viewport_hovered = ImGui::IsItemHovered();
+
+			m_editor->m_viewport.min = image_min;
+			m_editor->m_viewport.max = image_max;
+
+			// Fix aspect ratio if needed
+			float aspect = (image_max.x - image_min.x) /
+				(image_max.y - image_min.y);
+
+			if (fabs(aspect - m_old_aspect) > 1e-6) {
+				m_editor->m_camera.get <kobra::Camera> ().aspect = aspect;
+				m_old_aspect = aspect;
+			}
+		} else {
+			m_dset = ImGui_ImplVulkan_AddTexture(
+				static_cast <VkSampler>
+				(*m_editor->m_viewport.sampler),
+
+				static_cast <VkImageView>
+				(*m_editor->m_viewport.image.view),
+
+				static_cast <VkImageLayout>
+				(vk::ImageLayout::eShaderReadOnlyOptimal)
+			);
+		}
+
+		m_old_image = image;
+		ImGui::End();
+	}
+};
+
 // Editor implementation
 Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 		const std::vector <const char *> &extensions)
@@ -436,7 +469,8 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	auto font = std::make_pair(KOBRA_DIR "/resources/fonts/NotoSans.ttf", 18);
 	m_ui = std::make_shared <kobra::layers::UI> (
 		get_context(), window,
-		graphics_queue, font
+		graphics_queue, font,
+		vk::AttachmentLoadOp::eClear
 	);
 
 	// Load scene
@@ -506,8 +540,21 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	m_buffers.traced = kobra::cuda::alloc(size * sizeof(uint32_t));
 	m_buffers.traced_cpu.resize(size);
 
+	// Allocate the viewport resources
+	m_viewport.image = kobra::ImageData(
+		phdev, device,
+		swapchain.format, window.extent,
+		vk::ImageTiling::eOptimal,
+		vk::ImageUsageFlagBits::eColorAttachment
+			| vk::ImageUsageFlagBits::eSampled
+			| vk::ImageUsageFlagBits::eTransferDst,
+		vk::MemoryPropertyFlagBits::eDeviceLocal,
+		vk::ImageAspectFlagBits::eColor
+	);
+
+	m_viewport.sampler = kobra::make_sampler(device, m_viewport.image);
+
 	// Attach UI layers
-	// m_image_viewer = std::make_shared <ImageViewer> (get_context(), images);
 	m_progress_bar = std::make_shared <ProgressBar> ("Irradiance Computation Progress");
 	m_info_tab = std::make_shared <InfoTab> ();
 	m_material_editor = std::make_shared <MaterialEditor> (this, &m_texture_loader);
@@ -517,6 +564,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	m_ui->attach(m_info_tab);
 	m_ui->attach(m_material_editor);
 	m_ui->attach(std::make_shared <RTXRenderer> (this));
+	m_ui->attach(std::make_shared <Viewport> (this));
 }
 
 Editor::~Editor()
@@ -533,42 +581,44 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 		const vk::raii::Framebuffer &framebuffer)
 {
 	// Camera movement
-	auto &transform = m_camera.get <kobra::Transform> ();
+	if (m_input.viewport_focused) {
+		auto &transform = m_camera.get <kobra::Transform> ();
 
-	float speed = 20.0f * frame_time;
+		float speed = 20.0f * frame_time;
 
-	glm::vec3 forward = transform.forward();
-	glm::vec3 right = transform.right();
-	glm::vec3 up = transform.up();
+		glm::vec3 forward = transform.forward();
+		glm::vec3 right = transform.right();
+		glm::vec3 up = transform.up();
 
-	bool moved = false;
-	if (io.input->is_key_down(GLFW_KEY_W)) {
-		transform.move(forward * speed);
-		moved = true;
-	} else if (io.input->is_key_down(GLFW_KEY_S)) {
-		transform.move(-forward * speed);
-		moved = true;
-	}
+		bool moved = false;
+		if (io.input->is_key_down(GLFW_KEY_W)) {
+			transform.move(forward * speed);
+			moved = true;
+		} else if (io.input->is_key_down(GLFW_KEY_S)) {
+			transform.move(-forward * speed);
+			moved = true;
+		}
 
-	if (io.input->is_key_down(GLFW_KEY_A)) {
-		transform.move(-right * speed);
-		moved = true;
-	} else if (io.input->is_key_down(GLFW_KEY_D)) {
-		transform.move(right * speed);
-		moved = true;
-	}
+		if (io.input->is_key_down(GLFW_KEY_A)) {
+			transform.move(-right * speed);
+			moved = true;
+		} else if (io.input->is_key_down(GLFW_KEY_D)) {
+			transform.move(right * speed);
+			moved = true;
+		}
 
-	if (io.input->is_key_down(GLFW_KEY_E)) {
-		transform.move(up * speed);
-		moved = true;
-	} else if (io.input->is_key_down(GLFW_KEY_Q)) {
-		transform.move(-up * speed);
-		moved = true;
-	}
+		if (io.input->is_key_down(GLFW_KEY_E)) {
+			transform.move(up * speed);
+			moved = true;
+		} else if (io.input->is_key_down(GLFW_KEY_Q)) {
+			transform.move(-up * speed);
+			moved = true;
+		}
 
-	if (moved) {
-		std::lock_guard <std::mutex> lock(m_renderers.movement_mutex);
-		m_renderers.movement.push(0);
+		if (moved) {
+			std::lock_guard <std::mutex> lock(m_renderers.movement_mutex);
+			m_renderers.movement.push(0);
+		}
 	}
 
 	std::vector <const kobra::Renderable *> renderables;
@@ -711,6 +761,8 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 
 		// If there is a selection, highlight it
 		if (m_selection.first >= 0 && m_selection.second >= 0) {
+			// TODO: only render the selected objetcs...
+			// otherwise computtion becomes very wasted...
 			m_objectifier.composite_highlight(
 				cmd, framebuffer, window.extent,
 				m_scene.ecs,
@@ -720,8 +772,76 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 			);
 		}
 
+		// Copy framebuffer image to viewport image
+		vk::ImageCopy copy_region {
+			{vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+			{0, 0, 0},
+			{vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+			{0, 0, 0},
+			{window.extent.width, window.extent.height, 1}
+		};
+
+		// Transition layouts
+		vk::ImageMemoryBarrier swapchain_barrier {
+			{},
+			vk::AccessFlagBits::eTransferWrite,
+			vk::ImageLayout::ePresentSrcKHR,
+			vk::ImageLayout::eTransferSrcOptimal,
+			VK_QUEUE_FAMILY_IGNORED,
+			VK_QUEUE_FAMILY_IGNORED,
+			swapchain.images[frame_index],
+			{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}
+		};
+
+		vk::ImageMemoryBarrier viewport_barrier {
+			{},
+			vk::AccessFlagBits::eTransferWrite,
+			m_viewport.image.layout,
+			vk::ImageLayout::eTransferDstOptimal,
+			VK_QUEUE_FAMILY_IGNORED,
+			VK_QUEUE_FAMILY_IGNORED,
+			*m_viewport.image.image,
+			{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}
+		};
+
+		cmd.pipelineBarrier(
+			vk::PipelineStageFlagBits::eTopOfPipe,
+			vk::PipelineStageFlagBits::eTransfer,
+			{}, {}, {},
+			{swapchain_barrier, viewport_barrier}
+		);
+
+		cmd.copyImage(
+			swapchain.images[frame_index],
+			vk::ImageLayout::eTransferSrcOptimal,
+			*m_viewport.image.image,
+			vk::ImageLayout::eTransferDstOptimal,
+			copy_region
+		);
+
+		// Transition layouts back
+		swapchain_barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+		swapchain_barrier.dstAccessMask = vk::AccessFlagBits::eMemoryRead;
+		swapchain_barrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
+		swapchain_barrier.newLayout = vk::ImageLayout::ePresentSrcKHR;
+
+		viewport_barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+		viewport_barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+		viewport_barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+		viewport_barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+		cmd.pipelineBarrier(
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::PipelineStageFlagBits::eFragmentShader,
+			{}, {}, {},
+			{swapchain_barrier, viewport_barrier}
+		);
+
 		// Render the UI last
-		m_ui->render(cmd, framebuffer, window.extent);
+		m_ui->render(cmd,
+			framebuffer, window.extent,
+			kobra::RenderArea::full(), {true}
+		);
 	cmd.end();
 
 	// TODO: after present actions...
@@ -729,8 +849,24 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 
 void Editor::resize(const vk::Extent2D &extent)
 {
-	m_camera.get <kobra::Camera> ().aspect = extent.width / (float) extent.height;
+	// m_camera.get <kobra::Camera> ().aspect = extent.width / (float) extent.height;
 	// TODO: resize the objectifier...
+
+	// Resize the viewport image
+	// m_viewport.image.resize(extent); TODO: implement this
+
+	m_viewport.image = kobra::ImageData(
+		phdev, device,
+		swapchain.format, extent,
+		vk::ImageTiling::eOptimal,
+		vk::ImageUsageFlagBits::eColorAttachment
+			| vk::ImageUsageFlagBits::eSampled
+			| vk::ImageUsageFlagBits::eTransferDst,
+		vk::MemoryPropertyFlagBits::eDeviceLocal,
+		vk::ImageAspectFlagBits::eColor
+	);
+
+	m_viewport.sampler = kobra::make_sampler(device, m_viewport.image);
 }
 
 void Editor::after_present()
@@ -740,7 +876,19 @@ void Editor::after_present()
 		Request request = request_queue.front();
 		request_queue.pop();
 
-		auto ids = m_objectifier.query(request.x, request.y);
+		ImVec2 min = m_viewport.min;
+		ImVec2 max = m_viewport.max;
+
+		ImVec2 fixed {
+			(request.x - min.x) / (max.x - min.x),
+			(request.y - min.y) / (max.y - min.y)
+		};
+
+		fixed.x *= window.extent.width;
+		fixed.y *= window.extent.height;
+
+		// TODO: get coordinates of the viewport image...
+		auto ids = m_objectifier.query(fixed.x, fixed.y);
 		m_selection = {int(ids.first) - 1, int(ids.second) - 1};
 
 		// Update the material editor
@@ -761,16 +909,17 @@ void Editor::after_present()
 
 void Editor::mouse_callback(void *us, const kobra::io::MouseEvent &event)
 {
-	// Skip if on ImGui
-	if (ImGui::GetIO().WantCaptureMouse)
-		return;
-
 	static const int select_button = GLFW_MOUSE_BUTTON_LEFT;
 
 	// Check if selecting
 	if (event.action == GLFW_PRESS && event.button == select_button) {
 		Editor *editor = static_cast <Editor *> (us);
-		editor->request_queue.push({event.xpos, event.ypos});
+		// TODO: this needs to query the position on the viewport
+		// image...
+		editor->request_queue.push({
+			float(event.xpos),
+			float(event.ypos)
+		});
 	}
 
 	// Panning around
@@ -794,19 +943,19 @@ void Editor::mouse_callback(void *us, const kobra::io::MouseEvent &event)
 
 	Editor *editor = static_cast <Editor *> (us);
 	bool is_drag_button = (event.button == pan_button);
-	if (event.action == GLFW_PRESS && is_drag_button) {
+	if (event.action == GLFW_PRESS && is_drag_button && editor->m_input.viewport_hovered) {
 		dragging = true;
 		glfwSetInputMode(editor->window.handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-	} else if (event.action == GLFW_RELEASE && is_drag_button) {
+	} else if (event.action == GLFW_RELEASE && is_drag_button && !editor->m_input.viewport_hovered) {
 		dragging = false;
 		glfwSetInputMode(editor->window.handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 	}
 
 	bool is_alt_down = editor->io.input->is_key_down(GLFW_KEY_LEFT_ALT);
-	if (!alt_dragging && is_alt_down) {
+	if (!alt_dragging && is_alt_down && editor->m_input.viewport_hovered) {
 		alt_dragging = true;
 		glfwSetInputMode(editor->window.handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-	} else if (alt_dragging && !is_alt_down) {
+	} else if (alt_dragging && !is_alt_down && !editor->m_input.viewport_hovered) {
 		alt_dragging = false;
 		glfwSetInputMode(editor->window.handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 	}

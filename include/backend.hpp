@@ -432,7 +432,8 @@ struct Swapchain {
 			surface_format.colorSpace,
 			swapchain_extent,
 			1,
-			vk::ImageUsageFlagBits::eColorAttachment,
+			vk::ImageUsageFlagBits::eColorAttachment
+				| vk::ImageUsageFlagBits::eTransferSrc,
 			vk::SharingMode::eExclusive,
 			{},
 			transform,
