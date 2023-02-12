@@ -676,7 +676,7 @@ class BufferData {
 	vk::PhysicalDeviceMemoryProperties	_memory_properties;
 public:
 	// Once-a-lifetime properties
-	vk::DeviceSize				size;
+	vk::DeviceSize				size = 0;
 	vk::BufferUsageFlags			flags;
 	vk::MemoryPropertyFlags			memory_properties;
 

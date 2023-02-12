@@ -17,8 +17,15 @@
 #include "../include/cuda/color.cuh"
 #include "../include/layers/denoiser.cuh"
 
+// Native File Dialog
 #include <nfd.h>
+
+// JSON
 #include <nlohmann/json.hpp>
+
+// ImPlot headers
+#include <implot/implot.h>
+#include <implot/implot_internal.h>
 
 // Forward declarations
 struct ProgressBar;
@@ -75,11 +82,15 @@ struct Editor : public kobra::BaseApp {
 	struct {
 		kobra::ImageData image = nullptr;
 		vk::raii::Framebuffer framebuffer = nullptr;
+		kobra::DepthBuffer depth_buffer = nullptr;
 		vk::raii::Sampler sampler = nullptr;
+		// TODO: store extent
 
 		ImVec2 min = {1/0.0f, 1/0.0f};
 		ImVec2 max = {-1.0f, -1.0f};
 	} m_viewport;
+
+	void resize_viewport(const vk::Extent2D &);
 
 	// Buffers
 	struct {
@@ -102,6 +113,12 @@ struct Editor : public kobra::BaseApp {
 		bool viewport_focused = false;
 		bool dragging = false;
 		bool alt_dragging = false;
+
+		// TODO: put this into another struct...
+		std::queue <std::string> capture_requests;
+		kobra::BufferData capture_buffer = nullptr;
+		std::vector <uint8_t> capture_data;
+		std::string current_capture_path;
 	} m_input;
 
 	Editor(const vk::raii::PhysicalDevice &, const std::vector <const char *> &);
@@ -179,6 +196,8 @@ struct Console : public kobra::ui::ImGuiAttachment {
 						message_remainder = m_message.substr(i + 1);
 					}
 				}
+
+				m_message = message_remainder;
 			}
 		);
 	}
@@ -193,15 +212,14 @@ struct Console : public kobra::ui::ImGuiAttachment {
 
 		ImGui::SetWindowSize(ImVec2(500, 500), ImGuiCond_FirstUseEver);
 
-		// TODO: dock for framerate and performance
 		ImGui::Text("Output");
 		ImGui::Separator();
 
-		for (const auto &line : m_lines)
-			ImGui::Text(line.c_str());
-
-		// Always show last line
-		ImGui::SetScrollHereY(1.0f);
+		// TODO: scroll to bottom
+		// TODO: color code...
+		// TODO: vertica barbetween timestamp (and source), message tpye, and message
+		for (const std::string &line : m_lines)
+			ImGui::Text("%s", line.c_str());
 
 		ImGui::End();
 	}
@@ -298,7 +316,6 @@ public:
 		}
 
 		// TODO: emission intensity
-
 		if (ImGui::SliderFloat("Roughness", &roughness, 0.0f, 1.0f)) {
 			material->roughness = std::max(roughness, 0.001f);
 			updated_material = true;
@@ -351,7 +368,82 @@ public:
 	}
 };
 
+void load_attachment(Editor *editor)
+{
+	std::cout << "Loading RTX plugin..." << std::endl;
+
+	std::string current_path = std::filesystem::current_path();
+	nfdchar_t *path = nullptr;
+	nfdfilteritem_t filter = {"RTX Plugin", "json"};
+	nfdresult_t result = NFD_OpenDialog(&path, &filter, 1, current_path.c_str());
+
+	if (result == NFD_OKAY) {
+		std::cout << "Loading " << path << std::endl;
+		std::string contents = kobra::common::read_file(path);
+		nlohmann::json j = nlohmann::json::parse(contents);
+		std::cout << j.dump(4) << std::endl;
+
+		if (!j.contains("name") || !j.contains("library")) {
+			kobra::logger("Editor", kobra::Log::ERROR)
+				<< "Invalid RTX plugin file\n";
+			return;
+		}
+
+		std::cout << "\tname: " << j["name"] << std::endl;
+		std::cout << "\tlibrary: " << j["library"] << std::endl;
+		// TODO: also retrieve the shader and
+		// compile it into an intermediate ptx
+		// (and cache it in the scene dir)
+
+		// Load the library
+		std::string plugin_library = j["library"];
+		std::string plugin_name = j["name"];
+
+		void *handle = dlopen(plugin_library.c_str(), RTLD_LAZY);
+		if (!handle) {
+			std::cerr << "Error: " << dlerror() << std::endl;
+			return;
+		}
+
+		// Load the plugin
+		typedef kobra::amadeus::AttachmentRTX* (*create_t)();
+
+		create_t create = (create_t) dlsym(handle, "load_attachment");
+		if (!create) {
+			std::cerr << "Error: " << dlerror() << std::endl;
+			return;
+		}
+
+		// TODO: use rtxa extension, and ignore metadata
+		std::cout << "Loading plugin..." << std::endl;
+		kobra::amadeus::AttachmentRTX *plugin = create();
+		std::cout << "Plugin loaded: " << plugin << std::endl;
+		if (!plugin) {
+			KOBRA_LOG_FILE(kobra::Log::ERROR) << "Error: plugin is null\n";
+			dlclose(handle);
+			return;
+		}
+
+		editor->m_renderers.armada_rtx->attach(
+			plugin_name,
+			std::shared_ptr <kobra::amadeus::AttachmentRTX> (plugin)
+		);
+
+		std::cout << "All attachments:" << std::endl;
+		for (auto &attachment : editor->m_renderers.armada_rtx->attachments()) {
+			std::cout << "\t" << attachment << std::endl;
+		}
+
+		dlclose(handle);
+	} else if (result == NFD_CANCEL) {
+		std::cout << "User cancelled" << std::endl;
+	} else {
+		std::cout << "Error: " << NFD_GetError() << std::endl;
+	}
+}
+
 // RTX Renderer UI attachment
+// TODO: put all these attachments in separate headers
 class RTXRenderer : public kobra::ui::ImGuiAttachment {
 	Editor *m_editor = nullptr;
 	int m_path_depth = 0;
@@ -410,76 +502,76 @@ public:
 			m_editor->m_renderers.movement.push(0);
 		}
 
+		ImGui::Spacing();
+		if (ImGui::Button("Load RTX Plugin")) {
+			// TODO: do this async...
+			load_attachment(m_editor);
+		}
+
 		ImGui::End();
 	}
 };
 
-void load_attachment(Editor *editor)
+void request_capture(Editor *editor)
 {
-	std::cout << "Loading RTX plugin..." << std::endl;
+	std::cout << "Snap!" << std::endl;
 
-	std::string current_path = std::filesystem::current_path();
+	// Create file dialog to get save path
 	nfdchar_t *path = nullptr;
-	nfdfilteritem_t filter = {"RTX Plugin", "json"};
-	nfdresult_t result = NFD_OpenDialog(&path, &filter, 1, current_path.c_str());
+	nfdresult_t result = NFD_SaveDialog(&path, nullptr, 0, nullptr, nullptr);
 
 	if (result == NFD_OKAY) {
-		std::cout << "Loading " << path << std::endl;
-		std::string contents = kobra::common::read_file(path);
-		nlohmann::json j = nlohmann::json::parse(contents);
-		std::cout << j.dump(4) << std::endl;
-
-		std::cout << "\tname: " << j["name"] << std::endl;
-		std::cout << "\tlibrary: " << j["library"] << std::endl;
-		// TODO: also retrieve the shader and
-		// compile it into an intermediate ptx
-		// (and cache it in the scene dir)
-
-		// Load the library
-		std::string plugin_library = j["library"];
-		std::string plugin_name = j["name"];
-
-		void *handle = dlopen(plugin_library.c_str(), RTLD_LAZY);
-		if (!handle) {
-			std::cerr << "Error: " << dlerror() << std::endl;
-			return;
-		}
-
-		// Load the plugin
-		typedef kobra::amadeus::AttachmentRTX* (*create_t)();
-
-		create_t create = (create_t) dlsym(handle, "load_attachment");
-		if (!create) {
-			std::cerr << "Error: " << dlerror() << std::endl;
-			return;
-		}
-
-		// TODO: use rtxa extension, and ignore metadata
-		std::cout << "Loading plugin..." << std::endl;
-		kobra::amadeus::AttachmentRTX *plugin = create();
-		std::cout << "Plugin loaded: " << plugin << std::endl;
-		if (!plugin) {
-			KOBRA_LOG_FILE(kobra::Log::ERROR) << "Error: plugin is null\n";
-			dlclose(handle);
-			return;
-		}
-
-		editor->m_renderers.armada_rtx->attach(
-			plugin_name,
-			std::shared_ptr <kobra::amadeus::AttachmentRTX> (plugin)
-		);
-
-		std::cout << "All attachments:" << std::endl;
-		for (auto &attachment : editor->m_renderers.armada_rtx->attachments()) {
-			std::cout << "\t" << attachment << std::endl;
-		}
-
-		dlclose(handle);
+		std::cout << "Path: " << path << std::endl;
+		editor->m_input.capture_requests.push(path);
 	} else if (result == NFD_CANCEL) {
 		std::cout << "User cancelled" << std::endl;
 	} else {
 		std::cout << "Error: " << NFD_GetError() << std::endl;
 	}
+}
+
+void Editor::resize_viewport(const vk::Extent2D &extent)
+{
+	std::cout << "Editor::resize_viewport Resizing viewport to " << extent.width << "x" << extent.height << std::endl;
+
+	// TODO: resize with the viewport image window in ImGui
+	m_viewport.image = kobra::ImageData(
+		phdev, device,
+		swapchain.format, extent,
+		vk::ImageTiling::eOptimal,
+		vk::ImageUsageFlagBits::eColorAttachment
+			| vk::ImageUsageFlagBits::eSampled
+			| vk::ImageUsageFlagBits::eTransferDst
+			| vk::ImageUsageFlagBits::eTransferSrc,
+		vk::MemoryPropertyFlagBits::eDeviceLocal,
+		vk::ImageAspectFlagBits::eColor
+	);
+
+	m_viewport.sampler = kobra::make_sampler(device, m_viewport.image);
+
+	m_viewport.depth_buffer = std::move(
+		kobra::DepthBuffer {
+			phdev, device,
+			vk::Format::eD32Sfloat,
+			m_viewport.image.extent
+		}
+	);
+
+	// Resize the viewport framebuffer
+	// TODO: move all viewport resources to the viewport attchment...
+	std::vector <vk::raii::ImageView> attachments;
+	attachments.emplace_back(std::move(m_viewport.image.view));
+
+	m_viewport.framebuffer = std::move(
+		kobra::make_framebuffers(device,
+			render_pass,
+			attachments, // TODO: pass vk::ImageViews instead of vk::raii::ImageView
+			&m_viewport.depth_buffer.view,
+			extent
+		).front()
+	);
+
+	m_viewport.image.view = std::move(attachments.front());
 }
 
 // Viewport UI attachment
@@ -488,13 +580,15 @@ void load_attachment(Editor *editor)
 class Viewport : public kobra::ui::ImGuiAttachment {
 	Editor *m_editor = nullptr;
 	vk::DescriptorSet m_dset;
-	vk::Image m_old_image = nullptr;
+	ImVec2 m_old_size = ImVec2(0.0f, 0.0f);
 	float m_old_aspect = 0.0f;
+	vk::Image m_old_image = nullptr;
 public:
 	Viewport() = delete;
 	Viewport(Editor *editor) : m_editor {editor} {
 		NFD_Init();
 		m_old_aspect = m_editor->m_camera.get <kobra::Camera> ().aspect;
+		m_old_size = {0, 0};
 	}
 
 	// TODO: pass commandbuffer to this function
@@ -509,9 +603,12 @@ public:
 			}
 
 			if (ImGui::BeginMenu("View")) {
-				// TODO: request for file save location
 				if (ImGui::MenuItem("Capture Viewport Image"))
-					std::cout << "Snap!" << std::endl;
+					request_capture(m_editor);
+
+				// TODO: viewport render setup
+				// TODO: maybe in a separate window?
+
 				ImGui::EndMenu();
 			}
 
@@ -522,6 +619,7 @@ public:
 		ImGui::Begin("Viewport", nullptr, ImGuiWindowFlags_MenuBar);
 
 		if (ImGui::BeginMenuBar()) {
+			// TODO: show current renderer
 			if (ImGui::BeginMenu("Renderers")) {
 				if (ImGui::MenuItem("Rasterizer"))
 					m_editor->m_renderers.mode = eRasterizer;
@@ -529,10 +627,7 @@ public:
 					m_editor->m_renderers.mode = eRaytracer;
 				ImGui::EndMenu();
 			}
-			if (ImGui::Button("Load RTX Plugin")) {
-				// TODO: do this async...
-				load_attachment(m_editor);
-			}
+			// TODO: overlay # of samples...
 			ImGui::EndMenuBar();
 		}
 
@@ -543,6 +638,26 @@ public:
 
 			// TODO: set the window aspect ratio
 			ImGui::Image(m_dset, window_size);
+
+			// Check if the image has changed size
+			ImVec2 image_size = ImGui::GetItemRectSize();
+			if (image_size.x != m_old_size.x ||
+				image_size.y != m_old_size.y) {
+				m_old_size = image_size;
+				std::cout << "Need to resize viewport image to: "
+					<< image_size.x << "x" << image_size.y << std::endl;
+				// Add to sync queue
+				// TODO: refactor...
+				m_editor->sync_queue.push({
+					"Editor::resize_viewport",
+					[&]() {
+						m_editor->resize_viewport({
+							(uint32_t) m_old_size.x,
+							(uint32_t) m_old_size.y
+						});
+					}
+				});
+			}
 
 			// Get pixel range of the image
 			ImVec2 image_min = ImGui::GetItemRectMin();
@@ -580,6 +695,50 @@ public:
 	}
 };
 
+struct Performance : public kobra::ui::ImGuiAttachment {
+	std::chrono::high_resolution_clock::time_point start_time;
+public:
+	Performance() {
+		start_time = std::chrono::high_resolution_clock::now();
+	}
+
+	void render() override {
+		ImGui::Begin("Performance");
+		ImGui::Text("Framterate: %.1f", ImGui::GetIO().Framerate);
+
+		// Plot the frame times over 5 seconds
+		using frame_time = std::pair <float, float>;
+		static std::vector <frame_time> frames;
+
+		float fps = ImGui::GetIO().Framerate;
+		float time = std::chrono::duration <float> (std::chrono::high_resolution_clock::now() - start_time).count();
+		frames.push_back({time, fps});
+
+		// Remove old frame times
+		while (frames.size() > 0 && frames.front().first < time - 5.0f)
+			frames.erase(frames.begin());
+
+		// Plot the frame times
+		ImPlot::SetNextAxesLimits(0, 5, 0, 165, ImGuiCond_Always);
+		if (ImPlot::BeginPlot("Frame times")) {
+			std::vector <float> times;
+			std::vector <float> fpses;
+
+			float min_time = frames.front().first;
+			for (auto &frame : frames) {
+				times.push_back(frame.first - min_time);
+				fpses.push_back(frame.second);
+			}
+
+			// Set limits
+			ImPlot::PlotLine("Framrate", times.data(), fpses.data(), times.size());
+			ImPlot::EndPlot();
+		}
+
+		ImGui::End();
+	}
+};
+
 // Editor implementation
 Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 		const std::vector <const char *> &extensions)
@@ -612,6 +771,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 
 	// Configure ImGui
 	ImGui::CreateContext();
+	ImPlot::CreateContext();
 	ImGui_ImplGlfw_InitForVulkan(window.handle, true);
 
 	// Docking
@@ -703,18 +863,28 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	m_buffers.traced_cpu.resize(size);
 
 	// Allocate the viewport resources
+	// TODO: method...
 	m_viewport.image = kobra::ImageData(
 		phdev, device,
 		swapchain.format, window.extent,
 		vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eColorAttachment
 			| vk::ImageUsageFlagBits::eSampled
-			| vk::ImageUsageFlagBits::eTransferDst,
+			| vk::ImageUsageFlagBits::eTransferDst
+			| vk::ImageUsageFlagBits::eTransferSrc,
 		vk::MemoryPropertyFlagBits::eDeviceLocal,
 		vk::ImageAspectFlagBits::eColor
 	);
 
 	m_viewport.sampler = kobra::make_sampler(device, m_viewport.image);
+
+	m_viewport.depth_buffer = std::move(
+		kobra::DepthBuffer {
+			phdev, device,
+			vk::Format::eD32Sfloat,
+			m_viewport.image.extent
+		}
+	);
 
 	// Create the viewport framebuffer
 	std::vector <vk::raii::ImageView> attachments;
@@ -724,7 +894,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 		kobra::make_framebuffers(device,
 			render_pass,
 			attachments,
-			&depth_buffer.view,
+			&m_viewport.depth_buffer.view,
 			window.extent
 		).front()
 	);
@@ -742,6 +912,9 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	m_ui->attach(m_material_editor);
 	m_ui->attach(std::make_shared <RTXRenderer> (this));
 	m_ui->attach(std::make_shared <Viewport> (this));
+	m_ui->attach(std::make_shared <Performance> ());
+	// m_ui->attach(std::make_shared <SceneGraph> (this));
+	// TODO: scene graph...
 
 	// Load and set the icon
 	std::string icon_path = KOBRA_DIR "/kobra_icon.png";
@@ -899,14 +1072,19 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 					.height = rtx_extent.height,
 					.channels = 4
 				},
-				cmd, m_viewport.framebuffer, window.extent
+				cmd,
+				m_viewport.framebuffer,
+				m_viewport.image.extent
 			);
 		} else {
 			m_forward_renderer.render(
 				params,
 				m_camera.get <kobra::Camera> (),
 				m_camera.get <kobra::Transform> (),
-				cmd, m_viewport.framebuffer, window.extent
+				// TODO: pass these rest as parameters
+				cmd,
+				m_viewport.framebuffer,
+				m_viewport.image.extent
 			);
 		}
 
@@ -952,7 +1130,9 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 			// TODO: only render the selected objetcs...
 			// otherwise computtion becomes very wasted...
 			m_objectifier.composite_highlight(
-				cmd, m_viewport.framebuffer, window.extent,
+				cmd,
+				m_viewport.framebuffer,
+				m_viewport.image.extent,
 				m_scene.ecs,
 				m_camera.get <kobra::Camera> (),
 				m_camera.get <kobra::Transform> (),
@@ -960,23 +1140,78 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 			);
 		}
 
-		vk::ImageMemoryBarrier viewport_barrier {
-			{},
-			vk::AccessFlagBits::eTransferWrite,
-			vk::ImageLayout::ePresentSrcKHR,
-			vk::ImageLayout::eShaderReadOnlyOptimal,
-			VK_QUEUE_FAMILY_IGNORED,
-			VK_QUEUE_FAMILY_IGNORED,
-			*m_viewport.image.image,
-			{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}
-		};
+		m_viewport.image.layout = vk::ImageLayout::ePresentSrcKHR;
+		m_viewport.image.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
 
-		cmd.pipelineBarrier(
-			vk::PipelineStageFlagBits::eTopOfPipe,
-			vk::PipelineStageFlagBits::eTransfer,
-			{}, {}, {},
-			{viewport_barrier}
-		);
+		if (!m_input.capture_requests.empty()) {
+			std::string path = m_input.capture_requests.front();
+			// Onkly take the first request
+			m_input.capture_requests = std::queue <std::string> ();
+
+			std::cout << "Capturing to " << path << std::endl;
+			m_input.current_capture_path = path;
+
+			// Allocate the buffer for the image if it hasn't been allocated
+			if (m_input.capture_buffer.size == 0) {
+				std::cout << "Allocating capture buffer" << std::endl;
+
+				// TODO: get the format in order to compute
+				// size...
+				int size = sizeof(uint32_t) * m_viewport.image.extent.width
+					* m_viewport.image.extent.height;
+
+				m_input.capture_buffer = kobra::BufferData(
+					phdev, device, size,
+					vk::BufferUsageFlagBits::eTransferDst,
+					vk::MemoryPropertyFlagBits::eHostVisible
+						| vk::MemoryPropertyFlagBits::eHostCoherent
+				);
+			}
+
+			// Copy the image to the buffer
+			m_viewport.image.transition_layout(cmd, vk::ImageLayout::eTransferSrcOptimal);
+
+			cmd.copyImageToBuffer(
+				*m_viewport.image.image,
+				vk::ImageLayout::eTransferSrcOptimal,
+				*m_input.capture_buffer.buffer,
+				{vk::BufferImageCopy {
+					0, 0, 0,
+					{vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+					{0, 0, 0},
+					{m_viewport.image.extent.width, m_viewport.image.extent.height, 1}
+				}}
+			);
+
+			m_viewport.image.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
+
+			// Add capture to sync queue
+			sync_queue.push({
+				"Capture Viewport Image",
+				[&]() {
+					m_input.capture_data.resize(m_input.capture_buffer.size);
+					m_input.capture_buffer.download(m_input.capture_data);
+
+					// Convert from BGRA to RGBA
+					for (int i = 0; i < m_input.capture_data.size(); i += 4)
+						std::swap(m_input.capture_data[i], m_input.capture_data[i + 2]);
+
+					std::string path = m_input.current_capture_path;
+					stbi_write_png(
+						path.c_str(),
+						m_viewport.image.extent.width,
+						m_viewport.image.extent.height,
+						4,
+						m_input.capture_data.data(),
+						m_viewport.image.extent.width * 4
+					);
+
+					kobra::logger("Editor", kobra::Log::OK)
+						<< "Captured viewport image to "
+						<< path << std::endl;
+				}
+			});
+		}
 
 		// Render the UI last
 		m_ui->render(cmd,
@@ -988,44 +1223,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 	// TODO: after present actions...
 }
 
-void Editor::resize(const vk::Extent2D &extent)
-{
-	// m_camera.get <kobra::Camera> ().aspect = extent.width / (float) extent.height;
-	// TODO: resize the objectifier...
-
-	// Resize the viewport image
-	// m_viewport.image.resize(extent); TODO: implement this
-
-	// TODO: resize with the viewport image window in ImGui
-	m_viewport.image = kobra::ImageData(
-		phdev, device,
-		swapchain.format, extent,
-		vk::ImageTiling::eOptimal,
-		vk::ImageUsageFlagBits::eColorAttachment
-			| vk::ImageUsageFlagBits::eSampled
-			| vk::ImageUsageFlagBits::eTransferDst,
-		vk::MemoryPropertyFlagBits::eDeviceLocal,
-		vk::ImageAspectFlagBits::eColor
-	);
-
-	m_viewport.sampler = kobra::make_sampler(device, m_viewport.image);
-
-	// Resize the viewport framebuffer
-	// TODO: move all viewport resources to the viewport attchment...
-	std::vector <vk::raii::ImageView> attachments;
-	attachments.emplace_back(std::move(m_viewport.image.view));
-
-	m_viewport.framebuffer = std::move(
-		kobra::make_framebuffers(device,
-			render_pass,
-			attachments, // TODO: pass vk::ImageViews instead of vk::raii::ImageView
-			&depth_buffer.view,
-			extent
-		).front()
-	);
-
-	m_viewport.image.view = std::move(attachments.front());
-}
+void Editor::resize(const vk::Extent2D &) {}
 
 void Editor::after_present()
 {

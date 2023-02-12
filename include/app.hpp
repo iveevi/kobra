@@ -105,15 +105,15 @@ protected:
 
 	std::vector <FrameData>			frames;
 
-	// Sync queue for between-frames operations
-	SyncQueue			sync_queue;
-
 	// Generate aux structures
 	Context get_context();
 
 	// Recreate swapchain
 	void recreate_swapchain();
 public:
+	// Sync queue for between-frames operations
+	SyncQueue			sync_queue;
+
 	// Constructor
 	BaseApp(const vk::raii::PhysicalDevice &,
 			const std::string &,
