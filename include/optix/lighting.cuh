@@ -136,7 +136,7 @@ float3 sample_area_light(TriangleLight light, cuda::Seed seed)
 	float3 rand = cuda::pcg3f(seed);
 	float u = fract(rand.x);
 	float v = fract(rand.y);
-	
+
 	if (u + v > 1.0f) {
 		u = 1.0f - u;
 		v = 1.0f - v;

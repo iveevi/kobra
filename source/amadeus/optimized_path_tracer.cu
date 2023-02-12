@@ -1,16 +1,7 @@
-// Engine headers
-#include "../../include/amadeus/armada.cuh"
-
-#include <nvrtc.h>
-#include <filesystem>
+#include "optimized_path_tracer.cuh"
 
 using namespace kobra;
 using namespace kobra::amadeus;
-
-// Launch parameters
-struct PathTracerParameters : ArmadaLaunchInfo {
-	OptixTraversableHandle traversable;
-};
 
 // Classic Monte Carlo path tracer
 class OptimizedPathTracer : public AttachmentRTX {
@@ -29,7 +20,7 @@ class OptimizedPathTracer : public AttachmentRTX {
 	OptixPipeline m_pipeline;
 
 	// Buffer for launch parameters
-	PathTracerParameters m_parameters;
+	OptimizedPathTracerParameters m_parameters;
 	CUdeviceptr m_cuda_parameters;
 
 	// TODO: stream
@@ -119,11 +110,31 @@ public:
 		m_sbt.hitgroupRecordCount = 0;
 
 		// Initialize the parameters buffer
-		m_cuda_parameters = (CUdeviceptr) cuda::alloc <PathTracerParameters> (1);
+		m_cuda_parameters = (CUdeviceptr) cuda::alloc <OptimizedPathTracerParameters> (1);
 	}
 
 	void load() override {}
 	void unload() override {}
+
+	// Options
+	void set_option(const std::string &field, const OptionValue &value) override {
+		if (field == "russian_roulette") {
+			if (std::holds_alternative <bool> (value)) {
+				m_parameters.russian_roulette = std::get <bool> (value);
+				std::cout << "Russian roulette: " << std::get <bool> (value) << '\n';
+			} else {
+				KOBRA_LOG_FILE(Log::WARN) << "Invalid value for"
+					" russian_roulette option, expected bool\n";
+			}
+		}
+	}
+
+	OptionValue get_option(const std::string &field) const override {
+		if (field == "russian_roulette")
+			return m_parameters.russian_roulette;
+
+		return {};
+	}
 
 	// Rendering
 	void render(const ArmadaRTX *armada_rtx,
@@ -158,7 +169,8 @@ public:
 		OPTIX_CHECK(
 			optixLaunch(
 				m_pipeline, 0,
-				m_cuda_parameters, sizeof(PathTracerParameters),
+				m_cuda_parameters,
+				sizeof(OptimizedPathTracerParameters),
 				&m_sbt, extent.width, extent.height, 1
 			)
 		);

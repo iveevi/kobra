@@ -1,14 +1,15 @@
 #include "amadeus_common.cuh"
-#include "../../include/amadeus/path_tracer.cuh"
+#include "../../source/amadeus/optimized_path_tracer.cuh"
 
 extern "C"
 {
-	__constant__ kobra::amadeus::PathTracerParameters parameters;
+	__constant__ OptimizedPathTracerParameters parameters;
 }
 
 // Ray packet data
 struct RayPacket {
 	float3	value;
+	float3	beta;
 
 	float4	position;
 	float3	normal;
@@ -81,6 +82,7 @@ extern "C" __global__ void __raygen__()
 	// Prepare the ray packet
 	RayPacket rp {
 		.value = make_float3(0.0f),
+		.beta = make_float3(1.0f),
 		.position = make_float4(0),
 		.ior = 1.0f,
 		.depth = 0,
@@ -120,6 +122,7 @@ extern "C" __global__ void __raygen__()
 		color = {1, 0, 1, 1};
 
 	// Accumulate and store necessary data
+	// TODO: use an iterative algorithm to save stack space
 	auto &buffers = parameters.buffers;
 	accumulate(buffers.color[index], color);
 	accumulate(buffers.normal[index], {normal, 0.0f});
@@ -131,7 +134,18 @@ extern "C" __global__ void __raygen__()
 extern "C" __global__ void __closesthit__()
 {
 	// Load all necessary data
-	LOAD_RAYPACKET(parameters);
+	// TODO: skip depth check if russian roulette is enabled
+	RayPacket *rp;
+	unsigned int i0 = optixGetPayload_0();
+	unsigned int i1 = optixGetPayload_1();
+	rp = unpack_pointer <RayPacket> (i0, i1);
+
+	bool in_rr_bounds = (rp->depth < 20 && parameters.russian_roulette);
+	if (rp->depth > parameters.max_depth && !in_rr_bounds) {
+		rp->value = make_float3(0.0f);
+		return;
+	}
+
 	LOAD_INTERSECTION_DATA(parameters);
 
 	bool primary = (rp->depth == 0);
@@ -163,6 +177,7 @@ extern "C" __global__ void __closesthit__()
 	};
 
 	float3 direct = material.emission + Ld(lc, surface_hit, rp->seed);
+	float3 indirect = make_float3(0.0f);
 
 	// Generate new ray
 	Shading out;
@@ -172,24 +187,37 @@ extern "C" __global__ void __closesthit__()
 	float3 f = eval(surface_hit, wi, pdf, out, rp->seed);
 
 	// Get threshold value for current ray
+	// TODO: compute inv_pdf instad of pdf
 	float3 T = f * abs(dot(wi, n))/pdf;
-
-	// Update for next ray
-	// TODO: boolean member for toggling russian roulette
-	rp->ior = material.refraction;
-	rp->depth++;
-
-	// Trace the next ray
-	float3 indirect = make_float3(0.0f);
 	if (pdf > 0) {
-		trace(parameters.traversable, 0, 1, x, wi, i0, i1);
-		indirect = rp->value;
+		rp->beta *= T;
+
+		float q = 1.0f - min(max(0.05f, rp->beta.y), 1.0f);
+		float r = fract(rp->seed.x);
+
+		// Update for next ray
+		rp->ior = material.refraction;
+		rp->depth++;
+
+		// Trace the next ray
+		if (parameters.russian_roulette && r < q) {
+			// Russian roulette
+			// Ray terminates
+		} else {
+			if (parameters.russian_roulette)
+				rp->beta /= (1.0f - q);
+
+			trace(parameters.traversable, 0, 1, x, wi, i0, i1);
+			indirect = T * rp->value;
+
+			if (parameters.russian_roulette)
+				indirect /= (1.0f - q);
+		}
 	}
 
 	// Update the value
-	rp->value = direct;
-	if (pdf > 0)
-		rp->value += T * indirect;
+	// TODO: check if the shader can be updated...
+	rp->value = direct + indirect;
 
 	rp->position = make_float4(x, 1);
 	rp->normal = n;

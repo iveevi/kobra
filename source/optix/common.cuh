@@ -263,7 +263,7 @@ float3 Ld_Environment(const LightingContext &lc, const SurfaceHit &sh, float &pd
 
 // Trace ray into scene and get relevant information
 __device__
-float3 Ld( const LightingContext &lc, const SurfaceHit &sh, Seed seed)
+float3 Ld(const LightingContext &lc, const SurfaceHit &sh, Seed seed)
 {
 	int quad_count = lc.quad_count;
 	int tri_count = lc.triangle_count;

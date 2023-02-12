@@ -5,6 +5,7 @@
 #include <atomic>
 #include <map>
 #include <optional>
+#include <variant>
 #include <vector>
 
 // OptiX headers
@@ -115,6 +116,15 @@ public:
 
 	virtual void load() = 0;
 	virtual void unload() = 0;
+
+	// Options; default no action
+	using OptionValue = std::variant <int, float, bool, std::string>;
+
+	virtual void set_option(const std::string &, const OptionValue &) {}
+
+	virtual OptionValue get_option(const std::string &) const {
+		return {};
+	}
 
 	// Rendering
 	virtual void render(
@@ -248,6 +258,22 @@ public:
 		for (const auto &[name, attachment] : m_attachments)
 			names.push_back(name);
 		return names;
+	}
+
+	std::string active_attachment() const {
+		return m_active_attachment;
+	}
+
+	// Configure options
+	void set_option(const std::string &field, const AttachmentRTX::OptionValue &value) {
+		KOBRA_LOG_FUNC(Log::OK) << "Setting option " << field<< std::endl;
+		auto attachment = m_attachments.at(m_active_attachment);
+		attachment->set_option(field, value);
+	}
+
+	AttachmentRTX::OptionValue get_option(const std::string &field) const {
+		auto attachment = m_attachments.at(m_active_attachment);
+		return attachment->get_option(field);
 	}
 
 	// Buffer accessors

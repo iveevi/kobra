@@ -58,7 +58,7 @@ struct Microfacets {
 	static float GGX(float3 n, float3 h, const Material &mat) {
 		float alpha = mat.roughness;
 		float theta = acos(clamp(dot(n, h), 0.0f, 0.999f));
-		
+
 		return (alpha * alpha)
 			/ (M_PI * pow(cos(theta), 4)
 			* pow(alpha * alpha + tan(theta) * tan(theta), 2.0f));
@@ -337,8 +337,8 @@ float3 brdf(const SurfaceHit &sh, float3 wi, Shading out)
 	// TODO: Implement PBRT specular transmission with Tr...
 	// also fresnel transmission and microfacet transmission
 	if (out & Shading::eTransmission)
-		return sh.mat.diffuse/M_PI + SpecularTransmission::brdf(sh.mat, sh.n, wi, sh.wo, sh.entering, out);
-	
+		return sh.mat.diffuse/M_PI + FresnelSpecular::brdf(sh.mat, sh.n, wi, sh.wo, sh.entering, out);
+
 	return sh.mat.diffuse/M_PI + GGX::brdf(sh.mat, sh.n, wi, sh.wo, sh.entering, out);
 }
 
@@ -347,8 +347,8 @@ KCUDA_INLINE KCUDA_HOST_DEVICE
 float pdf(const SurfaceHit &sh, float3 wi, Shading out)
 {
 	if (out & Shading::eTransmission)
-		return SpecularTransmission::pdf(sh.mat, sh.n, wi, sh.wo, sh.entering, out);
-	
+		return FresnelSpecular::pdf(sh.mat, sh.n, wi, sh.wo, sh.entering, out);
+
 	return GGX::pdf(sh.mat, sh.n, wi, sh.wo, sh.entering, out);
 }
 
@@ -357,7 +357,7 @@ KCUDA_INLINE KCUDA_HOST_DEVICE
 float3 sample(const SurfaceHit &sh, Shading &out, Seed seed)
 {
 	if (sh.mat.type & Shading::eTransmission)
-		return SpecularTransmission::sample(sh.mat, sh.n, sh.wo, sh.entering, seed, out);
+		return FresnelSpecular::sample(sh.mat, sh.n, sh.wo, sh.entering, seed, out);
 
 	return GGX::sample(sh.mat, sh.n, sh.wo, sh.entering, seed, out);
 }
@@ -371,7 +371,7 @@ float3 eval(const SurfaceHit &sh, float3 &wi, float &in_pdf, Shading &out, Seed 
 	wi = sample(sh, out, seed);
 	// wi = sample(mat, n, wo, entering, seed, out);
 	if (length(wi) < 1e-6f)
-	 	return make_float3(0.0f);
+		return make_float3(0.0f);
 
 	in_pdf = pdf(sh, wi, out);
 	return brdf(sh, wi, out);
@@ -456,7 +456,7 @@ KCUDA_HOST_DEVICE __forceinline__
 float3 eval(const SurfaceHit &sh, float3 &wi, float &in_pdf, Shading &out, Seed seed)
 {
 	if (sh.mat.type & Shading::eTransmission)
-		return eval <SpecularTransmission> (sh, wi, in_pdf, out, seed);
+		return eval <FresnelSpecular> (sh, wi, in_pdf, out, seed);
 
 	// Fallback to GGX
 	return eval <GGX> (sh, wi, in_pdf, out, seed);

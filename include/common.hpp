@@ -1,5 +1,4 @@
-#ifndef COMMON_H_
-#define COMMON_H_
+#pragma once
 
 // Path macros
 #ifndef KOBRA_DIR
@@ -9,6 +8,7 @@
 #endif
 
 #define KOBRA_SHADERS_DIR KOBRA_DIR "/bin/spv"
+#define KOBRA_FONTS_DIR KOBRA_DIR "/resources/fonts"
 
 // Standard headers
 #include <fstream>
@@ -107,7 +107,7 @@ inline std::string get_filename(const std::string &file)
 
 #endif
 
-	// Windows	
+	// Windows
 #ifdef _WIN32
 
 	return file.substr(file.find_last_of('\\') + 1);
@@ -222,5 +222,3 @@ inline glm::vec3 closest_point(const Ray &ray, const glm::vec3 &point)
 }
 
 }
-
-#endif

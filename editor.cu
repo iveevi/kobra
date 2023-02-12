@@ -12,6 +12,7 @@
 #include "../include/engine/irradiance_computer.hpp"
 #include "../include/amadeus/armada.cuh"
 #include "../include/amadeus/path_tracer.cuh"
+#include "../include/amadeus/restir.cuh"
 #include "../include/layers/framer.hpp"
 #include "../include/cuda/color.cuh"
 #include "../include/layers/denoiser.cuh"
@@ -31,6 +32,11 @@ struct Viewport;
 // TODO: logging attachment
 // TODO: info tab that shows logging and framerate...
 // TODO: viewport attachment
+
+enum Mode : uint32_t {
+	eRasterizer = 0,
+	eRaytracer = 1,
+};
 
 // TODO: only keep the state here...
 struct Editor : public kobra::BaseApp {
@@ -61,7 +67,7 @@ struct Editor : public kobra::BaseApp {
 		std::mutex movement_mutex;
 		std::queue <uint32_t> movement;
 
-		int mode = 0;
+		int mode = eRasterizer;
 		bool denoise = true;
 	} m_renderers;
 
@@ -366,11 +372,43 @@ public:
 			m_editor->m_renderers.movement.push(0);
 		}
 
+		// TODO: roussian roulette, different integrators, and loading
+		// RTX attachments
+
+		// Drop down to choose the RTX attachment
+		auto attachments = m_editor->m_renderers.armada_rtx->attachments();
+		auto current = m_editor->m_renderers.armada_rtx->active_attachment();
+		if (ImGui::BeginCombo("RTX Attachment", current.c_str())) {
+			for (auto &attachment : attachments) {
+				bool is_selected = (current == attachment);
+				if (ImGui::Selectable(attachment.c_str(), is_selected)) {
+					m_editor->m_renderers.armada_rtx->activate(attachment);
+					std::lock_guard <std::mutex> lock_guard
+						(m_editor->m_renderers.movement_mutex);
+					m_editor->m_renderers.movement.push(0);
+				}
+
+				if (is_selected)
+					ImGui::SetItemDefaultFocus();
+			}
+
+			ImGui::EndCombo();
+		}
+
 		// Checkboxes for enabling/disabling denoising
 		ImGui::Checkbox("Denoise", &m_editor->m_renderers.denoise);
 
-		// TODO: roussian roulette, different integrators, and loading
-		// RTX attachments
+		bool russian_roulette = false;
+		auto opt = m_editor->m_renderers.armada_rtx->get_option("russian_roulette");
+		if (std::holds_alternative <bool> (opt))
+			russian_roulette = std::get <bool> (opt);
+
+		if (ImGui::Checkbox("Russian Roulette", &russian_roulette)) {
+			m_editor->m_renderers.armada_rtx->set_option("russian_roulette", russian_roulette);
+			std::lock_guard <std::mutex> lock_guard
+				(m_editor->m_renderers.movement_mutex);
+			m_editor->m_renderers.movement.push(0);
+		}
 
 		ImGui::End();
 	}
@@ -416,6 +454,7 @@ void load_attachment(Editor *editor)
 			return;
 		}
 
+		// TODO: use rtxa extension, and ignore metadata
 		std::cout << "Loading plugin..." << std::endl;
 		kobra::amadeus::AttachmentRTX *plugin = create();
 		std::cout << "Plugin loaded: " << plugin << std::endl;
@@ -460,15 +499,34 @@ public:
 
 	// TODO: pass commandbuffer to this function
 	void render() override {
+		if (ImGui::BeginMainMenuBar()) {
+			if (ImGui::BeginMenu("File")) {
+				ImGui::EndMenu();
+			}
+
+			if (ImGui::BeginMenu("Edit")) {
+				ImGui::EndMenu();
+			}
+
+			if (ImGui::BeginMenu("View")) {
+				// TODO: request for file save location
+				if (ImGui::MenuItem("Capture Viewport Image"))
+					std::cout << "Snap!" << std::endl;
+				ImGui::EndMenu();
+			}
+
+			ImGui::EndMainMenuBar();
+		}
+
 		// TODO: separate attachment for the main menu bar
 		ImGui::Begin("Viewport", nullptr, ImGuiWindowFlags_MenuBar);
 
 		if (ImGui::BeginMenuBar()) {
 			if (ImGui::BeginMenu("Renderers")) {
-				if (ImGui::MenuItem("Path Tracer"))
-					m_editor->m_renderers.mode = 0;
-				if (ImGui::MenuItem("RTX"))
-					m_editor->m_renderers.mode = 1;
+				if (ImGui::MenuItem("Rasterizer"))
+					m_editor->m_renderers.mode = eRasterizer;
+				if (ImGui::MenuItem("Raytracer"))
+					m_editor->m_renderers.mode = eRaytracer;
 				ImGui::EndMenu();
 			}
 			if (ImGui::Button("Load RTX Plugin")) {
@@ -561,7 +619,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	imgui_io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	imgui_io.ConfigWindowsMoveFromTitleBarOnly = true;
 
-	auto font = std::make_pair(KOBRA_DIR "/resources/fonts/NotoSans.ttf", 18);
+	auto font = std::make_pair(KOBRA_FONTS_DIR "/Montserrat/static/Montserrat-SemiBold.ttf", 18);
 	m_ui = std::make_shared <kobra::layers::UI> (
 		get_context(), window,
 		graphics_queue, font,
@@ -615,6 +673,11 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	m_renderers.armada_rtx = std::make_shared <kobra::amadeus::ArmadaRTX> (
 		get_context(), m_renderers.system,
 		m_renderers.mesh_memory, raytracing_extent
+	);
+
+	m_renderers.armada_rtx->attach(
+		"ReSTIR",
+		std::make_shared <kobra::amadeus::ReSTIR> ()
 	);
 
 	m_renderers.armada_rtx->attach(
@@ -861,7 +924,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 
 		// TODO: progress bar...
 		// std::cout << "Sample count: " << m_irradiance_computer.samples << std::endl;
-		m_progress_bar->m_progress = m_irradiance_computer.samples/128.0f;
+		m_progress_bar->m_progress = m_irradiance_computer.samples/16.0f;
 
 		// Handle requests
 		std::optional <Request> selection_request;
