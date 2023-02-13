@@ -294,7 +294,6 @@ void Objectifier::render(const vk::raii::CommandBuffer &cmd,
 }
 
 // Composite a highlighting effect
-// TODO: pass submesh
 void Objectifier::composite_highlight(
 		const vk::raii::CommandBuffer &cmd,
 		const vk::raii::Framebuffer &framebuffer,
@@ -350,38 +349,31 @@ void Objectifier::composite_highlight(
 		.expected = {id.first, id.second}
 	};
 
-	for (int i = 0; i < ecs.size(); i++) {
-		if (ecs.exists <Renderable> (i)) {
-			pc.model = ecs.get <Transform> (i).matrix();
+	// Get the entity and submesh
+	const Transform &t = ecs.get <Transform> (id.first);
+	const Renderable &renderable = ecs.get <Renderable> (id.first);
 
-			// Bind and draw
-			const Renderable &renderable = ecs.get <Renderable> (i);
+	pc.model = t.matrix();
+	pc.id = {id.first, id.second};
 
-			int submeshes = renderable.size();
-			for (int j = 0; j < submeshes; j++) {
-				pc.id = {i, j};
+	cmd.pushConstants <PushConstants> (
+		*compositing.ppl,
+		vk::ShaderStageFlagBits::eVertex,
+		0, pc
+	);
 
-				cmd.pushConstants <PushConstants> (
-					*compositing.ppl,
-					vk::ShaderStageFlagBits::eVertex,
-					0, pc
-				);
+	cmd.pushConstants <CompositingData> (
+		*compositing.ppl,
+		vk::ShaderStageFlagBits::eFragment,
+		sizeof(PushConstants), data
+	);
 
-				cmd.pushConstants <CompositingData> (
-					*compositing.ppl,
-					vk::ShaderStageFlagBits::eFragment,
-					sizeof(PushConstants), data
-				);
+	cmd.bindVertexBuffers(0, *renderable.get_vertex_buffer(id.second).buffer, {0});
+	cmd.bindIndexBuffer(*renderable.get_index_buffer(id.second).buffer,
+		0, vk::IndexType::eUint32
+	);
 
-				cmd.bindVertexBuffers(0, *renderable.get_vertex_buffer(j).buffer, {0});
-				cmd.bindIndexBuffer(*renderable.get_index_buffer(j).buffer,
-					0, vk::IndexType::eUint32
-				);
-
-				cmd.drawIndexed(renderable.get_index_count(j), 1, 0, 0, 0);
-			}
-		}
-	}
+	cmd.drawIndexed(renderable.get_index_count(id.second), 1, 0, 0, 0);
 
 	// End render pass
 	cmd.endRenderPass();

@@ -41,17 +41,37 @@ inline std::string function_name(const std::string &pretty)
 enum class Log {OK, ERROR, WARN, INFO, AUTO};
 
 // Logging handlers
-using LogHandler = std::function <void (const char *, std::streamsize)>;
+using LogHandler = std::function <
+	void (Log, const std::string &, const std::string &,
+		const std::string &, const std::string &)
+>;
 
 namespace detail {
 
 // Global log handlers
 extern std::map <void *, LogHandler> log_handlers;
-	
+
 // Custom streambuf for piping logging
 class LogStreamBuf : public std::basic_streambuf <char> {
+	Log level;
+	std::string time;
+	std::string header;
+	std::string source;
+	std::string line;
 public:
 	LogStreamBuf(std::streambuf *sb) : main_stream(sb) {}
+
+	void current_context(Log l, const std::string &t, const std::string &h, const std::string &s) {
+		for (auto &h : log_handlers)
+			h.second(l, time, header, source, line);
+
+		time = t;
+		header = h;
+		source = s;
+		level = l;
+
+		line.clear();
+	}
 protected:
 	std::streambuf *main_stream;
 
@@ -60,8 +80,7 @@ protected:
 			return traits_type::not_eof(c);
 		} else {
 			// Convert char to string
-			std::string s;
-			s += c;
+			line += c;
 
 			// Send to main stream
 			main_stream->sputc(c);
@@ -73,13 +92,10 @@ protected:
 	std::streamsize xsputn(const char *s, std::streamsize n) override {
 		// Convert char to string
 		std::string str(s, n);
+		line += str;
 
 		// Send to main stream
 		main_stream->sputn(s, n);
-
-		// Send to log handlers
-		for (auto &h : log_handlers)
-			h.second(s, n);
 
 		return n;
 	}
@@ -88,10 +104,15 @@ protected:
 // Custom stream for piping logging
 class LogStream : public std::basic_ostream <char> {
 public:
-	LogStream(std::ostream &os) : std::basic_ostream <char> (new LogStreamBuf(os.rdbuf())) {}
-};
+	LogStream(std::ostream &os)
+			: std::basic_ostream <char>
+			(new LogStreamBuf(os.rdbuf())) {}
 
-extern LogStream main_stream;
+	void current_context(Log l, const std::string &t, const std::string &h, const std::string &s) {
+		static_cast <LogStreamBuf *>
+			(rdbuf())->current_context(l, t, h, s);
+	}
+};
 
 }
 

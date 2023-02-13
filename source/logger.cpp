@@ -3,6 +3,15 @@
 
 namespace kobra {
 
+namespace detail {
+
+std::map <void *, LogHandler> log_handlers;
+
+LogStream main_stream(std::cerr);
+
+}
+
+
 static std::string time()
 {
 	auto t = std::time(0);
@@ -38,24 +47,19 @@ detail::LogStream &logger(const std::string &source, Log level, const std::strin
 			std::cerr << termcolor::blue;
 	}
 
-	std::cerr << "[" << time() << std::setw(10) << h << "] "
+	std::string t = time();
+	std::cerr << "[" << t << std::setw(10) << h << "] "
 		<< termcolor::reset;
 
 	std::string stripped = source;
 	if (!source_is_loc)
 		stripped = function_name(stripped);
 
+	detail::main_stream.current_context(level, t, h, stripped);
 	detail::main_stream << termcolor::italic << termcolor::cyan
 		<< "[" << stripped << "] " << termcolor::reset;
 
 	return detail::main_stream;
-}
-
-namespace detail {
-
-std::map <void *, LogHandler> log_handlers;
-LogStream main_stream(std::cerr);
-
 }
 
 }

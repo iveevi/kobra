@@ -179,26 +179,32 @@ struct ProgressBar : public kobra::ui::ImGuiAttachment {
 
 // Info UI Attachment
 struct Console : public kobra::ui::ImGuiAttachment {
-	std::vector <std::string> m_lines;
+	struct LogItem {
+		kobra::Log level;
+		std::string time;
+		std::string source;
+		std::string message;
+	};
+
+	std::vector <LogItem> m_lines;
 	std::string m_message;
+
+	void add_log(kobra::Log level, const std::string &time, const std::string &header,
+			const std::string &source, const std::string &message) {
+		// TODO: instead of rendering the header, render a spite if
+		// error or warning...
+		m_lines.push_back({level, time, source, message});
+	}
 
 	// TODO: multiple fonts; use monospace for this (e.g. JetBrains Mono)
 	Console() {
 		// Attach logger handler
-		kobra::add_log_handler(this,
-			[&](const char *str, std::streamsize n) {
-				m_message += std::string(str, n);
-
-				std::string message_remainder = m_message;
-				for (size_t i = 0; i < m_message.size(); i++) {
-					if (m_message[i] == '\n') {
-						m_lines.push_back(m_message.substr(0, i));
-						message_remainder = m_message.substr(i + 1);
-					}
-				}
-
-				m_message = message_remainder;
-			}
+		kobra::add_log_handler(this, std::bind(
+				&Console::add_log, this,
+				std::placeholders::_1, std::placeholders::_2,
+				std::placeholders::_3, std::placeholders::_4,
+				std::placeholders::_5
+			)
 		);
 	}
 
@@ -213,13 +219,47 @@ struct Console : public kobra::ui::ImGuiAttachment {
 		ImGui::SetWindowSize(ImVec2(500, 500), ImGuiCond_FirstUseEver);
 
 		ImGui::Text("Output");
-		ImGui::Separator();
 
 		// TODO: scroll to bottom
 		// TODO: color code...
 		// TODO: vertica barbetween timestamp (and source), message tpye, and message
-		for (const std::string &line : m_lines)
-			ImGui::Text("%s", line.c_str());
+		ImGui::Columns(3, "output", true);
+		ImGui::Separator();
+		ImGui::Text("Timestamp");
+		ImGui::NextColumn();
+		ImGui::Text("Source");
+		ImGui::NextColumn();
+		ImGui::Text("Message");
+		ImGui::NextColumn();
+		ImGui::Separator();
+
+		for (const auto &line : m_lines) {
+			ImVec4 color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+			if (line.level == kobra::Log::ERROR)
+				color = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
+			else if (line.level == kobra::Log::WARN)
+				color = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
+			else if (line.level == kobra::Log::INFO)
+				color = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);
+			else if (line.level == kobra::Log::OK)
+				color = ImVec4(0.5f, 0.5f, 1.0f, 1.0f);
+
+			// Color
+			ImGui::PushStyleColor(ImGuiCol_Text, color);
+
+			ImGui::Text("%s", line.time.c_str());
+			ImGui::NextColumn();
+
+			// Italicize source
+			// TODO: this needs a different font
+			ImGui::Text("%s", line.source.c_str());
+			ImGui::NextColumn();
+
+			ImGui::Text("%s", line.message.c_str());
+			ImGui::NextColumn();
+
+			ImGui::PopStyleColor();
+		}
 
 		ImGui::End();
 	}
@@ -532,8 +572,6 @@ void request_capture(Editor *editor)
 
 void Editor::resize_viewport(const vk::Extent2D &extent)
 {
-	std::cout << "Editor::resize_viewport Resizing viewport to " << extent.width << "x" << extent.height << std::endl;
-
 	// TODO: resize with the viewport image window in ImGui
 	m_viewport.image = kobra::ImageData(
 		phdev, device,
