@@ -233,6 +233,8 @@ ret load_attachment()
 		return {nullptr, nullptr};
 	}
 
+	std::cout << "PTX file compiled successfully\n";
+
 	// TODO: global wide cache for the PTX files...
 	return {
 		"Experimental Path Tracer",

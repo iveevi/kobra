@@ -190,7 +190,6 @@ struct Console : public kobra::ui::ImGuiAttachment {
 			const std::string &source, const std::string &message) {
 		// TODO: instead of rendering the header, render a spite if
 		// error or warning...
-		std::cout << "!!!" << header << " " << source << ": " << message << std::endl;
 		m_lines.push_back({level, time, source, message});
 	}
 
