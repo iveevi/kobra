@@ -21,6 +21,7 @@ struct RayPacket {
 	float	ior;
 
 	int	depth;
+	bool	specular;
 };
 
 static KCUDA_INLINE KCUDA_HOST_DEVICE
@@ -86,6 +87,7 @@ extern "C" __global__ void __raygen__()
 		.position = make_float4(0),
 		.ior = 1.0f,
 		.depth = 0,
+		.specular = false
 	};
 
 	// Trace ray and generate contribution
@@ -178,7 +180,7 @@ extern "C" __global__ void __closesthit__()
 
 	// TODO: remove the initial emission term...
 	float3 direct = Ld(lc, surface_hit, rp->seed);
-	if (primary)
+	if (primary || rp->specular)
 		direct += material.emission;
 
 	float3 indirect = make_float3(0.0f);
@@ -211,11 +213,14 @@ extern "C" __global__ void __closesthit__()
 			if (parameters.russian_roulette)
 				rp->beta /= (1.0f - q);
 
+			rp->specular = (length(material.specular) > 0.0f);
 			trace(parameters.traversable, 0, 1, x, wi, i0, i1);
 			indirect = T * rp->value;
 
-			if (parameters.russian_roulette)
+			if (parameters.russian_roulette) {
 				indirect /= (1.0f - q);
+				direct /= (1.0f - q);
+			}
 		}
 	}
 
