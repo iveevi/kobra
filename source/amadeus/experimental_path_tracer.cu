@@ -1,10 +1,10 @@
-#include "optimized_path_tracer.cuh"
+#include "experimental_path_tracer.cuh"
 
 using namespace kobra;
 using namespace kobra::amadeus;
 
 // Classic Monte Carlo path tracer
-class OptimizedPathTracer : public AttachmentRTX {
+class ExperimentalPathTracer : public AttachmentRTX {
 	// SBT record types
 	using RaygenRecord = optix::Record <int>;
 	using MissRecord = optix::Record <int>;
@@ -20,7 +20,7 @@ class OptimizedPathTracer : public AttachmentRTX {
 	OptixPipeline m_pipeline;
 
 	// Buffer for launch parameters
-	OptimizedPathTracerParameters m_parameters;
+	ExperimentalPathTracerParameters m_parameters;
 	CUdeviceptr m_cuda_parameters;
 
 	// TODO: stream
@@ -28,7 +28,7 @@ class OptimizedPathTracer : public AttachmentRTX {
 	// Create the program groups and pipeline
 	void create_pipeline(const OptixDeviceContext &optix_context) {
 		static constexpr const char OPTIX_PTX_FILE[] =
-			"bin/ptx/optimized_path_tracer.ptx";
+			"bin/ptx/experimental_path_tracer.ptx";
 
 		// Load module
 		m_module = optix::load_optix_module(
@@ -78,7 +78,7 @@ class OptimizedPathTracer : public AttachmentRTX {
 	OptixShaderBindingTable m_sbt;
 public:
 	// Constructor
-	OptimizedPathTracer() : AttachmentRTX(1) {}
+	ExperimentalPathTracer() : AttachmentRTX(1) {}
 
 	// Attaching and unloading
 	// TODO: return bool to indicate success
@@ -110,7 +110,7 @@ public:
 		m_sbt.hitgroupRecordCount = 0;
 
 		// Initialize the parameters buffer
-		m_cuda_parameters = (CUdeviceptr) cuda::alloc <OptimizedPathTracerParameters> (1);
+		m_cuda_parameters = (CUdeviceptr) cuda::alloc <ExperimentalPathTracerParameters> (1);
 	}
 
 	void load() override {}
@@ -170,7 +170,7 @@ public:
 			optixLaunch(
 				m_pipeline, 0,
 				m_cuda_parameters,
-				sizeof(OptimizedPathTracerParameters),
+				sizeof(ExperimentalPathTracerParameters),
 				&m_sbt, extent.width, extent.height, 1
 			)
 		);
@@ -181,7 +181,12 @@ public:
 
 extern "C" {
 
-kobra::amadeus::AttachmentRTX *load_attachment()
+struct ret {
+	const char *name;
+	kobra::amadeus::AttachmentRTX *ptr;
+};
+
+ret load_attachment()
 {
 	std::vector <std::string> include_paths = {
 		KOBRA_DIR,
@@ -191,10 +196,10 @@ kobra::amadeus::AttachmentRTX *load_attachment()
 	};
 
 	// TODO: compile the necessary PTX files
-	constexpr char CUDA_SHADER_FILE[] = KOBRA_DIR "/source/optix/optimized_path_tracer.cu";
+	constexpr char CUDA_SHADER_FILE[] = KOBRA_DIR "/source/optix/experimental_path_tracer.cu";
 
 	// Write the PTX file
-	const std::string ptx_file = "bin/ptx/optimized_path_tracer.ptx";
+	const std::string ptx_file = "bin/ptx/experimental_path_tracer.ptx";
 
 	std::vector <const char *> options {
 		"-std=c++17",
@@ -225,11 +230,14 @@ kobra::amadeus::AttachmentRTX *load_attachment()
 	int ret = system(cmd.c_str());
 	if (ret != 0) {
 		KOBRA_LOG_FUNC(Log::ERROR) << "Failed to compile PTX file\n";
-		return nullptr;
+		return {nullptr, nullptr};
 	}
 
 	// TODO: global wide cache for the PTX files...
-	return new OptimizedPathTracer();
+	return {
+		"Experimental Path Tracer",
+		new ExperimentalPathTracer()
+	};
 }
 
 // TODO: dellocate attachment

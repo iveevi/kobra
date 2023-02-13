@@ -1,9 +1,9 @@
 #include "amadeus_common.cuh"
-#include "../../source/amadeus/optimized_path_tracer.cuh"
+#include "../../source/amadeus/experimental_path_tracer.cuh"
 
 extern "C"
 {
-	__constant__ OptimizedPathTracerParameters parameters;
+	__constant__ ExperimentalPathTracerParameters parameters;
 }
 
 // Ray packet data
@@ -176,7 +176,11 @@ extern "C" __global__ void __closesthit__()
 		parameters.environment_map,
 	};
 
-	float3 direct = material.emission + Ld(lc, surface_hit, rp->seed);
+	// TODO: remove the initial emission term...
+	float3 direct = Ld(lc, surface_hit, rp->seed);
+	if (primary)
+		direct += material.emission;
+
 	float3 indirect = make_float3(0.0f);
 
 	// Generate new ray

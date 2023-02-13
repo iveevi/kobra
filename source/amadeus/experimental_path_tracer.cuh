@@ -7,7 +7,7 @@
 #include <filesystem>
 
 // Launch parameters
-struct OptimizedPathTracerParameters : kobra::amadeus::ArmadaLaunchInfo {
+struct ExperimentalPathTracerParameters : kobra::amadeus::ArmadaLaunchInfo {
 	OptixTraversableHandle traversable;
 
 	bool russian_roulette;

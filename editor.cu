@@ -20,9 +20,6 @@
 // Native File Dialog
 #include <nfd.h>
 
-// JSON
-#include <nlohmann/json.hpp>
-
 // ImPlot headers
 #include <implot/implot.h>
 #include <implot/implot_internal.h>
@@ -193,6 +190,7 @@ struct Console : public kobra::ui::ImGuiAttachment {
 			const std::string &source, const std::string &message) {
 		// TODO: instead of rendering the header, render a spite if
 		// error or warning...
+		std::cout << "!!!" << header << " " << source << ": " << message << std::endl;
 		m_lines.push_back({level, time, source, message});
 	}
 
@@ -236,11 +234,11 @@ struct Console : public kobra::ui::ImGuiAttachment {
 		for (const auto &line : m_lines) {
 			ImVec4 color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
 			if (line.level == kobra::Log::ERROR)
-				color = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
+				color = ImVec4(1.0f, 0.5f, 0.5f, 1.0f);
 			else if (line.level == kobra::Log::WARN)
-				color = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
+				color = ImVec4(1.0f, 1.0f, 0.5f, 1.0f);
 			else if (line.level == kobra::Log::INFO)
-				color = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);
+				color = ImVec4(0.5f, 1.0f, 0.5f, 1.0f);
 			else if (line.level == kobra::Log::OK)
 				color = ImVec4(0.5f, 0.5f, 1.0f, 1.0f);
 
@@ -414,59 +412,46 @@ void load_attachment(Editor *editor)
 
 	std::string current_path = std::filesystem::current_path();
 	nfdchar_t *path = nullptr;
-	nfdfilteritem_t filter = {"RTX Plugin", "json"};
+	nfdfilteritem_t filter = {"RTX Plugin", "rtxa"};
 	nfdresult_t result = NFD_OpenDialog(&path, &filter, 1, current_path.c_str());
 
 	if (result == NFD_OKAY) {
 		std::cout << "Loading " << path << std::endl;
-		std::string contents = kobra::common::read_file(path);
-		nlohmann::json j = nlohmann::json::parse(contents);
-		std::cout << j.dump(4) << std::endl;
 
-		if (!j.contains("name") || !j.contains("library")) {
-			kobra::logger("Editor", kobra::Log::ERROR)
-				<< "Invalid RTX plugin file\n";
-			return;
-		}
-
-		std::cout << "\tname: " << j["name"] << std::endl;
-		std::cout << "\tlibrary: " << j["library"] << std::endl;
-		// TODO: also retrieve the shader and
-		// compile it into an intermediate ptx
-		// (and cache it in the scene dir)
-
-		// Load the library
-		std::string plugin_library = j["library"];
-		std::string plugin_name = j["name"];
-
-		void *handle = dlopen(plugin_library.c_str(), RTLD_LAZY);
+		void *handle = dlopen(path, RTLD_LAZY);
 		if (!handle) {
 			std::cerr << "Error: " << dlerror() << std::endl;
 			return;
 		}
 
 		// Load the plugin
-		typedef kobra::amadeus::AttachmentRTX* (*create_t)();
+		struct Attachment {
+			const char *name;
+			kobra::amadeus::AttachmentRTX *ptr;
+		};
 
-		create_t create = (create_t) dlsym(handle, "load_attachment");
-		if (!create) {
-			std::cerr << "Error: " << dlerror() << std::endl;
+		typedef Attachment (*plugin_t)();
+
+		plugin_t plugin = (plugin_t) dlsym(handle, "load_attachment");
+		if (!plugin) {
+			kobra::logger("Editor::load_attachment", kobra::Log::ERROR)
+				<< "Error: " << dlerror() << "\n";
 			return;
 		}
 
 		// TODO: use rtxa extension, and ignore metadata
 		std::cout << "Loading plugin..." << std::endl;
-		kobra::amadeus::AttachmentRTX *plugin = create();
-		std::cout << "Plugin loaded: " << plugin << std::endl;
-		if (!plugin) {
+		Attachment attachment = plugin();
+		std::cout << "Attachment loaded: " << attachment.name << "@" << attachment.ptr << std::endl;
+		if (!attachment.ptr) {
 			KOBRA_LOG_FILE(kobra::Log::ERROR) << "Error: plugin is null\n";
 			dlclose(handle);
 			return;
 		}
 
 		editor->m_renderers.armada_rtx->attach(
-			plugin_name,
-			std::shared_ptr <kobra::amadeus::AttachmentRTX> (plugin)
+			attachment.name,
+			std::shared_ptr <kobra::amadeus::AttachmentRTX> (attachment.ptr)
 		);
 
 		std::cout << "All attachments:" << std::endl;
@@ -786,6 +771,8 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 			extensions
 		}
 {
+	m_console = std::make_shared <Console> ();
+
 	// TODO: constructor should be loaded very fast, everything else should
 	// be loaded as needed...
 	int MIP_LEVELS = 5;
@@ -941,7 +928,6 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 
 	// Attach UI layers
 	m_progress_bar = std::make_shared <ProgressBar> ("Irradiance Computation Progress");
-	m_console = std::make_shared <Console> ();
 	m_material_editor = std::make_shared <MaterialEditor> (this, &m_texture_loader);
 
 	// m_ui->attach(m_image_viewer);
