@@ -57,23 +57,6 @@ float3 rand_uniform_3f(Seed seed)
 	return fract(seed);
 }
 
-/* KCUDA_INLINE KCUDA_HOST_DEVICE
-float3 random_sphere(float3 &seed)
-{
-	float3 r = random3(seed);
-	float ang1 = (r.x + 1.0f) * M_PI;	
-	float u = r.y;
-	float u2 = u * u;
-	
-	float sqrt1MinusU2 = sqrt(1.0 - u2);
-	
-	float x = sqrt1MinusU2 * cos(ang1);
-	float y = sqrt1MinusU2 * sin(ang1);
-	float z = u;
-
-	return float3 {x, y, z};
-} */
-
 }
 
 }

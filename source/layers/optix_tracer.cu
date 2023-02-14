@@ -1214,7 +1214,7 @@ void OptixTracer::_optix_update_materials()
 	}
 }
 
-// Taken from nvidia's book
+// Taken from Nvidia's book
 static void generate_halton_sequence(int N, int b, std::vector <float> &dst)
 {
 	int n = 0;

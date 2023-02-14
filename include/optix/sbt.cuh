@@ -12,10 +12,11 @@ namespace optix {
 
 // Hit data record
 struct Hit {	
-	glm::mat4 model;
-	Vertex *vertices;
-	glm::uvec3 *triangles;
 	BoundingBox bbox;
+	Vertex *vertices;
+	glm::mat4 model;
+	glm::uvec3 *triangles;
+	int32_t light_index;
 	uint32_t material_index;
 };
 

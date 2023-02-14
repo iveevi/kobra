@@ -3,17 +3,66 @@
 using namespace kobra;
 using namespace kobra::amadeus;
 
+// Taken from Nvidia's book
+static void generate_halton_sequence(int N, int b, std::vector <float> &dst)
+{
+	int n = 0;
+	int d = 1;
+
+	for (int i = 0; i < N; i++) {
+		int x = d - n;
+		if (x == 1) {
+			n = 1;
+			d *= b;
+		} else {
+			int y = d/b;
+			while (x <= y)
+				y /= b;
+			n = (b + 1) * y - x;
+		}
+
+		dst[i] = (float) n / (float) d;
+	}
+}
+
+static void generate_pixel_offsets(int N, std::vector <float> &x, std::vector <float> &y)
+{
+	static std::vector <int> bases {2, 3, 5, 7, 11, 13};
+
+	srand(time(0));
+	int r1 = rand() % bases.size();
+	int r2 = rand() % bases.size();
+
+	if (r1 == r2)
+		r2 = (r2 + 1) % bases.size();
+
+	int b1 = bases[r1];
+	int b2 = bases[r2];
+
+	generate_halton_sequence(N, b1, x);
+	generate_halton_sequence(N, b2, y);
+
+	for (int i = 0; i < N; i++) {
+		x[i] -= 0.5f;
+		y[i] -= 0.5f;
+	}
+}
+
 // Classic Monte Carlo path tracer
 class ExperimentalPathTracer : public AttachmentRTX {
 	// SBT record types
 	using RaygenRecord = optix::Record <int>;
 	using MissRecord = optix::Record <int>;
 
+	// Extent
+	vk::Extent2D m_extent;
+
 	// Pipeline related information
 	OptixModule m_module;
 
 	OptixProgramGroup m_ray_generation;
 	OptixProgramGroup m_closest_hit;
+	OptixProgramGroup m_closest_hit_shadow;
 	OptixProgramGroup m_miss;
 	OptixProgramGroup m_miss_shadow;
 
@@ -21,6 +70,10 @@ class ExperimentalPathTracer : public AttachmentRTX {
 
 	// Buffer for launch parameters
 	ExperimentalPathTracerParameters m_parameters;
+
+	std::vector <float> m_pixel_offsets_x;
+	std::vector <float> m_pixel_offsets_y;
+
 	CUdeviceptr m_cuda_parameters;
 
 	// TODO: stream
@@ -43,6 +96,7 @@ class ExperimentalPathTracer : public AttachmentRTX {
 		std::vector <OptixProgramGroupDesc> program_descs = {
 			OPTIX_DESC_RAYGEN(m_module, "__raygen__"),
 			OPTIX_DESC_HIT(m_module, "__closesthit__"),
+			OPTIX_DESC_HIT(m_module, "__closesthit__shadow"),
 			OPTIX_DESC_MISS(m_module, "__miss__"),
 			OPTIX_DESC_MISS(m_module, "__miss__shadow")
 		};
@@ -51,6 +105,7 @@ class ExperimentalPathTracer : public AttachmentRTX {
 		std::vector <OptixProgramGroup *> program_groups = {
 			&m_ray_generation,
 			&m_closest_hit,
+			&m_closest_hit_shadow,
 			&m_miss,
 			&m_miss_shadow
 		};
@@ -67,6 +122,7 @@ class ExperimentalPathTracer : public AttachmentRTX {
 			{
 				m_ray_generation,
 				m_closest_hit,
+				m_closest_hit_shadow,
 				m_miss,
 				m_miss_shadow
 			},
@@ -78,13 +134,16 @@ class ExperimentalPathTracer : public AttachmentRTX {
 	OptixShaderBindingTable m_sbt;
 public:
 	// Constructor
-	ExperimentalPathTracer() : AttachmentRTX(1) {}
+	ExperimentalPathTracer() : AttachmentRTX(2) {}
 
 	// Attaching and unloading
 	// TODO: return bool to indicate success
 	void attach(const ArmadaRTX &armada_rtx) override {
 		// First load the pipeline
 		create_pipeline(armada_rtx.system()->context());
+
+		// Get the extent
+		m_extent = armada_rtx.extent();
 
 		// Allocate the SBT
 		std::vector <RaygenRecord> ray_generation_records(1);
@@ -111,10 +170,36 @@ public:
 
 		// Initialize the parameters buffer
 		m_cuda_parameters = (CUdeviceptr) cuda::alloc <ExperimentalPathTracerParameters> (1);
+
+		m_pixel_offsets_x.clear();
+		m_pixel_offsets_y.clear();
 	}
 
-	void load() override {}
-	void unload() override {}
+	void load() override {
+		// Generate the pixel offsets
+		if (m_pixel_offsets_x.empty() || m_pixel_offsets_y.empty()) {
+			int width = m_extent.width;
+			int height = m_extent.height;
+
+			m_pixel_offsets_x.resize(width * height);
+			m_pixel_offsets_y.resize(width * height);
+
+			generate_pixel_offsets(
+				width * height,
+				m_pixel_offsets_x, m_pixel_offsets_y
+			);
+
+			// Copy the parameters to the GPU
+			std::cout << "Copying parameters to GPU\n";
+			std::cout << "\tResolution: " << width << 'x' << height << '\n';
+			std::cout << "\tsize: " << m_pixel_offsets_x.size() << '\n';
+			m_parameters.halton_x = cuda::make_buffer(m_pixel_offsets_x);
+			m_parameters.halton_y = cuda::make_buffer(m_pixel_offsets_y);
+		}
+	}
+
+	void unload() override {
+	}
 
 	// Options
 	void set_option(const std::string &field, const OptionValue &value) override {
@@ -144,17 +229,30 @@ public:
 			const vk::Extent2D &extent) override {
 		// Check if hit groups need to be updated, and update them if necessary
 		if (hit_records) {
-			for (auto &hitgroup_record : *hit_records)
-				optix::pack_header(m_closest_hit, hitgroup_record);
-
 			// Free old buffer
 			if (m_sbt.hitgroupRecordBase)
 				cuda::free(m_sbt.hitgroupRecordBase);
 
 			// Update the SBT
-			m_sbt.hitgroupRecordBase = cuda::make_buffer_ptr(*hit_records);
+			std::vector <HitRecord> local_hit_records(2 * hit_records->size());
+
+			for (size_t i = 0; i < hit_records->size(); i++) {
+				local_hit_records[2 * i] = (*hit_records)[i];
+				local_hit_records[2 * i + 1] = (*hit_records)[i];
+
+				pack_header(m_closest_hit, local_hit_records[2 * i]);
+				pack_header(m_closest_hit_shadow, local_hit_records[2 * i + 1]);
+			}
+
+
+			std::cout << "Total hit records: " << local_hit_records.size() << '\n';
+
+			m_sbt.hitgroupRecordBase = cuda::make_buffer_ptr(local_hit_records);
 			m_sbt.hitgroupRecordStrideInBytes = sizeof(HitRecord);
-			m_sbt.hitgroupRecordCount = hit_records->size();
+			m_sbt.hitgroupRecordCount = local_hit_records.size();
+
+			m_parameters.instances = hit_records->size();
+			std::cout << "Instances: " << hit_records->size() << '\n';
 		}
 
 		// Copy the parameters and launch
@@ -205,6 +303,7 @@ ret load_attachment()
 		"-std=c++17",
 		"-arch=compute_75",
 		"-lineinfo",
+		"-g",
 		"-DKOBRA_OPTIX_SHADER=0",
 		"--expt-relaxed-constexpr",
 	};

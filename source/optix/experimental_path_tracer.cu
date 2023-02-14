@@ -9,7 +9,6 @@
 #include "../../include/cuda/math.cuh"
 #include "../../include/cuda/matrix.cuh"
 #include "../../include/optix/core.cuh"
-#include "../../include/optix/lighting.cuh"
 #include "../../include/optix/sbt.cuh"
 
 using namespace kobra::cuda;
@@ -162,29 +161,68 @@ Material calculate_material(const _material &mat, glm::vec2 uv)
 	return material;
 }
 
-// Check shadow visibility
-KCUDA_INLINE __device__
-bool is_occluded(OptixTraversableHandle handle, float3 origin, float3 dir, float R)
+// Check light visibility
+KCUDA_INLINE KCUDA_DEVICE
+int32_t query_occlusion(float3 origin, float3 dir, float R)
 {
 	static float eps = 0.05f;
 
-	bool vis = true;
-
+	int32_t lv = -1;
 	unsigned int j0, j1;
-	pack_pointer <bool> (&vis, j0, j1);
-
-	optixTrace(handle,
+	pack_pointer(&lv, j0, j1);
+	optixTrace(parameters.traversable,
 		origin, dir,
-		0, R - eps, 0,
+		0, R + eps, 0,
 		OptixVisibilityMask(0b1),
-		OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT
-			| OPTIX_RAY_FLAG_DISABLE_ANYHIT
-			| OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT,
-		0, 0, 1,
-		j0, j1
+		OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+		1, 2, 1, j0, j1
 	);
 
-	return vis;
+	return lv;
+}
+
+KCUDA_INLINE KCUDA_HOST_DEVICE
+float3 sample_light(TriangleLight light, Seed seed)
+{
+	float3 rand = pcg3f(seed);
+	float u = fract(rand.x);
+	float v = fract(rand.y);
+
+	if (u + v > 1.0f) {
+		u = 1.0f - u;
+		v = 1.0f - v;
+	}
+
+	return light.a + u * light.ab + v * light.ac;
+}
+
+// Direct lighting for Next Event Estimation
+KCUDA_DEVICE
+float3 Ld_light(int li, const SurfaceHit &sh,
+		float &light_pdf, Seed seed)
+{
+	TriangleLight light = parameters.lights.tri_lights[li];
+
+	// PDF for sampling point on diffuse light
+	light_pdf = 1.0f/light.area();
+
+	float3 lpos = sample_light(light, seed);
+
+	float3 wi = normalize(lpos - sh.x);
+	float R = length(lpos - sh.x);
+
+	// TODO: pass triangle light index
+	int32_t light_index = query_occlusion(sh.x, wi, R);
+	if (light_index != li)
+		return make_float3(0.0f);
+
+	// TODO: brdf should evaluate all lobes...
+	float3 f = brdf(sh, wi, eDiffuse);
+
+	float ldot = abs(dot(light.normal(), wi));
+	float geometric = ldot * abs(dot(sh.n, wi))/(R * R);
+
+	return f * light.intensity * geometric;
 }
 
 // Get direct lighting for environment map
@@ -213,8 +251,8 @@ float3 Ld_Environment(const SurfaceHit &sh, float &pdf, Seed seed)
 	pdf = 1.0f/(4.0f * M_PI);
 
 	// NEE
-	bool occluded = is_occluded(parameters.traversable, sh.x, wi, WORLD_RADIUS);
-	if (occluded)
+	int32_t light_index = query_occlusion(sh.x, wi, WORLD_RADIUS);
+	if (light_index != -1)
 		return make_float3(0.0f);
 
 	// TODO: method for abs dot in surface hit
@@ -232,34 +270,62 @@ float3 Ld(const SurfaceHit &sh, Seed seed)
 	int tri_count = parameters.lights.tri_count;
 
 	// TODO: parameter for if envmap is used
-	int total_count = quad_count + tri_count + parameters.has_environment_map;
+	int total_count = tri_count + parameters.has_environment_map;
 
 	// Regular direct lighting
 	unsigned int i = rand_uniform(seed) * total_count;
 
-	float3 contr = {0.0f};
-	float pdf = 1.0f/total_count;
+	float3 contr_light = {0.0f};
 
 	// TODO: importance sample power
 	float light_pdf = 0.0f;
-	if (i < quad_count) {
-		QuadLight light = parameters.lights.quad_lights[i];
-		contr = Ld_light(parameters.traversable, light, sh, light_pdf, seed);
-	} else if (i < quad_count + tri_count) {
-		int ni = i - quad_count;
-		TriangleLight light = parameters.lights.tri_lights[ni];
-		contr = Ld_light(parameters.traversable, light, sh, light_pdf, seed);
+	if (i < tri_count) {
+		contr_light = Ld_light(i, sh, light_pdf, seed);
 	} else {
 		// Environment light
 		// TODO: imlpement PBRT's better importance sampling
-		contr = Ld_Environment(sh, light_pdf, seed);
+		contr_light = Ld_Environment(sh, light_pdf, seed);
 	}
 
-	pdf *= light_pdf;
+	light_pdf /= total_count;
 
-	// TODO: MIS with BRDF sampling
+	// MIS with BRDF sampling
+	Shading out;
+	float brdf_pdf;
+	float3 wi;
 
-	return contr/pdf;
+	float3 f = eval(sh, wi, brdf_pdf, out, seed);
+
+	// Check which light is hit
+	int32_t light_index = query_occlusion(sh.x, wi, 1e6f);
+	float3 contr_brdf = make_float3(0.0f);
+
+	if (light_index >= 0) {
+		// Light is hit
+		TriangleLight light = parameters.lights.tri_lights[light_index];
+		contr_brdf = f * light.intensity * abs(dot(light.normal(), wi));
+	} else if (light_index == -1) {
+		// Environment light
+		float u = atan2(wi.x, wi.z)/(2.0f * M_PI) + 0.5f;
+		float v = asin(wi.y)/M_PI + 0.5f;
+
+		float4 sample = tex2D <float4> (parameters.environment_map, u, v);
+		float3 Li = make_float3(sample);
+
+		contr_brdf = f * Li;
+	}
+
+	float light_pdf2 = light_pdf * light_pdf;
+	float brdf_pdf2 = brdf_pdf * brdf_pdf;
+
+	float w_light = light_pdf2/(light_pdf2 + brdf_pdf2);
+	float w_brdf = brdf_pdf2/(light_pdf2 + brdf_pdf2);
+
+	float3 contr = w_light * contr_light/light_pdf;
+	if (brdf_pdf > 0.0f)
+		contr += w_brdf * contr_brdf/brdf_pdf;
+
+	return contr;
 }
 
 // Kernel helpers/code blocks
@@ -287,29 +353,26 @@ void make_ray(uint3 idx,
 	const float3 W = to_f3(parameters.camera.ax_w);
 
 	// TODO: use a Blue noise sequence
-	// Constant, jittered
-	/* Jittered halton
-	int xoff = rand(parameters.image_width, seed);
-	int yoff = rand(parameters.image_height, seed);
+
+	// Jittered halton
+	seed = make_float3(idx.x, idx.y, 0);
+	int xoff = rand_uniform(parameters.resolution.x, seed);
+	int yoff = rand_uniform(parameters.resolution.y, seed);
 
 	// Compute ray origin and direction
-	float xoffset = parameters.xoffset[xoff];
-	float yoffset = parameters.yoffset[yoff];
-	radius = sqrt(xoffset * xoffset + yoffset * yoffset)/sqrt(0.5f); */
+	int index = xoff + yoff * parameters.resolution.x;
+	seed.x = parameters.halton_x[index];
+	seed.y = parameters.halton_y[index];
 
 	// TODO: mitchell netravali filter
-	pcg3f(seed);
-
-	float xoffset = (fract(seed.x) - 0.5f);
-	float yoffset = (fract(seed.y) - 0.5f);
-
 	float2 d = 2.0f * make_float2(
-		float(idx.x + xoffset)/parameters.resolution.x,
-		float(idx.y + yoffset)/parameters.resolution.y
+		float(idx.x + seed.x)/parameters.resolution.x,
+		float(idx.y + seed.y)/parameters.resolution.y
 	) - 1.0f;
 
 	origin = to_f3(parameters.camera.center);
 	direction = normalize(d.x * U + d.y * V + W);
+	seed.z = parameters.time;
 }
 
 // Accumulatoin helper
@@ -343,12 +406,7 @@ extern "C" __global__ void __raygen__()
 
 	float3 origin;
 	float3 direction;
-
-	float3 seed = make_float3(
-		idx.x + parameters.samples,
-		idx.y + parameters.samples,
-		parameters.samples
-	);
+	float3 seed;
 
 	make_ray(idx, origin, direction, seed);
 
@@ -371,7 +429,7 @@ extern "C" __global__ void __raygen__()
 			break;
 
 		// Trace the ray
-		trace(parameters.traversable, 0, 1, x, wi, i0, i1);
+		trace(parameters.traversable, 0, 2, x, wi, i0, i1);
 
 		// Check if we hit the environment map
 		if (length(sh.n) < 1e-3f) {
@@ -419,9 +477,6 @@ extern "C" __global__ void __raygen__()
 		specular = (length(sh.mat.specular) > 0);
 		x = sh.x;
 	}
-
-	// Finally, store the result
-	// TODO: avoid this casting: just assume the buffers are float4s...
 
 	// Check for NaNs
 	// TODO: can we avoid this?
@@ -505,10 +560,31 @@ extern "C" __global__ void __miss__()
 	sh->n = make_float3(0.0f);
 }
 
-extern "C" __global__ void __miss__shadow()
+// Closest hit miss kernel
+extern "C" __global__ void __closesthit__shadow()
 {
+	int32_t *lv;
 	unsigned int i0 = optixGetPayload_0();
 	unsigned int i1 = optixGetPayload_1();
-	bool *vis = unpack_pointer <bool> (i0, i1);
-	*vis = false;
+	lv = unpack_pointer <int32_t> (i0, i1);
+
+	Hit *hit = reinterpret_cast <Hit *>
+		(optixGetSbtDataPointer());
+
+	float2 bary = optixGetTriangleBarycentrics();
+	int primitive_index = optixGetPrimitiveIndex();
+
+	// TODO: enum the miss modes...
+	*lv = -2;
+	if (hit->light_index >= 0)
+		*lv = hit->light_index + primitive_index;
+}
+
+extern "C" __global__ void __miss__shadow()
+{
+	int32_t *lv;
+	unsigned int i0 = optixGetPayload_0();
+	unsigned int i1 = optixGetPayload_1();
+	lv = unpack_pointer <int32_t> (i0, i1);
+	*lv = -1;
 }

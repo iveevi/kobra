@@ -180,6 +180,10 @@ class ArmadaRTX {
 
 		std::vector <cuda::_material> materials;
 		std::vector <std::set <_instance_ref>> material_submeshes;
+		
+		std::vector <layers::MeshMemory::Cachelet> cachelets;
+		std::vector <const Submesh *> submeshes;
+		std::vector <const Transform *> submesh_transforms;
 
 		// Update state for the hit records
 		long long int last_updated;

@@ -10,5 +10,10 @@
 struct ExperimentalPathTracerParameters : kobra::amadeus::ArmadaLaunchInfo {
 	OptixTraversableHandle traversable;
 
+	float *halton_x;
+	float *halton_y;
+
 	bool russian_roulette;
+
+	int instances;
 };

@@ -85,9 +85,9 @@ void pack_pointer(T * ptr, uint32_t &i0, uint32_t &i1)
 // TODO: move to source
 static void context_logger
 		(unsigned int level,
-		 const char *tag,
-		 const char *message,
-		 void *)
+		const char *tag,
+		const char *message,
+		void *)
 {
 	std::stringstream ss;
 	ss << level << std::setw(20) << tag;
@@ -174,8 +174,8 @@ inline OptixModule load_optix_module
 // Load Optix programs from a module
 inline OptixProgramGroup load_program_group
 		(const OptixDeviceContext &optix_context,
-		 const OptixProgramGroupDesc &desc,
-		 const OptixProgramGroupOptions &options)
+		const OptixProgramGroupDesc &desc,
+		const OptixProgramGroupOptions &options)
 {
 	static char log[2048];
 	static size_t sizeof_log = sizeof(log);
@@ -196,9 +196,9 @@ inline OptixProgramGroup load_program_group
 
 inline void load_program_groups
 		(const OptixDeviceContext &optix_context,
-		 const std::vector <OptixProgramGroupDesc> &descs,
-		 const OptixProgramGroupOptions &options,
-		 const std::vector <OptixProgramGroup *> &groups)
+		const std::vector <OptixProgramGroupDesc> &descs,
+		const OptixProgramGroupOptions &options,
+		const std::vector <OptixProgramGroup *> &groups)
 {
 	KOBRA_ASSERT(
 		descs.size() == groups.size(),
@@ -212,9 +212,9 @@ inline void load_program_groups
 // Create and configure OptiX pipeline
 OptixPipeline link_optix_pipeline
 	(const OptixDeviceContext &,
-	 const std::vector <OptixProgramGroup> &,
-	 const OptixPipelineCompileOptions &,
-	 const OptixPipelineLinkOptions &);
+	const std::vector <OptixProgramGroup> &,
+	const OptixPipelineCompileOptions &,
+	const OptixPipelineLinkOptions &);
 
 }
 

@@ -141,7 +141,7 @@ float3 sample_area_light(TriangleLight light, cuda::Seed seed)
 		u = 1.0f - u;
 		v = 1.0f - v;
 	}
-	
+
 	return light.a + u * light.ab + v * light.ac;
 }
 

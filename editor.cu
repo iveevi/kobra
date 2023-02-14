@@ -71,8 +71,8 @@ struct Editor : public kobra::BaseApp {
 		std::mutex movement_mutex;
 		std::queue <uint32_t> movement;
 
-		int mode = eRasterizer;
-		bool denoise = true;
+		int mode = eRaytracer;
+		bool denoise = false;
 	} m_renderers;
 
 	// Viewport

@@ -235,6 +235,14 @@ void ArmadaRTX::update_sbt_data
 		hit_record.data.triangles = cachelets[i].m_cuda_triangles;
 		hit_record.data.vertices = cachelets[i].m_cuda_vertices;
 
+		// If the material is emissive, then we need to
+		//	give a valid light index
+		hit_record.data.light_index = -1;
+		if (glm::length(mat.emission) > 0.0f) {
+			hit_record.data.light_index =
+				m_host.emissive_submesh_offsets[submesh];
+		}
+
 		// Push back
 		m_host.hit_records.push_back(hit_record);
 	}
@@ -303,8 +311,22 @@ void ArmadaRTX::update_materials(const std::set <uint32_t> &material_indices)
 		cudaMemcpyHostToDevice
 	);
 
+	bool sbt_needs_update = (m_host.tri_lights.size() != m_host.emissive_count);
+
 	// Also update the emissive submeshes if needed
+	// TODO: use the reutrn from tihs instead to check for sbt udpate...
 	update_triangle_light_buffers(emissive_submeshes_to_update);
+
+	// Update the SBT if needed (e.g. when a new emissive submesh is added)
+	if (sbt_needs_update) {
+		update_sbt_data(
+			m_host.cachelets,
+			m_host.submeshes,
+			m_host.submesh_transforms
+		);
+
+		m_host.last_updated = clock();
+	}
 }
 
 // Preprocess scene data
@@ -365,10 +387,14 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 
 	// Update data if necessary
 	if (updated || m_tlas.null) {
-		// Load the list of all submeshes
+		/* Load the list of all submeshes
 		std::vector <layers::MeshMemory::Cachelet> cachelets; // TODO: redo this method...
 		std::vector <const Submesh *> submeshes;
-		std::vector <const Transform *> submesh_transforms;
+		std::vector <const Transform *> submesh_transforms; */
+
+		m_host.cachelets.clear();
+		m_host.submesh_transforms.clear();
+		m_host.submeshes.clear();
 
 		// Reserve material-submesh reference structure
 		m_host.material_submeshes.clear();
@@ -389,9 +415,9 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 					{transform, submesh}
 				);
 
-				cachelets.push_back(m_mesh_memory->get(rasterizer, j));
-				submeshes.push_back(submesh);
-				submesh_transforms.push_back(transform);
+				m_host.cachelets.push_back(m_mesh_memory->get(rasterizer, j));
+				m_host.submeshes.push_back(submesh);
+				m_host.submesh_transforms.push_back(transform);
 			}
 		}
 
@@ -399,10 +425,9 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 		m_host.emissive_count = 0;
 
 		// TODO: compute before hand
-		// std::vector <std::pair <const Submesh *, int>> emissive_submeshes;
-		for (int i = 0; i < submeshes.size(); i++) {
-			const Submesh *submesh = submeshes[i];
-			const Transform *transform = submesh_transforms[i];
+		for (int i = 0; i < m_host.submeshes.size(); i++) {
+			const Submesh *submesh = m_host.submeshes[i];
+			const Transform *transform = m_host.submesh_transforms[i];
 
 			const Material &material = Material::all[submesh->material_index];
 			if (glm::length(material.emission) > 0
@@ -416,8 +441,12 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 		// Update the data
 		update_triangle_light_buffers({});
 		update_quad_light_buffers(lights, light_transforms);
+		update_sbt_data(
+			m_host.cachelets,
+			m_host.submeshes,
+			m_host.submesh_transforms
+		);
 
-		update_sbt_data(cachelets, submeshes, submesh_transforms);
 		// hit_records = &m_host.hit_records;
 		m_host.last_updated = clock();
 

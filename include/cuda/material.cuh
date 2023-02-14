@@ -13,11 +13,12 @@ struct Material {
 	float3		diffuse;
 	float3		specular;
 	float3		emission;
-	float3		ambient;
+	float3		ambient; // TODO: remove...
 	float		shininess;
 	float		roughness;
 	float		refraction;
 	Shading		type;
+	int32_t		light_index;
 };
 
 // Uber material info for RTX
@@ -29,7 +30,7 @@ struct _material {
 	float		shininess;
 	float		roughness;
 	float		refraction;
-	Shading		type; // TODO: remove this field...
+	Shading		type;
 
 	struct {
 		cudaTextureObject_t	diffuse;

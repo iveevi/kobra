@@ -51,10 +51,10 @@ class System {
                 OptixAccelBuildOptions gas_accel_options = {};
                 gas_accel_options.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
                 gas_accel_options.operation  = OPTIX_BUILD_OPERATION_BUILD;
-                
+
                 // Flags
                 const uint32_t triangle_input_flags[1] = {OPTIX_GEOMETRY_FLAG_NONE};
-        
+
                 // TODO: import buffers later
 		const Submesh &s = instance.m_renderable
                         ->mesh->submeshes[instance.m_index];
@@ -62,8 +62,8 @@ class System {
 		// Prepare submesh vertices and triangles
 		std::vector <float3> vertices;
 		std::vector <uint3> triangles;
-		
-                // TODO: cache CUDA buffers from either vertex buffer (with stride)
+
+		// TODO: cache CUDA buffers from either vertex buffer (with stride)
 		for (int j = 0; j < s.indices.size(); j += 3) {
 			triangles.push_back({
 				s.indices[j],
@@ -114,7 +114,7 @@ class System {
 				&gas_buffer_sizes
 			)
 		);
-		
+
 		d_gas_output = cuda::alloc(gas_buffer_sizes.outputSizeInBytes);
 		d_gas_tmp = cuda::alloc(gas_buffer_sizes.tempSizeInBytes);
 
@@ -151,7 +151,7 @@ public:
                         if (!ecs.exists <Renderable> (i))
                                 continue;
 
-                        const Renderable *renderable = &ecs.get <Renderable> (i);                                
+                        const Renderable *renderable = &ecs.get <Renderable> (i);
                         const Transform *transform = &ecs.get <Transform> (i);
 
                         // If already cached, just update transform
@@ -167,7 +167,7 @@ public:
                         int submeshes = renderable->size();
 
 			std::cout << "\t# of submeshes: " << submeshes << std::endl;
-                        
+
                         std::vector <Instance> instances;
                         instances.reserve(submeshes);
 
@@ -212,7 +212,7 @@ public:
                                 optix_instances.push_back(optix_instance);
                         }
                 }
-	
+
                 // Create top level acceleration structure
                 CUdeviceptr d_instances = cuda::make_buffer_ptr(optix_instances);
 
@@ -255,6 +255,8 @@ public:
 
                 cuda::free(d_ias_tmp);
                 cuda::free(d_instances);
+
+		std::cout << "Built TLAS with " << optix_instances.size() << " instances" << std::endl;
 
                 return handle;
         }
