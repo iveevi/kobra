@@ -1,4 +1,5 @@
-#include "../../source/amadeus/experimental_path_tracer.cuh"
+#define NAIVE_SHADER
+#include "../../source/amadeus/naive_path_tracer.cu"
 
 // OptiX headers
 #include <optix.h>
@@ -16,7 +17,7 @@ using namespace kobra::optix;
 
 extern "C"
 {
-	__constant__ ExperimentalPathTracerParameters parameters;
+	__constant__ NaivePathTracerParameters parameters;
 }
 
 // TODO: launch parameter for ray depth
@@ -161,194 +162,6 @@ Material calculate_material(const _material &mat, glm::vec2 uv)
 	return material;
 }
 
-// Check light visibility
-KCUDA_INLINE KCUDA_DEVICE
-int32_t query_occlusion(float3 origin, float3 dir, float R)
-{
-	static float eps = 0.05f;
-
-	int32_t lv = -1;
-	unsigned int j0, j1;
-	pack_pointer(&lv, j0, j1);
-	optixTrace(parameters.traversable,
-		origin, dir,
-		0, R + eps, 0,
-		OptixVisibilityMask(0b1),
-		OPTIX_RAY_FLAG_DISABLE_ANYHIT,
-		1, 2, 1, j0, j1
-	);
-
-	return lv;
-}
-
-KCUDA_INLINE KCUDA_HOST_DEVICE
-float3 sample_light(TriangleLight light, Seed seed)
-{
-	float3 rand = pcg3f(seed);
-	float u = fract(rand.x);
-	float v = fract(rand.y);
-
-	if (u + v > 1.0f) {
-		u = 1.0f - u;
-		v = 1.0f - v;
-	}
-
-	return light.a + u * light.ab + v * light.ac;
-}
-
-// Direct lighting for Next Event Estimation
-KCUDA_DEVICE
-float3 Ld_light(int li, const SurfaceHit &sh, float &light_pdf, float &light_wi_pdf, Seed seed)
-{
-	TriangleLight light = parameters.lights.tri_lights[li];
-
-	float3 lpos = sample_light(light, seed);
-
-	float3 wi = normalize(lpos - sh.x);
-	float R = length(lpos - sh.x);
-
-	// PDF for sampling point on diffuse light
-	light_pdf = 1.0f/light.area();
-	light_wi_pdf = pdf(sh, wi, eDiffuse);
-
-	// TODO: pass triangle light index
-	int32_t light_index = query_occlusion(sh.x, wi, R);
-	if (light_index != li)
-		return make_float3(0.0f);
-
-	// TODO: brdf should evaluate all lobes...
-	float3 f = brdf(sh, wi, eDiffuse);
-
-	float ldot = abs(dot(light.normal(), wi));
-	float geometric = ldot * abs(dot(sh.n, wi))/(R * R);
-
-	return f * light.intensity * geometric;
-}
-
-// Get direct lighting for environment map
-KCUDA_DEVICE
-float3 Ld_Environment(const SurfaceHit &sh, float &light_pdf, float &light_wi_pdf, Seed seed)
-{
-	// TODO: sample in UV space instead of direction...
-	static const float WORLD_RADIUS = 10000.0f;
-
-	// Sample random direction
-	seed = rand_uniform_3f(seed);
-	float theta = acosf(sqrtf(1.0f - fract(seed.x)));
-	float phi = 2.0f * M_PI * fract(seed.y);
-
-	float3 wi = make_float3(
-		sinf(theta) * cosf(phi),
-		sinf(theta) * sinf(phi),
-		cosf(theta)
-	);
-
-	float u = atan2(wi.x, wi.z)/(2.0f * M_PI) + 0.5f;
-	float v = asin(wi.y)/M_PI + 0.5f;
-
-	float4 sample = tex2D <float4> (parameters.environment_map, u, v);
-	float3 Li = make_float3(sample);
-
-	light_wi_pdf = pdf(sh, wi, eDiffuse);
-	light_pdf = 1.0f/(4.0f * M_PI);
-
-	// NEE
-	int32_t light_index = query_occlusion(sh.x, wi, WORLD_RADIUS);
-	if (light_index != -1)
-		return make_float3(0.0f);
-
-	// TODO: method for abs dot in surface hit
-	float3 f = brdf(sh, wi, eDiffuse) * abs(dot(sh.n, wi));
-
-	// TODO: how to decide ray type for this?
-	return f * Li;
-}
-
-// Trace ray into scene and get relevant information
-static KCUDA_DEVICE
-float3 Ld(const SurfaceHit &sh, Seed seed)
-{
-	int quad_count = parameters.lights.quad_count;
-	int tri_count = parameters.lights.tri_count;
-
-	// TODO: parameter for if envmap is used
-	int total_count = tri_count + parameters.has_environment_map;
-
-	// Regular direct lighting
-	unsigned int i = rand_uniform(seed) * total_count;
-
-	float3 contr_light = {0.0f};
-
-	// TODO: importance sample power
-	float light_pdf = 0.0f;
-	float light_wi_pdf = 0.0f;
-
-	if (i < tri_count) {
-		contr_light = Ld_light(i, sh, light_pdf, light_wi_pdf, seed);
-	} else {
-		// Environment light
-		// TODO: imlpement PBRT's better importance sampling
-		contr_light = Ld_Environment(sh, light_pdf, light_wi_pdf, seed);
-	}
-
-	light_pdf /= total_count;
-
-	// MIS with BRDF sampling
-	Shading out;
-	float brdf_pdf;
-	float3 wi;
-
-	float3 f = eval(sh, wi, brdf_pdf, out, seed);
-
-	// Check which light is hit
-	int32_t light_index = query_occlusion(sh.x, wi, 1e6f);
-	float3 contr_brdf = make_float3(0.0f);
-
-	if (light_index >= 0) {
-		// Light is hit
-		TriangleLight light = parameters.lights.tri_lights[light_index];
-		contr_brdf = f * light.intensity * abs(dot(light.normal(), wi));
-	} else if (light_index == -1 && parameters.has_environment_map) {
-		// Environment light
-		float u = atan2(wi.x, wi.z)/(2.0f * M_PI) + 0.5f;
-		float v = asin(wi.y)/M_PI + 0.5f;
-
-		float4 sample = tex2D <float4> (parameters.environment_map, u, v);
-		float3 Li = make_float3(sample);
-
-		contr_brdf = f * Li;
-	}
-
-	float light_wi_pdf2 = light_wi_pdf * light_wi_pdf;
-	float brdf_pdf2 = brdf_pdf * brdf_pdf;
-
-	float w_light = light_wi_pdf2/(light_wi_pdf2 + brdf_pdf2 + 1e-6f);
-	float w_brdf = brdf_pdf2/(light_wi_pdf2 + brdf_pdf2 + 1e-6f);
-
-	float3 contr = make_float3(0.0);
-	if (light_pdf > 0.0f)
-		w_light * contr_light/light_pdf;
-
-	if (brdf_pdf > 0.0f)
-		contr += w_brdf * contr_brdf/brdf_pdf;
-
-	return contr;
-}
-
-// Kernel helpers/code blocks
-KCUDA_INLINE __device__
-void trace(OptixTraversableHandle handle, int hit_program, int stride, float3 origin, float3 direction, uint i0, uint i1)
-{
-	optixTrace(handle,
-		origin, direction,
-		0.0f, 1e16f, 0.0f,
-		OptixVisibilityMask(0b11),
-		OPTIX_RAY_FLAG_DISABLE_ANYHIT,
-		hit_program, stride, 0,
-		i0, i1
-	);
-}
-
 static KCUDA_INLINE KCUDA_HOST_DEVICE
 void make_ray(uint3 idx,
 		float3 &origin,
@@ -435,12 +248,22 @@ extern "C" __global__ void __raygen__()
 			break;
 
 		// Trace the ray
-		trace(parameters.traversable, 0, 2, x, wi, i0, i1);
+		optixTrace(parameters.traversable,
+			x, wi,
+			0.0f, 1e16f, 0.0f,
+			OptixVisibilityMask(0b11),
+			OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+			0, 1, 0,
+			i0, i1
+		);
 
-		// Check if we hit the environment map
-		if (length(sh.n) < 1e-3f) {
+		// Check if we hit an emitter
+		if (length(sh.mat.emission) > 0.0f) {
 			radiance += beta * sh.mat.emission;
-			break;
+
+			// Check if we hit the environment map
+			if (length(sh.n) < 1e-6f)
+				break;
 		}
 
 		if (depth == 0) {
@@ -449,13 +272,6 @@ extern "C" __global__ void __raygen__()
 			albedo = {sh.mat.diffuse.x, sh.mat.diffuse.y, sh.mat.diffuse.z, 1.0f};
 			position = {sh.x.x, sh.x.y, sh.x.z, 0.0f};
 		}
-
-		// Otherwise compute direct lighting
-		float3 direct = Ld(sh, seed);
-		if (depth == 0)
-			direct += sh.mat.emission;
-
-		radiance += beta * direct;
 
 		// Generate new ray
 		Shading out;
@@ -469,7 +285,7 @@ extern "C" __global__ void __raygen__()
 
 		// Update the info and continue
 		beta *= f * abs(dot(wi, sh.n))/pdf;
-		specular = (length(sh.mat.specular) > 0) && (sh.mat.roughness < 1e-2f);
+		specular = (length(sh.mat.specular) > 0);
 		x = sh.x;
 
 		// Russian roulette
@@ -495,9 +311,10 @@ extern "C" __global__ void __raygen__()
 	accumulate(buffers.color[index], color);
 	accumulate(buffers.normal[index], normal);
 	accumulate(buffers.albedo[index], albedo);
+	accumulate(buffers.position[index], position);
 
 	// TODO: accumulate position?
-	buffers.position[index] = position;
+	// buffers.position[index] = position;
 }
 
 // Closest hit kernel
@@ -562,33 +379,4 @@ extern "C" __global__ void __miss__()
 
 	sh->mat.emission = make_float3(c);
 	sh->n = make_float3(0.0f);
-}
-
-// Closest hit miss kernel
-extern "C" __global__ void __closesthit__shadow()
-{
-	int32_t *lv;
-	unsigned int i0 = optixGetPayload_0();
-	unsigned int i1 = optixGetPayload_1();
-	lv = unpack_pointer <int32_t> (i0, i1);
-
-	Hit *hit = reinterpret_cast <Hit *>
-		(optixGetSbtDataPointer());
-
-	float2 bary = optixGetTriangleBarycentrics();
-	int primitive_index = optixGetPrimitiveIndex();
-
-	// TODO: enum the miss modes...
-	*lv = -2;
-	if (hit->light_index >= 0)
-		*lv = hit->light_index + primitive_index;
-}
-
-extern "C" __global__ void __miss__shadow()
-{
-	int32_t *lv;
-	unsigned int i0 = optixGetPayload_0();
-	unsigned int i1 = optixGetPayload_1();
-	lv = unpack_pointer <int32_t> (i0, i1);
-	*lv = -1;
 }

@@ -471,10 +471,15 @@ void load_attachment(Editor *editor)
 class RTXRenderer : public kobra::ui::ImGuiAttachment {
 	Editor *m_editor = nullptr;
 	int m_path_depth = 0;
+	bool m_enable_envmap = true;
 public:
 	RTXRenderer() = delete;
-	RTXRenderer(Editor *editor) : m_editor {editor}, m_path_depth {2} {
+	RTXRenderer(Editor *editor)
+			: m_editor {editor},
+			m_path_depth {2},
+			m_enable_envmap {true} {
 		m_editor->m_renderers.armada_rtx->set_depth(m_path_depth);
+		m_editor->m_renderers.armada_rtx->set_envmap_enabled(m_enable_envmap);
 	}
 
 	void render() override {
@@ -521,6 +526,14 @@ public:
 
 		if (ImGui::Checkbox("Russian Roulette", &russian_roulette)) {
 			m_editor->m_renderers.armada_rtx->set_option("russian_roulette", russian_roulette);
+			std::lock_guard <std::mutex> lock_guard
+				(m_editor->m_renderers.movement_mutex);
+			m_editor->m_renderers.movement.push(0);
+		}
+
+		// Environment map
+		if (ImGui::Checkbox("Environment Map", &m_enable_envmap)) {
+			m_editor->m_renderers.armada_rtx->set_envmap_enabled(m_enable_envmap);
 			std::lock_guard <std::mutex> lock_guard
 				(m_editor->m_renderers.movement_mutex);
 			m_editor->m_renderers.movement.push(0);

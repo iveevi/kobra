@@ -3,6 +3,9 @@
 #include <optix_host.h>
 #include <optix_stack_size.h>
 
+// ImGUI headers
+#include <imgui.h>
+
 // Engine headers
 #include "../../include/camera.hpp"
 #include "../../include/cuda/alloc.cuh"

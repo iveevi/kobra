@@ -180,7 +180,7 @@ class ArmadaRTX {
 
 		std::vector <cuda::_material> materials;
 		std::vector <std::set <_instance_ref>> material_submeshes;
-		
+
 		std::vector <layers::MeshMemory::Cachelet> cachelets;
 		std::vector <const Submesh *> submeshes;
 		std::vector <const Transform *> submesh_transforms;
@@ -315,6 +315,11 @@ public:
 	void set_depth(int depth) {
 		KOBRA_ASSERT(depth >= 0 && depth <= 10, "Depth must be between 0 and 10");
 		m_launch_info.max_depth = depth;
+	}
+
+	// Environment map
+	void set_envmap_enabled(bool enabled) {
+		m_launch_info.has_environment_map = enabled;
 	}
 
 	// Methods
