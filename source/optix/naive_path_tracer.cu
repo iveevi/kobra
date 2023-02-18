@@ -258,13 +258,12 @@ extern "C" __global__ void __raygen__()
 		);
 
 		// Check if we hit an emitter
-		if (length(sh.mat.emission) > 0.0f) {
+		if (length(sh.mat.emission) > 0.0f)
 			radiance += beta * sh.mat.emission;
 
-			// Check if we hit the environment map
-			if (length(sh.n) < 1e-6f)
-				break;
-		}
+		// Check if we hit the environment map
+		if (length(sh.n) < 1e-6f)
+			break;
 
 		if (depth == 0) {
 			normal = {sh.n.x, sh.n.y, sh.n.z, 0.0f};

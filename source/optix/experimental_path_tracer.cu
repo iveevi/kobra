@@ -162,12 +162,18 @@ Material calculate_material(const _material &mat, glm::vec2 uv)
 }
 
 // Check light visibility
+struct LightVisibility {
+	float distance;
+	float3 normal;
+	int32_t index;
+};
+
 KCUDA_INLINE KCUDA_DEVICE
-int32_t query_occlusion(float3 origin, float3 dir, float R)
+LightVisibility query_occlusion(float3 origin, float3 dir, float R)
 {
 	static float eps = 0.05f;
 
-	int32_t lv = -1;
+	LightVisibility lv { -1, { 0, 0, 0 }, -1 };
 	unsigned int j0, j1;
 	pack_pointer(&lv, j0, j1);
 	optixTrace(parameters.traversable,
@@ -196,43 +202,68 @@ float3 sample_light(TriangleLight light, Seed seed)
 	return light.a + u * light.ab + v * light.ac;
 }
 
-// Direct lighting for Next Event Estimation
-KCUDA_DEVICE
-float3 Ld_light(int li, const SurfaceHit &sh, float &light_pdf, float &light_wi_pdf, Seed seed)
+KCUDA_INLINE KCUDA_DEVICE
+float power_heuristic(float fpdf, float gpdf)
 {
-	TriangleLight light = parameters.lights.tri_lights[li];
+	return (fpdf * fpdf) / (fpdf * fpdf + gpdf * gpdf);
+}
 
-	float3 lpos = sample_light(light, seed);
+KCUDA_INLINE KCUDA_DEVICE
+float3 Ld_light(const TriangleLight &light, const SurfaceHit &sh, int index, Seed seed)
+{
+	float3 Ld = make_float3(0.0f);
+	Shading shading = eDiffuse;
 
-	float3 wi = normalize(lpos - sh.x);
-	float R = length(lpos - sh.x);
+	float3 Li = light.intensity;
+	if (length(Li) <= 0.0f) // TODO: is black method...
+		return Ld;
 
-	// PDF for sampling point on diffuse light
-	light_pdf = 1.0f/light.area();
-	light_wi_pdf = pdf(sh, wi, eDiffuse);
+	// Light sampling
+	float3 point = sample_light(light, seed);
+	float3 wi = normalize(point - sh.x);
+	float R = length(point - sh.x);
 
-	// TODO: pass triangle light index
-	int32_t light_index = query_occlusion(sh.x, wi, R);
-	if (light_index != li)
-		return make_float3(0.0f);
+	LightVisibility lv = query_occlusion(sh.x, wi, R);
+	if (lv.index == index) {
+		float3 f = brdf(sh, wi, eDiffuse);
+		float geometric = abs(dot(sh.n, wi));
+		float light_dot = abs(dot(lv.normal, wi));
 
-	// TODO: brdf should evaluate all lobes...
-	float3 f = brdf(sh, wi, eDiffuse);
+		float pdf_brdf = pdf(sh, wi, shading);
+		float pdf_nee = (R * R)/(light.area() * light_dot);
+		float mis_nee_weight = power_heuristic(pdf_nee, pdf_brdf);
 
-	float ldot = abs(dot(light.normal(), wi));
-	float geometric = ldot * abs(dot(sh.n, wi))/(R * R);
+		Ld += f * geometric * Li * mis_nee_weight/pdf_nee;
+	}
 
-	return f * light.intensity * geometric;
+	// BSDF sampling
+	float pdf_brdf;
+	float3 f = eval(sh, wi, pdf_brdf, shading, seed);
+	if (length(f) <= 0 || pdf_brdf <= 0)
+		return Ld;
+
+	lv = query_occlusion(sh.x, wi, 1e6f);
+	if (lv.index == index) {
+		R = lv.distance;
+		float geometric = abs(dot(sh.n, wi));
+		float light_dot = abs(dot(lv.normal, wi));
+		float pdf_nee = (R * R)/(light.area() * light_dot);
+
+		float mis_brdf_weight = power_heuristic(pdf_brdf, pdf_nee);
+		Ld += f * geometric * Li * mis_brdf_weight/pdf_brdf;
+	}
+
+	return Ld;
 }
 
 // Get direct lighting for environment map
 KCUDA_DEVICE
-float3 Ld_Environment(const SurfaceHit &sh, float &light_pdf, float &light_wi_pdf, Seed seed)
+float3 Ld_Environment(const SurfaceHit &sh, Seed &seed)
 {
-	// TODO: sample in UV space instead of direction...
-	static const float WORLD_RADIUS = 10000.0f;
+	float3 Ld = make_float3(0.0f);
+	Shading shading = eDiffuse;
 
-	// Sample random direction
+	// Light sampling: sample random direction
 	seed = rand_uniform_3f(seed);
 	float theta = acosf(sqrtf(1.0f - fract(seed.x)));
 	float phi = 2.0f * M_PI * fract(seed.y);
@@ -249,90 +280,59 @@ float3 Ld_Environment(const SurfaceHit &sh, float &light_pdf, float &light_wi_pd
 	float4 sample = tex2D <float4> (parameters.environment_map, u, v);
 	float3 Li = make_float3(sample);
 
-	light_wi_pdf = pdf(sh, wi, eDiffuse);
-	light_pdf = 1.0f/(4.0f * M_PI);
+	LightVisibility lv = query_occlusion(sh.x, wi, 1e6f);
+	if (lv.index == -1) {
+		float3 f = brdf(sh, wi, eDiffuse);
+		float geometric = abs(dot(sh.n, wi));
+		float pdf_brdf = pdf(sh, wi, shading);
+		float pdf_nee = 1/(4.0f * M_PI);
+		float mis_nee_weight = power_heuristic(pdf_nee, pdf_brdf);
 
-	// NEE
-	int32_t light_index = query_occlusion(sh.x, wi, WORLD_RADIUS);
-	if (light_index != -1)
-		return make_float3(0.0f);
-
-	// TODO: method for abs dot in surface hit
-	float3 f = brdf(sh, wi, eDiffuse) * abs(dot(sh.n, wi));
-
-	// TODO: how to decide ray type for this?
-	return f * Li;
-}
-
-// Trace ray into scene and get relevant information
-static KCUDA_DEVICE
-float3 Ld(const SurfaceHit &sh, Seed seed)
-{
-	int quad_count = parameters.lights.quad_count;
-	int tri_count = parameters.lights.tri_count;
-
-	// TODO: parameter for if envmap is used
-	int total_count = tri_count + parameters.has_environment_map;
-
-	// Regular direct lighting
-	unsigned int i = rand_uniform(seed) * total_count;
-
-	float3 contr_light = {0.0f};
-
-	// TODO: importance sample power
-	float light_pdf = 0.0f;
-	float light_wi_pdf = 0.0f;
-
-	if (i < tri_count) {
-		contr_light = Ld_light(i, sh, light_pdf, light_wi_pdf, seed);
-	} else {
-		// Environment light
-		// TODO: imlpement PBRT's better importance sampling
-		contr_light = Ld_Environment(sh, light_pdf, light_wi_pdf, seed);
+		Ld += f * geometric * Li * mis_nee_weight/pdf_nee;
 	}
 
-	light_pdf /= total_count;
+	// BSDF sampling
+	float pdf_brdf;
+	float3 f = eval(sh, wi, pdf_brdf, shading, seed);
+	if (length(f) <= 0 || pdf_brdf <= 0)
+		return Ld;
 
-	// MIS with BRDF sampling
-	Shading out;
-	float brdf_pdf;
-	float3 wi;
-
-	float3 f = eval(sh, wi, brdf_pdf, out, seed);
-
-	// Check which light is hit
-	int32_t light_index = query_occlusion(sh.x, wi, 1e6f);
-	float3 contr_brdf = make_float3(0.0f);
-
-	if (light_index >= 0) {
-		// Light is hit
-		TriangleLight light = parameters.lights.tri_lights[light_index];
-		contr_brdf = f * light.intensity * abs(dot(light.normal(), wi));
-	} else if (light_index == -1 && parameters.has_environment_map) {
-		// Environment light
+	lv = query_occlusion(sh.x, wi, 1e6f);
+	if (lv.index == -1) {
 		float u = atan2(wi.x, wi.z)/(2.0f * M_PI) + 0.5f;
 		float v = asin(wi.y)/M_PI + 0.5f;
 
 		float4 sample = tex2D <float4> (parameters.environment_map, u, v);
 		float3 Li = make_float3(sample);
 
-		contr_brdf = f * Li;
+		float geometric = abs(dot(sh.n, wi));
+		float pdf_nee = 1/(4.0f * M_PI);
+
+		float mis_brdf_weight = power_heuristic(pdf_brdf, pdf_nee);
+		Ld += f * geometric * Li * mis_brdf_weight/pdf_brdf;
 	}
 
-	float light_wi_pdf2 = light_wi_pdf * light_wi_pdf;
-	float brdf_pdf2 = brdf_pdf * brdf_pdf;
+	return Ld;
+}
 
-	float w_light = light_wi_pdf2/(light_wi_pdf2 + brdf_pdf2 + 1e-6f);
-	float w_brdf = brdf_pdf2/(light_wi_pdf2 + brdf_pdf2 + 1e-6f);
+// Trace ray into scene and get relevant information
+static KCUDA_DEVICE
+float3 Ld(const SurfaceHit &sh, Seed seed)
+{
+	int total_count = parameters.lights.tri_count
+		+ parameters.has_environment_map;
+	int index = rand_uniform(total_count, seed);
 
-	float3 contr = make_float3(0.0);
-	if (light_pdf > 0.0f)
-		w_light * contr_light/light_pdf;
-
-	if (brdf_pdf > 0.0f)
-		contr += w_brdf * contr_brdf/brdf_pdf;
-
-	return contr;
+	float3 Ld = make_float3(0.0f);
+	if (index < parameters.lights.tri_count) {
+		TriangleLight light = parameters.lights.tri_lights[index];
+		Ld = Ld_light(light, sh, index, seed);
+	} else if (parameters.has_environment_map) {
+		Ld = Ld_Environment(sh, seed);
+	}
+	
+	float sampled_pdf = 1.0f/total_count;
+	return Ld/sampled_pdf;
 }
 
 // Kernel helpers/code blocks
@@ -422,7 +422,6 @@ extern "C" __global__ void __raygen__()
 	float3 beta {1.0f, 1.0f, 1.0f};
 	float3 wi = direction;
 	float3 x = origin;
-	bool specular = false;
 
 	// AOVs for denoising
 	glm::vec4 normal;
@@ -437,11 +436,13 @@ extern "C" __global__ void __raygen__()
 		// Trace the ray
 		trace(parameters.traversable, 0, 2, x, wi, i0, i1);
 
+		// First any emission
+		if (depth == 0)
+			radiance += sh.mat.emission;
+
 		// Check if we hit the environment map
-		if (length(sh.n) < 1e-3f) {
-			radiance += beta * sh.mat.emission;
+		if (length(sh.n) < 1e-6f)
 			break;
-		}
 
 		if (depth == 0) {
 			normal = {sh.n.x, sh.n.y, sh.n.z, 0.0f};
@@ -451,11 +452,7 @@ extern "C" __global__ void __raygen__()
 		}
 
 		// Otherwise compute direct lighting
-		float3 direct = Ld(sh, seed);
-		if (depth == 0)
-			direct += sh.mat.emission;
-
-		radiance += beta * direct;
+		radiance += beta * Ld(sh, seed);
 
 		// Generate new ray
 		Shading out;
@@ -469,7 +466,6 @@ extern "C" __global__ void __raygen__()
 
 		// Update the info and continue
 		beta *= f * abs(dot(wi, sh.n))/pdf;
-		specular = (length(sh.mat.specular) > 0) && (sh.mat.roughness < 1e-2f);
 		x = sh.x;
 
 		// Russian roulette
@@ -567,28 +563,48 @@ extern "C" __global__ void __miss__()
 // Closest hit miss kernel
 extern "C" __global__ void __closesthit__shadow()
 {
-	int32_t *lv;
+	LightVisibility *lv;
 	unsigned int i0 = optixGetPayload_0();
 	unsigned int i1 = optixGetPayload_1();
-	lv = unpack_pointer <int32_t> (i0, i1);
+	lv = unpack_pointer <LightVisibility> (i0, i1);
 
 	Hit *hit = reinterpret_cast <Hit *>
 		(optixGetSbtDataPointer());
 
 	float2 bary = optixGetTriangleBarycentrics();
 	int primitive_index = optixGetPrimitiveIndex();
+	glm::uvec3 triangle = hit->triangles[primitive_index];
+
+	glm::vec2 uv_a = hit->vertices[triangle.x].tex_coords;
+	glm::vec2 uv_b = hit->vertices[triangle.y].tex_coords;
+	glm::vec2 uv_c = hit->vertices[triangle.z].tex_coords;
+	glm::vec2 uv = interpolate(uv_a, uv_b, uv_c, bary);
+	uv.y = 1 - uv.y;
+
+	_material mat = parameters.materials[hit->material_index];
+	Material material = calculate_material(mat, uv);
+
+	bool entering;
+	float3 wo = -optixGetWorldRayDirection();
+	float3 n = calculate_normal(hit, mat, triangle, bary, uv, entering);
+	float3 x = calculate_intersection(hit, triangle, bary);
+
+	lv->distance = length(x - optixGetWorldRayOrigin());
+	lv->normal = n;
 
 	// TODO: enum the miss modes...
-	*lv = -2;
+	lv->index = -2;
 	if (hit->light_index >= 0)
-		*lv = hit->light_index + primitive_index;
+		lv->index = hit->light_index + primitive_index;
 }
 
 extern "C" __global__ void __miss__shadow()
 {
-	int32_t *lv;
+	LightVisibility *lv;
 	unsigned int i0 = optixGetPayload_0();
 	unsigned int i1 = optixGetPayload_1();
-	lv = unpack_pointer <int32_t> (i0, i1);
-	*lv = -1;
+	lv = unpack_pointer <LightVisibility> (i0, i1);
+	lv->index = -1;
+
+	// TODO: store envmap sample
 }

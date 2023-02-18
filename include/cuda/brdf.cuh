@@ -57,7 +57,7 @@ struct Microfacets {
 	KCUDA_INLINE KCUDA_HOST_DEVICE
 	static float GGX(float3 n, float3 h, const Material &mat) {
 		float alpha = mat.roughness;
-		float theta = acos(clamp(dot(n, h), 0.0f, 0.999f));
+		float theta = acos(clamp(dot(n, h), 0.0f, 1.0f));
 
 		return (alpha * alpha)
 			/ (M_PI * pow(cos(theta), 4)
@@ -261,16 +261,15 @@ struct GGX {
 		float avg_Ks = (mat.specular.x + mat.specular.y + mat.specular.z) / 3.0f;
 
 		float t = 1.0f;
-		// if (avg_Kd + avg_Ks > 0.0f)
-		//	t = fmax(avg_Ks/(avg_Kd + avg_Ks), 0.25f);
 		if (avg_Kd + avg_Ks > 0.0f)
-			t = avg_Ks/(avg_Kd + avg_Ks);
+			t = fmax(avg_Ks/(avg_Kd + avg_Ks), 0.25f);
 
 		float term1 = dot(n, wi)/M_PI;
-		float term2 = Microfacets::GGX(n, h, mat) * G(n, wi, wo, mat)
-			* dot(wo, h) / (4 * dot(wi, h) * dot(wo, n));
+		// float term2 = Microfacets::GGX(n, h, mat) * G(n, wi, wo, mat)
+		//	* dot(wo, h) / (4 * dot(wi, h) * dot(wo, n));
 
-		// float term2 = Microfacets::GGX(n, h, mat) * dot(n, h)/(4.0f * dot(wi, h));
+		float term2 = Microfacets::GGX(n, h, mat)
+			* dot(n, h)/(4.0f * dot(wi, h));
 
 		float pdf = (1 - t) * term1 + t * term2;
 		return pdf;

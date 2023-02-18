@@ -453,12 +453,20 @@ void load_attachment(Editor *editor)
 			std::shared_ptr <kobra::amadeus::AttachmentRTX> (attachment.ptr)
 		);
 
+		{
+			std::lock_guard <std::mutex> lock_guard
+				(editor->m_renderers.movement_mutex);
+			editor->m_renderers.movement.push(0);
+		}
+
 		std::cout << "All attachments:" << std::endl;
 		for (auto &attachment : editor->m_renderers.armada_rtx->attachments()) {
 			std::cout << "\t" << attachment << std::endl;
 		}
 
 		dlclose(handle);
+
+		// Signal
 	} else if (result == NFD_CANCEL) {
 		std::cout << "User cancelled" << std::endl;
 	} else {

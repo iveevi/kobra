@@ -144,7 +144,9 @@ class NaivePathTracer : public AttachmentRTX {
 	OptixShaderBindingTable m_sbt;
 public:
 	// Constructor
-	NaivePathTracer() : AttachmentRTX(1) {}
+	NaivePathTracer() : AttachmentRTX(1) {
+		m_parameters.russian_roulette = false;
+	}
 
 	// Attaching and unloading
 	// TODO: return bool to indicate success

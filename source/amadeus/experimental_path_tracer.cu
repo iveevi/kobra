@@ -134,7 +134,9 @@ class ExperimentalPathTracer : public AttachmentRTX {
 	OptixShaderBindingTable m_sbt;
 public:
 	// Constructor
-	ExperimentalPathTracer() : AttachmentRTX(2) {}
+	ExperimentalPathTracer() : AttachmentRTX(2) {
+		m_parameters.russian_roulette = false;
+	}
 
 	// Attaching and unloading
 	// TODO: return bool to indicate success
