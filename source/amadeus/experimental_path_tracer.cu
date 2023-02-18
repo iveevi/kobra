@@ -190,17 +190,23 @@ public:
 				width * height,
 				m_pixel_offsets_x, m_pixel_offsets_y
 			);
-
-			// Copy the parameters to the GPU
-			std::cout << "Copying parameters to GPU\n";
-			std::cout << "\tResolution: " << width << 'x' << height << '\n';
-			std::cout << "\tsize: " << m_pixel_offsets_x.size() << '\n';
-			m_parameters.halton_x = cuda::make_buffer(m_pixel_offsets_x);
-			m_parameters.halton_y = cuda::make_buffer(m_pixel_offsets_y);
 		}
+
+		// Copy the parameters to the GPU
+		m_parameters.halton_x = cuda::make_buffer(m_pixel_offsets_x);
+		m_parameters.halton_y = cuda::make_buffer(m_pixel_offsets_y);
+
+		// Allocate buffer for weights
+		// TODO: add to the base launch info...
+		// and then arbitrarize the filter (e.g. options)
+		m_parameters.weights = cuda::alloc <float> (m_extent.width * m_extent.height);
 	}
 
 	void unload() override {
+		// Free the weights
+		cuda::free(m_parameters.halton_x);
+		cuda::free(m_parameters.halton_y);
+		cuda::free(m_parameters.weights);
 	}
 
 	// Options

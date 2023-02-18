@@ -330,7 +330,7 @@ float3 Ld(const SurfaceHit &sh, Seed seed)
 	} else if (parameters.has_environment_map) {
 		Ld = Ld_Environment(sh, seed);
 	}
-	
+
 	float sampled_pdf = 1.0f/total_count;
 	return Ld/sampled_pdf;
 }
@@ -350,10 +350,10 @@ void trace(OptixTraversableHandle handle, int hit_program, int stride, float3 or
 }
 
 static KCUDA_INLINE KCUDA_HOST_DEVICE
-void make_ray(uint3 idx,
+float2 make_ray(uint3 idx,
 		float3 &origin,
 		float3 &direction,
-		float3 &seed)
+		Seed seed)
 {
 	const float3 U = to_f3(parameters.camera.ax_u);
 	const float3 V = to_f3(parameters.camera.ax_v);
@@ -362,7 +362,7 @@ void make_ray(uint3 idx,
 	// TODO: use a Blue noise sequence
 
 	// Jittered halton
-	seed = make_float3(idx.x, idx.y, 0);
+	seed = make_float3(idx.x, idx.y, parameters.samples);
 	int xoff = rand_uniform(parameters.resolution.x, seed);
 	int yoff = rand_uniform(parameters.resolution.y, seed);
 
@@ -379,12 +379,14 @@ void make_ray(uint3 idx,
 
 	origin = to_f3(parameters.camera.center);
 	direction = normalize(d.x * U + d.y * V + W);
-	seed.z = parameters.time;
+
+	// Return the radius of the sample
+	return float2 {seed.x, seed.y};
 }
 
 // Accumulatoin helper
 template <class T>
-__forceinline__ __device__
+static KCUDA_INLINE KCUDA_DEVICE
 void accumulate(T &dst, T sample)
 {
 	if (parameters.accumulate) {
@@ -394,6 +396,29 @@ void accumulate(T &dst, T sample)
 	} else {
 		dst = sample;
 	}
+}
+
+// Mitchell netravali filter
+static KCUDA_INLINE KCUDA_DEVICE
+float mitchell(float x)
+{
+	constexpr float B = 1.0f/3.0f;
+	constexpr float C = 1.0f/3.0f;
+
+	// x is in the range [-0.5, 0.5]
+	if (!(x >= -0.5f && x <= 0.5f)) {
+		printf("x = %f\n", x);
+	}
+
+	x = abs(4 * x); // Get to the range [0, 2]
+
+	float x3 = x * x * x;
+	float x2 = x * x;
+
+	if (x > 1)
+		return ((-B - 6*C)*x3 + (6*B + 30*C)*x2 + (-12*B - 48*C) * x + (8*B + 24*C))/6;
+
+	return ((12 - 9*B - 6*C)*x3 + (-18 + 12*B + 6*C)*x2 + (6 - 2*B))/6;
 }
 
 // Ray generation kernel
@@ -415,7 +440,7 @@ extern "C" __global__ void __raygen__()
 	float3 direction;
 	float3 seed;
 
-	make_ray(idx, origin, direction, seed);
+	float2 offset = make_ray(idx, origin, direction, seed);
 
 	// Path trace
 	float3 radiance {0.0f, 0.0f, 0.0f};
@@ -437,12 +462,14 @@ extern "C" __global__ void __raygen__()
 		trace(parameters.traversable, 0, 2, x, wi, i0, i1);
 
 		// First any emission
-		if (depth == 0)
-			radiance += sh.mat.emission;
+		bool escaped = (length(sh.n) < 1e-6f);
+		if (depth == 0 || escaped) {
+			radiance += beta * sh.mat.emission;
 
-		// Check if we hit the environment map
-		if (length(sh.n) < 1e-6f)
-			break;
+			// Check if we hit the environment map
+			if (escaped)
+				break;
+		}
 
 		if (depth == 0) {
 			normal = {sh.n.x, sh.n.y, sh.n.z, 0.0f};
@@ -488,12 +515,25 @@ extern "C" __global__ void __raygen__()
 	auto &buffers = parameters.buffers;
 
 	glm::vec4 color = {radiance.x, radiance.y, radiance.z, 1.0f};
-	accumulate(buffers.color[index], color);
+	// accumulate(buffers.color[index], color);
 	accumulate(buffers.normal[index], normal);
 	accumulate(buffers.albedo[index], albedo);
 
 	// TODO: accumulate position?
 	buffers.position[index] = position;
+
+	// Filtered color
+	float weight = mitchell(offset.x) * mitchell(offset.y);
+
+	if (parameters.samples == 0)
+		parameters.weights[index] = 0.0f;
+
+	buffers.color[index] *= parameters.weights[index];
+	// buffers.color[index] *= parameters.samples;
+	buffers.color[index] += weight * color;
+	// buffers.color[index] /= parameters.samples + 1;
+	parameters.weights[index] += weight;
+	buffers.color[index] /= parameters.weights[index];
 }
 
 // Closest hit kernel

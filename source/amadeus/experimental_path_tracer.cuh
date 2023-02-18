@@ -12,6 +12,7 @@ struct ExperimentalPathTracerParameters : kobra::amadeus::ArmadaLaunchInfo {
 
 	float *halton_x;
 	float *halton_y;
+	float *weights;
 
 	bool russian_roulette;
 
