@@ -164,23 +164,29 @@ Material calculate_material(const _material &mat, glm::vec2 uv)
 // Check light visibility
 struct LightVisibility {
 	float distance;
-	float3 normal;
 	int32_t index;
 };
 
 KCUDA_INLINE KCUDA_DEVICE
-LightVisibility query_occlusion(float3 origin, float3 dir, float R)
+LightVisibility  query_occlusion(float3 origin, float3 dir, float R, bool no_hit)
 {
 	static float eps = 0.05f;
 
-	LightVisibility lv { -1, { 0, 0, 0 }, -1 };
+	LightVisibility lv { -1.0f, -1 };
 	unsigned int j0, j1;
 	pack_pointer(&lv, j0, j1);
+
+	int flags = OPTIX_RAY_FLAG_DISABLE_ANYHIT;
+	if (no_hit) {
+		flags |= OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT;
+		flags |= OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT;
+	}
+
 	optixTrace(parameters.traversable,
 		origin, dir,
-		0, R + eps, 0,
+		0, R - eps, 0,
 		OptixVisibilityMask(0b1),
-		OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+		flags,
 		1, 2, 1, j0, j1
 	);
 
@@ -223,11 +229,11 @@ float3 Ld_light(const TriangleLight &light, const SurfaceHit &sh, int index, See
 	float3 wi = normalize(point - sh.x);
 	float R = length(point - sh.x);
 
-	LightVisibility lv = query_occlusion(sh.x, wi, R);
-	if (lv.index == index) {
+	LightVisibility visible = query_occlusion(sh.x, wi, R, true);
+	if (visible.index == -1) {
 		float3 f = brdf(sh, wi, eDiffuse);
 		float geometric = abs(dot(sh.n, wi));
-		float light_dot = abs(dot(lv.normal, wi));
+		float light_dot = abs(dot(light.normal(), wi));
 
 		float pdf_brdf = pdf(sh, wi, shading);
 		float pdf_nee = (R * R)/(light.area() * light_dot);
@@ -242,11 +248,11 @@ float3 Ld_light(const TriangleLight &light, const SurfaceHit &sh, int index, See
 	if (length(f) <= 0 || pdf_brdf <= 0)
 		return Ld;
 
-	lv = query_occlusion(sh.x, wi, 1e6f);
-	if (lv.index == index) {
-		R = lv.distance;
+	visible = query_occlusion(sh.x, wi, 1e6f, false);
+	if (visible.index == index) {
+		R = light.intersects(sh.x, wi);
 		float geometric = abs(dot(sh.n, wi));
-		float light_dot = abs(dot(lv.normal, wi));
+		float light_dot = abs(dot(light.normal(), wi));
 		float pdf_nee = (R * R)/(light.area() * light_dot);
 
 		float mis_brdf_weight = power_heuristic(pdf_brdf, pdf_nee);
@@ -280,8 +286,8 @@ float3 Ld_Environment(const SurfaceHit &sh, Seed &seed)
 	float4 sample = tex2D <float4> (parameters.environment_map, u, v);
 	float3 Li = make_float3(sample);
 
-	LightVisibility lv = query_occlusion(sh.x, wi, 1e6f);
-	if (lv.index == -1) {
+	LightVisibility visible = query_occlusion(sh.x, wi, 1e6f, false);
+	if (visible.index == -1) {
 		float3 f = brdf(sh, wi, eDiffuse);
 		float geometric = abs(dot(sh.n, wi));
 		float pdf_brdf = pdf(sh, wi, shading);
@@ -297,8 +303,8 @@ float3 Ld_Environment(const SurfaceHit &sh, Seed &seed)
 	if (length(f) <= 0 || pdf_brdf <= 0)
 		return Ld;
 
-	lv = query_occlusion(sh.x, wi, 1e6f);
-	if (lv.index == -1) {
+	visible = query_occlusion(sh.x, wi, 1e6f, false);
+	if (visible.index == -1) {
 		float u = atan2(wi.x, wi.z)/(2.0f * M_PI) + 0.5f;
 		float v = asin(wi.y)/M_PI + 0.5f;
 
@@ -614,23 +620,9 @@ extern "C" __global__ void __closesthit__shadow()
 	float2 bary = optixGetTriangleBarycentrics();
 	int primitive_index = optixGetPrimitiveIndex();
 	glm::uvec3 triangle = hit->triangles[primitive_index];
-
-	glm::vec2 uv_a = hit->vertices[triangle.x].tex_coords;
-	glm::vec2 uv_b = hit->vertices[triangle.y].tex_coords;
-	glm::vec2 uv_c = hit->vertices[triangle.z].tex_coords;
-	glm::vec2 uv = interpolate(uv_a, uv_b, uv_c, bary);
-	uv.y = 1 - uv.y;
-
-	_material mat = parameters.materials[hit->material_index];
-	Material material = calculate_material(mat, uv);
-
-	bool entering;
-	float3 wo = -optixGetWorldRayDirection();
-	float3 n = calculate_normal(hit, mat, triangle, bary, uv, entering);
 	float3 x = calculate_intersection(hit, triangle, bary);
 
 	lv->distance = length(x - optixGetWorldRayOrigin());
-	lv->normal = n;
 
 	// TODO: enum the miss modes...
 	lv->index = -2;
@@ -645,6 +637,4 @@ extern "C" __global__ void __miss__shadow()
 	unsigned int i1 = optixGetPayload_1();
 	lv = unpack_pointer <LightVisibility> (i0, i1);
 	lv->index = -1;
-
-	// TODO: store envmap sample
 }
