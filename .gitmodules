@@ -9,7 +9,8 @@
 	url = https://github.com/nothings/stb
 [submodule "thirdparty/glslang"]
 	path = thirdparty/glslang
-	url = https://github.com/KhronosGroup/glslang.git
+	url = https://github.com/KhronosGroup/glslang
+	branch = sdk-1.3.239
 [submodule "thirdparty/tinyexr"]
 	path = thirdparty/tinyexr
 	url = https://github.com/syoyo/tinyexr.git
@@ -40,3 +41,6 @@
 [submodule "thirdparty/nativefiledialog-extended"]
 	path = thirdparty/nativefiledialog-extended
 	url = https://github.com/btzy/nativefiledialog-extended
+[submodule "thirdparty/--init"]
+	path = thirdparty/--init
+	url = https://github.com/KhronosGroup/glslang

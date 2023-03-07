@@ -140,9 +140,9 @@ _compile_out glsl_to_spriv
 
 	// Enable SPIR-V and Vulkan rules when parsing GLSL
 	EShMessages messages = (EShMessages) (EShMsgSpvRules | EShMsgVulkanRules);
+
 	// ShaderIncluder includer;
-	if (!shader.parse(&glslang::DefaultTBuiltInResource,
-			450, false, messages)) {
+	if (!shader.parse(GetDefaultResources(), 450, false, messages)) {
 		out.log = shader.getInfoLog();
 		out.source = source_copy;
 		return out;
@@ -158,6 +158,23 @@ _compile_out glsl_to_spriv
 	}
 
 	glslang::GlslangToSpv(*program.getIntermediate(stage), out.spirv);
+	return out;
+}
+
+std::string fmt_lines(const std::string &str)
+{
+	// Add line numbers to each line
+	std::string out = "";
+	std::string line;
+
+	std::istringstream stream(str);
+
+	int line_num = 1;
+	while (std::getline(stream, line)) {
+		out += std::to_string(line_num) + ": " + line + "\n";
+		line_num++;
+	}
+
 	return out;
 }
 
@@ -185,7 +202,7 @@ std::optional <vk::raii::ShaderModule> ShaderProgram::compile
 		// TODO: show the errornous line(s)
 		KOBRA_LOG_FUNC(Log::ERROR)
 			<< "Shader compilation failed:\n" << out.log
-			<< "\nSource:\n" << out.source << "\n";
+			<< "\nSource:\n" << fmt_lines(out.source) << "\n";
 
 		m_failed = true;
 		return std::nullopt;

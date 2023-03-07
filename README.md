@@ -1,5 +1,7 @@
 ![](kobra_logo.svg)
 
+[ ] Implement an image difference with various metrics (e.g. MAPE, FLIP)
+
 # Kobra
 Kobra is a 3D vulkan rendering engine written in C++. It's modular interface is
 designed to yield a robust yet flexible framework with which one can efficiently

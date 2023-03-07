@@ -205,7 +205,7 @@ struct MotionCapture : public kobra::BaseApp {
 		ImGui::CreateContext();
 		ImPlot::CreateContext();
 
-		ImGui_ImplGlfw_InitForVulkan(window.handle, true);
+		ImGui_ImplGlfw_InitForVulkan(window.m_handle, true);
 
 		std::pair <std::string, size_t> font {
 			KOBRA_DIR "/resources/fonts/NotoSans.ttf", 30
@@ -375,12 +375,12 @@ struct MotionCapture : public kobra::BaseApp {
 					.height = rtx_extent.height,
 					.channels = 4
 				},
-				cmd, framebuffer, window.extent,
+				cmd, framebuffer, window.m_extent,
 				// TODO: embed in a docked ImGui window
 				{{420, 0}, {1080 + 420, 1080}}
 			);
 
-			ui->render(cmd, framebuffer, window.extent);
+			ui->render(cmd, framebuffer, window.m_extent);
 		cmd.end();
 
 #ifdef RECORD

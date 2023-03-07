@@ -192,29 +192,37 @@ const vk::raii::Instance &get_vulkan_instance();
 
 // Window type
 struct Window {
-	GLFWwindow	*handle;
-	std::string	title;
-	vk::Extent2D	extent;
+	GLFWwindow	*m_handle;
+	std::string	m_title;
+	vk::Extent2D	m_extent;
 
 	Window() = default;
 
 	Window(const std::string &title, const vk::Extent2D &extent)
-			: title(title), extent(extent) {
+			: m_title(title), m_extent(extent) {
 		_initialize_glfw();
-		handle = glfwCreateWindow(
-			extent.width, extent.height,
+		m_handle = glfwCreateWindow(
+			m_extent.width, m_extent.height,
 			title.c_str(),
 			nullptr, nullptr
 		);
+
+		glfwGetFramebufferSize(m_handle,
+			(int *) &m_extent.width,
+			(int *) &m_extent.height
+		);
+
+		std::cout << "Framebuffer size: "
+			<< m_extent.width << "x" << m_extent.height << std::endl;
 	}
 
 	~Window() {
-		glfwDestroyWindow(handle);
+		glfwDestroyWindow(m_handle);
 	}
 
 	// Set cursor mode
 	void set_cursor_mode(int mode) {
-		glfwSetInputMode(handle, GLFW_CURSOR, mode);
+		glfwSetInputMode(m_handle, GLFW_CURSOR, mode);
 	}
 };
 

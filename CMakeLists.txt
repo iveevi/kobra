@@ -110,8 +110,8 @@ set(ImPlot_SOURCES
 )
 
 set(Glslang_SOURCES
-	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/glslang/SPIRV/GlslangToSpv.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/glslang/SPIRV/SpvBuilder.cpp
+	# ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/glslang/SPIRV/GlslangToSpv.cpp
+	# ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/glslang/SPIRV/SpvBuilder.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/glslang/StandAlone/ResourceLimits.cpp
 )
 

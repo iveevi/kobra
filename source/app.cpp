@@ -20,21 +20,22 @@ App::App(const vk::raii::PhysicalDevice &phdev_,
 	auto queue_family = find_queue_families(phdev, surface);
 
 	// TODO: extensions as a device
+	std::cout << "Window extent: " << window.m_extent.width << "x" << window.m_extent.height << std::endl;
 	device = make_device(phdev, queue_family, extensions);
-	swapchain = Swapchain {phdev, device, surface, window.extent, queue_family};
+	swapchain = Swapchain {phdev, device, surface, window.m_extent, queue_family};
 
 	KOBRA_LOG_FUNC(Log::OK) << "Swapchain format: " << vk::to_string(swapchain.format) << std::endl;
 
 	// GLFW things
-	glfwSetWindowUserPointer(window.handle, &io);
-	glfwSetMouseButtonCallback(window.handle, &io::mouse_button_callback);
-	glfwSetCursorPosCallback(window.handle, &io::mouse_position_callback);
-	glfwSetKeyCallback(window.handle, &io::keyboard_callback);
+	glfwSetWindowUserPointer(window.m_handle, &io);
+	glfwSetMouseButtonCallback(window.m_handle, &io::mouse_button_callback);
+	glfwSetCursorPosCallback(window.m_handle, &io::mouse_position_callback);
+	glfwSetKeyCallback(window.m_handle, &io::keyboard_callback);
 
 	// TODO: store memory requirements
 
 	// Initialize IO info
-	io.input = new io::Input(window.handle);
+	io.input = new io::Input(window.m_handle);
 }
 
 // Virtual destructor
@@ -50,7 +51,7 @@ void App::run()
 
 	// Start timer
 	frame_timer.start();
-	while (!glfwWindowShouldClose(window.handle)) {
+	while (!glfwWindowShouldClose(window.m_handle)) {
 		// Check if manually terminated
 		if (terminated)
 			break;
@@ -85,7 +86,7 @@ coordinates::Screen App::coordinates(float x, float y)
 {
 	return coordinates::Screen {
 		x, y,
-		window.extent.width, window.extent.height
+		window.m_extent.width, window.m_extent.height
 	};
 }
 
@@ -111,10 +112,11 @@ BaseApp::BaseApp(const vk::raii::PhysicalDevice &phdev_,
 		: App(phdev_, name_, extent_, extensions)
 {
 	// Create the depth buffer
+	std::cout << "Creating depth buffer: " << window.m_extent.width << "x" << window.m_extent.height << std::endl;
 	depth_buffer = std::move(DepthBuffer {
 		phdev, device,
 		vk::Format::eD32Sfloat,
-		window.extent
+		window.m_extent
 	});
 
 	// Initialize the texture loader
@@ -133,7 +135,7 @@ BaseApp::BaseApp(const vk::raii::PhysicalDevice &phdev_,
 		render_pass,
 		swapchain.image_views,
 		&depth_buffer.view,
-		window.extent
+		window.m_extent
 	);
 
 	// Create command pool
@@ -291,7 +293,7 @@ Context BaseApp::get_context()
 		.command_pool = &command_pool,
 		.descriptor_pool = &descriptor_pool,
 		.sync_queue = &sync_queue,
-		.extent = window.extent,
+		.extent = window.m_extent,
 		.swapchain_format = swapchain.format,
 		.depth_format = depth_buffer.format,
 		.texture_loader = &m_texture_loader
@@ -304,14 +306,14 @@ void BaseApp::recreate_swapchain()
 	int width = 0;
 	int height = 0;
 
-	glfwGetFramebufferSize(window.handle, &width, &height);
+	glfwGetFramebufferSize(window.m_handle, &width, &height);
 	while (width == 0 || height == 0) {
-		glfwGetFramebufferSize(window.handle, &width, &height);
+		glfwGetFramebufferSize(window.m_handle, &width, &height);
 		glfwWaitEvents();
 	}
 
-	window.extent.width = width;
-	window.extent.height = height;
+	window.m_extent.width = width;
+	window.m_extent.height = height;
 
 	// Wait for the device to be idle
 	device.waitIdle();
@@ -319,7 +321,7 @@ void BaseApp::recreate_swapchain()
 	// Recreate the swapchain
 	auto queue_family = find_queue_families(phdev, surface);
 	swapchain = Swapchain {
-		phdev, device, surface, window.extent,
+		phdev, device, surface, window.m_extent,
 		queue_family, &swapchain.swapchain
 	};
 
@@ -355,7 +357,7 @@ void BaseApp::recreate_swapchain()
 	depth_buffer = std::move(DepthBuffer {
 		phdev, device,
 		vk::Format::eD32Sfloat,
-		window.extent
+		window.m_extent
 	});
 
 	// TODO: remove the framebuffers from here...
@@ -365,11 +367,11 @@ void BaseApp::recreate_swapchain()
 		render_pass,
 		swapchain.image_views,
 		&depth_buffer.view,
-		window.extent
+		window.m_extent
 	);
 
 	// Call possibly overriden resize function
-	resize(window.extent);
+	resize(window.m_extent);
 }
 
 }

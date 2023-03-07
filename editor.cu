@@ -658,6 +658,12 @@ public:
 			ImGui::EndMainMenuBar();
 		}
 
+		// Minimum size for the viewport
+		ImGui::SetNextWindowSizeConstraints(
+			ImVec2(256, 256),
+			ImVec2(FLT_MAX, FLT_MAX)
+		);
+
 		// TODO: separate attachment for the main menu bar
 		ImGui::Begin("Viewport", nullptr, ImGuiWindowFlags_MenuBar);
 
@@ -817,7 +823,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	// Configure ImGui
 	ImGui::CreateContext();
 	ImPlot::CreateContext();
-	ImGui_ImplGlfw_InitForVulkan(window.handle, true);
+	ImGui_ImplGlfw_InitForVulkan(window.m_handle, true);
 
 	// Docking
 	ImGuiIO &imgui_io = ImGui::GetIO();
@@ -911,7 +917,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	// TODO: method...
 	m_viewport.image = kobra::ImageData(
 		phdev, device,
-		swapchain.format, window.extent,
+		swapchain.format, window.m_extent,
 		vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eColorAttachment
 			| vk::ImageUsageFlagBits::eSampled
@@ -940,7 +946,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 			render_pass,
 			attachments,
 			&m_viewport.depth_buffer.view,
-			window.extent
+			window.m_extent
 		).front()
 	);
 
@@ -967,7 +973,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	GLFWimage icon;
 	stbi_set_flip_vertically_on_load(false);
 	icon.pixels = stbi_load(icon_path.c_str(), &icon.width, &icon.height, nullptr, 4);
-	glfwSetWindowIcon(window.handle, 1, &icon);
+	glfwSetWindowIcon(window.m_handle, 1, &icon);
 	stbi_image_free(icon.pixels);
 	stbi_set_flip_vertically_on_load(true);
 }
@@ -1259,7 +1265,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 
 		// Render the UI last
 		m_ui->render(cmd,
-			framebuffer, window.extent,
+			framebuffer, window.m_extent,
 			kobra::RenderArea::full(), {true}
 		);
 	cmd.end();
@@ -1284,8 +1290,8 @@ void Editor::after_present()
 			(request.y - min.y) / (max.y - min.y)
 		};
 
-		/* fixed.x *= window.extent.width;
-		fixed.y *= window.extent.height; */
+		/* fixed.x *= window.m_extent.width;
+		fixed.y *= window.m_extent.height; */
 
 		vk::Extent2D extent = m_objectifier.query_extent();
 		fixed.x *= extent.width;
@@ -1349,19 +1355,19 @@ void Editor::mouse_callback(void *us, const kobra::io::MouseEvent &event)
 	bool is_drag_button = (event.button == pan_button);
 	if (event.action == GLFW_PRESS && is_drag_button && editor->m_input.viewport_hovered) {
 		dragging = true;
-		glfwSetInputMode(editor->window.handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		glfwSetInputMode(editor->window.m_handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 	} else if (event.action == GLFW_RELEASE && is_drag_button && !editor->m_input.viewport_hovered) {
 		dragging = false;
-		glfwSetInputMode(editor->window.handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+		glfwSetInputMode(editor->window.m_handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 	}
 
 	bool is_alt_down = editor->io.input->is_key_down(GLFW_KEY_LEFT_ALT);
 	if (!alt_dragging && is_alt_down && editor->m_input.viewport_hovered) {
 		alt_dragging = true;
-		glfwSetInputMode(editor->window.handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		glfwSetInputMode(editor->window.m_handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 	} else if (alt_dragging && !is_alt_down && !editor->m_input.viewport_hovered) {
 		alt_dragging = false;
-		glfwSetInputMode(editor->window.handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+		glfwSetInputMode(editor->window.m_handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 	}
 
 	// Pan only when dragging

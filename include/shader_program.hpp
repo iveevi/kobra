@@ -8,7 +8,7 @@
 
 // Glslang and SPIRV-Tools
 #include <glslang/SPIRV/GlslangToSpv.h>
-#include <glslang/StandAlone/ResourceLimits.h>
+#include <glslang/Public/ResourceLimits.h>
 
 // Engine headers
 #include "backend.hpp"

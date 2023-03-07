@@ -263,7 +263,7 @@ vk::raii::SurfaceKHR make_surface(const Window &window)
 	VkSurfaceKHR surface;
 	VkResult result = glfwCreateWindowSurface(
 		*get_vulkan_instance(),
-		window.handle,
+		window.m_handle,
 		nullptr,
 		&surface
 	);
