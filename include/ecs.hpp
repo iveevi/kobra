@@ -208,6 +208,14 @@ public:
 	// Display info for one component
 	template <class T>
 	void info() const;
+
+	// Methods for saving and loading
+	void populate_mesh_cache(std::set <MeshPtr> &cache) const {
+		for (const MeshPtr &mesh : meshes) {
+			if (mesh)
+				cache.insert(mesh);
+		}
+	}
 };
 
 // _constructor specializations

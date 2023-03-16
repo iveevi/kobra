@@ -244,8 +244,13 @@ extern "C" __global__ void __raygen__()
 
 	int depth = 0;
 	for(;; depth++) {
-		if (!parameters.russian_roulette && (depth > parameters.max_depth))
+		// Check if depths have been exceeded
+		if (parameters.russian_roulette) {
+			if (depth > 20)
+				break;
+		} else if (depth > parameters.max_depth) {
 			break;
+		}
 
 		// Trace the ray
 		optixTrace(parameters.traversable,

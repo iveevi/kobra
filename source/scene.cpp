@@ -1,3 +1,7 @@
+// Standard headers
+#include <filesystem>
+
+// Engine headers
 #include "../include/scene.hpp"
 #include "../include/profiler.hpp"
 
@@ -50,104 +54,7 @@ static constexpr char camera_format[]
 aspect: %f
 )";
 
-static void save_transform(const Transform &transform, std::ofstream &fout)
-{
-	fout << "\n[TRANSFORM]\n";
-	fout << common::sprintf(transform_format,
-		transform.position.x, transform.position.y, transform.position.z,
-		transform.rotation.x, transform.rotation.y, transform.rotation.z,
-		transform.scale.x, transform.scale.y, transform.scale.z
-	);
-}
-
-static void save_renderable(const Renderable &renderable, std::ofstream &fout)
-{
-	fout << "\n[RENDERABLE]\n";
-}
-
-static void save_light(const Light &light, std::ofstream &fout)
-{
-	fout << "\n[LIGHT]\n";
-	fout << common::sprintf(light_format,
-		light.color.r, light.color.g, light.color.b,
-		light.power,
-		light_types[light.type].c_str()
-	);
-}
-
-static void save_camera(const Camera &cam, std::ofstream &fout)
-{
-	fout << "\n[CAMERA]\n";
-	fout << common::sprintf(camera_format,
-		cam.fov,
-		cam.aspect
-	);
-}
-
-static void save_mesh(const Mesh &mesh, std::ofstream &fout)
-{
-	fout << "\n[MESH]\n";
-	fout << "source: " << (mesh.source().empty() ? "0" : mesh.source().c_str()) << "\n";
-
-	if (mesh.source().empty()) {
-		// No source, raw data
-		for (const auto &submesh : mesh.submeshes) {
-			fout << "submesh {\n";
-			for (const auto &vert : submesh.vertices) {
-				fout << common::sprintf("\tv %.2f %.2f %.2f\n",
-					vert.position.x, vert.position.y, vert.position.z
-				);
-			}
-
-			fout << "\n";
-			for (int i = 0; i < submesh.indices.size(); i += 3) {
-				fout << common::sprintf("\tf %d %d %d\n",
-					submesh.indices[i], submesh.indices[i + 1], submesh.indices[i + 2]
-				);
-			}
-
-			fout << "}\n";
-		}
-	}
-}
-
-static void save_components(const Entity &e, std::ofstream &fout)
-{
-	// Case by case...
-	save_transform(e.get <Transform> (), fout);
-
-	if (e.exists <Mesh> ())
-		save_mesh(e.get <Mesh> (), fout);
-
-	if (e.exists <Renderable> ())
-		save_renderable(e.get <Renderable> (), fout);
-
-	if (e.exists <Light> ())
-		save_light(e.get <Light> (), fout);
-
-	if (e.exists <Camera> ())
-		save_camera(e.get <Camera> (), fout);
-}
-
-void Scene::save(const std::string &path)
-{
-	std::ofstream fout(path);
-	if (!fout.is_open()) {
-		KOBRA_LOG_FUNC(Log::ERROR) << "Failed to open file: " << path << std::endl;
-		return;
-	}
-
-	fout << "[PROPERTIES]" << std::endl;
-	fout << "environment_map: " << p_environment_map << std::endl;
-
-	for (int i = 0; i < ecs.size(); i++) {
-		const auto &entity = ecs.get_entity(i);
-		fout << "\n[ENTITY]" << std::endl;
-		fout << "name: " << entity.name << std::endl;
-
-		save_components(entity, fout);
-	}
-}
+void Scene::save(const std::string &file) {}
 
 // Scene loading functions and helpers
 inline std::string get_header(std::ifstream &fin)
@@ -460,6 +367,9 @@ void Scene::load(const Context &context, const std::string &path)
 	read_fmt(fin, "environment_map: %s\n", buf);
 	p_environment_map = buf;
 
+	// Initialize the ECS
+	ecs = std::make_shared <ECS> ();
+
 	// Load entities
 	std::string header = get_header(fin);
 	while (fin.good()) {
@@ -469,7 +379,7 @@ void Scene::load(const Context &context, const std::string &path)
 		}
 
 		read_fmt(fin, "name: %1023[^\n]\n", buf);
-		Entity &e = ecs.make_entity(buf);
+		Entity &e = ecs->make_entity(buf);
 
 		header = load_components(e, fin, context);
 	}

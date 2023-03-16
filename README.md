@@ -1,84 +1,90 @@
 ![](kobra_logo.svg)
 
-[ ] Implement an image difference with various metrics (e.g. MAPE, FLIP)
-
 # Kobra
-Kobra is a 3D vulkan rendering engine written in C++. It's modular interface is
-designed to yield a robust yet flexible framework with which one can efficiently
-experiment with new rendering techniques. Thus, it presents itself as an easy
-to learn basis for research in visual computing.
 
-## Features
+Kobra is a 3D rendering engine written in C++ using the Vulkan API. It is
+designed with research development in mind, so that more time can be spent
+towards experimentation rather than implementation. This project is still in
+progress.
 
-The primary focus of Kobra has been physically based rendering. The following
-are notable features in this regard:
+## Current Features
 
-- [x] Path tracing in GLSL
-	- [x] Construction and traversal of modern acceleration structures (BVHs)
-	- [x] Multiple importance sampling with GGX microfacet BRDFs
-- [x] Path tracing with NVIDIA OptiX
-	- [x] Multiple importance sampling with GGX microfacet BRDFs
-	- [x] Tranmission through dielectrics
-	- [x] OptiX AI denoising (AOV)
+Kobra targets physically-based path-tracing pipelines. Currently, only
+path-tracing with OptiX/CUDA is supported (see the **Upcoming** section
+for platforms that will be supported in the future).
 
-Furthermore, Kobra provides the ability to perform classical rasterization and
-UI rendering.
+However, Kobra provides other facilities that enables convenient development of
+rendering applications, such as rasterization (with customizable shader
+programs) and UI rendering (currently built directly off of ImGui).
 
-Kobra aims to be part of the leading edge of rendering technology. In the
-future, Kobra aims to ease the process of building large scenes and assets with
-affordable resources. Algorithms of interest are 3D scene reconstruction,
-material inference from images, and creating character animations from video
-samples.
+These facilities can be accessed as *layers*; for example, `ForwardRenderer`,
+`UI`, and `Denoiser` are layers which perform computations related to forward
+rendering, UI rendering, and image denoising. Multiple layers can be
+sequentially dispatched in the same command buffer. The documentation for such
+operations are still in development.
 
-## Screenshots
+Furthermore, Kobra provides an (basic) interface for editing scenes and
+rendering, shown below:
 
-The following scenes are from the McGuire Computer Graphics Archive. There were
-rendered on a RTX 3060 Ti using the OptiX path tracer. All scenes achieved
-reasonable performance, averaging at least 30 frames per second.
+![](media/editor.png)
 
-<center>
-	<h3> Breakfast Room </h3>
-	<div>
-		<img src = "media/capture_10.png">
-	</div>
-	<b>Figure 1:</b> Basic indoor scene, demonstrating soft shadows and crisp textures.
-</center>
+Note that this is not final by any means, and any suggestions for improving this
+interface are welcome.
 
-<br />
-<center>
-	<h3> Fireplace (Indoor Lighting) </h3>
-	<div>
-		<img src = "media/capture_11.png">
-	</div>
-	<b>Figure 2:</b> Another indoor scene, this time with more glossy materials.
-</center>
+Scenes are currently specified with a file describing components in
+the entity-component system; see `scenes/` for examples. The file specification
+for scenes is not fixed, and still being developed.
 
-<br />
-<center>
-	<h3> Sponza </h3>
-	<div>
-		<img src = "media/capture_12.png">
-	</div>
-	<b>Figure 3:</b> A large outdoor scene, demonstrating lobal illumination.
-</center>
+### Layers
 
-<br />
-<center>
-	<h3> Living Room </h3>
-	<div>
-		<img src = "media/capture_13.png">
-	</div>
-	<b>Figure 4:</b> An indoor scene featuring lots of complex geometry and textures.
-</center>
+The following list includes the currently available layers.
 
-<br />
-<center>
-	<h3> Fireplace (Outdoor Lighting) </h3>
-	<div>
-		<img src = "media/capture_14.png">
-	</div>
-	<b>Figure 5:</b> This indoor scene involves no direct lighting, but is still
-	lit by the environment map in background, which enters through the windows.<br>
-	Also note the glass, which exhibits perfect specular transmission and
-	reflection, much like real glass.
-</center>
+- `MeshMemory`: manages mesh memory, which is often shared across other layers
+- `ForwardRenderer`: performs forward rendering, with customizable `ShaderProgram`s
+- `UI`: does UI rendering, by attaching user-defined `ImGuiAttachment` objects
+- `Denoiser`: denoises input images
+- `Framer`: renders a plain image to the swapchain; useful for raytracing, where
+  the image is generated outside of Vulkan
+- `System`: manages raytracing buffers and acceleration structures for a given
+  scene
+- `ArmadaRTX`: performs raytracing of arbitrary programs; the functionality of
+  the RTX kernels can be programmed via `AttachmentRTX` objects -- see
+  `path_tracer.cuh` and `restir.cuh` in the `include/armada/` directory for
+  examples
+
+## Renders
+
+The following are example renders generated from Kobra's OptiX path tracer (+AI
+denoising).
+
+### Bathroom [1]
+![](media/bathroom.png)
+
+### Breakfast Room [1]
+![](media/breakfast-room.png)
+
+### Fireplace [1]
+![](media/fireplace.png)
+
+### Kitchen [2]
+![](media/kitchen.png)
+
+### Living Room [1]
+![](media/living-room.png)
+
+### San Miguel [1]
+![](media/san-miguel.png)
+
+### Sibenik [1]
+![](media/sibenik.png)
+
+[1] [McGuire Computer Graphics Archive](https://casual-effects.com/data/)
+
+[2] [Rendering Resources](https://benedikt-bitterli.me/resources/)
+
+# Upcoming
+
+- [ ] Revive the GLSL path tracer (using RadeonRays as backend)
+- [ ] VulkanRTX port
+- [ ] Implement an applet for presenting image difference with various metrics
+  (e.g. MAPE, FLIP)

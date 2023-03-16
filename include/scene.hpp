@@ -1,5 +1,4 @@
-#ifndef KOBRA_SCENE_H_
-#define KOBRA_SCENE_H_
+#pragma once
 
 // Standard headers
 #include <string>
@@ -12,7 +11,7 @@ namespace kobra {
 
 // Scene class
 struct Scene {
-	ECS ecs;
+	std::shared_ptr <ECS> ecs;
 
 	// Other scene-local data
 	std::string p_environment_map;
@@ -20,8 +19,11 @@ struct Scene {
 	// Saving and loading
 	void save(const std::string &);
 	void load(const Context &, const std::string &);
+
+	// Populate cache list of meshes
+	void populate_mesh_cache(std::set <MeshPtr> &mesh_cache) const {
+		ecs->populate_mesh_cache(mesh_cache);
+	}
 };
 
 }
-
-#endif

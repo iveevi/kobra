@@ -45,6 +45,7 @@ enum Mode : uint32_t {
 // TODO: only keep the state here...
 struct Editor : public kobra::BaseApp {
 	kobra::Scene m_scene;
+	kobra::Project m_project;
 	kobra::Entity m_camera;
 
 	kobra::layers::ForwardRenderer m_forward_renderer;
@@ -311,7 +312,8 @@ public:
 
 		glm::vec3 diffuse = material->diffuse;
 		glm::vec3 specular = material->specular;
-		glm::vec3 ambient = material->ambient;
+		// glm::vec3 ambient = material->ambient; TODO: remove this
+		// property...
 		float roughness = material->roughness;
 
 		// Decompose the emission if it is not loaded
@@ -638,6 +640,10 @@ public:
 	void render() override {
 		if (ImGui::BeginMainMenuBar()) {
 			if (ImGui::BeginMenu("File")) {
+				if (ImGui::MenuItem("Save")) {
+					std::cout << "Saving (TODO: open file dialog)" << std::endl;
+					m_editor->m_project.save("./scene");
+				}
 				ImGui::EndMenu();
 			}
 
@@ -838,12 +844,14 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	);
 
 	// Load scene
-	kobra::Project project = kobra::Project::load(".kobra/project");
-	m_scene.load(get_context(), project.scene);
+	// kobra::Project project = kobra::Project(".kobra/project");
+	m_project = kobra::Project(".kobra/project");
+	// m_scene.load(get_context(), project.scene);
+	m_scene = m_project.load_scene(get_context());
 
 	// TODO: Create a camera somewhere outside...
 	// plus icons for lights and cameras
-	m_camera = m_scene.ecs.get_entity("Camera");
+	m_camera = m_scene.ecs->get_entity("Camera");
 	m_camera.get <kobra::Camera> ().aspect = 1.5f;
 
 	// IO callbacks
@@ -1038,23 +1046,22 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 	std::vector <const kobra::Light *> lights;
 	std::vector <const kobra::Transform *> light_transforms;
 
-	auto renderables_transforms = m_scene.ecs.tuples <kobra::Renderable, kobra::Transform> ();
-	auto lights_transforms = m_scene.ecs.tuples <kobra::Light, kobra::Transform> ();
+	auto renderables_transforms = m_scene.ecs->tuples <kobra::Renderable, kobra::Transform> ();
+	auto lights_transforms = m_scene.ecs->tuples <kobra::Light, kobra::Transform> ();
 
 	auto ecs = m_scene.ecs;
-
-	for (int i = 0; i < ecs.size(); i++) {
-		if (ecs.exists <kobra::Renderable> (i)) {
-			const auto *renderable = &ecs.get <kobra::Renderable> (i);
-			const auto *transform = &ecs.get <kobra::Transform> (i);
+	for (int i = 0; i < ecs->size(); i++) {
+		if (ecs->exists <kobra::Renderable> (i)) {
+			const auto *renderable = &ecs->get <kobra::Renderable> (i);
+			const auto *transform = &ecs->get <kobra::Transform> (i);
 
 			renderables.push_back(renderable);
 			renderable_transforms.push_back(transform);
 		}
 
-		if (ecs.exists <kobra::Light> (i)) {
-			const auto *light = &ecs.get <kobra::Light> (i);
-			const auto *transform = &ecs.get <kobra::Transform> (i);
+		if (ecs->exists <kobra::Light> (i)) {
+			const auto *light = &ecs->get <kobra::Light> (i);
+			const auto *transform = &ecs->get <kobra::Transform> (i);
 
 			lights.push_back(light);
 			light_transforms.push_back(transform);
@@ -1083,7 +1090,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 			}
 
 			m_renderers.armada_rtx->render(
-				m_scene.ecs,
+				*m_scene.ecs,
 				m_camera.get <kobra::Camera> (),
 				m_camera.get <kobra::Transform> (),
 				accumulate
@@ -1167,7 +1174,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 			m_objectifier.render(
 				cmd,
 				// TODO: pass extent...
-				m_scene.ecs,
+				*m_scene.ecs,
 				m_camera.get <kobra::Camera> (),
 				m_camera.get <kobra::Transform> ()
 			);
@@ -1183,7 +1190,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 				cmd,
 				m_viewport.framebuffer,
 				m_viewport.image.extent,
-				m_scene.ecs,
+				*m_scene.ecs,
 				m_camera.get <kobra::Camera> (),
 				m_camera.get <kobra::Transform> (),
 				m_selection
@@ -1306,7 +1313,7 @@ void Editor::after_present()
 			m_material_editor->material_index = -1;
 		} else {
 			kobra::Renderable &renderable = m_scene.ecs
-				.get <kobra::Renderable> (m_selection.first);
+				->get <kobra::Renderable> (m_selection.first);
 
 			uint32_t material_index = renderable.material_indices[m_selection.second];
 			m_material_editor->material_index = material_index;

@@ -1,8 +1,5 @@
 # cmake_minimum_required(VERSION 3.12)
-
 project(kobra CXX CUDA)
-project(stress CXX)
-project(editor CXX)
 
 # CXX options
 set(CMAKE_CXX_STANDARD 17)
@@ -143,18 +140,18 @@ add_library(Kobra_COMMON OBJECT
 )
 
 # Set executable sources -- Kobra
-add_executable(kobra main.cu $<TARGET_OBJECTS:Kobra_COMMON>)
+# add_executable(kobra main.cu $<TARGET_OBJECTS:Kobra_COMMON>)
 
-target_link_libraries(kobra
-	${Vulkan_LIBRARIES}
-	glfw
-	glslang
-	SPIRV
-	assimp
-	nvidia-ml
-	${OpenCV_LIBS}
-	${ImageMagick_LIBRARIES}
-)
+#target_link_libraries(kobra
+#	${Vulkan_LIBRARIES}
+#	glfw
+#	glslang
+#	SPIRV
+#	assimp
+#	nvidia-ml
+#	${OpenCV_LIBS}
+#	${ImageMagick_LIBRARIES}
+#)
 
 # TODO: create a shared library of library facilities
 
@@ -226,7 +223,7 @@ add_custom_target(
     DEPENDS glsl_shaders optix_shaders_copy
 )
 
-add_dependencies(kobra copy_resources)
+add_dependencies(editor copy_resources)
 
 # Compile plugins as well
 include(cmake/armada_rtx_plugins.cmake)
