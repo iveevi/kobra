@@ -44,3 +44,9 @@
 [submodule "thirdparty/--init"]
 	path = thirdparty/--init
 	url = https://github.com/KhronosGroup/glslang
+[submodule "thirdparty/taskflow"]
+	path = thirdparty/taskflow
+	url = https://github.com/taskflow/taskflow.git
+[submodule "thirdparty/ImGuizmo"]
+	path = thirdparty/ImGuizmo
+	url = https://github.com/CedricGuillemet/ImGuizmo.git

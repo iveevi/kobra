@@ -210,10 +210,12 @@ public:
 	void info() const;
 
 	// Methods for saving and loading
-	void populate_mesh_cache(std::set <MeshPtr> &cache) const {
+	void populate_mesh_cache(std::set <const Submesh *> &cache) const {
 		for (const MeshPtr &mesh : meshes) {
-			if (mesh)
-				cache.insert(mesh);
+			if (mesh) {
+				std::cout << "Mesh with " << mesh->triangles() << " triangles\n";
+				mesh->populate_mesh_cache(cache);
+			}
 		}
 	}
 };

@@ -55,18 +55,6 @@ endif()
 # Add NativeFileDialog extended
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/nativefiledialog-extended)
 
-# ImageMagick
-find_package(ImageMagick COMPONENTS Magick++ REQUIRED)
-
-if (ImageMagick_FOUND)
-    message(STATUS "ImageMagick found")
-    message(STATUS "ImageMagick version: ${ImageMagick_VERSION}")
-    message(STATUS "ImageMagick include path: ${ImageMagick_INCLUDE_DIRS}")
-    message(STATUS "ImageMagick libraries: ${ImageMagick_LIBRARIES}")
-else()
-    message(FATAL_ERROR "ImageMagick not found")
-endif()
-
 # Macros
 add_compile_definitions(KOBRA_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 
@@ -77,14 +65,15 @@ add_compile_definitions(MAGICKCORE_HDRI_ENABLE=0)
 # Include directories
 include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty
-	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/glm
-	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/optix
-	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/termcolor/include
-	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/imgui
 	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/freetype/include
+	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/glm
+	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/imgui
 	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/imgui/examples
-	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/nativefiledialog-extended/src/include
 	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/json/single_include
+	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/nativefiledialog-extended/src/include
+	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/optix
+	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/taskflow
+	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/termcolor/include
 	${OpenCV_INCLUDE_DIRS}
 	${ImageMagick_INCLUDE_DIRS}
 )
@@ -166,7 +155,6 @@ target_link_libraries(stress
 	assimp
 	nvidia-ml
 	${OpenCV_LIBS}
-	${ImageMagick_LIBRARIES}
 )
 
 # Set executable sources -- Stress

@@ -30,6 +30,8 @@ struct Console;
 struct MaterialEditor;
 struct RTXRenderer;
 struct Viewport;
+struct SceneGraph;
+struct EntityProperties;
 
 // TODO: add updated (emissive) materials as lights...
 
@@ -794,6 +796,27 @@ public:
 	}
 };
 
+// Scene graph
+struct SceneGraph : public kobra::ui::ImGuiAttachment {
+	const kobra::Scene *m_scene = nullptr;
+public:
+	SceneGraph() {}
+
+	void set_scene(const kobra::Scene *scene) {
+		m_scene = scene;
+	}
+
+	void render() override {
+		ImGui::Begin("Scene Graph");
+		if (m_scene != nullptr) {
+			auto ecs = *m_scene->ecs;
+			for (auto &entity : ecs)
+				ImGui::Text("%s", entity.name.c_str());
+		}
+		ImGui::End();
+	}
+};
+
 // Editor implementation
 Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 		const std::vector <const char *> &extensions)
@@ -964,6 +987,9 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	m_progress_bar = std::make_shared <ProgressBar> ("Irradiance Computation Progress");
 	m_material_editor = std::make_shared <MaterialEditor> (this, &m_texture_loader);
 
+	auto scene_graph = std::make_shared <SceneGraph> ();
+	scene_graph->set_scene(&m_scene);
+
 	// m_ui->attach(m_image_viewer);
 	m_ui->attach(m_progress_bar);
 	m_ui->attach(m_console);
@@ -971,7 +997,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	m_ui->attach(std::make_shared <RTXRenderer> (this));
 	m_ui->attach(std::make_shared <Viewport> (this));
 	m_ui->attach(std::make_shared <Performance> ());
-	// m_ui->attach(std::make_shared <SceneGraph> (this));
+	m_ui->attach(scene_graph);
 	// TODO: scene graph...
 
 	// Load and set the icon

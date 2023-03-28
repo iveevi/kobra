@@ -17,6 +17,9 @@ namespace kobra {
 
 // Materials, in GGX form
 struct Material {
+        // Name of the material
+        std::string name;
+
 	// TODO: default should be purple, flat shading
 	glm::vec3	diffuse {1, 0, 1};
 	glm::vec3	specular {0.0f};

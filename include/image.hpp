@@ -8,7 +8,7 @@
 #include <vector>
 
 // ImageMagick headers
-#include <ImageMagick-7/Magick++.h>
+// #include <ImageMagick-7/Magick++.h>
 
 // STB headers
 #include <stb/stb_image.h>

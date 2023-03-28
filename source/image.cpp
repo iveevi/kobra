@@ -7,7 +7,7 @@
 
 namespace kobra {
 
-// Miscellaneous file formats that STB cannot load
+/* Miscellaneous file formats that STB cannot load
 static byte *load_texture_magick(const std::filesystem::path &path,
 		int &width, int &height, int &channels)
 {
@@ -47,7 +47,7 @@ static byte *load_texture_magick(const std::filesystem::path &path,
 
 	// Return the image data
 	return data;
-}
+} */
 
 // Load an image
 byte *load_texture(const std::filesystem::path &path,
@@ -59,8 +59,8 @@ byte *load_texture(const std::filesystem::path &path,
 	std::cout << "Loading texture: " << path << std::endl;
 	std::cout << "Extension: " << ext << std::endl;
 
-	if (ext == ".dds")
-		return load_texture_magick(path, width, height, channels);
+	// if (ext == ".dds")
+	//	return load_texture_magick(path, width, height, channels);
 
 	// Otherwise load with STB
 	stbi_set_flip_vertically_on_load(true);

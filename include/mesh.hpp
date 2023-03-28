@@ -148,6 +148,12 @@ public:
 		return partition(bvhs);
 	}
 
+	// Populate mesh cache
+	void populate_mesh_cache(std::set <const Submesh *> &cache) {
+		for (const auto &submesh : submeshes)
+			cache.insert(&submesh);
+	}
+
 	// Mesh factories
 	// TODO: should make a 1x1x1, then transform will do the rest
 	// TODO: clean up and put into source file
