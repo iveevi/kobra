@@ -33,12 +33,34 @@ struct Transform {
 
         // Obtain proeprties from matrix
         Transform(const glm::mat4 &mat) {
-                glm::quat rot;
-                glm::vec3 skew;
-                glm::vec4 perspective;
-                glm::decompose(mat, scale, rot, position, skew, perspective);
-                rot = glm::conjugate(rot);
-                rotation = glm::eulerAngles(rot);
+                position = mat[3];
+
+                scale.x = glm::length(glm::vec3(mat[0])); // Basis vector X
+                scale.y = glm::length(glm::vec3(mat[1])); // Basis vector Y
+                scale.z = glm::length(glm::vec3(mat[2])); // Basis vector Z
+
+                const glm::vec3 left	= glm::normalize(glm::vec3(mat[0])); // Normalized left axis
+                const glm::vec3 up	= glm::normalize(glm::vec3(mat[1])); // Normalized up axis
+                const glm::vec3 forward	= glm::normalize(glm::vec3(mat[2])); // Normalized forward axis
+
+                // Obtain the "unscaled" transform matrix
+                glm::mat4 m(0.0f);
+                m[0][0] = left.x;
+                m[0][1] = left.y;
+                m[0][2] = left.z;
+
+                m[1][0] = up.x;
+                m[1][1] = up.y;
+                m[1][2] = up.z;
+
+                m[2][0] = forward.x;
+                m[2][1] = forward.y;
+                m[2][2] = forward.z;
+
+                rotation.x = atan2f( m[1][2], m[2][2]);
+                rotation.y = atan2f(-m[0][2], sqrtf(m[1][2] * m[1][2] + m[2][2] * m[2][2]));
+                rotation.z = atan2f( m[0][1], m[0][0]);
+                rotation = glm::degrees(rotation); // Convert to degrees, or you could multiply it by (180.f / 3.14159265358979323846f)
         }
 
 	// Calculate the model matrix

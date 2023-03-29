@@ -678,6 +678,8 @@ class Viewport : public kobra::ui::ImGuiAttachment {
 
         const kobra::Camera *camera = nullptr;
         const kobra::Transform *camera_transform = nullptr;
+        
+        ImGuizmo::OPERATION current_operation = ImGuizmo::TRANSLATE;
 public:
 	Viewport() = delete;
 	Viewport(Editor *editor) : m_editor {editor} {
@@ -685,6 +687,10 @@ public:
 		m_old_aspect = m_editor->m_camera.get <kobra::Camera> ().aspect;
 		m_old_size = {0, 0};
 	}
+
+        void set_operation(ImGuizmo::OPERATION op) {
+                current_operation = op;
+        }
 
         void set_transform() {
                 transform = nullptr;
@@ -813,16 +819,17 @@ public:
 			);
 		}
                 
-                static ImGuizmo::OPERATION current_operation(ImGuizmo::TRANSLATE);
-                static ImGuizmo::MODE current_mode(ImGuizmo::WORLD);
-
                 if (transform) {
+                        static ImGuizmo::MODE current_mode(ImGuizmo::WORLD);
+
                         ImGuizmo::SetDrawlist();
 
                         ImGuiIO &io = ImGui::GetIO();
                         float windowWidth = (float) ImGui::GetWindowWidth();
                         float windowHeight = (float) ImGui::GetWindowHeight();
-                        ImGuizmo::SetRect(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y, windowWidth, windowHeight);
+
+                        ImGuizmo::SetRect(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
+                                windowWidth, windowHeight);
 
                         glm::mat4 view = camera->view_matrix(*camera_transform);
                         glm::mat4 proj = camera->perspective_matrix();
@@ -1537,13 +1544,23 @@ void Editor::keyboard_callback(void *us, const kobra::io::KeyboardEvent &event)
 {
 	Editor *editor = static_cast <Editor *> (us);
 	if (event.action == GLFW_PRESS) {
-		if (event.key == GLFW_KEY_TAB)
+                auto &viewport = editor->m_ui_attachments.viewport;
+		
+                if (event.key == GLFW_KEY_TAB)
 			editor->m_renderers.mode = !editor->m_renderers.mode;
 		if (event.key == GLFW_KEY_ESCAPE) {
                         // TODO: callback
 			editor->m_selection = {-1, -1};
 			editor->m_material_editor->material_index = -1;
-                        editor->m_ui_attachments.viewport->set_transform();
+                        viewport->set_transform();
 		}
+
+                // Gizmo modes
+                if (event.key == GLFW_KEY_R)
+                        viewport->set_operation(ImGuizmo::ROTATE);
+                if (event.key == GLFW_KEY_T)
+                        viewport->set_operation(ImGuizmo::TRANSLATE);
+                if (event.key == GLFW_KEY_Y)
+                        viewport->set_operation(ImGuizmo::SCALE);
 	}
 }
