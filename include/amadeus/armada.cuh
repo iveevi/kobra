@@ -13,15 +13,16 @@
 #include <optix_stubs.h>
 
 // Engine headers
-#include "system.cuh"
 #include "../backend.hpp"
 #include "../core/async.hpp"
 #include "../core/kd.cuh"
+#include "../daemons/transform.hpp"
+#include "../layers/mesh_memory.hpp"
 #include "../optix/parameters.cuh"
 #include "../optix/sbt.cuh"
 #include "../timer.hpp"
 #include "../vertex.hpp"
-#include "../layers/mesh_memory.hpp"
+#include "system.cuh"
 
 namespace kobra {
 
@@ -160,6 +161,7 @@ class ArmadaRTX {
 	struct _instance_ref {
 		const Transform *transform = nullptr;
 		const Submesh *submesh = nullptr;
+                int id = -1;
 
 		bool operator <(const _instance_ref &other) const {
 			if (transform != other.transform)
@@ -182,6 +184,8 @@ class ArmadaRTX {
 		std::vector <std::set <_instance_ref>> material_submeshes;
 
 		std::vector <layers::MeshMemory::Cachelet> cachelets;
+
+                std::vector <int> entity_id;
 		std::vector <const Submesh *> submeshes;
 		std::vector <const Transform *> submesh_transforms;
 
@@ -206,6 +210,9 @@ class ArmadaRTX {
 		long long int last_updated;
 		std::map <std::string, long long int> times;
 		bool null = true;
+
+                OptixTraversableHandle handle;
+                CUdeviceptr ptr;
 	} m_tlas;
 
 	// Private methods
@@ -231,7 +238,9 @@ class ArmadaRTX {
 		std::vector <HitRecord> *hit_records;
 	};
 
-	preprocess_update preprocess_scene(const ECS &, const Camera &, const Transform &);
+	preprocess_update preprocess_scene(const ECS &,
+                const daemons::Transform &,
+                const Camera &, const Transform &);
 public:
 	// Default constructor
 	ArmadaRTX() = default;
@@ -327,6 +336,7 @@ public:
 
 	void render(
 		const ECS &,
+                const daemons::Transform &,
 		const Camera &,
 		const Transform &,
 		bool = false

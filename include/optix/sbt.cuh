@@ -11,7 +11,7 @@ namespace kobra {
 namespace optix {
 
 // Hit data record
-struct Hit {	
+struct Hit {
 	BoundingBox bbox;
 	Vertex *vertices;
 	glm::mat4 model;

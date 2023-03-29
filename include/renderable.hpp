@@ -41,6 +41,9 @@ public:
 	std::vector <uint32_t>		material_indices;
 
 	// Mesh itself
+        // TODO: distinguish between model and mesh:
+        // renderables should contain a set of MESHES
+        // that are directly indirected
 	const Mesh			*mesh = nullptr;
 
 	// No default constructor

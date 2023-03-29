@@ -1,21 +1,22 @@
-#include "../include/app.hpp"
-#include "../include/backend.hpp"
-#include "../include/layers/common.hpp"
-#include "../include/layers/forward_renderer.hpp"
-#include "../include/layers/image_renderer.hpp"
-#include "../include/layers/objectifier.hpp"
-#include "../include/layers/ui.hpp"
-#include "../include/project.hpp"
-#include "../include/scene.hpp"
-#include "../include/shader_program.hpp"
-#include "../include/ui/attachment.hpp"
-#include "../include/engine/irradiance_computer.hpp"
-#include "../include/amadeus/armada.cuh"
-#include "../include/amadeus/path_tracer.cuh"
-#include "../include/amadeus/restir.cuh"
-#include "../include/layers/framer.hpp"
-#include "../include/cuda/color.cuh"
-#include "../include/layers/denoiser.cuh"
+#include "include/app.hpp"
+#include "include/backend.hpp"
+#include "include/layers/common.hpp"
+#include "include/layers/forward_renderer.hpp"
+#include "include/layers/image_renderer.hpp"
+#include "include/layers/objectifier.hpp"
+#include "include/layers/ui.hpp"
+#include "include/project.hpp"
+#include "include/scene.hpp"
+#include "include/shader_program.hpp"
+#include "include/ui/attachment.hpp"
+#include "include/engine/irradiance_computer.hpp"
+#include "include/amadeus/armada.cuh"
+#include "include/amadeus/path_tracer.cuh"
+#include "include/amadeus/restir.cuh"
+#include "include/layers/framer.hpp"
+#include "include/cuda/color.cuh"
+#include "include/layers/denoiser.cuh"
+#include "include/daemons/transform.hpp"
 
 // Native File Dialog
 #include <nfd.h>
@@ -23,6 +24,12 @@
 // ImPlot headers
 #include <implot/implot.h>
 #include <implot/implot_internal.h>
+
+// ImGuizmo
+#include <ImGuizmo/ImGuizmo.h>
+
+// Extra GLM headers
+#include <glm/gtc/type_ptr.hpp>
 
 // Forward declarations
 struct ProgressBar;
@@ -53,11 +60,17 @@ struct Editor : public kobra::BaseApp {
 	kobra::layers::ForwardRenderer m_forward_renderer;
 	kobra::layers::Objectifier m_objectifier;
 
+        std::shared_ptr <kobra::daemons::Transform> transform_daemon;
+
 	std::shared_ptr <kobra::layers::UI> m_ui;
 
 	std::shared_ptr <ProgressBar> m_progress_bar;
 	std::shared_ptr <Console> m_console;
 	std::shared_ptr <MaterialEditor> m_material_editor;
+
+        struct {
+                std::shared_ptr <Viewport> viewport;
+        } m_ui_attachments;
 
 	kobra::engine::IrradianceComputer m_irradiance_computer;
 	bool m_saved_irradiance = false;
@@ -579,6 +592,34 @@ void request_capture(Editor *editor)
 	}
 }
 
+void import_asset(Editor *editor)
+{
+	std::cout << "Importing asset..." << std::endl;
+
+	// Create file dialog to get save path
+	nfdchar_t *path = nullptr;
+	nfdresult_t result = NFD_OpenDialog(&path, nullptr, 0, nullptr);
+
+	if (result == NFD_OKAY) {
+		std::cout << "Path: " << path << std::endl;
+                std::cout << "Importing the asset...\n";
+
+                // Extract name of the entity from the file name
+                // TODO: check for duplicates
+                std::string path_str = path;
+                kobra::Mesh mesh = *kobra::Mesh::load(path);
+                auto ecs = editor->m_scene.ecs;
+
+                auto entity = ecs->make_entity(path_str);
+                entity.add <kobra::Mesh> (mesh);
+                entity.add <kobra::Renderable> (editor->get_context(), &entity.get <kobra::Mesh> ());
+	} else if (result == NFD_CANCEL) {
+		std::cout << "User cancelled" << std::endl;
+	} else {
+		std::cout << "Error: " << NFD_GetError() << std::endl;
+	}
+}
+
 void Editor::resize_viewport(const vk::Extent2D &extent)
 {
 	// TODO: resize with the viewport image window in ImGui
@@ -627,9 +668,16 @@ void Editor::resize_viewport(const vk::Extent2D &extent)
 class Viewport : public kobra::ui::ImGuiAttachment {
 	Editor *m_editor = nullptr;
 	vk::DescriptorSet m_dset;
+
 	ImVec2 m_old_size = ImVec2(0.0f, 0.0f);
 	float m_old_aspect = 0.0f;
 	vk::Image m_old_image = nullptr;
+        
+        kobra::Transform *transform = nullptr;
+        glm::mat4 proxy;
+
+        const kobra::Camera *camera = nullptr;
+        const kobra::Transform *camera_transform = nullptr;
 public:
 	Viewport() = delete;
 	Viewport(Editor *editor) : m_editor {editor} {
@@ -637,6 +685,20 @@ public:
 		m_old_aspect = m_editor->m_camera.get <kobra::Camera> ().aspect;
 		m_old_size = {0, 0};
 	}
+
+        void set_transform() {
+                transform = nullptr;
+        }
+
+        void set_transform(kobra::Entity &entity) {
+                transform = &entity.get <kobra::Transform> ();
+                proxy = transform->matrix();
+        }
+
+        void set_camera(const kobra::Entity &ecamera) {
+                camera = &ecamera.get <kobra::Camera> ();
+                camera_transform = &ecamera.get <kobra::Transform> ();
+        }
 
 	// TODO: pass commandbuffer to this function
 	void render() override {
@@ -650,6 +712,8 @@ public:
 			}
 
 			if (ImGui::BeginMenu("Edit")) {
+                                if (ImGui::MenuItem("Import Asset"))
+                                        import_asset(m_editor);
 				ImGui::EndMenu();
 			}
 
@@ -708,10 +772,12 @@ public:
 				m_editor->sync_queue.push({
 					"Editor::resize_viewport",
 					[&]() {
-						m_editor->resize_viewport({
-							(uint32_t) m_old_size.x,
-							(uint32_t) m_old_size.y
-						});
+                                                if (m_old_size.x > 0 && m_old_size.y > 0) {
+                                                        m_editor->resize_viewport({
+                                                                (uint32_t) m_old_size.x,
+                                                                (uint32_t) m_old_size.y
+                                                        });
+                                                }
 					}
 				});
 			}
@@ -746,6 +812,31 @@ public:
 				(vk::ImageLayout::eShaderReadOnlyOptimal)
 			);
 		}
+                
+                static ImGuizmo::OPERATION current_operation(ImGuizmo::TRANSLATE);
+                static ImGuizmo::MODE current_mode(ImGuizmo::WORLD);
+
+                if (transform) {
+                        ImGuizmo::SetDrawlist();
+
+                        ImGuiIO &io = ImGui::GetIO();
+                        float windowWidth = (float) ImGui::GetWindowWidth();
+                        float windowHeight = (float) ImGui::GetWindowHeight();
+                        ImGuizmo::SetRect(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y, windowWidth, windowHeight);
+
+                        glm::mat4 view = camera->view_matrix(*camera_transform);
+                        glm::mat4 proj = camera->perspective_matrix();
+
+                        ImGuizmo::Manipulate(
+                                glm::value_ptr(view),
+                                glm::value_ptr(proj),
+                                current_operation, current_mode,
+                                glm::value_ptr(proxy),
+                                nullptr, nullptr
+                        );
+
+                        *transform = proxy;
+                }
 
 		m_old_image = image;
 		ImGui::End();
@@ -800,7 +891,7 @@ public:
 struct SceneGraph : public kobra::ui::ImGuiAttachment {
 	const kobra::Scene *m_scene = nullptr;
 public:
-	SceneGraph() {}
+	SceneGraph() = default;
 
 	void set_scene(const kobra::Scene *scene) {
 		m_scene = scene;
@@ -871,10 +962,12 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	m_project = kobra::Project(".kobra/project");
 	// m_scene.load(get_context(), project.scene);
 	m_scene = m_project.load_scene(get_context());
+        transform_daemon = std::make_shared <kobra::daemons::Transform> (m_scene.ecs.get());
 
 	// TODO: Create a camera somewhere outside...
 	// plus icons for lights and cameras
-	m_camera = m_scene.ecs->get_entity("Camera");
+	m_camera = m_scene.ecs->get_entity("Camera"); // TODO: separate the
+        // camera from the scene...
 	m_camera.get <kobra::Camera> ().aspect = 1.5f;
 
 	// IO callbacks
@@ -908,7 +1001,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	// creates a framebuffer...)
 
 	// Load all the renderers
-	m_renderers.system = std::make_shared <kobra::amadeus::System> ();
+	m_renderers.system = std::make_shared <kobra::amadeus::System> (transform_daemon.get());
 	m_renderers.mesh_memory = std::make_shared <kobra::layers::MeshMemory> (get_context());
 
 	constexpr vk::Extent2D raytracing_extent = {1000, 1000};
@@ -990,15 +1083,20 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	auto scene_graph = std::make_shared <SceneGraph> ();
 	scene_graph->set_scene(&m_scene);
 
+        m_ui_attachments.viewport = std::make_shared <Viewport> (this);
+
 	// m_ui->attach(m_image_viewer);
 	m_ui->attach(m_progress_bar);
 	m_ui->attach(m_console);
 	m_ui->attach(m_material_editor);
 	m_ui->attach(std::make_shared <RTXRenderer> (this));
-	m_ui->attach(std::make_shared <Viewport> (this));
 	m_ui->attach(std::make_shared <Performance> ());
+        m_ui->attach(m_ui_attachments.viewport);
 	m_ui->attach(scene_graph);
 	// TODO: scene graph...
+
+        // Configure the attachments
+        m_ui_attachments.viewport->set_camera(m_camera);
 
 	// Load and set the icon
 	std::string icon_path = KOBRA_DIR "/kobra_icon.png";
@@ -1117,6 +1215,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 
 			m_renderers.armada_rtx->render(
 				*m_scene.ecs,
+                                *transform_daemon,
 				m_camera.get <kobra::Camera> (),
 				m_camera.get <kobra::Transform> (),
 				accumulate
@@ -1337,9 +1436,14 @@ void Editor::after_present()
 		// Update the material editor
 		if (m_selection.first < 0 || m_selection.second < 0) {
 			m_material_editor->material_index = -1;
+                        m_ui_attachments.viewport->set_transform();
 		} else {
 			kobra::Renderable &renderable = m_scene.ecs
 				->get <kobra::Renderable> (m_selection.first);
+
+                        m_ui_attachments.viewport->set_transform(m_scene.ecs->get_entity(m_selection.first));
+                        std::cout << "Selected entity at index " <<
+                                m_selection.first << std::endl;
 
 			uint32_t material_index = renderable.material_indices[m_selection.second];
 			m_material_editor->material_index = material_index;
@@ -1348,6 +1452,9 @@ void Editor::after_present()
 
 	// Ping all systems using materials
 	kobra::Material::daemon.ping_all();
+
+        // Daemon update cycle
+        transform_daemon->update();
 }
 
 void Editor::mouse_callback(void *us, const kobra::io::MouseEvent &event)
@@ -1433,8 +1540,10 @@ void Editor::keyboard_callback(void *us, const kobra::io::KeyboardEvent &event)
 		if (event.key == GLFW_KEY_TAB)
 			editor->m_renderers.mode = !editor->m_renderers.mode;
 		if (event.key == GLFW_KEY_ESCAPE) {
+                        // TODO: callback
 			editor->m_selection = {-1, -1};
 			editor->m_material_editor->material_index = -1;
+                        editor->m_ui_attachments.viewport->set_transform();
 		}
 	}
 }

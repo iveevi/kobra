@@ -105,9 +105,6 @@ protected:
 
 	std::vector <FrameData>			frames;
 
-	// Generate aux structures
-	Context get_context();
-
 	// Recreate swapchain
 	void recreate_swapchain();
 public:
@@ -138,6 +135,9 @@ public:
 
 	// Overload frame function
 	virtual void frame() override;
+
+	// Generate aux structures
+	Context get_context();
 };
 
 }

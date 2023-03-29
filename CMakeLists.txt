@@ -89,10 +89,11 @@ set(ImGui_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/imgui/backends/imgui_impl_vulkan.cpp
 )
 
-set(ImPlot_SOURCES
+set(ImExtra_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/implot/implot.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/implot/implot_items.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/implot/implot_demo.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/ImGuizmo/ImGuizmo.cpp
 )
 
 set(Glslang_SOURCES
@@ -124,7 +125,7 @@ set(Kobra_SOURCES
 add_library(Kobra_COMMON OBJECT
 	${Kobra_SOURCES}
 	${ImGui_SOURCES}
-	${ImPlot_SOURCES}
+        ${ImExtra_SOURCES}
 	${Glslang_SOURCES}
 )
 

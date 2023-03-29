@@ -14,6 +14,7 @@
 #include "../ecs.hpp"
 #include "../optix/core.cuh"
 #include "../renderable.hpp"
+#include "../daemons/transform.hpp"
 
 namespace kobra {
 
@@ -21,6 +22,10 @@ namespace amadeus {
 
 // Backend management for raytacing
 class System {
+        // Reference to ECS transform daemon
+        // TODO: make a member of the ECS itself...
+        kobra::daemons::Transform *transform_daemon = nullptr;
+
         // Critical OptiX objects
         OptixDeviceContext m_context = 0;
 
@@ -135,7 +140,8 @@ class System {
         }
 public:
         // Default constructor
-        System() : m_context(optix::make_context()) {}
+        System(kobra::daemons::Transform *td)
+                : transform_daemon(td), m_context(optix::make_context()) {}
 
 	// Propreties
 	OptixDeviceContext context() const {
@@ -147,7 +153,6 @@ public:
 		bool updated = false;
 
                 for (int i = 0; i < ecs.size(); i++) {
-                        // TODO: one unifying renderer component, with options for raytracing, etc
                         if (!ecs.exists <Renderable> (i))
                                 continue;
 
@@ -156,11 +161,18 @@ public:
 
                         // If already cached, just update transform
                         if (m_cache.instances.count(renderable) > 0) {
-                                for (Instance &instance : m_cache.instances[renderable])
-                                        instance.m_transform = transform->matrix();
+                                for (Instance &instance : m_cache.instances[renderable]) {
+                                        if ((*transform_daemon)[i]) {
+                                                instance.m_transform = transform->matrix();
+                                                updated |= true;
+                                        }
+                                }
 
                                 continue;
                         }
+                        
+                        // TODO: if any of the transforms have changed,
+                        // then signal an update...
 
                         // Lazily generate GAS by callback
                         // TODO: callback system

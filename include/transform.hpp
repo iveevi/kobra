@@ -6,6 +6,9 @@
 #include <iostream>
 #include <optional>
 
+// GLM headers
+#include <glm/gtx/matrix_decompose.hpp>
+
 // Engine headers
 #include "vec.hpp"
 
@@ -14,7 +17,7 @@ namespace kobra {
 // Transform class
 struct Transform {
 	glm::vec3 position;
-	glm::vec3 rotation;
+	glm::vec3 rotation; // in degrees
 	glm::vec3 scale;
 
 	// Constructor
@@ -27,6 +30,16 @@ struct Transform {
 	Transform(const Transform &t)
 			: position(t.position), rotation(t.rotation),
 			scale(t.scale) {}
+
+        // Obtain proeprties from matrix
+        Transform(const glm::mat4 &mat) {
+                glm::quat rot;
+                glm::vec3 skew;
+                glm::vec4 perspective;
+                glm::decompose(mat, scale, rot, position, skew, perspective);
+                rot = glm::conjugate(rot);
+                rotation = glm::eulerAngles(rot);
+        }
 
 	// Calculate the model matrix
 	glm::mat4 matrix() const {
