@@ -43,10 +43,9 @@ struct Transform {
                                 glm::vec3 drot = t.rotation - old.rotation;
                                 glm::vec3 dsc = t.scale - old.scale;
 
-                                if (glm::length(dtr) > 1e-3f || glm::length(drot) > 1e-3f || glm::length(dsc) > 1e-3f) {
+                                if (glm::length(dtr) > 1e-3f || glm::length(drot) > 1e-3f || glm::length(dsc) > 1e-3f)
                                         status[i] = eChanged;
-                                        std::cout << "Entity index " << i << " has moved/transformed\n";
-                                } else
+                                else
                                         status[i] = eSame;
 
                                 old = t;

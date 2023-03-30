@@ -24,12 +24,12 @@ void MeshMemory::fill_cachelet(Cachelet &cachelet, const Submesh &submesh)
 }
 
 // Generate cache information for a renderable for CUDA
-void MeshMemory::cache_cuda(Ref renderable)
+void MeshMemory::cache_cuda(const ECS &ecs, int entity)
 {
 	// Check if we need to cache
 	// TODO: check if the renderable has changed
-	if (m_cache.find(renderable) != m_cache.end()) {
-		Cache cache = m_cache[renderable];
+	if (m_cache.find(entity) != m_cache.end()) {
+		Cache cache = m_cache[entity];
 		
 		int count = 0;
 		for (auto &cachelet : cache.m_cachelets) {
@@ -46,19 +46,20 @@ void MeshMemory::cache_cuda(Ref renderable)
 			return;
 	}
 
-	int submeshes = renderable->size();
+        auto &renderable = ecs.get_entity(entity).get <Renderable> ();
+	int submeshes = renderable.size();
 
 	std::vector <Cachelet> cachelets(submeshes);
 	for (int i = 0; i < submeshes; i++) {
 		// TODO: easier indexing... (make mesh private)
 		// inherit renderable from shared_ptr <Mesh>?
-		fill_cachelet(cachelets[i], renderable->mesh->submeshes[i]);
+		fill_cachelet(cachelets[i], renderable.mesh->submeshes[i]);
 	}
 
 	// Insert into cache
 	Cache cache { cachelets };
 
-	m_cache.insert({ renderable, cache });
+	m_cache.insert({ entity, cache });
 }
 
 }

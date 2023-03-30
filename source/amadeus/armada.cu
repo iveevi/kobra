@@ -18,6 +18,7 @@
 #include "../../include/transform.hpp"
 #include "../../shaders/raster/bindings.h"
 #include "../../include/profiler.hpp"
+#include "glm/gtx/string_cast.hpp"
 
 namespace kobra {
 
@@ -38,7 +39,9 @@ ArmadaRTX::ArmadaRTX(const Context &context,
 	m_timer.start();
 
 	// Initialize the host state
+	m_host.total_meshes = 0;
 	m_host.last_updated = 0;
+	m_host.cached_ecs = nullptr;
 
 	// Initialize TLAS state
 	m_tlas.null = true;
@@ -73,7 +76,7 @@ ArmadaRTX::ArmadaRTX(const Context &context,
 
 	// Add self to the material system ping list
 	Material::daemon.ping_at(this,
-		[](void *user, const std::set <uint32_t> &materials) {
+	[](void *user, const std::set <uint32_t> &materials) {
 			ArmadaRTX *armada = (ArmadaRTX *) user;
 			armada->update_materials(materials);
 		}
@@ -218,26 +221,31 @@ void ArmadaRTX::update_quad_light_buffers
 }
 
 // Update the SBT data
-void ArmadaRTX::update_sbt_data
-		(const std::vector <layers::MeshMemory::Cachelet> &cachelets,
-		const std::vector <const Submesh *> &submeshes,
-		const std::vector <const Transform *> &submesh_transforms)
+void ArmadaRTX::update_sbt_data(const ECS &ecs)
+		// (const std::vector <layers::MeshMemory::Cachelet> &cachelets,
+		// const std::vector <const Submesh *> &submeshes,
+		// const std::vector <const Transform *> &submesh_transforms)
 {
-	int submesh_count = submeshes.size();
+	int submesh_count = m_host.entity_id.size();
 
 	m_host.hit_records.clear();
 	for (int i = 0; i < submesh_count; i++) {
-		const Submesh *submesh = submeshes[i];
+		auto &entity = ecs.get_entity(m_host.entity_id[i]);
+		auto &transform = entity.get <Transform> ();
+		auto &renderable = entity.get <Renderable> ();
+		auto *submesh = &renderable.mesh->submeshes[m_host.submesh_indices[i]];
+
+		// const Submesh *submesh = submeshes[i];
 		const Material &mat = Material::all[submesh->material_index];
 
 		HitRecord hit_record {};
 
                 // TODO: use ecs indirection...
-		hit_record.data.model = submesh_transforms[i]->matrix();
+		hit_record.data.model = transform.matrix();
 		hit_record.data.material_index = submesh->material_index;
 
-		hit_record.data.triangles = cachelets[i].m_cuda_triangles;
-		hit_record.data.vertices = cachelets[i].m_cuda_vertices;
+		hit_record.data.triangles = m_host.cachelets[i].m_cuda_triangles;
+		hit_record.data.vertices = m_host.cachelets[i].m_cuda_vertices;
 
 		// If the material is emissive, then we need to
 		//	give a valid light index
@@ -260,12 +268,13 @@ void ArmadaRTX::update_materials(const std::set <uint32_t> &material_indices)
 
 	std::set <_instance_ref> emissive_submeshes_to_update;
 	for (uint32_t mat_index : material_indices) {
+		printf("Updating material %d\n", mat_index);
 		const Material &material = Material::all[mat_index];
 		cuda::_material &mat = m_host.materials[mat_index];
 
 		bool was_emissive = (length(mat.emission) > 0.0f)
 				|| mat.textures.has_emission;
-
+		
 		// Copy basic data
 		mat.diffuse = cuda::to_f3(material.diffuse);
 		mat.specular = cuda::to_f3(material.specular);
@@ -323,14 +332,79 @@ void ArmadaRTX::update_materials(const std::set <uint32_t> &material_indices)
 
 	// Update the SBT if needed (e.g. when a new emissive submesh is added)
 	if (sbt_needs_update) {
-		update_sbt_data(
-			m_host.cachelets,
-			m_host.submeshes,
-			m_host.submesh_transforms
-		);
+		update_sbt_data(*m_host.cached_ecs);
+			// m_host.submeshes,
+			// m_host.submesh_transforms
 
 		m_host.last_updated = clock();
 	}
+}
+
+// Convert material
+cuda::_material convert_material
+                (const Material &material,
+                TextureLoader &texture_loader,
+                const vk::raii::Device &device)
+{
+        cuda::_material mat;
+
+        // Scalar/vector values
+        mat.diffuse = cuda::to_f3(material.diffuse);
+        mat.specular = cuda::to_f3(material.specular);
+        mat.emission = cuda::to_f3(material.emission);
+        mat.ambient = cuda::to_f3(material.ambient);
+        mat.shininess = material.shininess;
+        mat.roughness = material.roughness;
+        mat.refraction = material.refraction;
+        mat.type = material.type;
+
+        // Textures
+        if (material.has_albedo()) {
+                const ImageData &diffuse = texture_loader
+                        .load_texture(material.albedo_texture);
+
+                mat.textures.diffuse
+                        = cuda::import_vulkan_texture(device, diffuse);
+                mat.textures.has_diffuse = true;
+        }
+
+        if (material.has_normal()) {
+                const ImageData &normal = texture_loader
+                        .load_texture(material.normal_texture);
+
+                mat.textures.normal
+                        = cuda::import_vulkan_texture(device, normal);
+                mat.textures.has_normal = true;
+        }
+
+        if (material.has_specular()) {
+                const ImageData &specular = texture_loader
+                        .load_texture(material.specular_texture);
+
+                mat.textures.specular
+                        = cuda::import_vulkan_texture(device, specular);
+                mat.textures.has_specular = true;
+        }
+
+        if (material.has_emission()) {
+                const ImageData &emission = texture_loader
+                        .load_texture(material.emission_texture);
+
+                mat.textures.emission
+                        = cuda::import_vulkan_texture(device, emission);
+                mat.textures.has_emission = true;
+        }
+
+        if (material.has_roughness()) {
+                const ImageData &roughness = texture_loader
+                        .load_texture(material.roughness_texture);
+
+                mat.textures.roughness
+                        = cuda::import_vulkan_texture(device, roughness);
+                mat.textures.has_roughness = true;
+        }
+
+        return mat;
 }
 
 // Preprocess scene data
@@ -372,6 +446,7 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 	std::vector <const Light *> lights;
 	std::vector <const Transform *> light_transforms;
 
+        int total_meshes = 0;
 	for (int i = 0; i < ecs.size(); i++) {
 		// TODO: one unifying renderer component, with options for
 		// raytracing, etc
@@ -382,6 +457,7 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
                         renderable_id.push_back(i);
 			renderables.push_back(renderable);
 			renderable_transforms.push_back(transform);
+                        total_meshes += renderable->size();
 		}
 
 		if (ecs.exists <Light> (i)) {
@@ -401,8 +477,8 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 		std::vector <const Transform *> submesh_transforms; */
 
 		m_host.cachelets.clear();
-		m_host.submesh_transforms.clear();
-		m_host.submeshes.clear();
+		m_host.entity_id.clear();
+		m_host.submesh_indices.clear();
 
 		// Reserve material-submesh reference structure
 		m_host.material_submeshes.clear();
@@ -415,7 +491,7 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 
 			// Cache the renderables
 			// TODO: all update functions should go to a separate methods
-			m_mesh_memory->cache_cuda(renderable);
+			m_mesh_memory->cache_cuda(ecs, id);
 
 			for (int j = 0; j < renderable->mesh->submeshes.size(); j++) {
 				const Submesh *submesh = &renderable->mesh->submeshes[j];
@@ -424,12 +500,13 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 					{transform, submesh, id}
 				);
 
-				m_host.cachelets.push_back(m_mesh_memory->get(renderable, j));
+				m_host.cachelets.push_back(m_mesh_memory->get(id, j));
 
                                 // TODO: use instance ref vector instead...
                                 m_host.entity_id.push_back(i);
-				m_host.submeshes.push_back(submesh);
-				m_host.submesh_transforms.push_back(transform);
+                                m_host.submesh_indices.push_back(j);
+				// m_host.submeshes.push_back(submesh);
+				// m_host.submesh_transforms.push_back(transform);
 			}
 		}
 
@@ -437,10 +514,16 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 		m_host.emissive_count = 0;
 
 		// TODO: compute before hand
-		for (int i = 0; i < m_host.submeshes.size(); i++) {
+		for (int i = 0; i < m_host.entity_id.size(); i++) {
                         int id = m_host.entity_id[i];
-			const Submesh *submesh = m_host.submeshes[i];
-			const Transform *transform = m_host.submesh_transforms[i];
+		
+			auto &entity = ecs.get_entity(m_host.entity_id[i]);
+			auto *transform = &entity.get <Transform> ();
+			auto &renderable = entity.get <Renderable> ();
+			auto *submesh = &renderable.mesh->submeshes[m_host.submesh_indices[i]];
+
+			// const Submesh *submesh = m_host.submeshes[i];
+			// const Transform *transform = m_host.submesh_transforms[i];
 
 			const Material &material = Material::all[submesh->material_index];
 			if (glm::length(material.emission) > 0
@@ -454,11 +537,7 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 		// Update the data
 		update_triangle_light_buffers({});
 		update_quad_light_buffers(lights, light_transforms);
-		update_sbt_data(
-			m_host.cachelets,
-			m_host.submeshes,
-			m_host.submesh_transforms
-		);
+		update_sbt_data(ecs);
 
 		// hit_records = &m_host.hit_records;
 		m_host.last_updated = clock();
@@ -479,7 +558,6 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 		m_tlas.null = false;
 		m_tlas.last_updated = clock();
                 m_tlas.handle = m_system->build_tlas(
-			renderables,
 			m_attachments[m_previous_attachment]->m_hit_group_count
 		);
         }
@@ -490,90 +568,128 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 
 		m_host.materials.clear();
 		for (const Material &material : Material::all) {
-			cuda::_material mat;
-
-			// Scalar/vector values
-			mat.diffuse = cuda::to_f3(material.diffuse);
-			mat.specular = cuda::to_f3(material.specular);
-			mat.emission = cuda::to_f3(material.emission);
-			mat.ambient = cuda::to_f3(material.ambient);
-			mat.shininess = material.shininess;
-			mat.roughness = material.roughness;
-			mat.refraction = material.refraction;
-			mat.type = material.type;
-
-			// Textures
-			if (material.has_albedo()) {
-				const ImageData &diffuse = m_texture_loader
-					->load_texture(material.albedo_texture);
-
-				mat.textures.diffuse
-					= cuda::import_vulkan_texture(*m_device, diffuse);
-				mat.textures.has_diffuse = true;
-			}
-
-			if (material.has_normal()) {
-				const ImageData &normal = m_texture_loader
-					->load_texture(material.normal_texture);
-
-				mat.textures.normal
-					= cuda::import_vulkan_texture(*m_device, normal);
-				mat.textures.has_normal = true;
-			}
-
-			if (material.has_specular()) {
-				const ImageData &specular = m_texture_loader
-					->load_texture(material.specular_texture);
-
-				mat.textures.specular
-					= cuda::import_vulkan_texture(*m_device, specular);
-				mat.textures.has_specular = true;
-			}
-
-			if (material.has_emission()) {
-				const ImageData &emission = m_texture_loader
-					->load_texture(material.emission_texture);
-
-				mat.textures.emission
-					= cuda::import_vulkan_texture(*m_device, emission);
-				mat.textures.has_emission = true;
-			}
-
-			if (material.has_roughness()) {
-				const ImageData &roughness = m_texture_loader
-					->load_texture(material.roughness_texture);
-
-				mat.textures.roughness
-					= cuda::import_vulkan_texture(*m_device, roughness);
-				mat.textures.has_roughness = true;
-			}
-
+                        cuda::_material mat = convert_material
+                                (material, *m_texture_loader, *m_device);
 			m_host.materials.push_back(mat);
 		}
 
 		m_launch_info.materials = cuda::make_buffer(m_host.materials);
 	}
 
-        // Update triangle lights that have moved
-        std::set <_instance_ref> emissive_to_update;
-        for (auto ref : m_host.emissive_submeshes) {
-                if (transform_daemon[ref.id])
-                        emissive_to_update.insert(ref);
-        }
-
-        if (emissive_to_update.size() > 0)
-                update_triangle_light_buffers(emissive_to_update);
-
         // Update host SBT data
         if (transform_daemon.size() > 0) {
-                for (int i = 0; i < m_host.submeshes.size(); i++) {
+		// Update triangle lights that have moved
+		std::set <_instance_ref> emissive_to_update;
+		for (auto ref : m_host.emissive_submeshes) {
+			if (transform_daemon[ref.id])
+				emissive_to_update.insert(ref);
+		}
+
+		if (emissive_to_update.size() > 0)
+			update_triangle_light_buffers(emissive_to_update);
+                
+		for (int i = 0; i < m_host.entity_id.size(); i++) {
                         int id = m_host.entity_id[i];
                         if (transform_daemon[id]) {
-                                m_host.hit_records[i].data.model = m_host.submesh_transforms[i]->matrix();
+				auto &transform = ecs.get <Transform> (id);
+                                m_host.hit_records[i].data.model = transform.matrix();
                                 m_host.last_updated = clock();
                         }
                 }
         }
+
+        // Considering newly added components
+        if (total_meshes != m_host.total_meshes && m_host.total_meshes != 0) {
+                std::cout << "Different number of total meshes..." << std::endl;
+
+                // TODO: obtain the list of submeshes in order...
+                int current_size = m_host.entity_id.size();
+
+                std::set <int> current_entities
+                        (m_host.entity_id.begin(), m_host.entity_id.end());
+                
+                if (m_host.material_submeshes.size() < Material::all.size())
+                        m_host.material_submeshes.resize(Material::all.size());
+
+                // Add the new submeshes to host cache
+		for (int i = 0; i < renderables.size(); i++) {
+                        int id = renderable_id[i];
+			if (current_entities.count(id) > 0)
+				continue;
+
+			const Renderable *renderable = renderables[i];
+			const Transform *transform = renderable_transforms[i];
+
+			// Cache the renderables
+			// TODO: all update functions should go to a separate methods
+			m_mesh_memory->cache_cuda(ecs, id);
+
+			for (int j = 0; j < renderable->mesh->submeshes.size(); j++) {
+				const Submesh *submesh = &renderable->mesh->submeshes[j];
+
+                                printf("New sbubmesh: %p\n", submesh);
+				uint32_t material_index = submesh->material_index;
+                                print("\tmaterial index = %d\n", material_index);
+				m_host.material_submeshes[material_index].insert(
+					{transform, submesh, id}
+				);
+
+				m_host.cachelets.push_back(m_mesh_memory->get(id, j));
+
+                                // TODO: use instance ref vector instead...
+                                m_host.entity_id.push_back(id);
+                                m_host.submesh_indices.push_back(j);
+				// m_host.submeshes.push_back(submesh);
+				// m_host.submesh_transforms.push_back(transform);
+                        }
+                }
+		
+                for (int i = current_size; i < m_host.entity_id.size(); i++) {
+                        int id = m_host.entity_id[i];
+			
+			auto &entity = ecs.get_entity(m_host.entity_id[i]);
+			auto *transform = &entity.get <Transform> ();
+			auto &renderable = entity.get <Renderable> ();
+			auto *submesh = &renderable.mesh->submeshes[m_host.submesh_indices[i]];
+			
+			// const Submesh *submesh = m_host.submeshes[i];
+			// const Transform *transform = m_host.submesh_transforms[i];
+
+			const Material &material = Material::all[submesh->material_index];
+			if (glm::length(material.emission) > 0
+					|| material.has_emission()) {
+				_instance_ref ref {transform, submesh, id};
+				m_host.emissive_submeshes.insert(ref);
+				m_host.emissive_count += submesh->triangles();
+			}
+
+                        // Append to current list of materials
+                        cuda::_material mat = convert_material
+                                (material, *m_texture_loader, *m_device);
+			m_host.materials.push_back(mat);
+		}
+
+                // Recreate device side materials buffer
+                if (m_launch_info.materials)
+                        cuda::free(m_launch_info.materials);
+
+                m_launch_info.materials = cuda::make_buffer(m_host.materials);
+
+                // TODO: pass a range to update, instead of rebuilding...
+		update_sbt_data(ecs);
+
+                printf("SBT state:\n");
+                for (auto record : m_host.hit_records) {
+                        printf("\tmaterial index: %d\n",
+                               record.data.material_index);
+                }
+                printf("Total # of materials is %lu\n", m_host.materials.size());
+		
+                // TODO: put in the sbt method...
+                m_host.last_updated = clock();
+        }
+
+        m_host.total_meshes = total_meshes;
 
 	// Send hit records to attachment if needed
 	long long int attachment_time = m_host.times[m_previous_attachment];
@@ -591,6 +707,9 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 		m_tlas.times[m_previous_attachment] = m_tlas.last_updated;
                 handle = m_tlas.handle;
 	}
+
+	// Update the cached ecs
+	m_host.cached_ecs = &ecs;
 
 	return {handle, hit_records};
 }

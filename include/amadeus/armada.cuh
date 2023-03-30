@@ -186,12 +186,16 @@ class ArmadaRTX {
 		std::vector <layers::MeshMemory::Cachelet> cachelets;
 
                 std::vector <int> entity_id;
-		std::vector <const Submesh *> submeshes;
-		std::vector <const Transform *> submesh_transforms;
+		std::vector <int> submesh_indices;
+		// std::vector <const Submesh *> submeshes;
+		// std::vector <const Transform *> submesh_transforms;
 
 		// Update state for the hit records
+                int total_meshes;
 		long long int last_updated;
 		std::map <std::string, long long int> times;
+
+		const ECS *cached_ecs;
 	} m_host;
 
 	// Timer
@@ -225,11 +229,10 @@ class ArmadaRTX {
 		const std::vector <const Transform *> &
 	);
 
-	void update_sbt_data(
-		const std::vector <layers::MeshMemory::Cachelet> &,
-		const std::vector <const Submesh *> &,
-		const std::vector <const Transform *> &
-	);
+	void update_sbt_data(const ECS &);
+		// const std::vector <layers::MeshMemory::Cachelet> &,
+		// const std::vector <const Submesh *> &,
+		// const std::vector <const Transform *> &
 
 	void update_materials(const std::set <uint32_t> &);
 

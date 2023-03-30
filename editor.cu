@@ -610,9 +610,15 @@ void import_asset(Editor *editor)
                 kobra::Mesh mesh = *kobra::Mesh::load(path);
                 auto ecs = editor->m_scene.ecs;
 
+                std::cout << "(BEFORE) Editor camera: " << &editor->m_camera.get
+                        <kobra::Transform> () << "\n";
+
                 auto entity = ecs->make_entity(path_str);
                 entity.add <kobra::Mesh> (mesh);
                 entity.add <kobra::Renderable> (editor->get_context(), &entity.get <kobra::Mesh> ());
+                
+                std::cout << "(AFTER) Editor camera: " << &editor->m_camera.get
+                        <kobra::Transform> () << "\n";
 	} else if (result == NFD_CANCEL) {
 		std::cout << "User cancelled" << std::endl;
 	} else {
@@ -701,10 +707,10 @@ public:
                 proxy = transform->matrix();
         }
 
-        void set_camera(const kobra::Entity &ecamera) {
+        /* void set_camera(const kobra::Entity &ecamera) {
                 camera = &ecamera.get <kobra::Camera> ();
                 camera_transform = &ecamera.get <kobra::Transform> ();
-        }
+        } */
 
 	// TODO: pass commandbuffer to this function
 	void render() override {
@@ -820,6 +826,9 @@ public:
 		}
                 
                 if (transform) {
+                        camera = &m_editor->m_camera.get <kobra::Camera> ();
+                        camera_transform = &m_editor->m_camera.get <kobra::Transform> ();
+
                         static ImGuizmo::MODE current_mode(ImGuizmo::WORLD);
 
                         ImGuizmo::SetDrawlist();
@@ -907,7 +916,7 @@ public:
 	void render() override {
 		ImGui::Begin("Scene Graph");
 		if (m_scene != nullptr) {
-			auto ecs = *m_scene->ecs;
+			auto &ecs = *m_scene->ecs;
 			for (auto &entity : ecs)
 				ImGui::Text("%s", entity.name.c_str());
 		}
@@ -1103,7 +1112,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	// TODO: scene graph...
 
         // Configure the attachments
-        m_ui_attachments.viewport->set_camera(m_camera);
+        // m_ui_attachments.viewport->set_camera(m_camera);
 
 	// Load and set the icon
 	std::string icon_path = KOBRA_DIR "/kobra_icon.png";
@@ -1277,7 +1286,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 			);
 		}
 
-		m_irradiance_computer.sample(cmd);
+		// m_irradiance_computer.sample(cmd);
 		/* if (m_irradiance_computer.sample(cmd)
 				&& !m_irradiance_computer.cached
 				&& !m_saved_irradiance) {
@@ -1449,8 +1458,6 @@ void Editor::after_present()
 				->get <kobra::Renderable> (m_selection.first);
 
                         m_ui_attachments.viewport->set_transform(m_scene.ecs->get_entity(m_selection.first));
-                        std::cout << "Selected entity at index " <<
-                                m_selection.first << std::endl;
 
 			uint32_t material_index = renderable.material_indices[m_selection.second];
 			m_material_editor->material_index = material_index;

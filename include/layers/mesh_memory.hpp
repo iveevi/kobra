@@ -7,6 +7,7 @@
 // Engine headers
 #include "../backend.hpp"
 #include "../renderable.hpp"
+#include "../ecs.hpp"
 
 namespace kobra {
 
@@ -15,8 +16,6 @@ namespace layers {
 // Contains memory relating to a renderable, about its mesh and submeshes
 class MeshMemory {
 public:
-	using Ref = const Renderable *;
-
 	// Information for a single submesh
 	struct Cachelet {
 		// TODO: move all the buffer datas here
@@ -41,7 +40,7 @@ private:
 	void fill_cachelet(Cachelet &, const Submesh &);
 
 	// Set of all cache items
-	std::map <Ref, Cache> m_cache;
+	std::map <int, Cache> m_cache;
 public:
 	// Default constructor
 	MeshMemory() = default;
@@ -52,15 +51,15 @@ public:
 
 	// Cache a renderable
 	// void cache(const Renderable &);
-	void cache_cuda(Ref);
+	void cache_cuda(const ECS &, int);
 
 	// Get a cache item
-	const Cache &get(Ref renderable) const {
-		return m_cache.at(renderable);
+	const Cache &get(int entity) const {
+		return m_cache.at(entity);
 	}
 
-	const Cachelet &get(Ref renderable, size_t submesh) const {
-		return m_cache.at(renderable).m_cachelets.at(submesh);
+	const Cachelet &get(int entity, size_t submesh) const {
+		return m_cache.at(entity).m_cachelets.at(submesh);
 	}
 };
 

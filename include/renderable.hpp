@@ -46,8 +46,10 @@ public:
         // that are directly indirected
 	const Mesh			*mesh = nullptr;
 
-	// No default constructor
+	// No default or copy constructor
 	Renderable() = delete;
+	Renderable(const Renderable &) = delete;
+	const Renderable &operator=(const Renderable &) = delete;
 
 	// Constructor initializes the buffers
 	Renderable(const Context &, Mesh *);

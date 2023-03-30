@@ -31,27 +31,21 @@ class System {
 
         // Instance type
         struct Instance {
-                const Renderable *m_renderable = nullptr;
-                int m_index = 0;
-                glm::mat4 m_transform;
+                // const Renderable *m_renderable = nullptr;
+                int entity_id;
+                int index = 0;
+                glm::mat4 transform;
                 OptixTraversableHandle m_gas = 0;
-
-                Instance(const Renderable *source, int index, const Transform *transform)
-                                : m_renderable(source), m_index(index),
-                                m_transform(transform->matrix()) {}
         };
 
         // Object cache
         // TODO: callback system to upate cache
         struct {
-                std::map <
-                        const Renderable *,
-                        std::vector <Instance>
-                > instances;
+                std::map <int, std::vector <Instance>> instances;
         } m_cache;
 
         // Build GAS for an instance
-        void build_gas(Instance &instance) {
+        void build_gas(const ECS &ecs, Instance &instance) {
                 // Build acceleration structures
                 OptixAccelBuildOptions gas_accel_options = {};
                 gas_accel_options.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
@@ -61,8 +55,8 @@ class System {
                 const uint32_t triangle_input_flags[1] = {OPTIX_GEOMETRY_FLAG_NONE};
 
                 // TODO: import buffers later
-		const Submesh &s = instance.m_renderable
-                        ->mesh->submeshes[instance.m_index];
+                auto &renderable = ecs.get_entity(instance.entity_id).get <Renderable> ();
+		const Submesh &s = renderable.mesh->submeshes[instance.index];
 
 		// Prepare submesh vertices and triangles
 		std::vector <float3> vertices;
@@ -160,16 +154,19 @@ public:
                         const Transform *transform = &ecs.get <Transform> (i);
 
                         // If already cached, just update transform
-                        if (m_cache.instances.count(renderable) > 0) {
-                                for (Instance &instance : m_cache.instances[renderable]) {
+                        if (m_cache.instances.count(i) > 0) {
+                                for (Instance &instance : m_cache.instances[i]) {
                                         if ((*transform_daemon)[i]) {
-                                                instance.m_transform = transform->matrix();
+                                                instance.transform = transform->matrix();
                                                 updated |= true;
                                         }
                                 }
 
                                 continue;
                         }
+
+                        std::cout << "New renderable: " << renderable <<
+                                std::endl;
                         
                         // TODO: if any of the transforms have changed,
                         // then signal an update...
@@ -185,11 +182,11 @@ public:
 
                         for (int j = 0; j < submeshes; j++) {
                                 // TODO: build GAS for now...
-                                instances.emplace_back(Instance(renderable, j, transform));
-                                build_gas(instances.back());
+                                instances.emplace_back(Instance {i, j, transform->matrix()});
+                                build_gas(ecs, instances.back());
                         }
 
-			m_cache.instances.insert({renderable, instances});
+			m_cache.instances.insert({i, instances});
 			updated = true;
                 }
 
@@ -197,14 +194,13 @@ public:
         }
 
         // Build TLAS from selected renderables
-        OptixTraversableHandle build_tlas(const std::vector <const Renderable *> &renderables, int hit_groups, int mask = 0xFF) {
+        // TODO: choose a subset of entities to render
+        OptixTraversableHandle build_tlas(int hit_groups, int mask = 0xFF) {
                 std::vector <OptixInstance> optix_instances;
 
-                for (const Renderable *renderable : renderables) {
-                        const std::vector <Instance> &instances = m_cache.instances[renderable];
-
-                        for (const Instance &instance : instances) {
-                                glm::mat4 mat = instance.m_transform;
+                for (auto pr : m_cache.instances) {
+                        for (const Instance &instance : pr.second) {
+                                glm::mat4 mat = instance.transform;
 
                                 float transform[12] = {
                                         mat[0][0], mat[1][0], mat[2][0], mat[3][0],

@@ -14,3 +14,4 @@ bin
 build
 compile_commands.json
 data
+docs
