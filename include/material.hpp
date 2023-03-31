@@ -24,9 +24,9 @@ struct Material {
 	glm::vec3	diffuse {1, 0, 1};
 	glm::vec3	specular {0.0f};
 	glm::vec3	emission {0.0f};
-	glm::vec3	ambient {0.2f};
-	float		shininess {0.0f};
-	float		roughness {0.0f};
+	glm::vec3	ambient {0.2f}; // TODO: deprecate
+	float		shininess {0.0f}; // TODO: deprecate
+	float		roughness {0.001f};
 	float		refraction {1.0f};
 
 	// TODO: extinction, absorption, etc.

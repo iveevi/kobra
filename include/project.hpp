@@ -16,6 +16,8 @@ namespace kobra {
 
 // Project description; for a complete game, rendering application, etc.
 struct Project {
+	std::string directory = "";
+
 	int default_scene_index = 0;
 	std::string default_save_path = "";
 	std::vector <Scene> scenes = {};
@@ -25,6 +27,7 @@ struct Project {
 	Project() {}
 
 	// Load project from a file
+	// NOTE: currently a bootstrap
 	Project(const std::string &project_file) {
 		// Check if the file exists
 		if (!std::filesystem::exists(project_file)) // TODO: kobra error...
@@ -43,25 +46,48 @@ struct Project {
 		default_scene_index = 0;
 	}
 
-	// Load scene
-	Scene &load_scene(const Context &context, int index = -1) {
-		// If negative, use the default scene
-		if (index == -1)
-			index = default_scene_index;
+	// Load project from directory
+	void load_project(const std::string &dir) {
+		directory = dir;
 
-		// Skip if the scene is already loaded
-		if (scenes[index].ecs)
-			return scenes[index];
+		printf("Loading project from path: %s\n", dir.c_str());
+		std::filesystem::path path = dir;
 
-		// Check if the scene exists
-		if (index >= scenes_files.size())
-			throw std::runtime_error("Scene does not exist");
+		// Project file
+		std::filesystem::path project_file = path / "project.den";
+		if (!std::filesystem::exists(project_file))
+			throw std::runtime_error("Project file does not exist");
 
-		// Load the scene into the scene list
-		scenes[index].load(context, scenes_files[index]);
-		scenes[index].name = "scene-" + std::to_string(index); // TODO: change this
-		return scenes[index];
+		// Load the project file
+		std::string token;
+
+		std::ifstream file(project_file);
+
+		int number_of_scenes;
+		file >> token >> number_of_scenes;
+		if (token != "@scenes")
+			throw std::runtime_error("Invalid project file");
+
+		// Load the scenes
+		printf("Loading %d scenes\n", number_of_scenes);
+		for (int i = 0; i < number_of_scenes; i++) {
+			std::string scene_file;
+			file >> scene_file;
+			scenes_files.push_back(scene_file);
+
+			printf("Scene %d: %s\n", i, scene_file.c_str());
+
+			// Ensure the scene file exists
+			if (!std::filesystem::exists(path / scene_file))
+				throw std::runtime_error("Scene file does not exist");
+		}
+
+		// Resize (but all are null)
+		scenes.resize(scenes_files.size());
 	}
+
+	// Load scene
+	Scene &load_scene(const Context &, int = -1);
 
 	// Transcribe submesh into binary data
 	static std::string transcribe_submesh(const Submesh &submesh) {
@@ -87,13 +113,37 @@ struct Project {
                 // Setup the stream
                 std::ostringstream stream;
 
+		printf("Transcribing material %s\n", material.name.c_str());
                 int name_length = material.name.size();
                 stream.write((char *) &name_length, sizeof(int));
-                stream.write((char *) &material.name, sizeof(std::string));
+                stream.write(material.name.c_str(), name_length * sizeof(char));
                 stream.write((char *) &material.diffuse, sizeof(glm::vec3));
                 stream.write((char *) &material.specular, sizeof(glm::vec3));
                 stream.write((char *) &material.ambient, sizeof(glm::vec3));
                 stream.write((char *) &material.emission, sizeof(glm::vec3));
+                stream.write((char *) &material.roughness, sizeof(float));
+                stream.write((char *) &material.refraction, sizeof(float));
+		stream.write((char *) &material.type, sizeof(Shading));
+
+		int normal_texture_length = material.normal_texture.size();
+		stream.write((char *) &normal_texture_length, sizeof(int));
+		stream.write(material.normal_texture.c_str(), normal_texture_length * sizeof(char));
+
+		int diffuse_texture_length = material.albedo_texture.size();
+		stream.write((char *) &diffuse_texture_length, sizeof(int));
+		stream.write(material.albedo_texture.c_str(), diffuse_texture_length * sizeof(char));
+
+		int specular_texture_length = material.specular_texture.size();
+		stream.write((char *) &specular_texture_length, sizeof(int));
+		stream.write(material.specular_texture.c_str(), specular_texture_length * sizeof(char));
+
+		int emission_texture_length = material.emission_texture.size();
+		stream.write((char *) &emission_texture_length, sizeof(int));
+		stream.write(material.emission_texture.c_str(), emission_texture_length * sizeof(char));
+
+		int roughness_texture_length = material.roughness_texture.size();
+		stream.write((char *) &roughness_texture_length, sizeof(int));
+		stream.write(material.roughness_texture.c_str(), roughness_texture_length * sizeof(char));
 
                 return stream.str();
         }
@@ -110,6 +160,7 @@ struct Project {
 		std::filesystem::create_directory(path / "assets");	// Assets directory (user home)
 
 		std::filesystem::path cache_path = path / ".cache";
+		std::filesystem::path assets_path = path / "assets";
 
 		// Collect all SUBMESHES to populate the cache
 		// TODO: need to find similar enough meshes (e.g. translated or
@@ -118,12 +169,6 @@ struct Project {
 		for (auto &scene : scenes)
 			scene.populate_mesh_cache(submesh_cache);
 
-		std::cout << "Submesh cache size: " << submesh_cache.size() << std::endl;
-		for (auto &submesh : submesh_cache) {
-			std::cout << submesh << std::endl;
-			std::cout << "Size of transcribed submesh: " << transcribe_submesh(*submesh).size() << std::endl;
-		}
-
 		// ID each submesh in the cache
 		std::vector <std::pair <const Submesh *, std::string>> submesh_ids;
 		std::map <const Submesh *, size_t> submesh_id_map;
@@ -131,8 +176,9 @@ struct Project {
 		// TODO: use the name of the entity for the mesh...
 		size_t id = 0;
 		for (auto &submesh : submesh_cache) {
-			submesh_ids.push_back({submesh, "submesh-" + std::to_string(id++)});
+			submesh_ids.push_back({submesh, "submesh-" + std::to_string(id)});
 			submesh_id_map[submesh] = id;
+			id++;
 		}
 
 		tf::Taskflow taskflow;
@@ -140,8 +186,6 @@ struct Project {
 
 		taskflow.for_each(submesh_ids.begin(), submesh_ids.end(),
 			[&](const auto &pr) {
-				std::cout << "Saving submesh " << pr.first<< std::endl;
-
 				// TODO: ID each submesh in the cache...
 				std::filesystem::path filename = cache_path/(pr.second + ".submesh");
 				std::ofstream file(filename, std::ios::binary);
@@ -162,16 +206,14 @@ struct Project {
 
                 int index = 0;
                 for (auto &mat : Material::all) {
-                        mat.name = "material-" + std::to_string(index);
+                        mat.name = "material-" + std::to_string(index++);
                 }
 
                 // For now, store in the cache directory
                 taskflow.for_each(Material::all.begin(), Material::all.end(),
                         [&](const Material &mat) {
-				std::cout << "Saving material: " << mat.name << std::endl;
-
 				// TODO: ID each submesh in the cache...
-				std::filesystem::path filename = cache_path/(mat.name + ".mat");
+				std::filesystem::path filename = assets_path/(mat.name + ".mat");
 				std::ofstream file(filename, std::ios::binary);
 
 				// Write the submesh to the file
@@ -189,6 +231,12 @@ struct Project {
 			std::filesystem::path filename = path / (scene.name + ".kobra");
 			std::ofstream file(filename);
 
+                        // Write all used materials, in order
+                        file << "@materials\n"
+				<< ".list " << Material::all.size() << "\n";
+                        for (int i = 0; i < Material::all.size(); i++)
+                                file << "\tmaterial-" << std::to_string(i) << ".mat\n";
+
 			// Write the scene description
 			for (auto &entity : *scene.ecs) {
 				file << "\n@entity " << entity.name << "\n";
@@ -200,13 +248,12 @@ struct Project {
 					<< transform.scale.x << " " << transform.scale.y << " " << transform.scale.z << "\n";
 
 				if (entity.exists <Mesh> ()) {
-					file << ".mesh " << entity.get <Mesh> ().submeshes.size();
+					file << ".mesh " << entity.get <Mesh> ().submeshes.size() << "\n";
 					auto &submeshes = entity.get <Mesh> ().submeshes;
 					for (auto &submesh : submeshes) {
 						size_t id = submesh_id_map[&submesh];
-						file << " submesh-" << id << ", " << submesh.material_index;
+						file << "\tsubmesh-" << id << ".submesh, " << submesh.material_index << "\n";
 					}
-					file << "\n";
 
 					// TODO: material indices...
 				}
@@ -234,7 +281,7 @@ struct Project {
 		// Write all the scenes
 		file << "@scenes " << scenes.size() << "\n";
 		for (auto &scene : scenes)
-			file << scene.name << "\n";
+			file << scene.name << ".kobra\n";
 
 		// TODO: use fmt library
 

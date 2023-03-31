@@ -178,10 +178,15 @@ public:
 
 	// Get entity by name
 	Entity &get_entity(const std::string &name) {
+		if (name_map.find(name) == name_map.end())
+			KOBRA_LOG_FUNC(Log::WARN) << "Entity " << name << " does not exist.\n";
+
 		return entities[name_map.at(name)];
 	}
 
 	const Entity &get_entity(const std::string &name) const {
+		if (name_map.find(name) == name_map.end())
+			KOBRA_LOG_FUNC(Log::WARN) << "Entity " << name << " does not exist.\n";
 		return entities[name_map.at(name)];
 	}
 

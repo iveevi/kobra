@@ -268,7 +268,6 @@ void ArmadaRTX::update_materials(const std::set <uint32_t> &material_indices)
 
 	std::set <_instance_ref> emissive_submeshes_to_update;
 	for (uint32_t mat_index : material_indices) {
-		printf("Updating material %d\n", mat_index);
 		const Material &material = Material::all[mat_index];
 		cuda::_material &mat = m_host.materials[mat_index];
 
@@ -469,6 +468,10 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 		}
 	}
 
+	// If no renderables, exit
+	if (renderables.empty())
+		return {handle, hit_records};
+
 	// Update data if necessary
 	if (m_tlas.null) {
 		/* Load the list of all submeshes
@@ -503,7 +506,7 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 				m_host.cachelets.push_back(m_mesh_memory->get(id, j));
 
                                 // TODO: use instance ref vector instead...
-                                m_host.entity_id.push_back(i);
+                                m_host.entity_id.push_back(id);
                                 m_host.submesh_indices.push_back(j);
 				// m_host.submeshes.push_back(submesh);
 				// m_host.submesh_transforms.push_back(transform);
@@ -517,7 +520,7 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 		for (int i = 0; i < m_host.entity_id.size(); i++) {
                         int id = m_host.entity_id[i];
 		
-			auto &entity = ecs.get_entity(m_host.entity_id[i]);
+			auto &entity = ecs.get_entity(id);
 			auto *transform = &entity.get <Transform> ();
 			auto &renderable = entity.get <Renderable> ();
 			auto *submesh = &renderable.mesh->submeshes[m_host.submesh_indices[i]];
@@ -738,6 +741,17 @@ void ArmadaRTX::render
 	}
 
 	auto out = preprocess_scene(ecs, transform_daemon, camera, transform);
+	
+	// Skip if nothing to render
+	if (m_host.entity_id.empty()) {
+		// TODO: log once function
+		static bool logged = false;
+		if (!logged) {
+			KOBRA_LOG_FUNC(Log::WARN) << "No renderables\n";
+			logged = true;
+		}
+		return;
+	}
 
 	// Reset the accumulation state if needed
 	if (!accumulate || out.handle.has_value())

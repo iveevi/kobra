@@ -42,7 +42,13 @@ Renderable::Renderable(const Context &context, Mesh *mesh_)
 
 		// UBO
 		// kobra::Material mat = (*mesh)[i].material;
-		kobra::Material mat = Material::all[(*mesh)[i].material_index];
+		kobra::Material mat;
+
+		int index = mesh->submeshes[i].material_index;
+		if (index >= Material::all.size())
+			KOBRA_LOG_FILE(Log::ERROR) << "Material index out of range\n";
+		else
+			mat = Material::all[index];
 
 		UBO ubo_data {
 			.diffuse = mat.diffuse,

@@ -606,14 +606,14 @@ void import_asset(Editor *editor)
 
                 // Extract name of the entity from the file name
                 // TODO: check for duplicates
-                std::string path_str = path;
-                kobra::Mesh mesh = *kobra::Mesh::load(path);
+                std::filesystem::path asset_path = path;
+                kobra::Mesh mesh = *kobra::Mesh::load(asset_path.string());
                 auto ecs = editor->m_scene.ecs;
 
                 std::cout << "(BEFORE) Editor camera: " << &editor->m_camera.get
                         <kobra::Transform> () << "\n";
 
-                auto entity = ecs->make_entity(path_str);
+                auto entity = ecs->make_entity(asset_path.stem());
                 entity.add <kobra::Mesh> (mesh);
                 entity.add <kobra::Renderable> (editor->get_context(), &entity.get <kobra::Mesh> ());
                 
@@ -975,9 +975,13 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 
 	// Load scene
 	// kobra::Project project = kobra::Project(".kobra/project");
-	m_project = kobra::Project(".kobra/project");
+	// m_project = kobra::Project(".kobra/project");
+ 	m_project.load_project("scene");
+	
 	// m_scene.load(get_context(), project.scene);
 	m_scene = m_project.load_scene(get_context());
+	assert(m_scene.ecs);
+
         transform_daemon = std::make_shared <kobra::daemons::Transform> (m_scene.ecs.get());
 
 	// TODO: Create a camera somewhere outside...
@@ -997,7 +1001,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 
 	// TODO: irradiance computer load from cache...
 
-	// Configure the forward renderer
+	/* Configure the forward renderer
 	m_forward_renderer.add_pipeline(
 		"environment",
 		KOBRA_DIR "/source/shaders/environment_lighter.frag",
@@ -1010,7 +1014,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 		[&](const vk::raii::DescriptorSet &descriptor_set) {
 			m_irradiance_computer.bind(device, descriptor_set, 5);
 		}
-	);
+	); */
 
 	// TODO: each layer that renders should have its own frmebuffer, or at
 	// least a way to specify the image to render to (and then the layer
@@ -1211,7 +1215,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 	kobra::layers::ForwardRenderer::Parameters params {
 		.renderables = renderables_transforms,
 		.lights = lights_transforms,
-		.pipeline_package = "environment",
+		// .pipeline_package = "environment",
 	};
 
 	params.environment_map = KOBRA_DIR "/resources/skies/background_1.jpg";
@@ -1430,38 +1434,41 @@ void Editor::after_present()
 		Request request = request_queue.front();
 		request_queue.pop();
 
-		ImVec2 min = m_viewport.min;
-		ImVec2 max = m_viewport.max;
+                // If using Gizmo, ignore
+                if (!ImGuizmo::IsOver()) {
+                        ImVec2 min = m_viewport.min;
+                        ImVec2 max = m_viewport.max;
 
-		ImVec2 fixed {
-			(request.x - min.x) / (max.x - min.x),
-			(request.y - min.y) / (max.y - min.y)
-		};
+                        ImVec2 fixed {
+                                (request.x - min.x) / (max.x - min.x),
+                                (request.y - min.y) / (max.y - min.y)
+                        };
 
-		/* fixed.x *= window.m_extent.width;
-		fixed.y *= window.m_extent.height; */
+                        /* fixed.x *= window.m_extent.width;
+                        fixed.y *= window.m_extent.height; */
 
-		vk::Extent2D extent = m_objectifier.query_extent();
-		fixed.x *= extent.width;
-		fixed.y *= extent.height;
+                        vk::Extent2D extent = m_objectifier.query_extent();
+                        fixed.x *= extent.width;
+                        fixed.y *= extent.height;
 
-		// TODO: get coordinates of the viewport image...
-		auto ids = m_objectifier.query(fixed.x, fixed.y);
-		m_selection = {int(ids.first) - 1, int(ids.second) - 1};
+                        // TODO: get coordinates of the viewport image...
+                        auto ids = m_objectifier.query(fixed.x, fixed.y);
+                        m_selection = {int(ids.first) - 1, int(ids.second) - 1};
 
-		// Update the material editor
-		if (m_selection.first < 0 || m_selection.second < 0) {
-			m_material_editor->material_index = -1;
-                        m_ui_attachments.viewport->set_transform();
-		} else {
-			kobra::Renderable &renderable = m_scene.ecs
-				->get <kobra::Renderable> (m_selection.first);
+                        // Update the material editor
+                        if (m_selection.first < 0 || m_selection.second < 0) {
+                                m_material_editor->material_index = -1;
+                                m_ui_attachments.viewport->set_transform();
+                        } else {
+                                kobra::Renderable &renderable = m_scene.ecs
+                                        ->get <kobra::Renderable> (m_selection.first);
 
-                        m_ui_attachments.viewport->set_transform(m_scene.ecs->get_entity(m_selection.first));
+                                m_ui_attachments.viewport->set_transform(m_scene.ecs->get_entity(m_selection.first));
 
-			uint32_t material_index = renderable.material_indices[m_selection.second];
-			m_material_editor->material_index = material_index;
-		}
+                                uint32_t material_index = renderable.material_indices[m_selection.second];
+                                m_material_editor->material_index = material_index;
+                        }
+                }
 	}
 
 	// Ping all systems using materials
@@ -1469,6 +1476,9 @@ void Editor::after_present()
 
         // Daemon update cycle
         transform_daemon->update();
+
+        // Make sure the queue is empty
+        request_queue = std::queue <Request> ();
 }
 
 void Editor::mouse_callback(void *us, const kobra::io::MouseEvent &event)
