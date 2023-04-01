@@ -221,6 +221,7 @@ class ArmadaRTX {
 
 	// Private methods
 	void update_triangle_light_buffers(
+		const daemons::Transform *,
 		const std::set <_instance_ref> &
 	);
 

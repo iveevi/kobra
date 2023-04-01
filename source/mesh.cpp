@@ -356,6 +356,28 @@ Mesh Mesh::box(const glm::vec3 &center, const glm::vec3 &dim)
 	return m;
 }
 
+// Plane
+Mesh Mesh::plane(const glm::vec3 &center, float width, float height)
+{
+	glm::vec3 normal = { 0.0f, 0.0f, 1.0f };
+	VertexList vertices {
+		Vertex {{ center.x - width / 2.0f, center.y, center.z - height / 2.0f }, normal, { 0.0f, 0.0f }},
+		Vertex {{ center.x + width / 2.0f, center.y, center.z - height / 2.0f }, normal, { 1.0f, 0.0f }},
+		Vertex {{ center.x + width / 2.0f, center.y, center.z + height / 2.0f }, normal, { 1.0f, 1.0f }},
+		Vertex {{ center.x - width / 2.0f, center.y, center.z + height / 2.0f }, normal, { 0.0f, 1.0f }}
+	};
+
+	IndexList indices {
+		0, 1, 2,
+		2, 3, 0
+	};
+
+	auto out = Submesh {vertices, indices};
+	Mesh m = std::vector <Submesh> {out};
+	m._source = "plane";
+	return m;
+}
+
 /*
  * TODO: only parameters should be slices and stacks (transform will do the
  * rest)

@@ -391,6 +391,7 @@ vk::raii::Device make_device(const vk::raii::PhysicalDevice &phdev,
 	// Device features
 	vk::PhysicalDeviceFeatures device_features;
 	device_features.independentBlend = true;
+	device_features.fillModeNonSolid = true;
 
 	// Create the device
 	vk::DeviceCreateInfo device_info {
@@ -966,7 +967,7 @@ vk::raii::Pipeline make_graphics_pipeline(const GraphicsPipelineInfo &info)
 
 	// Rasterization state
 	vk::PipelineRasterizationStateCreateInfo rasterization_info {
-		{}, VK_FALSE, VK_FALSE, vk::PolygonMode::eFill,
+		{}, VK_FALSE, VK_FALSE, info.polygon_mode,
 		info.cull_mode, info.front_face, VK_FALSE, 0, 0, 0, 1
 	};
 

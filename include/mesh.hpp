@@ -157,7 +157,16 @@ public:
 	// Mesh factories
 	// TODO: should make a 1x1x1, then transform will do the rest
 	// TODO: clean up and put into source file
-	static Mesh box(const glm::vec3 &, const glm::vec3 &);
+	static Mesh box(
+		const glm::vec3 & = glm::vec3{0.0f},
+		const glm::vec3 & = glm::vec3 {0.5f}
+	);
+
+	static Mesh plane(
+		const glm::vec3 & = glm::vec3 {0.0f},
+		float = 1, float = 1
+	);
+
 	static Mesh sphere(const glm::vec3 &, float, int = 16, int = 16);
 
 	static std::optional <Mesh> load(const std::string &);

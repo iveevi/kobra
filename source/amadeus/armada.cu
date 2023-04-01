@@ -18,7 +18,6 @@
 #include "../../include/transform.hpp"
 #include "../../shaders/raster/bindings.h"
 #include "../../include/profiler.hpp"
-#include "glm/gtx/string_cast.hpp"
 
 namespace kobra {
 
@@ -93,7 +92,8 @@ void ArmadaRTX::set_envmap(const std::string &path)
 }
 
 void ArmadaRTX::update_triangle_light_buffers
-		(const std::set <_instance_ref> &emissive_submeshes_to_update)
+		(const daemons::Transform *transform_daemon,
+		const std::set <_instance_ref> &emissive_submeshes_to_update)
 {
 	// TODO: share this setup with the renderables (another layer for
 	// material buffer updates? or use the same daemon?)
@@ -155,6 +155,7 @@ void ArmadaRTX::update_triangle_light_buffers
 		size_t subrange_max = 0;
 
 		for (const auto &pr : emissive_submeshes_to_update) {
+			int id = pr.id;
 			const Submesh *submesh = pr.submesh;
 			const Transform *transform = pr.transform;
 
@@ -166,6 +167,27 @@ void ArmadaRTX::update_triangle_light_buffers
 				// then also update the triangle light position
 				m_host.tri_lights[offset + i].intensity =
 					cuda::to_f3(material.emission);
+			}
+
+			// TODO: perform these operations directly on the GPU
+			if (transform_daemon && transform_daemon->changed(id)) {
+				std::vector <glm::vec3> transformed_vertices(submesh->vertices.size());
+				for (int i = 0; i < submesh->vertices.size(); i++)
+					transformed_vertices[i] = transform->apply(submesh->vertices[i].position);
+
+				for (int i = 0; i < submesh->triangles(); i++) {
+					uint32_t i0 = submesh->indices[i * 3 + 0];
+					uint32_t i1 = submesh->indices[i * 3 + 1];
+					uint32_t i2 = submesh->indices[i * 3 + 2];
+
+					glm::vec3 a = transformed_vertices[i0];
+					glm::vec3 b = transformed_vertices[i1];
+					glm::vec3 c = transformed_vertices[i2];
+
+					m_host.tri_lights[offset + i].a = cuda::to_f3(a);
+					m_host.tri_lights[offset + i].ab = cuda::to_f3(b - a);
+					m_host.tri_lights[offset + i].ac = cuda::to_f3(c - a);
+				}
 			}
 
 			subrange_min = std::min(subrange_min, offset);
@@ -327,7 +349,7 @@ void ArmadaRTX::update_materials(const std::set <uint32_t> &material_indices)
 
 	// Also update the emissive submeshes if needed
 	// TODO: use the reutrn from tihs instead to check for sbt udpate...
-	update_triangle_light_buffers(emissive_submeshes_to_update);
+	update_triangle_light_buffers(nullptr, emissive_submeshes_to_update);
 
 	// Update the SBT if needed (e.g. when a new emissive submesh is added)
 	if (sbt_needs_update) {
@@ -538,7 +560,7 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 		}
 
 		// Update the data
-		update_triangle_light_buffers({});
+		update_triangle_light_buffers(&transform_daemon, {});
 		update_quad_light_buffers(lights, light_transforms);
 		update_sbt_data(ecs);
 
@@ -588,8 +610,15 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 				emissive_to_update.insert(ref);
 		}
 
-		if (emissive_to_update.size() > 0)
-			update_triangle_light_buffers(emissive_to_update);
+		if (emissive_to_update.size() > 0) {
+			update_triangle_light_buffers(&transform_daemon, emissive_to_update);
+			printf("Updated %d triangle lights\n", emissive_to_update.size());
+			for (auto ref : emissive_to_update) {
+				printf("Updated triangle light %d\n", ref.id);
+			}
+
+			m_host.last_updated = clock();
+		}
                 
 		for (int i = 0; i < m_host.entity_id.size(); i++) {
                         int id = m_host.entity_id[i];

@@ -60,6 +60,17 @@ struct Material {
 	// Serialize to GPU buffer
 	void serialize(std::vector <aligned_vec4> &) const;
 
+	// Construct the default material
+	// NOTE: different from the uninitialized material
+	static Material default_material() {
+		Material mat;
+		mat.name = "default"; // TODO: create a new file... and then get rid of the name
+		mat.diffuse = glm::vec3 {1};
+		mat.specular = glm::vec3 {0.5f};
+		mat.roughness = 0.2f;
+		return mat;
+	}
+
 	// Global material list
 	// TODO: one list per scene
 	static std::vector <Material> all;

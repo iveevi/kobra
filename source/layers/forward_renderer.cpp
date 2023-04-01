@@ -4,6 +4,7 @@
 #include "../../include/renderable.hpp"
 #include "../../include/shader_program.hpp"
 #include "../../source/shaders/bindings.h"
+#include <vulkan/vulkan_enums.hpp>
 
 namespace kobra {
 
@@ -393,6 +394,7 @@ ForwardRenderer::make_pipline_package
 
 	grp_info.vertex_shader = std::move(*vertex_shader.compile(*device));
 	grp_info.fragment_shader = std::move(*fragment_shader.compile(*device));
+	// grp_info.polygon_mode = vk::PolygonMode::eFillRectangleNV;
 
 	package.pipeline = make_graphics_pipeline(grp_info);
 

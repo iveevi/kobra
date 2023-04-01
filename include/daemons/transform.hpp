@@ -61,6 +61,11 @@ struct Transform {
                 // Returns the modification status
                 return status[index];
         }
+
+        uint8_t changed(int index) const {
+                // Returns the modification status
+                return status[index];
+        }
 };
 
 }

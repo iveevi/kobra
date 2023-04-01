@@ -31,6 +31,9 @@
 // Extra GLM headers
 #include <glm/gtc/type_ptr.hpp>
 
+// Aliasing declarations
+using namespace kobra;
+
 // Forward declarations
 struct ProgressBar;
 struct Console;
@@ -99,6 +102,10 @@ struct Editor : public kobra::BaseApp {
 		vk::raii::Sampler sampler = nullptr;
 		// TODO: store extent
 
+		// Scene viewing camera
+		Camera camera { 45.0f, 1.0f };
+		Transform camera_transform;
+
 		ImVec2 min = {1/0.0f, 1/0.0f};
 		ImVec2 max = {-1.0f, -1.0f};
 	} m_viewport;
@@ -148,6 +155,12 @@ struct Editor : public kobra::BaseApp {
 	// in a map) and then is passed to other layers for rendering
 };
 
+// Global communications structure
+struct Communications {
+	bool is_on_scene_graph = false;
+	Context context;
+} g_communications;
+
 int main()
 {
 	// Load Vulkan physical device
@@ -157,6 +170,7 @@ int main()
 			VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
 			VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
 			VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME,
+			VK_NV_FILL_RECTANGLE_EXTENSION_NAME,
 		});
 	};
 
@@ -167,6 +181,7 @@ int main()
 			VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 			VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
 			VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
+			VK_NV_FILL_RECTANGLE_EXTENSION_NAME,
 		},
 	};
 
@@ -915,11 +930,47 @@ public:
 
 	void render() override {
 		ImGui::Begin("Scene Graph");
+		
 		if (m_scene != nullptr) {
 			auto &ecs = *m_scene->ecs;
 			for (auto &entity : ecs)
 				ImGui::Text("%s", entity.name.c_str());
 		}
+
+		// Open a popup when the user right clicks on the scene graph
+		if (ImGui::BeginPopupContextWindow()) {
+			if (ImGui::BeginMenu("Add Entity")) {
+				if (ImGui::BeginMenu("Renderable")) {
+					if (ImGui::MenuItem("Box")) {
+						Mesh box = Mesh::box();
+						// TODO: method to request new material from a daemon...
+						box.submeshes[0].material_index = Material::all.size();
+						Material::all.push_back(Material::default_material());
+						auto &entity = m_scene->ecs->make_entity("Box");
+						entity.add <Mesh> (box);
+						entity.add <Renderable> (g_communications.context, &entity.get <Mesh> ());
+					}
+
+					if (ImGui::MenuItem("Plane")) {
+						Mesh plane = Mesh::plane();
+						plane.submeshes[0].material_index = Material::all.size();
+						Material::all.push_back(Material::default_material());
+						auto &entity = m_scene->ecs->make_entity("Plane");
+						entity.add <Mesh> (plane);
+						entity.add <Renderable> (g_communications.context, &entity.get <Mesh> ());
+					}
+
+					ImGui::EndMenu();
+				}
+
+				ImGui::EndMenu();
+			}
+
+			ImGui::EndPopup();
+		}
+
+		// g_communications.is_on_scene_graph = ImGui::IsWindowHovered();
+
 		ImGui::End();
 	}
 };
@@ -1128,6 +1179,9 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	glfwSetWindowIcon(window.m_handle, 1, &icon);
 	stbi_image_free(icon.pixels);
 	stbi_set_flip_vertically_on_load(true);
+
+	// Configure global comunication state
+	g_communications.context = get_context();
 }
 
 Editor::~Editor()

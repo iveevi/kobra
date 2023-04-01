@@ -1386,6 +1386,8 @@ struct GraphicsPipelineInfo {
 	const vk::raii::PipelineLayout &pipeline_layout;
 	// const vk::raii::PipelineCache &pipeline_cache = nullptr;
 
+	vk::PolygonMode polygon_mode = vk::PolygonMode::eFill;
+
 	vk::CullModeFlags cull_mode = vk::CullModeFlagBits::eBack;
 	vk::FrontFace front_face = vk::FrontFace::eCounterClockwise;
 
