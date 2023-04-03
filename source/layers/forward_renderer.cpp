@@ -395,6 +395,7 @@ ForwardRenderer::make_pipline_package
 	grp_info.vertex_shader = std::move(*vertex_shader.compile(*device));
 	grp_info.fragment_shader = std::move(*fragment_shader.compile(*device));
 	// grp_info.polygon_mode = vk::PolygonMode::eFillRectangleNV;
+	grp_info.cull_mode = vk::CullModeFlagBits::eNone;
 
 	package.pipeline = make_graphics_pipeline(grp_info);
 

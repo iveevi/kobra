@@ -1,38 +1,4 @@
-#include "include/app.hpp"
-#include "include/backend.hpp"
-#include "include/layers/common.hpp"
-#include "include/layers/forward_renderer.hpp"
-#include "include/layers/image_renderer.hpp"
-#include "include/layers/objectifier.hpp"
-#include "include/layers/ui.hpp"
-#include "include/project.hpp"
-#include "include/scene.hpp"
-#include "include/shader_program.hpp"
-#include "include/ui/attachment.hpp"
-#include "include/engine/irradiance_computer.hpp"
-#include "include/amadeus/armada.cuh"
-#include "include/amadeus/path_tracer.cuh"
-#include "include/amadeus/restir.cuh"
-#include "include/layers/framer.hpp"
-#include "include/cuda/color.cuh"
-#include "include/layers/denoiser.cuh"
-#include "include/daemons/transform.hpp"
-
-// Native File Dialog
-#include <nfd.h>
-
-// ImPlot headers
-#include <implot/implot.h>
-#include <implot/implot_internal.h>
-
-// ImGuizmo
-#include <ImGuizmo/ImGuizmo.h>
-
-// Extra GLM headers
-#include <glm/gtc/type_ptr.hpp>
-
-// Aliasing declarations
-using namespace kobra;
+#include "editor/common.hpp"
 
 // Forward declarations
 struct ProgressBar;
@@ -56,12 +22,11 @@ enum Mode : uint32_t {
 
 // TODO: only keep the state here...
 struct Editor : public kobra::BaseApp {
-	kobra::Scene m_scene;
-	kobra::Project m_project;
-	kobra::Entity m_camera;
+	Scene m_scene;
+	Project m_project;
 
-	kobra::layers::ForwardRenderer m_forward_renderer;
-	kobra::layers::Objectifier m_objectifier;
+	layers::ForwardRenderer m_forward_renderer;
+	layers::Objectifier m_objectifier;
 
         std::shared_ptr <kobra::daemons::Transform> transform_daemon;
 
@@ -155,12 +120,6 @@ struct Editor : public kobra::BaseApp {
 	// in a map) and then is passed to other layers for rendering
 };
 
-// Global communications structure
-struct Communications {
-	bool is_on_scene_graph = false;
-	Context context;
-} g_communications;
-
 int main()
 {
 	// Load Vulkan physical device
@@ -170,7 +129,7 @@ int main()
 			VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
 			VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
 			VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME,
-			VK_NV_FILL_RECTANGLE_EXTENSION_NAME,
+			// VK_NV_FILL_RECTANGLE_EXTENSION_NAME,
 		});
 	};
 
@@ -181,7 +140,7 @@ int main()
 			VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 			VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
 			VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
-			VK_NV_FILL_RECTANGLE_EXTENSION_NAME,
+			// VK_NV_FILL_RECTANGLE_EXTENSION_NAME,
 		},
 	};
 
@@ -616,24 +575,14 @@ void import_asset(Editor *editor)
 	nfdresult_t result = NFD_OpenDialog(&path, nullptr, 0, nullptr);
 
 	if (result == NFD_OKAY) {
-		std::cout << "Path: " << path << std::endl;
-                std::cout << "Importing the asset...\n";
-
                 // Extract name of the entity from the file name
                 // TODO: check for duplicates
                 std::filesystem::path asset_path = path;
                 kobra::Mesh mesh = *kobra::Mesh::load(asset_path.string());
                 auto ecs = editor->m_scene.ecs;
-
-                std::cout << "(BEFORE) Editor camera: " << &editor->m_camera.get
-                        <kobra::Transform> () << "\n";
-
                 auto entity = ecs->make_entity(asset_path.stem());
                 entity.add <kobra::Mesh> (mesh);
                 entity.add <kobra::Renderable> (editor->get_context(), &entity.get <kobra::Mesh> ());
-                
-                std::cout << "(AFTER) Editor camera: " << &editor->m_camera.get
-                        <kobra::Transform> () << "\n";
 	} else if (result == NFD_CANCEL) {
 		std::cout << "User cancelled" << std::endl;
 	} else {
@@ -705,7 +654,7 @@ public:
 	Viewport() = delete;
 	Viewport(Editor *editor) : m_editor {editor} {
 		NFD_Init();
-		m_old_aspect = m_editor->m_camera.get <kobra::Camera> ().aspect;
+		m_old_aspect = m_editor->m_viewport.camera.aspect;
 		m_old_size = {0, 0};
 	}
 
@@ -775,6 +724,19 @@ public:
 					m_editor->m_renderers.mode = eRaytracer;
 				ImGui::EndMenu();
 			}
+
+			// Camera settings
+			if (ImGui::BeginMenu("Camera")) {
+				if (ImGui::SliderFloat("Speed", &g_application.speed, 0.1f, 100.0f));
+				if (ImGui::SliderFloat("FOV", &m_editor->m_viewport.camera.fov, 1.0f, 179.0f)) {
+					m_editor->m_renderers.movement_mutex.lock();
+					m_editor->m_renderers.movement.push(true);
+					m_editor->m_renderers.movement_mutex.unlock();
+				}
+
+				ImGui::EndMenu();
+			}
+
 			// TODO: overlay # of samples...
 			ImGui::EndMenuBar();
 		}
@@ -824,7 +786,7 @@ public:
 				(image_max.y - image_min.y);
 
 			if (fabs(aspect - m_old_aspect) > 1e-6) {
-				m_editor->m_camera.get <kobra::Camera> ().aspect = aspect;
+				m_editor->m_viewport.camera.aspect = aspect;
 				m_old_aspect = aspect;
 			}
 		} else {
@@ -841,8 +803,8 @@ public:
 		}
                 
                 if (transform) {
-                        camera = &m_editor->m_camera.get <kobra::Camera> ();
-                        camera_transform = &m_editor->m_camera.get <kobra::Transform> ();
+                        camera = &m_editor->m_viewport.camera;
+                        camera_transform = &m_editor->m_viewport.camera_transform;
 
                         static ImGuizmo::MODE current_mode(ImGuizmo::WORLD);
 
@@ -948,7 +910,7 @@ public:
 						Material::all.push_back(Material::default_material());
 						auto &entity = m_scene->ecs->make_entity("Box");
 						entity.add <Mesh> (box);
-						entity.add <Renderable> (g_communications.context, &entity.get <Mesh> ());
+						entity.add <Renderable> (g_application.context, &entity.get <Mesh> ());
 					}
 
 					if (ImGui::MenuItem("Plane")) {
@@ -957,7 +919,7 @@ public:
 						Material::all.push_back(Material::default_material());
 						auto &entity = m_scene->ecs->make_entity("Plane");
 						entity.add <Mesh> (plane);
-						entity.add <Renderable> (g_communications.context, &entity.get <Mesh> ());
+						entity.add <Renderable> (g_application.context, &entity.get <Mesh> ());
 					}
 
 					ImGui::EndMenu();
@@ -968,8 +930,6 @@ public:
 
 			ImGui::EndPopup();
 		}
-
-		// g_communications.is_on_scene_graph = ImGui::IsWindowHovered();
 
 		ImGui::End();
 	}
@@ -1035,12 +995,6 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 
         transform_daemon = std::make_shared <kobra::daemons::Transform> (m_scene.ecs.get());
 
-	// TODO: Create a camera somewhere outside...
-	// plus icons for lights and cameras
-	m_camera = m_scene.ecs->get_entity("Camera"); // TODO: separate the
-        // camera from the scene...
-	m_camera.get <kobra::Camera> ().aspect = 1.5f;
-
 	// IO callbacks
 	io.mouse_events.subscribe(mouse_callback, this);
 	io.keyboard_events.subscribe(keyboard_callback, this);
@@ -1091,7 +1045,8 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 		std::make_shared <kobra::amadeus::PathTracer> ()
 	);
 
-	m_renderers.armada_rtx->set_envmap(KOBRA_DIR "/resources/skies/background_1.jpg");
+	// m_renderers.armada_rtx->set_envmap(KOBRA_DIR "/resources/skies/background_1.jpg");
+	m_renderers.armada_rtx->set_envmap("/home/venki/downloads/095_hdrmaps_com_free.exr");
 
 	// Create the denoiser layer
 	m_renderers.denoiser = kobra::layers::Denoiser::make(
@@ -1166,9 +1121,6 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	m_ui->attach(scene_graph);
 	// TODO: scene graph...
 
-        // Configure the attachments
-        // m_ui_attachments.viewport->set_camera(m_camera);
-
 	// Load and set the icon
 	std::string icon_path = KOBRA_DIR "/kobra_icon.png";
 	std::cout << "Loading icon from " << icon_path << std::endl;
@@ -1181,7 +1133,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	stbi_set_flip_vertically_on_load(true);
 
 	// Configure global comunication state
-	g_communications.context = get_context();
+	g_application.context = get_context();
 }
 
 Editor::~Editor()
@@ -1199,9 +1151,9 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 {
 	// Camera movement
 	if (m_input.viewport_focused || m_input.dragging || m_input.alt_dragging) {
-		auto &transform = m_camera.get <kobra::Transform> ();
+		auto &transform = m_viewport.camera_transform;
 
-		float speed = 20.0f * frame_time;
+		float speed = g_application.speed * frame_time;
 
 		glm::vec3 forward = transform.forward();
 		glm::vec3 right = transform.right();
@@ -1272,7 +1224,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 		// .pipeline_package = "environment",
 	};
 
-	params.environment_map = KOBRA_DIR "/resources/skies/background_1.jpg";
+	params.environment_map = "/home/venki/downloads/095_hdrmaps_com_free.exr";
 
 	cmd.begin({});
 		// TODO: also see the normal and albedo and depth buffers from
@@ -1290,8 +1242,8 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 			m_renderers.armada_rtx->render(
 				*m_scene.ecs,
                                 *transform_daemon,
-				m_camera.get <kobra::Camera> (),
-				m_camera.get <kobra::Transform> (),
+				m_viewport.camera,
+				m_viewport.camera_transform,
 				accumulate
 			);
 
@@ -1335,8 +1287,8 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 		} else {
 			m_forward_renderer.render(
 				params,
-				m_camera.get <kobra::Camera> (),
-				m_camera.get <kobra::Transform> (),
+				m_viewport.camera,
+				m_viewport.camera_transform,
 				// TODO: pass these rest as parameters
 				cmd,
 				m_viewport.framebuffer,
@@ -1374,8 +1326,8 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 				cmd,
 				// TODO: pass extent...
 				*m_scene.ecs,
-				m_camera.get <kobra::Camera> (),
-				m_camera.get <kobra::Transform> ()
+				m_viewport.camera,
+				m_viewport.camera_transform
 			);
 
 			request_queue.push(*selection_request);
@@ -1390,8 +1342,8 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 				m_viewport.framebuffer,
 				m_viewport.image.extent,
 				*m_scene.ecs,
-				m_camera.get <kobra::Camera> (),
-				m_camera.get <kobra::Transform> (),
+				m_viewport.camera,
+				m_viewport.camera_transform,
 				m_selection
 			);
 		}
@@ -1453,14 +1405,21 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 						std::swap(m_input.capture_data[i], m_input.capture_data[i + 2]);
 
 					std::string path = m_input.current_capture_path;
-					stbi_write_png(
+					/* stbi_write_png(
 						path.c_str(),
 						m_viewport.image.extent.width,
 						m_viewport.image.extent.height,
 						4,
 						m_input.capture_data.data(),
 						m_viewport.image.extent.width * 4
-					);
+					); */
+
+					RawImage {
+						m_input.capture_data,
+						m_viewport.image.extent.width,
+						m_viewport.image.extent.height,
+						4
+					}.write(path);
 
 					kobra::logger("Editor", kobra::Log::OK)
 						<< "Captured viewport image to "
@@ -1598,7 +1557,7 @@ void Editor::mouse_callback(void *us, const kobra::io::MouseEvent &event)
 		if (pitch < -89.0f)
 			pitch = -89.0f;
 
-		kobra::Transform &transform = editor->m_camera.get <kobra::Transform> ();
+		kobra::Transform &transform = editor->m_viewport.camera_transform;
 		transform.rotation.x = pitch;
 		transform.rotation.y = yaw;
 

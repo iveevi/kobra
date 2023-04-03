@@ -1,5 +1,12 @@
 // STBI image implementation
 #define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+
+// TinyEXR implementation
+#define TINYEXR_IMPLEMENTATION
+#define TINYEXR_USE_STB_ZLIB 1
+
+#include <tinyexr/tinyexr.h>
 
 // Engine headers
 #include "../include/image.hpp"
@@ -50,17 +57,40 @@ static byte *load_texture_magick(const std::filesystem::path &path,
 } */
 
 // Load an image
-byte *load_texture(const std::filesystem::path &path,
-		int &width, int &height, int &channels)
+// TODO: return an optional...
+RawImage load_texture(const std::filesystem::path &path)
 {
-	// Special extensions
+	int width;
+	int height;
+	int channels;
+	
 	std::string ext = path.extension().string();
 
-	std::cout << "Loading texture: " << path << std::endl;
-	std::cout << "Extension: " << ext << std::endl;
+	// Special case extensions
+	if (ext == ".exr") {
+		// TinyEXR image data
+		float *data = nullptr;
 
-	// if (ext == ".dds")
-	//	return load_texture_magick(path, width, height, channels);
+		const char *error = nullptr;
+		LoadEXR(&data, &width, &height, path.string().c_str(), &error);
+
+		if (error) {
+			KOBRA_LOG_FUNC(Log::ERROR) << "Failed to load texture: " << path
+				<< " (" << error << ")" << std::endl;
+			return RawImage {};
+		}
+
+		return RawImage {
+			std::vector <uint8_t> {
+				reinterpret_cast <uint8_t *> (data),
+				reinterpret_cast <uint8_t *> (data)
+					+ width * height * 4 * sizeof(float)
+			},
+			static_cast <uint32_t> (width),
+			static_cast <uint32_t> (height),
+			4, RawImage::RGBA_32_F
+		};
+	}
 
 	// Otherwise load with STB
 	stbi_set_flip_vertically_on_load(true);
@@ -71,10 +101,20 @@ byte *load_texture(const std::filesystem::path &path,
 	);
 
 	// TODO: throw warning, then try to load with ImageMagick
-	if (!data)
-		assert(false);
+	if (!data) {
+		KOBRA_LOG_FUNC(Log::WARN) << "Failed to load texture: " << path
+			<< " (" << stbi_failure_reason() << ")" << std::endl;
+		return RawImage {};
+	}
 
-	return data;
+	printf("Loaded image: %s, %d x %d x %d\n", path.string().c_str(), width, height, channels);
+	return RawImage {
+		std::vector <uint8_t> (data, data + width * height * 4),
+		static_cast <uint32_t> (width),
+		static_cast <uint32_t> (height),
+		static_cast <uint32_t> (channels),
+		RawImage::RGBA_8_UI
+	};
 }
 
 }

@@ -1,11 +1,11 @@
-#define STB_IMAGE_WRITE_IMPLEMENTATION
+// #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "../include/capture.hpp"
 
 namespace kobra {
 
 namespace capture {
 
-// Convert vec <uint32_t> to vec <uint8_t>
+/* Convert vec <uint32_t> to vec <uint8_t>
 // TODO: more generic image formats?
 std::vector <uint8_t> convert(const std::vector <uint32_t> &ptr, size_t size)
 {
@@ -38,7 +38,7 @@ void snapshot(const BufferData &buffer, const vk::Extent3D &dim, const std::stri
 		image.data(),
 		(size_t) dim.width * dim.depth
 	);
-}
+} */
 
 }
 

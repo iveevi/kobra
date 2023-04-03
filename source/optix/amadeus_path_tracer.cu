@@ -210,7 +210,7 @@ extern "C" __global__ void __miss__()
 
 	float4 c = make_float4(0);
 	if (parameters.has_environment_map)
-		c = tex2D <float4> (parameters.environment_map, u, v);
+		c = tex2D <float4> (parameters.environment_map, u, 1 - v);
 
 	rp->value = make_float3(c);
 	rp->wi = ray_direction;

@@ -1,5 +1,5 @@
 // Standard headers
-#include <stb/stb_image_write.h>
+// #include <stb/stb_image_write.h>
 
 // Engine headers
 #include "../../include/engine/irradiance_computer.hpp"
@@ -313,11 +313,11 @@ void IrradianceComputer::save_irradiance_maps(const Context &context, const std:
 
 		std::cout << "\tDownloading " << filename << std::endl;
 
-		stbi_flip_vertically_on_write(true);
+		/* stbi_flip_vertically_on_write(true);
 		stbi_write_png(filename.c_str(),
 			m_extent.width, m_extent.height, 4, data8.data(),
 			m_extent.width * 4
-		);
+		); */
 	}
 }
 

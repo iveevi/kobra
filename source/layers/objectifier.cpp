@@ -2,6 +2,7 @@
 #include "../../include/layers/objectifier.hpp"
 #include "../../include/vertex.hpp"
 #include "../../include/shader_program.hpp"
+#include <vulkan/vulkan_enums.hpp>
 
 namespace kobra {
 
@@ -139,6 +140,7 @@ Objectifier::Objectifier(const Context &context)
 	};
 
 	grp_info1.blend_attachments = { false };
+	grp_info1.cull_mode = vk::CullModeFlagBits::eNone;
 
 	rendering.pipeline = make_graphics_pipeline(grp_info1);
 
@@ -179,6 +181,8 @@ Objectifier::Objectifier(const Context &context)
 		vertex_binding, vertex_attributes,
 		compositing.ppl
 	};
+
+	grp_info2.cull_mode = vk::CullModeFlagBits::eNone;
 
 	compositing.pipeline = make_graphics_pipeline(grp_info2);
 }

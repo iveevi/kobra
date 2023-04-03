@@ -1,3 +1,7 @@
+// Vulkan headers
+#include <vulkan/vulkan_format_traits.hpp>
+
+// Engine headers
 #include "../include/backend.hpp"
 
 namespace kobra {
@@ -36,7 +40,9 @@ ImageData &TextureLoader::load_texture(const std::string &path)
 	} else{
 		KOBRA_LOG_FUNC(Log::OK) << "Loading texture from file: " << path << "\n";
 
-		// TODO: not everything needs to be external...
+		// TODO: separate into own method
+
+		/* TODO: not everything needs to be external...
 		img = make_image(*m_device.phdev, *m_device.device,
 			m_command_pool, path,
 			vk::ImageTiling::eOptimal,
@@ -46,7 +52,79 @@ ImageData &TextureLoader::load_texture(const std::string &path)
 			vk::MemoryPropertyFlagBits::eDeviceLocal,
 			vk::ImageAspectFlagBits::eColor,
 			true
+		); */
+
+		// Raw image data
+		RawImage raw_image = kobra::load_texture(path);
+	
+		// Queue to submit commands to
+		vk::raii::Queue queue {*m_device.device, 0, 0};
+
+		// Temporary command buffer
+		auto cmd = make_command_buffer(*m_device.device, m_command_pool);
+	
+		// Create the image
+		vk::Extent2D extent {
+			static_cast <uint32_t> (raw_image.width),
+			static_cast <uint32_t> (raw_image.height)
+		};
+
+		// Select format
+		vk::Format format = vk::Format::eR8G8B8A8Unorm;
+		if (raw_image.type == RawImage::RGBA_32_F)
+			format = vk::Format::eR32G32B32A32Sfloat;
+
+		img = ImageData(
+			*m_device.phdev, *m_device.device,
+			format, extent,
+			vk::ImageTiling::eOptimal,
+			vk::ImageUsageFlagBits::eSampled
+				| vk::ImageUsageFlagBits::eTransferDst
+				| vk::ImageUsageFlagBits::eTransferSrc,
+			vk::MemoryPropertyFlagBits::eDeviceLocal,
+			vk::ImageAspectFlagBits::eColor,
+			true
 		);
+
+		// Copy the image data into a staging buffer
+		vk::DeviceSize size = raw_image.width * raw_image.height * vk::blockSize(img.format);
+
+		BufferData buffer {
+			*m_device.phdev, *m_device.device, size,
+			vk::BufferUsageFlagBits::eTransferSrc,
+			vk::MemoryPropertyFlagBits::eHostVisible
+				| vk::MemoryPropertyFlagBits::eHostCoherent
+		};
+
+		// Copy the data
+		buffer.upload(raw_image.data);
+
+		{
+			cmd.begin({});
+			img.transition_layout(cmd, vk::ImageLayout::eTransferDstOptimal);
+
+			// Copy the buffer to the image
+			copy_data_to_image(cmd,
+				buffer.buffer, img.image,
+				img.format, raw_image.width, raw_image.height
+			);
+
+			// TODO: transition_image_layout should go to the detail namespace...
+			img.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
+			cmd.end();
+		}
+
+		// Submit the command buffer
+		queue.submit(
+			vk::SubmitInfo {
+				0, nullptr, nullptr,
+				1, &*cmd
+			},
+			nullptr
+		);
+
+		// Wait
+		queue.waitIdle();
 	}
 
 	m_images.emplace_back(std::move(img));

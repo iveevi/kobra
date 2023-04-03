@@ -30,6 +30,7 @@
 #include "common.hpp"
 #include "core.hpp"
 #include "logger.hpp"
+#include "image.hpp"
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -894,20 +895,16 @@ void copy_image_to_buffer(const vk::raii::CommandBuffer &,
 
 // Create ImageData object from byte data
 ImageData make_image(const vk::raii::CommandBuffer &,
-		const vk::raii::PhysicalDevice &,
-		const vk::raii::Device &,
-		BufferData &,
-		uint32_t,
-		uint32_t,
-		byte *,
-		const vk::Format &,
+		const vk::PhysicalDevice &,
+		const vk::Device &,
+		const RawImage &,
 		vk::ImageTiling,
 		vk::ImageUsageFlags,
 		vk::MemoryPropertyFlags,
 		vk::ImageAspectFlags,
 		bool = false);
 
-// Create ImageData object from a file
+/* Create ImageData object from a file
 ImageData make_image(const vk::raii::CommandBuffer &,
 		const vk::raii::PhysicalDevice &,
 		const vk::raii::Device &,
@@ -1030,7 +1027,7 @@ inline ImageData make_image(const vk::raii::PhysicalDevice &phdev,
 
 	// Return image data
 	return img;
-}
+} */
 
 // Create a sampler from an ImageData object
 inline vk::raii::Sampler make_sampler(const vk::raii::Device &device, const ImageData &image)

@@ -64,6 +64,7 @@ add_compile_definitions(MAGICKCORE_HDRI_ENABLE=0)
 
 # Include directories
 include_directories(
+	${CMAKE_SOURCE_DIR}
 	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty
 	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/freetype/include
 	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/glm
@@ -74,6 +75,7 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/optix
 	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/taskflow
 	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/termcolor/include
+	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/tinyexr/deps/miniz
 	${OpenCV_INCLUDE_DIRS}
 	${ImageMagick_INCLUDE_DIRS}
 )

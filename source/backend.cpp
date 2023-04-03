@@ -782,11 +782,7 @@ void copy_image_to_buffer(const vk::raii::CommandBuffer &cmd,
 ImageData make_image(const vk::raii::CommandBuffer &cmd,
 		const vk::raii::PhysicalDevice &phdev,
 		const vk::raii::Device &device,
-		BufferData &buffer,
-		uint32_t width,
-		uint32_t height,
-		byte *data,
-		const vk::Format &format,
+		const RawImage &raw_image,
 		vk::ImageTiling tiling,
 		vk::ImageUsageFlags usage,
 		vk::MemoryPropertyFlags memory_properties,
@@ -795,41 +791,42 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 {
 	// Create the image
 	vk::Extent2D extent {
-		static_cast <uint32_t> (width),
-		static_cast <uint32_t> (height)
+		static_cast <uint32_t> (raw_image.width),
+		static_cast <uint32_t> (raw_image.height)
 	};
+
+	// Select format
+	vk::Format format = vk::Format::eR8G8B8A8Unorm;
+	if (raw_image.type == RawImage::RGBA_32_F)
+		format = vk::Format::eR32G32B32A32Sfloat;
 
 	ImageData img = ImageData(
 		phdev, device,
-		format,
-		extent,
-		tiling,
-		usage,
-		// vk::ImageLayout::eUndefined,
+		format, extent,
+		tiling, usage,
 		memory_properties,
 		aspect_mask, external
 	);
 
 	// Copy the image data into a staging buffer
-	vk::DeviceSize size = width * height * vk::blockSize(img.format);
+	vk::DeviceSize size = raw_image.width * raw_image.height * vk::blockSize(img.format);
 
-	buffer = BufferData(
-		phdev, device,
-		size,
+	BufferData buffer {
+		phdev, device, size,
 		vk::BufferUsageFlagBits::eTransferSrc,
 		vk::MemoryPropertyFlagBits::eHostVisible
 			| vk::MemoryPropertyFlagBits::eHostCoherent
-	);
+	};
 
 	// Copy the data
-	buffer.upload(data, size);
+	buffer.upload(raw_image.data);
 
 	img.transition_layout(cmd, vk::ImageLayout::eTransferDstOptimal);
 
 	// Copy the buffer to the image
 	copy_data_to_image(cmd,
 		buffer.buffer, img.image,
-		img.format, width, height
+		img.format, raw_image.width, raw_image.height
 	);
 
 	// TODO: transition_image_layout should go to the detail namespace...
@@ -838,7 +835,7 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 	return img;
 }
 
-// Create ImageData object from a file
+/* Create ImageData object from a file
 // TODO: delegate to the above function
 ImageData make_image(const vk::raii::CommandBuffer &cmd,
 		const vk::raii::PhysicalDevice &phdev,
@@ -861,10 +858,12 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 
 	byte *data = load_texture(filename, width, height, channels);
 
+	RawImage image = load_texture(filename);
+
 	// Create the image
 	vk::Extent2D extent {
-		static_cast <uint32_t> (width),
-		static_cast <uint32_t> (height)
+		static_cast <uint32_t> (image.width),
+		static_cast <uint32_t> (image.height)
 	};
 
 	// Get appropriate format
@@ -882,7 +881,7 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 	);
 
 	// Copy the image data into a staging buffer
-	vk::DeviceSize size = width * height * vk::blockSize(img.format);
+	vk::DeviceSize size = image.width * image.height * vk::blockSize(img.format);
 
 	buffer = BufferData(
 		phdev, device,
@@ -893,20 +892,20 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 	);
 
 	// Copy the data
-	buffer.upload(data, size);
+	buffer.upload(image.data);
 
 	img.transition_layout(cmd, vk::ImageLayout::eTransferDstOptimal);
 
 	// Copy the buffer to the image
 	copy_data_to_image(cmd,
 		buffer.buffer, img.image,
-		img.format, width, height
+		img.format, image.width, image.height
 	);
 
 	img.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
 
 	return img;
-}
+} */
 
 // Buffer addresses
 vk::DeviceAddress buffer_addr(const vk::raii::Device &device, const BufferData &bd)

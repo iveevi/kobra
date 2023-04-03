@@ -26,12 +26,17 @@ struct RawImage {
 	uint32_t height;
 	uint32_t channels;
 
+	enum {
+		RGBA_8_UI,
+		RGBA_32_F
+	} type;
+
         uint32_t size() const {
                 return width * height * channels;
         }
 
-	void write(const char *filename) {
-		stbi_write_png(filename,
+	void write(const std::string &filename) {
+		stbi_write_png(filename.c_str(),
 			width, height, channels,
 			data.data(), width * channels
 		);
@@ -39,7 +44,7 @@ struct RawImage {
 };
 
 // Load an image
-byte *load_texture(const std::filesystem::path &, int &, int &, int &);
+RawImage load_texture(const std::filesystem::path &);
 
 }
 

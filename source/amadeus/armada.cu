@@ -87,8 +87,12 @@ void ArmadaRTX::set_envmap(const std::string &path)
 {
 	// First load the environment map
 	const auto &map = m_texture_loader->load_texture(path);
-	m_launch_info.environment_map = cuda::import_vulkan_texture(*m_device, map);
+	
 	m_launch_info.has_environment_map = true;
+	if (map.format == vk::Format::eR32G32B32A32Sfloat)
+		m_launch_info.environment_map = cuda::import_vulkan_texture_32f(*m_device, map);
+	else
+		m_launch_info.environment_map = cuda::import_vulkan_texture(*m_device, map);
 }
 
 void ArmadaRTX::update_triangle_light_buffers
@@ -170,6 +174,7 @@ void ArmadaRTX::update_triangle_light_buffers
 			}
 
 			// TODO: perform these operations directly on the GPU
+			// IF the submesh is large enough
 			if (transform_daemon && transform_daemon->changed(id)) {
 				std::vector <glm::vec3> transformed_vertices(submesh->vertices.size());
 				for (int i = 0; i < submesh->vertices.size(); i++)

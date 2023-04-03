@@ -12,6 +12,5 @@ void main()
 {
 	direction = position;
 	gl_Position = proj * view * vec4(position, 1.0);
-	gl_Position.y = -gl_Position.y;
 	gl_Position = gl_Position.xyww;
 }
