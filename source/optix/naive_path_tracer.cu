@@ -175,7 +175,7 @@ void make_ray(uint3 idx,
 	// TODO: use a Blue noise sequence
 
 	// Jittered halton
-	seed = make_float3(idx.x, idx.y, 0);
+	seed = make_float3(idx.x, idx.y, parameters.samples);
 	int xoff = rand_uniform(parameters.resolution.x, seed);
 	int yoff = rand_uniform(parameters.resolution.y, seed);
 
@@ -192,7 +192,6 @@ void make_ray(uint3 idx,
 
 	origin = to_f3(parameters.camera.center);
 	direction = normalize(d.x * U + d.y * V + W);
-	seed.z = parameters.time;
 }
 
 // Accumulatoin helper
@@ -292,14 +291,16 @@ extern "C" __global__ void __raygen__()
 		specular = (length(sh.mat.specular) > 0);
 		x = sh.x;
 
-		// Russian roulette
-		float q = 1.0f - min(max(0.05f, beta.y), 1.0f);
-		float r = fract(seed.x);
+		if (depth > 2) {
+                        // Russian roulette
+                        float q = 1.0f - min(max(0.05f, beta.y), 1.0f);
+                        float r = fract(seed.x);
 
-		if (parameters.russian_roulette && r < q)
-			break;
-		else if (parameters.russian_roulette)
-			beta /= 1.0f - q;
+                        if (parameters.russian_roulette && r < q)
+                                break;
+                        else if (parameters.russian_roulette)
+                                beta /= 1.0f - q;
+                }
 	}
 
 	// Check for NaNs
@@ -379,7 +380,7 @@ extern "C" __global__ void __miss__()
 
 	float4 c = make_float4(0);
 	if (parameters.has_environment_map)
-		c = tex2D <float4> (parameters.environment_map, u, v);
+		c = tex2D <float4> (parameters.environment_map, u, 1 - v);
 
 	sh->mat.emission = make_float3(c);
 	sh->n = make_float3(0.0f);

@@ -185,7 +185,7 @@ LightVisibility  query_occlusion(float3 origin, float3 dir, float R, bool no_hit
 	optixTrace(parameters.traversable,
 		origin, dir,
 		0, R - eps, 0,
-		OptixVisibilityMask(0b1),
+		OptixVisibilityMask(0xFF),
 		flags,
 		1, 2, 1, j0, j1
 	);
@@ -229,8 +229,8 @@ float3 Ld_light(const TriangleLight &light, const SurfaceHit &sh, int index, See
 	float3 wi = normalize(point - sh.x);
 	float R = length(point - sh.x);
 
-	LightVisibility visible = query_occlusion(sh.x, wi, R, true);
-	if (visible.index == -1) {
+	LightVisibility visible = query_occlusion(sh.x, wi, 1.5 * R, false);
+	if (visible.index == index) {
 		float3 f = brdf(sh, wi, eDiffuse);
 		float geometric = abs(dot(sh.n, wi));
 		float light_dot = abs(dot(light.normal(), wi));
@@ -250,7 +250,8 @@ float3 Ld_light(const TriangleLight &light, const SurfaceHit &sh, int index, See
 
 	visible = query_occlusion(sh.x, wi, 1e6f, false);
 	if (visible.index == index) {
-		R = light.intersects(sh.x, wi);
+                // TODO: get distance from query...
+		R = visible.distance; // light.intersects(sh.x, wi);
 		float geometric = abs(dot(sh.n, wi));
 		float light_dot = abs(dot(light.normal(), wi));
 		float pdf_nee = (R * R)/(light.area() * light_dot);
@@ -308,7 +309,7 @@ float3 Ld_Environment(const SurfaceHit &sh, Seed &seed)
 		float u = atan2(wi.x, wi.z)/(2.0f * M_PI) + 0.5f;
 		float v = asin(wi.y)/M_PI + 0.5f;
 
-		float4 sample = tex2D <float4> (parameters.environment_map, u, v);
+		float4 sample = tex2D <float4> (parameters.environment_map, u, 1 - v);
 		float3 Li = make_float3(sample);
 
 		float geometric = abs(dot(sh.n, wi));
@@ -348,7 +349,7 @@ void trace(OptixTraversableHandle handle, int hit_program, int stride, float3 or
 	optixTrace(handle,
 		origin, direction,
 		0.0f, 1e16f, 0.0f,
-		OptixVisibilityMask(0b11),
+		OptixVisibilityMask(0xFF),
 		OPTIX_RAY_FLAG_DISABLE_ANYHIT,
 		hit_program, stride, 0,
 		i0, i1
@@ -509,7 +510,7 @@ extern "C" __global__ void __raygen__()
 		float q = 1.0f - min(max(0.05f, beta.y), 1.0f);
 		float r = fract(seed.x);
 
-		if (parameters.russian_roulette && r < q)
+		if (depth > 2 && parameters.russian_roulette && r < q)
 			break;
 		else if (parameters.russian_roulette)
 			beta /= 1.0f - q;
@@ -604,7 +605,7 @@ extern "C" __global__ void __miss__()
 
 	float4 c = make_float4(0);
 	if (parameters.has_environment_map)
-		c = tex2D <float4> (parameters.environment_map, u, v);
+		c = tex2D <float4> (parameters.environment_map, u, 1 - v);
 
 	sh->mat.emission = make_float3(c);
 	sh->n = make_float3(0.0f);

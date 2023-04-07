@@ -209,6 +209,7 @@ void ArmadaRTX::update_triangle_light_buffers
 }
 
 // Update the light buffers if needed
+// TODO: handle extra lights here
 void ArmadaRTX::update_quad_light_buffers
 		(const std::vector <const Light *> &lights,
 		const std::vector <const Transform *> &light_transforms)
@@ -587,9 +588,6 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
         if (updated) {
 		m_tlas.null = false;
 		m_tlas.last_updated = clock();
-                m_tlas.handle = m_system->build_tlas(
-			m_attachments[m_previous_attachment]->m_hit_group_count
-		);
         }
 
 	// Generate material buffer if needed
@@ -742,7 +740,13 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 	if (attachment_time < m_tlas.last_updated) {
 		// Create the acceleration structure
 		m_tlas.times[m_previous_attachment] = m_tlas.last_updated;
-                handle = m_tlas.handle;
+                // handle = m_tlas.handle;
+                // TODO: remove the cache handle...
+                // or cache one per group?
+                // or rebuild each time?
+                handle = m_system->build_tlas(
+			m_attachments[m_previous_attachment]->m_hit_group_count
+		);
 	}
 
 	// Update the cached ecs

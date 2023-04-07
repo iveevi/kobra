@@ -296,6 +296,7 @@ ret load_attachment()
 {
 	std::vector <std::string> include_paths = {
 		KOBRA_DIR,
+		KOBRA_DIR "/thirdparty/",
 		KOBRA_DIR "/thirdparty/glm",
 		KOBRA_DIR "/thirdparty/optix",
 		KOBRA_DIR "/thirdparty/termcolor/include",
