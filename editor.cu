@@ -15,6 +15,8 @@ struct EntityProperties;
 // TODO: info tab that shows logging and framerate...
 // TODO: viewport attachment
 
+Application g_application;
+
 enum Mode : uint32_t {
 	eRasterizer = 0,
 	eRaytracer = 1,
@@ -105,6 +107,8 @@ struct Editor : public kobra::BaseApp {
 		std::vector <uint8_t> capture_data;
 		std::string current_capture_path;
 	} m_input;
+
+        std::shared_ptr <EditorRenderer> m_editor_renderer;
 
 	Editor(const vk::raii::PhysicalDevice &, const std::vector <const char *> &);
 	~Editor();
@@ -935,6 +939,9 @@ public:
 	}
 };
 
+static const char *environment_map_path = KOBRA_DIR
+        "/resources/skies/background_1.jpg";
+
 // Editor implementation
 Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 		const std::vector <const char *> &extensions)
@@ -953,7 +960,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	// Load environment map
 	// TODO: load HDR...
 	kobra::ImageData &environment_map = m_texture_loader
-		.load_texture(KOBRA_DIR "/resources/skies/background_1.jpg");
+		.load_texture(environment_map_path);
 
 	m_irradiance_computer = kobra::engine::IrradianceComputer(
 		get_context(), environment_map,
@@ -1046,7 +1053,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	);
 
 	// m_renderers.armada_rtx->set_envmap(KOBRA_DIR "/resources/skies/background_1.jpg");
-	m_renderers.armada_rtx->set_envmap("/home/venki/downloads/095_hdrmaps_com_free.exr");
+	m_renderers.armada_rtx->set_envmap(environment_map_path);
 
 	// Create the denoiser layer
 	m_renderers.denoiser = kobra::layers::Denoiser::make(
@@ -1120,6 +1127,9 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
         m_ui->attach(m_ui_attachments.viewport);
 	m_ui->attach(scene_graph);
 	// TODO: scene graph...
+
+        // EditorRenderer
+        m_editor_renderer = std::make_shared <EditorRenderer> (get_context());
 
 	// Load and set the icon
 	std::string icon_path = KOBRA_DIR "/kobra_icon.png";
@@ -1224,7 +1234,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 		// .pipeline_package = "environment",
 	};
 
-	params.environment_map = "/home/venki/downloads/095_hdrmaps_com_free.exr";
+	params.environment_map = environment_map_path;
 
 	cmd.begin({});
 		// TODO: also see the normal and albedo and depth buffers from
@@ -1295,6 +1305,21 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 				m_viewport.image.extent
 			);
 		}
+
+                // Editor renderer
+                RenderInfo render_info {
+                        .camera = m_viewport.camera,
+                        .camera_transform = m_viewport.camera_transform,
+                        .cmd = cmd,
+                        .framebuffer = m_viewport.framebuffer,
+                        .extent = m_viewport.image.extent
+                        // .framebuffer = framebuffer,
+                        // .extent = window.m_extent
+                };
+
+                std::vector <Entity> renderable_entities = m_scene.ecs->tuple_entities <Renderable> ();
+                m_editor_renderer->render_gbuffer(render_info, renderable_entities);
+                m_editor_renderer->render_present(render_info);
 
 		// m_irradiance_computer.sample(cmd);
 		/* if (m_irradiance_computer.sample(cmd)

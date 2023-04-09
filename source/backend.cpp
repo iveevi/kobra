@@ -392,6 +392,7 @@ vk::raii::Device make_device(const vk::raii::PhysicalDevice &phdev,
 	vk::PhysicalDeviceFeatures device_features;
 	device_features.independentBlend = true;
 	device_features.fillModeNonSolid = true;
+        device_features.geometryShader = true;
 
 	// Create the device
 	vk::DeviceCreateInfo device_info {

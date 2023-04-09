@@ -156,6 +156,17 @@ public:
 		return ret;
 	}
 
+	template <class ... Ts>
+        std::vector <Entity> tuple_entities() const {
+                std::vector <Entity> ret;
+                for (int i = 0; i < size(); i++) {
+                        if (exists <Ts...> (i))
+                                ret.push_back(get_entity(i));
+                }
+
+                return ret;
+        }
+
 	// Add a component
 	template <class T, class ... Args>
 	void add(int i, Args ... args) {
@@ -297,7 +308,6 @@ KOBRA_RET_SHARED(Renderable, RenderablePtr, rasterizers);
 
 // Entity class, acts like a pointer to a component
 class Entity {
-	int32_t		id = -1;
 	ECS		*ecs = nullptr;
 
 	// Assert valid ECS
@@ -320,6 +330,7 @@ class Entity {
 	Entity(std::string name_, uint32_t id_, ECS *ecs_)
 		: name(name_), id(id_), ecs(ecs_) {}
 public:
+	int32_t		id = -1;
 	std::string	name = "";
 
 	// Default

@@ -161,7 +161,7 @@ target_link_libraries(stress
 )
 
 # Set executable sources -- Stress
-add_executable(editor editor.cu $<TARGET_OBJECTS:Kobra_COMMON>)
+add_executable(editor editor.cu editor/renderer.cu editor/shaders.cpp $<TARGET_OBJECTS:Kobra_COMMON>)
 
 target_link_libraries(editor
 	${Vulkan_LIBRARIES}

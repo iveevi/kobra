@@ -666,15 +666,15 @@ struct ImageData {
 	// Blank image
 	static ImageData blank(const vk::raii::PhysicalDevice &phdev,
 			const vk::raii::Device &device) {
-		return ImageData(phdev, device,
+		return ImageData {
+                        phdev, device,
 			vk::Format::eR8G8B8A8Unorm,
-			vk::Extent2D(1, 1),
+			vk::Extent2D {1, 1},
 			vk::ImageTiling::eOptimal,
 			vk::ImageUsageFlagBits::eSampled,
-			// vk::ImageLayout::eUndefined,
 			vk::MemoryPropertyFlagBits::eDeviceLocal,
 			vk::ImageAspectFlagBits::eColor
-		);
+                };
 	}
 };
 
