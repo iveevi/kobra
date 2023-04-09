@@ -720,14 +720,7 @@ public:
 		ImGui::Begin("Viewport", nullptr, ImGuiWindowFlags_MenuBar);
 
 		if (ImGui::BeginMenuBar()) {
-			// TODO: show current renderer
-			if (ImGui::BeginMenu("Renderers")) {
-				if (ImGui::MenuItem("Rasterizer"))
-					m_editor->m_renderers.mode = eRasterizer;
-				if (ImGui::MenuItem("Raytracer"))
-					m_editor->m_renderers.mode = eRaytracer;
-				ImGui::EndMenu();
-			}
+                        m_editor->m_editor_renderer->menu();
 
 			// Camera settings
 			if (ImGui::BeginMenu("Camera")) {
@@ -1237,7 +1230,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 	params.environment_map = environment_map_path;
 
 	cmd.begin({});
-		// TODO: also see the normal and albedo and depth buffers from
+		/* TODO: also see the normal and albedo and depth buffers from
 		// deferred renderer
 		// TODO: drop down menu for selecting the renderer
 		if (m_renderers.mode) {
@@ -1304,7 +1297,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 				m_viewport.framebuffer,
 				m_viewport.image.extent
 			);
-		}
+		} */
 
                 // Editor renderer
                 RenderInfo render_info {
@@ -1318,8 +1311,9 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
                 };
 
                 std::vector <Entity> renderable_entities = m_scene.ecs->tuple_entities <Renderable> ();
-                m_editor_renderer->render_gbuffer(render_info, renderable_entities);
-                m_editor_renderer->render_present(render_info);
+                m_editor_renderer->render(render_info, renderable_entities);
+                /* m_editor_renderer->render_gbuffer(render_info, renderable_entities);
+                m_editor_renderer->render_present(render_info); */
 
 		// m_irradiance_computer.sample(cmd);
 		/* if (m_irradiance_computer.sample(cmd)

@@ -164,7 +164,7 @@ vk::DescriptorImageInfo TextureLoader::make_descriptor(const std::string &path)
 }
 
 // Bind an image to a descriptor set
-void TextureLoader::bind(const vk::raii::DescriptorSet &dset, const std::string &path,uint32_t binding)
+void TextureLoader::bind(const vk::raii::DescriptorSet &dset, const std::string &path, uint32_t binding)
 {
 	auto descriptor = make_descriptor(path);
 

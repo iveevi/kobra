@@ -1,5 +1,101 @@
 #include "common.hpp"
+
+// Editor renderer shaders
+extern const char *gbuffer_vert_shader;
+extern const char *gbuffer_frag_shader;
+
+extern const char *albedo_vert_shader;
+extern const char *albedo_frag_shader;
+
+// TODO: use a simple mesh shader for this...
+extern const char *triangulation_vert_shader;
+extern const char *triangulation_frag_shader;
+
+extern const char *sobel_comp_shader;
+
+// Static variables
+static const std::vector <DescriptorSetLayoutBinding> gbuffer_bindings {
+        // Albedo for opacity masking
+	DescriptorSetLayoutBinding {
+		0, vk::DescriptorType::eCombinedImageSampler,
+		1, vk::ShaderStageFlagBits::eFragment
+	},
+
+        // Normal map
+	DescriptorSetLayoutBinding {
+		1, vk::DescriptorType::eCombinedImageSampler,
+		1, vk::ShaderStageFlagBits::eFragment
+	}
+};
+
+static const std::vector <DescriptorSetLayoutBinding> albedo_bindings {
+        // Albedo
+	DescriptorSetLayoutBinding {
+		0, vk::DescriptorType::eCombinedImageSampler,
+		1, vk::ShaderStageFlagBits::eFragment
+	},
+};
+
+static const std::vector <DescriptorSetLayoutBinding> triangulation_bindings {
+        // Position
+	DescriptorSetLayoutBinding {
+		0, vk::DescriptorType::eCombinedImageSampler,
+		1, vk::ShaderStageFlagBits::eFragment
+	},
+
+        // Normal
+        DescriptorSetLayoutBinding {
+		1, vk::DescriptorType::eCombinedImageSampler,
+		1, vk::ShaderStageFlagBits::eFragment
+	},
+
+        // Material index
+        DescriptorSetLayoutBinding {
+		2, vk::DescriptorType::eCombinedImageSampler,
+		1, vk::ShaderStageFlagBits::eFragment
+	},
+
+        // Extra
+        // TODO: tabular system for this and the shaders...
+        DescriptorSetLayoutBinding {
+                3, vk::DescriptorType::eCombinedImageSampler,
+                1, vk::ShaderStageFlagBits::eFragment
+        },
+};
+
+static const std::vector <DescriptorSetLayoutBinding> sobel_bindings {
+        // Position
+        DescriptorSetLayoutBinding {
+                0, vk::DescriptorType::eStorageImage,
+                1, vk::ShaderStageFlagBits::eCompute
+        },
+
+        // Output
+        DescriptorSetLayoutBinding {
+                1, vk::DescriptorType::eStorageImage,
+                1, vk::ShaderStageFlagBits::eCompute
+        },
+};
+
+// Push constants for editor renderer
+struct GBuffer_PushConstants {
+	glm::mat4 model;
+	glm::mat4 view;
+	glm::mat4 projection;
+	int material_index;
+        int texture_status;
+};
+
+struct Albedo_PushConstants {
+	glm::mat4 model;
+	glm::mat4 view;
+	glm::mat4 projection;
+
+        glm::vec4 albedo;
+        int has_albedo;
+};
         
+// Constructor
 EditorRenderer::EditorRenderer(const Context &context)
                 : phdev(context.phdev),
                 device(context.device),
@@ -9,104 +105,14 @@ EditorRenderer::EditorRenderer(const Context &context)
                 extent(context.extent)
 {
         resize(context.extent);
-        configure_gbuffer_pipeline(context.extent);
-        configure_present_pipeline(context.swapchain_format, context.extent);
+        configure_gbuffer_pipeline();
+        configure_albedo_pipeline(context.swapchain_format);
+        configure_triangulation_pipeline(context.swapchain_format);
+        configure_sobel_pipeline();
 
-        // Sobel filter compute shader
-        ShaderProgram sobel_compute_shader {
-                sobel_comp_shader,
-                vk::ShaderStageFlagBits::eCompute
-        };
-
-        vk::raii::ShaderModule sobel_compute_module = *sobel_compute_shader.compile(*device);
-
-        // Create pipeline layout
-        sobel_dsl = make_descriptor_set_layout(*device, sobel_bindings);
-
-        sobel_ppl = vk::raii::PipelineLayout {
-                *device,
-                vk::PipelineLayoutCreateInfo {
-                        vk::PipelineLayoutCreateFlags {},
-                        *sobel_dsl, {}
-                }
-        };
-
-        // Create pipeline
-        sobel_pipeline = vk::raii::Pipeline {
-                *device,
-                nullptr,
-                vk::ComputePipelineCreateInfo {
-                        vk::PipelineCreateFlags {},
-                        vk::PipelineShaderStageCreateInfo {
-                                vk::PipelineShaderStageCreateFlags {},
-                                vk::ShaderStageFlagBits::eCompute,
-                                *sobel_compute_module,
-                                "main"
-                        },
-                        *sobel_ppl,
-                        nullptr
-                }
-        };
-
-        // Create image and descriptor set for sobel output
-        sobel_output = ImageData {
-                *phdev, *device,
-                vk::Format::eR32Sfloat,
-                vk::Extent2D { extent.width, extent.height},
-                vk::ImageTiling::eOptimal,
-                vk::ImageUsageFlagBits::eStorage,
-                vk::MemoryPropertyFlagBits::eDeviceLocal,
-                vk::ImageAspectFlagBits::eColor
-        };
-
-        sobel_dset = std::move(vk::raii::DescriptorSets {
-                *device,
-                vk::DescriptorSetAllocateInfo {
-                        **descriptor_pool,
-                        *sobel_dsl
-                }
-        }.front());
-
-        // Bind image to descriptor set
-        std::array <vk::DescriptorImageInfo, 2> sobel_dset_image_infos {
-                vk::DescriptorImageInfo {
-                        nullptr,
-                        *framebuffer_images.normal.view,
-                        vk::ImageLayout::eGeneral
-                },
-
-                vk::DescriptorImageInfo {
-                        nullptr,
-                        *sobel_output.view,
-                        vk::ImageLayout::eGeneral
-                },
-        };
-
-        std::array <vk::WriteDescriptorSet, 2> sobel_dset_writes {
-                vk::WriteDescriptorSet {
-                        *sobel_dset,
-                        0, 0,
-                        vk::DescriptorType::eStorageImage,
-                        sobel_dset_image_infos[0],
-                },
-
-                vk::WriteDescriptorSet {
-                        *sobel_dset,
-                        1, 0,
-                        vk::DescriptorType::eStorageImage,
-                        sobel_dset_image_infos[1],
-                },
-        };
-
-        device->updateDescriptorSets(sobel_dset_writes, nullptr);
-
-        // Create a sampler for the sobel output
-        sobel_output_sampler = make_sampler(*device, sobel_output);
-        
-        bind_ds(*device, present_dset, sobel_output_sampler, sobel_output, 3);
 }
 
-void EditorRenderer::configure_gbuffer_pipeline(const vk::Extent2D &extent)
+void EditorRenderer::configure_gbuffer_pipeline()
 {
         // G-buffer render pass configuration
         std::vector <vk::Format> attachment_formats {
@@ -115,7 +121,7 @@ void EditorRenderer::configure_gbuffer_pipeline(const vk::Extent2D &extent)
                 framebuffer_images.material_index.format,
         };
 
-        gbuffer_rp = make_render_pass(*device,
+        gbuffer.render_pass = make_render_pass(*device,
                 attachment_formats,
                 {
                         vk::AttachmentLoadOp::eClear,
@@ -136,7 +142,7 @@ void EditorRenderer::configure_gbuffer_pipeline(const vk::Extent2D &extent)
 
         vk::FramebufferCreateInfo fb_info {
                 vk::FramebufferCreateFlags {},
-                *gbuffer_rp,
+                *gbuffer.render_pass,
                 attachment_views,
                 extent.width, extent.height, 1
         };
@@ -144,18 +150,18 @@ void EditorRenderer::configure_gbuffer_pipeline(const vk::Extent2D &extent)
         gbuffer_fb = vk::raii::Framebuffer {*device, fb_info};
 
         // G-buffer pipeline
-        gbuffer_dsl = make_descriptor_set_layout(*device, gbuffer_bindings);
+        gbuffer.dsl = make_descriptor_set_layout(*device, gbuffer_bindings);
 
         vk::PushConstantRange push_constant_range {
                 vk::ShaderStageFlagBits::eVertex,
-                0, sizeof(PushConstants)
+                0, sizeof(GBuffer_PushConstants)
         };
 
-        gbuffer_ppl = vk::raii::PipelineLayout {
+        gbuffer.pipeline_layout = vk::raii::PipelineLayout {
                 *device,
                 vk::PipelineLayoutCreateInfo {
                         vk::PipelineLayoutCreateFlags {},
-                        *gbuffer_dsl,
+                        *gbuffer.dsl,
                         push_constant_range
                 }
         };
@@ -172,12 +178,12 @@ void EditorRenderer::configure_gbuffer_pipeline(const vk::Extent2D &extent)
         };
 
         GraphicsPipelineInfo gbuffer_grp_info {
-                *device, gbuffer_rp,
+                *device, gbuffer.render_pass,
                 nullptr, nullptr,
                 nullptr, nullptr,
                 Vertex::vertex_binding(),
                 Vertex::vertex_attributes(),
-                gbuffer_ppl
+                gbuffer.pipeline_layout,
         };
 
         gbuffer_grp_info.vertex_shader = std::move(*gbuffer_vertex.compile(*device));
@@ -185,13 +191,66 @@ void EditorRenderer::configure_gbuffer_pipeline(const vk::Extent2D &extent)
         gbuffer_grp_info.blend_attachments = { true, true, false };
         gbuffer_grp_info.cull_mode = vk::CullModeFlagBits::eNone;
 
-        gbuffer_pipeline = make_graphics_pipeline(gbuffer_grp_info);
+        gbuffer.pipeline = make_graphics_pipeline(gbuffer_grp_info);
 }
 
-void EditorRenderer::configure_present_pipeline(const vk::Format &swapchain_format, const vk::Extent2D &extent)
+void EditorRenderer::configure_albedo_pipeline(const vk::Format &swapchain_format)
 {
-        // Present render pass configuration
-        present_rp = make_render_pass(*device,
+        albedo.render_pass = make_render_pass(*device,
+                { swapchain_format },
+                { vk::AttachmentLoadOp::eClear },
+                vk::Format::eD32Sfloat,
+                vk::AttachmentLoadOp::eClear
+        );
+
+        // G-buffer pipeline
+        albedo.dsl = make_descriptor_set_layout(*device, albedo_bindings);
+
+        vk::PushConstantRange push_constant_range {
+                vk::ShaderStageFlagBits::eVertex,
+                0, sizeof(Albedo_PushConstants)
+        };
+
+        albedo.pipeline_layout = vk::raii::PipelineLayout {
+                *device,
+                vk::PipelineLayoutCreateInfo {
+                        vk::PipelineLayoutCreateFlags {},
+                        *albedo.dsl,
+                        push_constant_range
+                }
+        };
+
+        // Load shaders and compile pipeline
+        ShaderProgram albedo_vertex {
+                albedo_vert_shader,
+                vk::ShaderStageFlagBits::eVertex
+        };
+
+        ShaderProgram albedo_fragment {
+                albedo_frag_shader,
+                vk::ShaderStageFlagBits::eFragment
+        };
+
+        GraphicsPipelineInfo albedo_grp_info {
+                *device, albedo.render_pass,
+                nullptr, nullptr,
+                nullptr, nullptr,
+                Vertex::vertex_binding(),
+                Vertex::vertex_attributes(),
+                albedo.pipeline_layout,
+        };
+
+        albedo_grp_info.vertex_shader = std::move(*albedo_vertex.compile(*device));
+        albedo_grp_info.fragment_shader = std::move(*albedo_fragment.compile(*device));
+        albedo_grp_info.cull_mode = vk::CullModeFlagBits::eNone;
+
+        albedo.pipeline = make_graphics_pipeline(albedo_grp_info);
+}
+
+void EditorRenderer::configure_triangulation_pipeline(const vk::Format &swapchain_format)
+{
+        // triangulation render pass configuration
+        triangulation.render_pass = make_render_pass(*device,
                 { swapchain_format },
                 { vk::AttachmentLoadOp::eClear },
                 vk::Format::eD32Sfloat, // TODO: remove the necessity
@@ -200,74 +259,74 @@ void EditorRenderer::configure_present_pipeline(const vk::Format &swapchain_form
                 vk::AttachmentLoadOp::eClear
         );
 
-        // Present pipeline
-        present_dsl = make_descriptor_set_layout(*device, present_bindings);
+        // triangulation pipeline
+        triangulation.dsl = make_descriptor_set_layout(*device, triangulation_bindings);
 
-        vk::PushConstantRange push_constant_range {
+        /* vk::PushConstantRange push_constant_range {
                 vk::ShaderStageFlagBits::eFragment,
-                0, sizeof(PushConstants)
-        };
+                0, sizeof(GBuffer_PushConstants)
+        }; */
 
-        present_ppl = vk::raii::PipelineLayout {
+        triangulation.pipeline_layout = vk::raii::PipelineLayout {
                 *device,
                 vk::PipelineLayoutCreateInfo {
                         vk::PipelineLayoutCreateFlags {},
-                        *present_dsl,
-                        push_constant_range
+                        *triangulation.dsl,
+                        nullptr
                 }
         };
 
         // Vertex format
-        struct PresentVertex {
+        struct TriangulationVertex {
                 glm::vec3 position;
                 glm::vec2 texcoord;
         };
 
         vk::VertexInputBindingDescription vertex_binding {
-                0, sizeof(PresentVertex),
+                0, sizeof(TriangulationVertex),
                 vk::VertexInputRate::eVertex
         };
 
         std::vector <vk::VertexInputAttributeDescription> vertex_attributes {
                 vk::VertexInputAttributeDescription {
                         0, 0, vk::Format::eR32G32B32Sfloat,
-                        offsetof(PresentVertex, position)
+                        offsetof(TriangulationVertex, position)
                 },
                 vk::VertexInputAttributeDescription {
                         1, 0, vk::Format::eR32G32Sfloat,
-                        offsetof(PresentVertex, texcoord)
+                        offsetof(TriangulationVertex, texcoord)
                 }
         };
 
         // Load shaders and compile pipeline
-        ShaderProgram present_vertex {
-                present_vert_shader,
+        ShaderProgram triangulation_vertex {
+                triangulation_vert_shader,
                 vk::ShaderStageFlagBits::eVertex
         };
 
-        ShaderProgram present_fragment {
-                present_frag_shader,
+        ShaderProgram triangulation_fragment {
+                triangulation_frag_shader,
                 vk::ShaderStageFlagBits::eFragment
         };
 
-        GraphicsPipelineInfo present_grp_info {
-                *device, present_rp,
+        GraphicsPipelineInfo triangulation_grp_info {
+                *device, triangulation.render_pass,
                 nullptr, nullptr,
                 nullptr, nullptr,
                 vertex_binding,
                 vertex_attributes,
-                present_ppl
+                triangulation.pipeline_layout
         };
 
-        present_grp_info.vertex_shader = std::move(*present_vertex.compile(*device));
-        present_grp_info.fragment_shader = std::move(*present_fragment.compile(*device));
-        // present_grp_info.vertex_shader = make_shader_module(*device, KOBRA_SHADERS_DIR "/editor_renderer.glsl");
-        present_grp_info.cull_mode = vk::CullModeFlagBits::eNone;
+        triangulation_grp_info.vertex_shader = std::move(*triangulation_vertex.compile(*device));
+        triangulation_grp_info.fragment_shader = std::move(*triangulation_fragment.compile(*device));
+        // triangulation_grp_info.vertex_shader = make_shader_module(*device, KOBRA_SHADERS_DIR "/editor_renderer.glsl");
+        triangulation_grp_info.cull_mode = vk::CullModeFlagBits::eNone;
 
-        present_pipeline = make_graphics_pipeline(present_grp_info);
+        triangulation.pipeline = make_graphics_pipeline(triangulation_grp_info);
 
         // Allocate buffer resources
-        std::vector <PresentVertex> vertices {
+        std::vector <TriangulationVertex> vertices {
                 // Triangle 1
                 { { -1.0f, -1.0f, 0.0f }, { 0.0f, 0.0f } },
                 { {  1.0f, -1.0f, 0.0f }, { 1.0f, 0.0f } },
@@ -279,22 +338,22 @@ void EditorRenderer::configure_present_pipeline(const vk::Format &swapchain_form
                 { { -1.0f,  1.0f, 0.0f }, { 0.0f, 1.0f } }
         };
 
-        present_mesh = BufferData {
+        triangulation.mesh = BufferData {
                 *phdev, *device,
-                vertices.size() * sizeof(PresentVertex),
+                vertices.size() * sizeof(TriangulationVertex),
                 vk::BufferUsageFlagBits::eVertexBuffer,
                 vk::MemoryPropertyFlagBits::eHostVisible
                         | vk::MemoryPropertyFlagBits::eHostCoherent
         };
 
-        present_mesh.upload(vertices);
+        triangulation.mesh.upload(vertices);
 
         // Configure descriptor set
-        present_dset = std::move(vk::raii::DescriptorSets {
+        triangulation.dset = std::move(vk::raii::DescriptorSets {
                 *device,
                 vk::DescriptorSetAllocateInfo {
                         **descriptor_pool,
-                        *present_dsl
+                        *triangulation.dsl
                 }
         }.front());
 
@@ -320,14 +379,110 @@ void EditorRenderer::configure_present_pipeline(const vk::Format &swapchain_form
                 }
         };
 
-        bind_ds(*device, present_dset, framebuffer_images.position_sampler, framebuffer_images.position, 0);
-        bind_ds(*device, present_dset, framebuffer_images.normal_sampler, framebuffer_images.normal, 1);
-        bind_ds(*device, present_dset, framebuffer_images.material_index_sampler, framebuffer_images.material_index, 2);
+        bind_ds(*device, triangulation.dset, framebuffer_images.position_sampler, framebuffer_images.position, 0);
+        bind_ds(*device, triangulation.dset, framebuffer_images.normal_sampler, framebuffer_images.normal, 1);
+        bind_ds(*device, triangulation.dset, framebuffer_images.material_index_sampler, framebuffer_images.material_index, 2);
+}
+
+void EditorRenderer::configure_sobel_pipeline()
+{
+        // Sobel filter compute shader
+        ShaderProgram sobel_compute_shader {
+                sobel_comp_shader,
+                vk::ShaderStageFlagBits::eCompute
+        };
+
+        vk::raii::ShaderModule sobel_compute_module = *sobel_compute_shader.compile(*device);
+
+        // Create pipeline layout
+        sobel.dsl = make_descriptor_set_layout(*device, sobel_bindings);
+
+        sobel.pipeline_layout = vk::raii::PipelineLayout {
+                *device,
+                vk::PipelineLayoutCreateInfo {
+                        vk::PipelineLayoutCreateFlags {},
+                        *sobel.dsl, {}
+                }
+        };
+
+        // Create pipeline
+        sobel.pipeline = vk::raii::Pipeline {
+                *device,
+                nullptr,
+                vk::ComputePipelineCreateInfo {
+                        vk::PipelineCreateFlags {},
+                        vk::PipelineShaderStageCreateInfo {
+                                vk::PipelineShaderStageCreateFlags {},
+                                vk::ShaderStageFlagBits::eCompute,
+                                *sobel_compute_module,
+                                "main"
+                        },
+                        *sobel.pipeline_layout,
+                        nullptr
+                }
+        };
+
+        // Create image and descriptor set for sobel output
+        sobel.output = ImageData {
+                *phdev, *device,
+                vk::Format::eR32Sfloat,
+                vk::Extent2D { extent.width, extent.height},
+                vk::ImageTiling::eOptimal,
+                vk::ImageUsageFlagBits::eStorage,
+                vk::MemoryPropertyFlagBits::eDeviceLocal,
+                vk::ImageAspectFlagBits::eColor
+        };
+
+        sobel.dset = std::move(vk::raii::DescriptorSets {
+                *device,
+                vk::DescriptorSetAllocateInfo {
+                        **descriptor_pool,
+                        *sobel.dsl
+                }
+        }.front());
+
+        // Bind image to descriptor set
+        std::array <vk::DescriptorImageInfo, 2> sobel_dset_image_infos {
+                vk::DescriptorImageInfo {
+                        nullptr,
+                        *framebuffer_images.material_index.view,
+                        vk::ImageLayout::eGeneral
+                },
+
+                vk::DescriptorImageInfo {
+                        nullptr,
+                        *sobel.output.view,
+                        vk::ImageLayout::eGeneral
+                },
+        };
+
+        std::array <vk::WriteDescriptorSet, 2> sobel_dset_writes {
+                vk::WriteDescriptorSet {
+                        *sobel.dset,
+                        0, 0,
+                        vk::DescriptorType::eStorageImage,
+                        sobel_dset_image_infos[0],
+                },
+
+                vk::WriteDescriptorSet {
+                        *sobel.dset,
+                        1, 0,
+                        vk::DescriptorType::eStorageImage,
+                        sobel_dset_image_infos[1],
+                },
+        };
+
+        device->updateDescriptorSets(sobel_dset_writes, nullptr);
+
+        // Create a sampler for the sobel output
+        sobel.output_sampler = make_sampler(*device, sobel.output);
+        bind_ds(*device, triangulation.dset, sobel.output_sampler, sobel.output, 3);
 }
         
 void EditorRenderer::resize(const vk::Extent2D &extent)
 {
         static vk::Format formats[] = {
+                vk::Format::eR32G32B32A32Sfloat,
                 vk::Format::eR32G32B32A32Sfloat,
                 vk::Format::eR32G32B32A32Sfloat,
                 vk::Format::eR32Sint // TODO: increase # of components to add
@@ -356,19 +511,9 @@ void EditorRenderer::resize(const vk::Extent2D &extent)
 
         framebuffer_images.material_index = ImageData {
                 *phdev, *device,
-                formats[2], extent, tiling,
+                formats[3], extent, tiling,
                 usage, mem_flags, aspect
         };
-
-        /* Transition images to the correct layout
-        vk::raii::Queue queue {*device, 0, 0};
-        submit_now(*device, queue, *command_pool,
-                   [&](const vk::raii::CommandBuffer &cmd) {
-                        framebuffer_images.position.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
-                        framebuffer_images.normal.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
-                        framebuffer_images.material_index.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
-                   }
-        ); */
 
         depth_buffer = DepthBuffer {
                 *phdev, *device,
@@ -391,17 +536,15 @@ void EditorRenderer::render_gbuffer(const RenderInfo &render_info, const std::ve
                 for (int i = 0; i < meshes.size(); i++) {
                         MeshIndex index { id, i };
 
-                        if (gbuffer_dsets_refs.find(index) == gbuffer_dsets_refs.end()) {
-                                std::array <vk::DescriptorSetLayout, 1> dsls { *gbuffer_dsl };
+                        if (gbuffer.dset_refs.find(index) == gbuffer.dset_refs.end()) {
+                                int new_index = gbuffer.dsets.size();
+                                gbuffer.dset_refs[index] = new_index;
                                 
-                                int new_index = gbuffer_dsets.size();
-                                gbuffer_dsets_refs[index] = new_index;
-                                
-                                gbuffer_dsets.emplace_back(
+                                gbuffer.dsets.emplace_back(
                                         std::move(
                                                 vk::raii::DescriptorSets {
                                                         *device,
-                                                        { **descriptor_pool, dsls }
+                                                        { **descriptor_pool, *gbuffer.dsl }
                                                 }.front()
                                         )
                                 );
@@ -417,14 +560,8 @@ void EditorRenderer::render_gbuffer(const RenderInfo &render_info, const std::ve
                                 if (material.has_normal())
                                         normal = material.normal_texture;
 
-                                const ImageData &albedo_texture = texture_loader->load_texture(albedo);
-                                const ImageData &normal_texture = texture_loader->load_texture(normal);
-
-                                vk::raii::Sampler &albedo_sampler = texture_loader->load_sampler(albedo);
-                                vk::raii::Sampler &normal_sampler = texture_loader->load_sampler(normal);
-
-                                bind_ds(*device, gbuffer_dsets[new_index], albedo_sampler, albedo_texture, 0);
-                                bind_ds(*device, gbuffer_dsets[new_index], normal_sampler, normal_texture, 1);
+                                texture_loader->bind(gbuffer.dsets[new_index], albedo, 0);
+                                texture_loader->bind(gbuffer.dsets[new_index], normal, 1);
                         }
                 }
         }
@@ -442,7 +579,7 @@ void EditorRenderer::render_gbuffer(const RenderInfo &render_info, const std::ve
 
         render_info.cmd.beginRenderPass(
                 vk::RenderPassBeginInfo {
-                        *gbuffer_rp,
+                        *gbuffer.render_pass,
                         *gbuffer_fb,
                         vk::Rect2D { vk::Offset2D {}, extent },
                         clear_values
@@ -451,9 +588,9 @@ void EditorRenderer::render_gbuffer(const RenderInfo &render_info, const std::ve
         );
 
         // Start the pipeline
-        render_info.cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *gbuffer_pipeline);
+        render_info.cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *gbuffer.pipeline);
 
-        PushConstants push_constants;
+        GBuffer_PushConstants push_constants;
 
         push_constants.view = render_info.camera.view_matrix(render_info.camera_transform);
         push_constants.projection = render_info.camera.perspective_matrix();
@@ -468,19 +605,29 @@ void EditorRenderer::render_gbuffer(const RenderInfo &render_info, const std::ve
                         MeshIndex index { id, i };
 
                         // Bind descriptor set
-                        int dset_index = gbuffer_dsets_refs[index];
+                        int dset_index = gbuffer.dset_refs[index];
                         render_info.cmd.bindDescriptorSets(
                                 vk::PipelineBindPoint::eGraphics,
-                                *gbuffer_ppl,
-                                0, { *gbuffer_dsets[dset_index] }, {}
+                                *gbuffer.pipeline_layout,
+                                0, { *gbuffer.dsets[dset_index] }, {}
                         );
 
                         // Bind push constants
                         push_constants.model = transform.matrix();
-                        push_constants.material_index = meshes[i].material_index;
 
-                        render_info.cmd.pushConstants <PushConstants> (
-                                *gbuffer_ppl,
+                        int material_index = meshes[i].material_index;
+                        push_constants.material_index = material_index;
+
+                        Material material = Material::all[material_index];
+                        
+                        int texture_status = 0;
+                        texture_status |= (material.has_albedo());
+                        texture_status |= (material.has_normal() << 1);
+
+                        push_constants.texture_status = texture_status;
+
+                        render_info.cmd.pushConstants <GBuffer_PushConstants> (
+                                *gbuffer.pipeline_layout,
                                 vk::ShaderStageFlagBits::eVertex,
                                 0, push_constants
                         );
@@ -494,18 +641,18 @@ void EditorRenderer::render_gbuffer(const RenderInfo &render_info, const std::ve
 
         render_info.cmd.endRenderPass();
 
-        // Transition layout for normal map
-        framebuffer_images.normal.layout = vk::ImageLayout::ePresentSrcKHR;
-        framebuffer_images.normal.transition_layout(render_info.cmd, vk::ImageLayout::eGeneral);
+        // Transition layout for position and normal map
+        framebuffer_images.material_index.layout = vk::ImageLayout::ePresentSrcKHR;
+        framebuffer_images.material_index.transition_layout(render_info.cmd, vk::ImageLayout::eGeneral);
 
-        sobel_output.transition_layout(render_info.cmd, vk::ImageLayout::eGeneral);
+        sobel.output.transition_layout(render_info.cmd, vk::ImageLayout::eGeneral);
 
         // Now apply Sobel filterto get edges
-        render_info.cmd.bindPipeline(vk::PipelineBindPoint::eCompute, *sobel_pipeline);
+        render_info.cmd.bindPipeline(vk::PipelineBindPoint::eCompute, *sobel.pipeline);
         render_info.cmd.bindDescriptorSets(
                 vk::PipelineBindPoint::eCompute,
-                *sobel_ppl,
-                0, { *sobel_dset }, {}
+                *sobel.pipeline_layout,
+                0, { *sobel.dset }, {}
         );
 
         render_info.cmd.dispatch(
@@ -515,8 +662,121 @@ void EditorRenderer::render_gbuffer(const RenderInfo &render_info, const std::ve
         );
 }
 
-void EditorRenderer::render_present(const RenderInfo &render_info)
+void EditorRenderer::render_albedo(const RenderInfo &render_info, const std::vector <Entity> &entities)
 {
+        // The given entities are assumed to have all the necessary
+        // components (Transform and Renderable)
+
+        for (const auto &entity : entities) {
+                int id = entity.id;
+                const auto &renderable = entity.get <Renderable> ();
+
+                // Allocat descriptor sets if needed
+                const auto &meshes = renderable.mesh->submeshes;
+
+                for (int i = 0; i < meshes.size(); i++) {
+                        MeshIndex index { id, i };
+
+                        if (albedo.dset_refs.find(index) == albedo.dset_refs.end()) {
+                                int new_index = albedo.dsets.size();
+                                albedo.dset_refs[index] = new_index;
+                                
+                                albedo.dsets.emplace_back(
+                                        std::move(
+                                                vk::raii::DescriptorSets {
+                                                        *device,
+                                                        { **descriptor_pool, *albedo.dsl }
+                                                }.front()
+                                        )
+                                );
+
+                                // Bind inforation to descriptor set
+                                Material material = Material::all[meshes[i].material_index];
+        
+                                std::string albedo_src = "blank";
+                                if (material.has_albedo())
+                                        albedo_src = material.albedo_texture;
+
+                                texture_loader->bind(albedo.dsets[new_index], albedo_src, 0);
+                        }
+                }
+        }
+
+        // Render to G-buffer
+        // render_info.render_area.apply(render_info.cmd, render_info.extent);
+        RenderArea::full().apply(render_info.cmd, render_info.extent);
+
+        std::vector <vk::ClearValue> clear_values {
+                vk::ClearColorValue { std::array <float, 4> { 0.0f, 0.0f, 0.0f, 1.0f } },
+                vk::ClearDepthStencilValue { 1.0f, 0 }
+        };
+
+        render_info.cmd.beginRenderPass(
+                vk::RenderPassBeginInfo {
+                        *albedo.render_pass,
+                        *render_info.framebuffer,
+                        vk::Rect2D { vk::Offset2D {}, render_info.extent },
+                        clear_values
+                },
+                vk::SubpassContents::eInline
+        );
+
+        // Start the pipeline
+        render_info.cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *albedo.pipeline);
+
+        Albedo_PushConstants push_constants;
+
+        push_constants.view = render_info.camera.view_matrix(render_info.camera_transform);
+        push_constants.projection = render_info.camera.perspective_matrix();
+
+        for (auto &entity : entities) {
+                int id = entity.id;
+                const auto &transform = entity.get <Transform> ();
+                const auto &renderable = entity.get <Renderable> ();
+                const auto &meshes = renderable.mesh->submeshes;
+
+                for (int i = 0; i < meshes.size(); i++) {
+                        MeshIndex index { id, i };
+
+                        // Bind descriptor set
+                        int dset_index = albedo.dset_refs[index];
+                        render_info.cmd.bindDescriptorSets(
+                                vk::PipelineBindPoint::eGraphics,
+                                *albedo.pipeline_layout,
+                                0, { *albedo.dsets[dset_index] }, {}
+                        );
+
+                        // Bind push constants
+                        push_constants.model = transform.matrix();
+
+                        int material_index = meshes[i].material_index;
+                        Material material = Material::all[material_index];
+
+                        push_constants.albedo = glm::vec4 { material.diffuse, 1.0f };
+                        push_constants.has_albedo = material.has_albedo();
+
+                        render_info.cmd.pushConstants <Albedo_PushConstants> (
+                                *albedo.pipeline_layout,
+                                vk::ShaderStageFlagBits::eVertex,
+                                0, push_constants
+                        );
+
+                        // Draw
+                        render_info.cmd.bindVertexBuffers(0, { *renderable.get_vertex_buffer(i).buffer }, { 0 });
+                        render_info.cmd.bindIndexBuffer(*renderable.get_index_buffer(i).buffer, 0, vk::IndexType::eUint32);
+                        render_info.cmd.drawIndexed(renderable.get_index_count(i), 1, 0, 0, 0);
+                }
+        }
+
+        render_info.cmd.endRenderPass();
+}
+
+void EditorRenderer::render_triangulation(const RenderInfo &render_info)
+{
+        if (render_state.mode != RenderState::eTriangulation) {
+                printf("ERROR: EditorRenderer::render_triangulation called in wrong mode\n");
+        }
+
         // TODO: pass different render options
 
         // Render to screen
@@ -534,17 +794,17 @@ void EditorRenderer::render_present(const RenderInfo &render_info)
         // Transition framebuffer images to shader read
         // TODO: some way to avoid this hackery
         framebuffer_images.position.layout = vk::ImageLayout::ePresentSrcKHR;
-        framebuffer_images.normal.layout = vk::ImageLayout::eGeneral;
-        framebuffer_images.material_index.layout = vk::ImageLayout::ePresentSrcKHR;
+        framebuffer_images.normal.layout = vk::ImageLayout::ePresentSrcKHR;
+        framebuffer_images.material_index.layout = vk::ImageLayout::eGeneral;
 
         framebuffer_images.position.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
         framebuffer_images.normal.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
         framebuffer_images.material_index.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
-        sobel_output.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
+        sobel.output.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
 
         render_info.cmd.beginRenderPass(
                 vk::RenderPassBeginInfo {
-                        *present_rp,
+                        *triangulation.render_pass,
                         *render_info.framebuffer,
                         vk::Rect2D { vk::Offset2D {}, render_info.extent },
                         clear_values
@@ -553,18 +813,80 @@ void EditorRenderer::render_present(const RenderInfo &render_info)
         );
 
         // Start the pipeline
-        render_info.cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *present_pipeline);
+        render_info.cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *triangulation.pipeline);
 
         // Bind descriptor set
         render_info.cmd.bindDescriptorSets(
                 vk::PipelineBindPoint::eGraphics,
-                *present_ppl,
-                0, { *present_dset }, {}
+                *triangulation.pipeline_layout,
+                0, { *triangulation.dset }, {}
         );
 
         // Draw
-        render_info.cmd.bindVertexBuffers(0, { *present_mesh.buffer }, { 0 });
+        render_info.cmd.bindVertexBuffers(0, { *triangulation.mesh.buffer }, { 0 });
         render_info.cmd.draw(6, 1, 0, 0);
 
         render_info.cmd.endRenderPass();
+}
+
+void EditorRenderer::render(const RenderInfo &render_info, const std::vector <Entity> &entities)
+{
+        // First render the G-Buffer
+        // TODO: only if the mode requires it...
+        render_gbuffer(render_info, entities);
+
+        switch (render_state.mode) {
+        case RenderState::eTriangulation:
+                render_triangulation(render_info);
+                break;
+
+        /* case RenderState::eWireframe:
+                render_wireframe(render_info, entities);
+                break;
+
+        case RenderState::eNormals:
+                render_normals(render_info, entities);
+                break; */
+
+        case RenderState::eAlbedo:
+                render_albedo(render_info, entities);
+                break;
+
+        /* case RenderState::eSparseRTX:
+                render_sparse_rtx(render_info, entities);
+                break; */
+
+        default:
+                printf("ERROR: EditorRenderer::render called in invalid mode\n");
+        }
+}
+
+void EditorRenderer::menu()
+{
+        static const char *modes[] = {
+                "Triangulation",
+                "Wireframe",
+                "Normals",
+                "Albedo",
+                "SparseRTX"
+        };
+
+        if (ImGui::BeginMenu(modes[render_state.mode])) {
+                if (ImGui::MenuItem("Triangulation"))
+                        render_state.mode = RenderState::eTriangulation;
+
+                if (ImGui::MenuItem("Wireframe"))
+                        render_state.mode = RenderState::eWireframe;
+
+                if (ImGui::MenuItem("Normals"))
+                        render_state.mode = RenderState::eNormals;
+
+                if (ImGui::MenuItem("Albedo"))
+                        render_state.mode = RenderState::eAlbedo;
+
+                if (ImGui::MenuItem("SparseRTX"))
+                        render_state.mode = RenderState::eSparseRTX;
+
+                ImGui::EndMenu();
+        }
 }

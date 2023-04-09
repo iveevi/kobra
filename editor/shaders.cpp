@@ -12,14 +12,17 @@ layout (push_constant) uniform PushConstants {
 	mat4 view;
 	mat4 proj;
 	int material_index;
+        int texture_status;
 };
 
 // G-buffer outputs
+// TODO: remove the extra outputs
 layout (location = 0) out vec3 out_position;
 layout (location = 1) out vec3 out_normal;
 layout (location = 2) out vec2 out_uv;
 layout (location = 3) out mat3 out_tbn;
 layout (location = 6) out int out_material_index;
+layout (location = 7) out int out_texture_status;
 
 void main()
 {
@@ -48,6 +51,7 @@ void main()
 	out_uv = vec2(in_uv.x, 1.0 - in_uv.y);
 	out_tbn = tbn;
         out_material_index = material_index;
+        out_texture_status = texture_status;
 }
 )";
 
@@ -60,6 +64,7 @@ layout (location = 1) in vec3 in_normal;
 layout (location = 2) in vec2 in_uv;
 layout (location = 3) in mat3 in_tbn;
 layout (location = 6) flat in int in_material_index;
+layout (location = 7) flat in int in_texture_status;
 
 // Sampler inputs
 layout (binding = 0)
@@ -75,6 +80,13 @@ layout (location = 2) out int g_material_index;
 
 void main()
 {
+        // If albedo map is present then mask out fragments
+        int has_albedo = in_texture_status & 0x1;
+        if (has_albedo != 0) {
+                if (texture(albedo_map, in_uv).a < 0.5)
+                        discard;
+        }
+
         // TODO: if albedo map is valid then mask out fragments...
 	g_position = vec4(in_position, 1.0);
 	g_normal = vec4(in_normal, 1.0);
@@ -93,8 +105,65 @@ void main()
 }
 )";
 
+// Albedo rendering
+const char *albedo_vert_shader = R"(
+#version 450
+
+layout (location = 0) in vec3 in_position;
+layout (location = 2) in vec2 in_uv;
+
+layout (push_constant) uniform PushConstants {
+	mat4 model;
+	mat4 view;
+	mat4 proj;
+        vec4 color;
+        int has_albedo;
+};
+
+layout (location = 0) out vec2 out_uv;
+layout (location = 1) out vec4 out_color;
+layout (location = 2) out int out_has_albedo;
+
+void main()
+{
+	// First compute rendering position
+	gl_Position = proj * view * model * vec4(in_position, 1.0);
+	gl_Position.y = -gl_Position.y;
+	gl_Position.z = (gl_Position.z + gl_Position.w)/2.0;
+	
+	// Pass outputs
+	out_uv = vec2(in_uv.x, 1.0 - in_uv.y);
+        out_color = color;
+        out_has_albedo = has_albedo;
+}
+)";
+
+const char *albedo_frag_shader = R"(
+#version 450
+
+layout (binding = 0)
+uniform sampler2D albedo_map;
+
+layout (location = 0) in vec2 in_uv;
+layout (location = 1) in vec4 in_color;
+layout (location = 2) flat in int in_has_albedo;
+
+layout (location = 0) out vec4 fragment;
+
+void main()
+{
+        if (in_has_albedo != 0) {
+                fragment = texture(albedo_map, in_uv);
+                if (fragment.a < 0.5)
+                        discard;
+        } else {
+                fragment = in_color;
+        }
+}
+)";
+
 // TODO: use a simple mesh shader for this...
-const char *present_vert_shader = R"(
+const char *triangulation_vert_shader = R"(
 #version 450
 
 layout (location = 0) in vec2 in_position;
@@ -109,7 +178,7 @@ void main()
 }
 )";
 
-const char *present_frag_shader = R"(
+const char *triangulation_frag_shader = R"(
 #version 450
 
 layout (binding = 0)
@@ -151,13 +220,15 @@ void main()
         int index = int(texture(index_map, in_uv).r);
 
         int material_index = index & 0xFFFF;
-        if (index == -1 || sobel > 1)
+        if (index == -1)
                 discard;
 
         // fragment = vec4(0.5 * normal + 0.5, 1.0);
         int triangle_index = index >> 16;
         vec3 color = COLOR_WHEEL[triangle_index % 12];
         fragment = vec4(color, 1.0);
+
+        fragment = mix(fragment, vec4(0.0, 0.0, 0.0, 1.0), sobel);
 }
 )";
 
@@ -167,27 +238,47 @@ const char *sobel_comp_shader = R"(
 
 layout (local_size_x = 16, local_size_y = 16) in;
 
-layout (binding = 0, rgba32f)
-uniform readonly image2D normal_map;
+layout (binding = 0, r32i)
+uniform readonly iimage2D index_map;
 
 layout (binding = 1, r32f)
 uniform writeonly image2D sobel_map;
 
-float sobel_kernel_x[3][3] = float[3][3](
-        float[3](1.0, 0.0, -1.0),
-        float[3](2.0, 0.0, -2.0),
-        float[3](1.0, 0.0, -1.0)
+int sobel_kernel_x[3][3] = int[3][3](
+        int[3](1, 0, -1),
+        int[3](2, 0, -2),
+        int[3](1, 0, -1)
 );
 
-float sobel_kernel_y[3][3] = float[3][3](
-        float[3](1.0, 2.0, 1.0),
-        float[3](0.0, 0.0, 0.0),
-        float[3](-1.0, -2.0, -1.0)
+int sobel_kernel_y[3][3] = int[3][3](
+        int[3](1, 2, 1),
+        int[3](0, 0, 0),
+        int[3](-1, -2, -1)
 );
+
+float sobel_kernel(ivec2 coord)
+{
+        int sobel_x = 0;
+        int sobel_y = 0;
+
+        for (int y = -1; y <= 1; y++) {
+                for (int x = -1; x <= 1; x++) {
+                        ivec2 offset = ivec2(x, y);
+
+                        int id = imageLoad(index_map, coord + offset).r;
+                        id = id & 0xFFFF;
+
+                        sobel_x += sobel_kernel_x[y + 1][x + 1] * id;
+                        sobel_y += sobel_kernel_y[y + 1][x + 1] * id;
+                }
+        }
+
+        return min(abs(sobel_x) + abs(sobel_y), 1.0);
+}
 
 void main()
 {
-        ivec2 size = imageSize(normal_map);
+        ivec2 size = imageSize(index_map);
         ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
 
         // Make sure we don't go out of bounds
@@ -195,29 +286,29 @@ void main()
         bool y_in_bounds = coord.y >= 1 && coord.y < size.y - 1;
 
         if (!x_in_bounds || !y_in_bounds) {
-                imageStore(sobel_map, coord, vec4(0));
+                imageStore(sobel_map, coord, ivec4(0));
                 return;
         }
 
-        // if (coord.x >= size.x || coord.y >= size.y)
-        //        return;
+        float sobel = sobel_kernel(coord);
+        imageStore(sobel_map, coord, vec4(sobel));
 
-        vec3 normal = imageLoad(normal_map, coord).xyz;
-        vec3 sobel_x = vec3(0.0);
-        vec3 sobel_y = vec3(0.0);
+        // If possible, perform a blur on the sobel map
+        x_in_bounds = coord.x >= 2 && coord.x < size.x - 2;
+        y_in_bounds = coord.y >= 2 && coord.y < size.y - 2;
 
+        if (!x_in_bounds || !y_in_bounds)
+                return;
+
+        // Compute the average sobel value around the neighborhood
         for (int y = -1; y <= 1; y++) {
                 for (int x = -1; x <= 1; x++) {
                         ivec2 offset = ivec2(x, y);
-                        vec3 n = imageLoad(normal_map, coord + offset).xyz;
-                        sobel_x += sobel_kernel_x[y + 1][x + 1] * n;
-                        sobel_y += sobel_kernel_y[y + 1][x + 1] * n;
+                        sobel += sobel_kernel(coord + offset);
                 }
         }
 
-        float sobel_magnitude = length(sobel_x) + length(sobel_y);
-
-        imageStore(sobel_map, coord, vec4(sobel_magnitude));
-        // imageStore(sobel_map, coord, vec4(sobel, 1.0));
+        sobel /= 9.0;
+        imageStore(sobel_map, coord, vec4(sobel));
 }
 )";

@@ -45,84 +45,6 @@ struct Application {
 	float speed = 10.0f;
 };
 
-/* Rasterizing for primary intersection and G-buffer
-struct PrimaryRasterizer {
-
-}; */
-
-// Push constants for editor renderer
-struct PushConstants {
-	glm::mat4 model;
-	glm::mat4 view;
-	glm::mat4 projection;
-	int material_index;
-};
-
-// Static member variables
-static const std::vector <DescriptorSetLayoutBinding> gbuffer_bindings {
-        // Albedo for opacity masking
-	DescriptorSetLayoutBinding {
-		0, vk::DescriptorType::eCombinedImageSampler,
-		1, vk::ShaderStageFlagBits::eFragment
-	},
-
-        // Normal map
-	DescriptorSetLayoutBinding {
-		1, vk::DescriptorType::eCombinedImageSampler,
-		1, vk::ShaderStageFlagBits::eFragment
-	}
-};
-
-static const std::vector <DescriptorSetLayoutBinding> present_bindings {
-        // Position
-	DescriptorSetLayoutBinding {
-		0, vk::DescriptorType::eCombinedImageSampler,
-		1, vk::ShaderStageFlagBits::eFragment
-	},
-
-        // Normal
-        DescriptorSetLayoutBinding {
-		1, vk::DescriptorType::eCombinedImageSampler,
-		1, vk::ShaderStageFlagBits::eFragment
-	},
-
-        // Material index
-        DescriptorSetLayoutBinding {
-		2, vk::DescriptorType::eCombinedImageSampler,
-		1, vk::ShaderStageFlagBits::eFragment
-	},
-
-        // Extra
-        // TODO: tabular system for this and the shaders...
-        DescriptorSetLayoutBinding {
-                3, vk::DescriptorType::eCombinedImageSampler,
-                1, vk::ShaderStageFlagBits::eFragment
-        },
-};
-
-static const std::vector <DescriptorSetLayoutBinding> sobel_bindings {
-        // Normal
-        DescriptorSetLayoutBinding {
-                0, vk::DescriptorType::eStorageImage,
-                1, vk::ShaderStageFlagBits::eCompute
-        },
-
-        // Output
-        DescriptorSetLayoutBinding {
-                1, vk::DescriptorType::eStorageImage,
-                1, vk::ShaderStageFlagBits::eCompute
-        },
-};
-
-// Editor renderer shaders
-extern const char *gbuffer_vert_shader;
-extern const char *gbuffer_frag_shader;
-
-// TODO: use a simple mesh shader for this...
-extern const char *present_vert_shader;
-extern const char *present_frag_shader;
-extern const char *sobel_comp_shader;
-
 // Render packet information
 struct RenderInfo {
         const Camera &camera;
@@ -157,48 +79,86 @@ struct EditorRenderer {
 
         vk::raii::Framebuffer gbuffer_fb = nullptr;
 
-        // Pipelines and render passes
-        vk::raii::RenderPass gbuffer_rp = nullptr;
-        vk::raii::PipelineLayout gbuffer_ppl = nullptr;
-        vk::raii::Pipeline gbuffer_pipeline = nullptr;
-
-        vk::raii::RenderPass present_rp = nullptr;
-        vk::raii::PipelineLayout present_ppl = nullptr;
-        vk::raii::Pipeline present_pipeline = nullptr;
-
-        vk::raii::PipelineLayout sobel_ppl = nullptr;
-        vk::raii::Pipeline sobel_pipeline = nullptr;
-
-        // Descriptor sets and layouts
-        vk::raii::DescriptorSetLayout gbuffer_dsl = nullptr;
-        vk::raii::DescriptorSetLayout present_dsl = nullptr;
-        vk::raii::DescriptorSetLayout sobel_dsl = nullptr;
-
-        vk::raii::DescriptorSet present_dset = nullptr;
-        vk::raii::DescriptorSet sobel_dset = nullptr;
-        
+        // Pipeline resources
         using MeshIndex = std::pair <int, int>; // Entity, mesh index
-        std::map <MeshIndex, int> gbuffer_dsets_refs;
-        std::vector <vk::raii::DescriptorSet> gbuffer_dsets;
+        
+        struct {
+                vk::raii::RenderPass render_pass = nullptr;
+                vk::raii::PipelineLayout pipeline_layout = nullptr;
+                vk::raii::Pipeline pipeline = nullptr;
+       
+                vk::raii::DescriptorSetLayout dsl = nullptr;
+                std::map <MeshIndex, int> dset_refs;
+                std::vector <vk::raii::DescriptorSet> dsets;
+        } gbuffer;
 
-        // Additional resources
-        BufferData present_mesh = nullptr;
+        struct {
+                vk::raii::RenderPass render_pass = nullptr;
+                vk::raii::PipelineLayout pipeline_layout = nullptr;
+                vk::raii::Pipeline pipeline = nullptr;
+        
+                vk::raii::DescriptorSetLayout dsl = nullptr;
+                std::map <MeshIndex, int> dset_refs;
+                std::vector <vk::raii::DescriptorSet> dsets;
+        } albedo;
 
-        ImageData sobel_output = nullptr;
-        vk::raii::Sampler sobel_output_sampler = nullptr;
+        struct {
+                vk::raii::RenderPass render_pass = nullptr;
+                vk::raii::PipelineLayout pipeline_layout = nullptr;
+                vk::raii::Pipeline pipeline = nullptr;
+        
+                vk::raii::DescriptorSetLayout dsl = nullptr;
+                vk::raii::DescriptorSet dset = nullptr;
+        
+                BufferData mesh = nullptr;
+        } triangulation;
+
+        struct {
+                vk::raii::PipelineLayout pipeline_layout = nullptr;
+                vk::raii::Pipeline pipeline = nullptr;
+        
+                vk::raii::DescriptorSetLayout dsl = nullptr;
+                vk::raii::DescriptorSet dset = nullptr;
+                
+                ImageData output = nullptr;
+                vk::raii::Sampler output_sampler = nullptr;
+        } sobel;
 
         // Current viewport extent
         vk::Extent2D extent;
 
+        // Rendering mode and parameters
+        struct RenderState {
+                enum {
+                        eTriangulation,
+                        eWireframe,
+                        eNormals,
+                        eAlbedo,
+                        eSparseRTX
+                } mode = eTriangulation;
+
+                bool bounding_boxes = false;
+        } render_state;
+
+        // TODO: table mapping render_state to function for presenting
+
         EditorRenderer() = delete;
         EditorRenderer(const Context &);
 
-        void configure_gbuffer_pipeline(const vk::Extent2D &);
-        void configure_present_pipeline(const vk::Format &, const vk::Extent2D &);
+        void configure_gbuffer_pipeline();
+        void configure_albedo_pipeline(const vk::Format &);
+        void configure_triangulation_pipeline(const vk::Format &);
+        void configure_sobel_pipeline();
 
         void resize(const vk::Extent2D &);
 
         void render_gbuffer(const RenderInfo &, const std::vector <Entity> &);
-        void render_present(const RenderInfo &);
+        void render_albedo(const RenderInfo &, const std::vector <Entity> &);
+        void render_triangulation(const RenderInfo &);
+
+        void render(const RenderInfo &, const std::vector <Entity> &);
+
+        // ImGui memu
+        void menu();
 
 };
