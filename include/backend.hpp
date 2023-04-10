@@ -1030,6 +1030,7 @@ inline ImageData make_image(const vk::raii::PhysicalDevice &phdev,
 } */
 
 // Create a sampler from an ImageData object
+// TODO: remove image parameter...
 inline vk::raii::Sampler make_sampler(const vk::raii::Device &device, const ImageData &image)
 {
 	return vk::raii::Sampler {

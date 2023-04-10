@@ -138,6 +138,7 @@ struct EditorRenderer {
                 } mode = eTriangulation;
 
                 bool bounding_boxes = false;
+                bool initialized = false;
         } render_state;
 
         // TODO: table mapping render_state to function for presenting

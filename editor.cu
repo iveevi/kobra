@@ -763,6 +763,11 @@ public:
                                                                 (uint32_t) m_old_size.x,
                                                                 (uint32_t) m_old_size.y
                                                         });
+
+                                                        m_editor->m_editor_renderer->resize({
+                                                                (uint32_t) m_old_size.x,
+                                                                (uint32_t) m_old_size.y
+                                                        });
                                                 }
 					}
 				});

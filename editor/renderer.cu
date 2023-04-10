@@ -101,14 +101,15 @@ EditorRenderer::EditorRenderer(const Context &context)
                 device(context.device),
                 descriptor_pool(context.descriptor_pool),
                 command_pool(context.command_pool),
-                texture_loader(context.texture_loader),
-                extent(context.extent)
+                texture_loader(context.texture_loader)
 {
         resize(context.extent);
         configure_gbuffer_pipeline();
         configure_albedo_pipeline(context.swapchain_format);
         configure_triangulation_pipeline(context.swapchain_format);
         configure_sobel_pipeline();
+
+        render_state.initialized = true;
 
 }
 
@@ -423,16 +424,6 @@ void EditorRenderer::configure_sobel_pipeline()
         };
 
         // Create image and descriptor set for sobel output
-        sobel.output = ImageData {
-                *phdev, *device,
-                vk::Format::eR32Sfloat,
-                vk::Extent2D { extent.width, extent.height},
-                vk::ImageTiling::eOptimal,
-                vk::ImageUsageFlagBits::eStorage,
-                vk::MemoryPropertyFlagBits::eDeviceLocal,
-                vk::ImageAspectFlagBits::eColor
-        };
-
         sobel.dset = std::move(vk::raii::DescriptorSets {
                 *device,
                 vk::DescriptorSetAllocateInfo {
@@ -479,7 +470,7 @@ void EditorRenderer::configure_sobel_pipeline()
         bind_ds(*device, triangulation.dset, sobel.output_sampler, sobel.output, 3);
 }
         
-void EditorRenderer::resize(const vk::Extent2D &extent)
+void EditorRenderer::resize(const vk::Extent2D &new_extent)
 {
         static vk::Format formats[] = {
                 vk::Format::eR32G32B32A32Sfloat,
@@ -499,26 +490,97 @@ void EditorRenderer::resize(const vk::Extent2D &extent)
 
         framebuffer_images.position = ImageData {
                 *phdev, *device,
-                formats[0], extent, tiling,
+                formats[0], new_extent, tiling,
                 usage, mem_flags, aspect
         };
 
         framebuffer_images.normal = ImageData {
                 *phdev, *device,
-                formats[1], extent, tiling,
+                formats[1], new_extent, tiling,
                 usage, mem_flags, aspect
         };
 
         framebuffer_images.material_index = ImageData {
                 *phdev, *device,
-                formats[3], extent, tiling,
+                formats[3], new_extent, tiling,
                 usage, mem_flags, aspect
         };
 
         depth_buffer = DepthBuffer {
                 *phdev, *device,
-                vk::Format::eD32Sfloat, extent
+                vk::Format::eD32Sfloat, new_extent
         };
+       
+        // Allocate Sobel filter output image
+        sobel.output = ImageData {
+                *phdev, *device,
+                vk::Format::eR32Sfloat,
+                vk::Extent2D { new_extent.width, new_extent.height},
+                vk::ImageTiling::eOptimal,
+                vk::ImageUsageFlagBits::eStorage,
+                vk::MemoryPropertyFlagBits::eDeviceLocal,
+                vk::ImageAspectFlagBits::eColor
+        };
+
+        // If needed, recreate framebuffer and rebind descriptor sets
+        if (render_state.initialized) {
+                std::vector <vk::ImageView> attachment_views {
+                        *framebuffer_images.position.view,
+                        *framebuffer_images.normal.view,
+                        *framebuffer_images.material_index.view,
+                        *depth_buffer.view
+                };
+
+                vk::FramebufferCreateInfo fb_info {
+                        vk::FramebufferCreateFlags {},
+                        *gbuffer.render_pass,
+                        attachment_views,
+                        new_extent.width, new_extent.height, 1
+                };
+
+                gbuffer_fb = vk::raii::Framebuffer {*device, fb_info};
+        
+                // Bind image to descriptor set
+                std::array <vk::DescriptorImageInfo, 2> sobel_dset_image_infos {
+                        vk::DescriptorImageInfo {
+                                nullptr,
+                                *framebuffer_images.material_index.view,
+                                vk::ImageLayout::eGeneral
+                        },
+
+                        vk::DescriptorImageInfo {
+                                nullptr,
+                                *sobel.output.view,
+                                vk::ImageLayout::eGeneral
+                        },
+                };
+
+                std::array <vk::WriteDescriptorSet, 2> sobel_dset_writes {
+                        vk::WriteDescriptorSet {
+                                *sobel.dset,
+                                0, 0,
+                                vk::DescriptorType::eStorageImage,
+                                sobel_dset_image_infos[0],
+                        },
+
+                        vk::WriteDescriptorSet {
+                                *sobel.dset,
+                                1, 0,
+                                vk::DescriptorType::eStorageImage,
+                                sobel_dset_image_infos[1],
+                        },
+                };
+
+                device->updateDescriptorSets(sobel_dset_writes, nullptr);
+        
+                bind_ds(*device, triangulation.dset, framebuffer_images.position_sampler, framebuffer_images.position, 0);
+                bind_ds(*device, triangulation.dset, framebuffer_images.normal_sampler, framebuffer_images.normal, 1);
+                bind_ds(*device, triangulation.dset, framebuffer_images.material_index_sampler, framebuffer_images.material_index, 2);
+                bind_ds(*device, triangulation.dset, sobel.output_sampler, sobel.output, 3);
+        }
+
+        // Update extent
+        extent = new_extent;
 }
 
 void EditorRenderer::render_gbuffer(const RenderInfo &render_info, const std::vector <Entity> &entities)
