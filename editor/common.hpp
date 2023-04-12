@@ -101,6 +101,15 @@ struct EditorRenderer {
                 std::map <MeshIndex, int> dset_refs;
                 std::vector <vk::raii::DescriptorSet> dsets;
         } albedo;
+        
+        struct {
+                vk::raii::RenderPass render_pass = nullptr;
+                vk::raii::PipelineLayout pipeline_layout = nullptr;
+                vk::raii::Pipeline pipeline = nullptr;
+        
+                vk::raii::DescriptorSetLayout dsl = nullptr;
+                vk::raii::DescriptorSet dset = nullptr;
+        } normal;
 
         struct {
                 vk::raii::RenderPass render_pass = nullptr;
@@ -109,8 +118,6 @@ struct EditorRenderer {
         
                 vk::raii::DescriptorSetLayout dsl = nullptr;
                 vk::raii::DescriptorSet dset = nullptr;
-        
-                BufferData mesh = nullptr;
         } triangulation;
 
         struct {
@@ -126,6 +133,9 @@ struct EditorRenderer {
 
         // Current viewport extent
         vk::Extent2D extent;
+       
+        // Presentation mesh
+        BufferData presentation_mesh = nullptr;
 
         // Rendering mode and parameters
         struct RenderState {
@@ -148,6 +158,7 @@ struct EditorRenderer {
 
         void configure_gbuffer_pipeline();
         void configure_albedo_pipeline(const vk::Format &);
+        void configure_normals_pipeline(const vk::Format &);
         void configure_triangulation_pipeline(const vk::Format &);
         void configure_sobel_pipeline();
 
@@ -155,6 +166,7 @@ struct EditorRenderer {
 
         void render_gbuffer(const RenderInfo &, const std::vector <Entity> &);
         void render_albedo(const RenderInfo &, const std::vector <Entity> &);
+        void render_normals(const RenderInfo &);
         void render_triangulation(const RenderInfo &);
 
         void render(const RenderInfo &, const std::vector <Entity> &);

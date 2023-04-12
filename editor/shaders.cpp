@@ -80,6 +80,8 @@ layout (location = 2) out int g_material_index;
 
 void main()
 {
+	g_position = vec4(in_position, 1.0);
+
         // If albedo map is present then mask out fragments
         int has_albedo = in_texture_status & 0x1;
         if (has_albedo != 0) {
@@ -87,20 +89,18 @@ void main()
                         discard;
         }
 
-        // TODO: if albedo map is valid then mask out fragments...
-	g_position = vec4(in_position, 1.0);
-	g_normal = vec4(in_normal, 1.0);
-
-        // TODO: pass pushconstant to vertex shader if normal map is present
-
-	/* Normal (TODO: use int instead of float for has_normal)
-	if (mat.has_normal > 0.5) {
+        // Normal map if present
+        int has_normal = in_texture_status & 0x2;
+	if (has_normal != 0) {
 		g_normal.xyz = 2 * texture(normal_map, in_uv).rgb - 1;
 		g_normal.xyz = normalize(in_tbn * g_normal.xyz);
 	} else {
-		g_normal = vec4(in_normal, 1.0);
-	} */
+                g_normal.xyz = normalize(in_normal);
+        }
 
+        g_normal.w = 1.0;
+
+        // Set material index
 	g_material_index = in_material_index | (gl_PrimitiveID << 16);
 }
 )";
@@ -163,7 +163,7 @@ void main()
 )";
 
 // TODO: use a simple mesh shader for this...
-const char *triangulation_vert_shader = R"(
+const char *presentation_vert_shader = R"(
 #version 450
 
 layout (location = 0) in vec2 in_position;
@@ -175,6 +175,39 @@ void main()
 {
         gl_Position = vec4(in_position, 0.0, 1.0);
         out_uv = in_uv;
+}
+)";
+
+const char *normal_frag_shader = R"(
+#version 450
+
+layout (binding = 0)
+uniform sampler2D normal_map;
+
+layout (location = 0) in vec2 in_uv;
+layout (location = 0) out vec4 fragment;
+
+void main()
+{
+        vec3 normal = texture(normal_map, in_uv).xyz;
+        fragment = vec4(0.5 * normal + 0.5, 1.0);
+}
+)";
+
+const char *selection_frag_shader = R"(
+#version 450
+
+layout (binding = 0)
+uniform sampler2D sobel_map;
+
+layout (location = 0) in vec2 in_uv;
+layout (location = 0) out vec4 fragment;
+
+void main()
+{
+        float sobel = texture(sobel_map, in_uv).r;
+        vec4 hl = vec4(0.89, 0.62, 0.21, 1.0);
+        fragment = mix(vec4(0.0), hl, sobel);
 }
 )";
 
@@ -223,12 +256,12 @@ void main()
         if (index == -1)
                 discard;
 
-        // fragment = vec4(0.5 * normal + 0.5, 1.0);
         int triangle_index = index >> 16;
         vec3 color = COLOR_WHEEL[triangle_index % 12];
         fragment = vec4(color, 1.0);
 
-        fragment = mix(fragment, vec4(0.0, 0.0, 0.0, 1.0), sobel);
+        // Mix with the outline
+        fragment = mix(fragment, vec4(0, 0, 0, 1), sobel);
 }
 )";
 

@@ -8,8 +8,11 @@ extern const char *albedo_vert_shader;
 extern const char *albedo_frag_shader;
 
 // TODO: use a simple mesh shader for this...
-extern const char *triangulation_vert_shader;
+extern const char *presentation_vert_shader;
+
+extern const char *normal_frag_shader;
 extern const char *triangulation_frag_shader;
+extern const char *selection_frag_shader;
 
 extern const char *sobel_comp_shader;
 
@@ -31,6 +34,14 @@ static const std::vector <DescriptorSetLayoutBinding> gbuffer_bindings {
 static const std::vector <DescriptorSetLayoutBinding> albedo_bindings {
         // Albedo
 	DescriptorSetLayoutBinding {
+		0, vk::DescriptorType::eCombinedImageSampler,
+		1, vk::ShaderStageFlagBits::eFragment
+	},
+};
+
+static const std::vector <DescriptorSetLayoutBinding> normal_bindings {
+        // Normal framebuffer
+        DescriptorSetLayoutBinding {
 		0, vk::DescriptorType::eCombinedImageSampler,
 		1, vk::ShaderStageFlagBits::eFragment
 	},
@@ -94,6 +105,28 @@ struct Albedo_PushConstants {
         glm::vec4 albedo;
         int has_albedo;
 };
+
+// Presentation Vertex format
+struct FlatVertex {
+        glm::vec3 position;
+        glm::vec2 texcoord;
+};
+
+static const vk::VertexInputBindingDescription flat_vertex_binding {
+        0, sizeof(FlatVertex),
+        vk::VertexInputRate::eVertex
+};
+
+static const std::vector <vk::VertexInputAttributeDescription> flat_vertex_attributes {
+        vk::VertexInputAttributeDescription {
+                0, 0, vk::Format::eR32G32B32Sfloat,
+                offsetof(FlatVertex, position)
+        },
+        vk::VertexInputAttributeDescription {
+                1, 0, vk::Format::eR32G32Sfloat,
+                offsetof(FlatVertex, texcoord)
+        }
+};
         
 // Constructor
 EditorRenderer::EditorRenderer(const Context &context)
@@ -106,11 +139,11 @@ EditorRenderer::EditorRenderer(const Context &context)
         resize(context.extent);
         configure_gbuffer_pipeline();
         configure_albedo_pipeline(context.swapchain_format);
+        configure_normals_pipeline(context.swapchain_format);
         configure_triangulation_pipeline(context.swapchain_format);
         configure_sobel_pipeline();
 
         render_state.initialized = true;
-
 }
 
 void EditorRenderer::configure_gbuffer_pipeline()
@@ -248,6 +281,63 @@ void EditorRenderer::configure_albedo_pipeline(const vk::Format &swapchain_forma
         albedo.pipeline = make_graphics_pipeline(albedo_grp_info);
 }
 
+void EditorRenderer::configure_normals_pipeline(const vk::Format &swapchain_format)
+{
+        normal.render_pass = make_render_pass(*device,
+                { swapchain_format },
+                { vk::AttachmentLoadOp::eClear },
+                vk::Format::eD32Sfloat,
+                vk::AttachmentLoadOp::eClear
+        );
+
+        normal.dsl = make_descriptor_set_layout(*device, normal_bindings);
+
+        normal.pipeline_layout = vk::raii::PipelineLayout {
+                *device,
+                vk::PipelineLayoutCreateInfo {
+                        vk::PipelineLayoutCreateFlags {},
+                        *normal.dsl, {}
+                }
+        };
+
+        // Load shaders and compile pipeline
+        ShaderProgram normal_vertex {
+                presentation_vert_shader,
+                vk::ShaderStageFlagBits::eVertex
+        };
+
+        ShaderProgram normal_fragment {
+                normal_frag_shader,
+                vk::ShaderStageFlagBits::eFragment
+        };
+
+        GraphicsPipelineInfo normal_grp_info {
+                *device, normal.render_pass,
+                nullptr, nullptr,
+                nullptr, nullptr,
+                flat_vertex_binding,
+                flat_vertex_attributes,
+                normal.pipeline_layout,
+        };
+
+        normal_grp_info.vertex_shader = std::move(*normal_vertex.compile(*device));
+        normal_grp_info.fragment_shader = std::move(*normal_fragment.compile(*device));
+        normal_grp_info.cull_mode = vk::CullModeFlagBits::eNone;
+
+        normal.pipeline = make_graphics_pipeline(normal_grp_info);
+        
+        // Configure descriptor set
+        normal.dset = std::move(vk::raii::DescriptorSets {
+                *device,
+                vk::DescriptorSetAllocateInfo {
+                        **descriptor_pool,
+                        *normal.dsl
+                }
+        }.front());
+        
+        bind_ds(*device, normal.dset, framebuffer_images.normal_sampler, framebuffer_images.normal, 0);
+}
+
 void EditorRenderer::configure_triangulation_pipeline(const vk::Format &swapchain_format)
 {
         // triangulation render pass configuration
@@ -277,31 +367,9 @@ void EditorRenderer::configure_triangulation_pipeline(const vk::Format &swapchai
                 }
         };
 
-        // Vertex format
-        struct TriangulationVertex {
-                glm::vec3 position;
-                glm::vec2 texcoord;
-        };
-
-        vk::VertexInputBindingDescription vertex_binding {
-                0, sizeof(TriangulationVertex),
-                vk::VertexInputRate::eVertex
-        };
-
-        std::vector <vk::VertexInputAttributeDescription> vertex_attributes {
-                vk::VertexInputAttributeDescription {
-                        0, 0, vk::Format::eR32G32B32Sfloat,
-                        offsetof(TriangulationVertex, position)
-                },
-                vk::VertexInputAttributeDescription {
-                        1, 0, vk::Format::eR32G32Sfloat,
-                        offsetof(TriangulationVertex, texcoord)
-                }
-        };
-
         // Load shaders and compile pipeline
         ShaderProgram triangulation_vertex {
-                triangulation_vert_shader,
+                presentation_vert_shader,
                 vk::ShaderStageFlagBits::eVertex
         };
 
@@ -314,8 +382,8 @@ void EditorRenderer::configure_triangulation_pipeline(const vk::Format &swapchai
                 *device, triangulation.render_pass,
                 nullptr, nullptr,
                 nullptr, nullptr,
-                vertex_binding,
-                vertex_attributes,
+                flat_vertex_binding,
+                flat_vertex_attributes,
                 triangulation.pipeline_layout
         };
 
@@ -327,7 +395,7 @@ void EditorRenderer::configure_triangulation_pipeline(const vk::Format &swapchai
         triangulation.pipeline = make_graphics_pipeline(triangulation_grp_info);
 
         // Allocate buffer resources
-        std::vector <TriangulationVertex> vertices {
+        std::vector <FlatVertex> vertices {
                 // Triangle 1
                 { { -1.0f, -1.0f, 0.0f }, { 0.0f, 0.0f } },
                 { {  1.0f, -1.0f, 0.0f }, { 1.0f, 0.0f } },
@@ -339,15 +407,16 @@ void EditorRenderer::configure_triangulation_pipeline(const vk::Format &swapchai
                 { { -1.0f,  1.0f, 0.0f }, { 0.0f, 1.0f } }
         };
 
-        triangulation.mesh = BufferData {
+        // TODO: keep somewhere else
+        presentation_mesh = BufferData {
                 *phdev, *device,
-                vertices.size() * sizeof(TriangulationVertex),
+                vertices.size() * sizeof(FlatVertex),
                 vk::BufferUsageFlagBits::eVertexBuffer,
                 vk::MemoryPropertyFlagBits::eHostVisible
                         | vk::MemoryPropertyFlagBits::eHostCoherent
         };
 
-        triangulation.mesh.upload(vertices);
+        presentation_mesh.upload(vertices);
 
         // Configure descriptor set
         triangulation.dset = std::move(vk::raii::DescriptorSets {
@@ -357,28 +426,6 @@ void EditorRenderer::configure_triangulation_pipeline(const vk::Format &swapchai
                         *triangulation.dsl
                 }
         }.front());
-
-        framebuffer_images.position_sampler = make_sampler(*device, framebuffer_images.position);
-        framebuffer_images.normal_sampler = make_sampler(*device, framebuffer_images.normal);
-        // framebuffer_images.material_index_sampler = make_sampler(*device, framebuffer_images.material_index);
-
-        framebuffer_images.material_index_sampler = vk::raii::Sampler {
-                *device,
-                vk::SamplerCreateInfo {
-                        vk::SamplerCreateFlags {},
-                        vk::Filter::eNearest,
-                        vk::Filter::eNearest,
-                        vk::SamplerMipmapMode::eNearest,
-                        vk::SamplerAddressMode::eClampToEdge,
-                        vk::SamplerAddressMode::eClampToEdge,
-                        vk::SamplerAddressMode::eClampToEdge,
-                        0.0f, VK_FALSE, 1.0f,
-                        VK_FALSE, vk::CompareOp::eNever,
-                        0.0f, 0.0f,
-                        vk::BorderColor::eFloatOpaqueWhite,
-                        VK_FALSE
-                }
-        };
 
         bind_ds(*device, triangulation.dset, framebuffer_images.position_sampler, framebuffer_images.position, 0);
         bind_ds(*device, triangulation.dset, framebuffer_images.normal_sampler, framebuffer_images.normal, 1);
@@ -577,6 +624,33 @@ void EditorRenderer::resize(const vk::Extent2D &new_extent)
                 bind_ds(*device, triangulation.dset, framebuffer_images.normal_sampler, framebuffer_images.normal, 1);
                 bind_ds(*device, triangulation.dset, framebuffer_images.material_index_sampler, framebuffer_images.material_index, 2);
                 bind_ds(*device, triangulation.dset, sobel.output_sampler, sobel.output, 3);
+
+                bind_ds(*device, normal.dset, framebuffer_images.normal_sampler, framebuffer_images.normal, 0);
+        } else {
+                // First time initialization
+
+                // Create samplers for the framebuffer images
+                framebuffer_images.position_sampler = make_sampler(*device, framebuffer_images.position);
+                framebuffer_images.normal_sampler = make_sampler(*device, framebuffer_images.normal);
+                // framebuffer_images.material_index_sampler = make_sampler(*device, framebuffer_images.material_index);
+
+                framebuffer_images.material_index_sampler = vk::raii::Sampler {
+                        *device,
+                        vk::SamplerCreateInfo {
+                                vk::SamplerCreateFlags {},
+                                vk::Filter::eNearest,
+                                vk::Filter::eNearest,
+                                vk::SamplerMipmapMode::eNearest,
+                                vk::SamplerAddressMode::eClampToEdge,
+                                vk::SamplerAddressMode::eClampToEdge,
+                                vk::SamplerAddressMode::eClampToEdge,
+                                0.0f, VK_FALSE, 1.0f,
+                                VK_FALSE, vk::CompareOp::eNever,
+                                0.0f, 0.0f,
+                                vk::BorderColor::eFloatOpaqueWhite,
+                                VK_FALSE
+                        }
+                };
         }
 
         // Update extent
@@ -833,14 +907,54 @@ void EditorRenderer::render_albedo(const RenderInfo &render_info, const std::vec
         render_info.cmd.endRenderPass();
 }
 
-void EditorRenderer::render_triangulation(const RenderInfo &render_info)
+void EditorRenderer::render_normals(const RenderInfo &render_info)
 {
-        if (render_state.mode != RenderState::eTriangulation) {
-                printf("ERROR: EditorRenderer::render_triangulation called in wrong mode\n");
-        }
-
         // TODO: pass different render options
 
+        // Render to screen
+        render_info.render_area.apply(render_info.cmd, render_info.extent);
+
+        std::vector <vk::ClearValue> clear_values {
+                vk::ClearColorValue { std::array <float, 4> { 0.0f, 0.0f, 0.0f, 1.0f } },
+                vk::ClearDepthStencilValue { 1.0f, 0 }
+        };
+
+        // TODO: remove depht buffer from this...
+
+        // Transition framebuffer images to shader read
+        // TODO: some way to avoid this hackery
+        framebuffer_images.normal.layout = vk::ImageLayout::ePresentSrcKHR;
+        framebuffer_images.normal.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
+
+        render_info.cmd.beginRenderPass(
+                vk::RenderPassBeginInfo {
+                        *normal.render_pass,
+                        *render_info.framebuffer,
+                        vk::Rect2D { vk::Offset2D {}, render_info.extent },
+                        clear_values
+                },
+                vk::SubpassContents::eInline
+        );
+
+        // Start the pipeline
+        render_info.cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *normal.pipeline);
+
+        // Bind descriptor set
+        render_info.cmd.bindDescriptorSets(
+                vk::PipelineBindPoint::eGraphics,
+                *normal.pipeline_layout,
+                0, { *normal.dset }, {}
+        );
+
+        // Draw
+        render_info.cmd.bindVertexBuffers(0, { *presentation_mesh.buffer }, { 0 });
+        render_info.cmd.draw(6, 1, 0, 0);
+
+        render_info.cmd.endRenderPass();
+}
+
+void EditorRenderer::render_triangulation(const RenderInfo &render_info)
+{
         // Render to screen
         render_info.render_area.apply(render_info.cmd, render_info.extent);
 
@@ -885,7 +999,7 @@ void EditorRenderer::render_triangulation(const RenderInfo &render_info)
         );
 
         // Draw
-        render_info.cmd.bindVertexBuffers(0, { *triangulation.mesh.buffer }, { 0 });
+        render_info.cmd.bindVertexBuffers(0, { *presentation_mesh.buffer }, { 0 });
         render_info.cmd.draw(6, 1, 0, 0);
 
         render_info.cmd.endRenderPass();
@@ -902,13 +1016,13 @@ void EditorRenderer::render(const RenderInfo &render_info, const std::vector <En
                 render_triangulation(render_info);
                 break;
 
-        /* case RenderState::eWireframe:
-                render_wireframe(render_info, entities);
-                break;
+        // case RenderState::eWireframe:
+        //         render_wireframe(render_info, entities);
+        //         break;
 
         case RenderState::eNormals:
-                render_normals(render_info, entities);
-                break; */
+                render_normals(render_info);
+                break;
 
         case RenderState::eAlbedo:
                 render_albedo(render_info, entities);
@@ -937,17 +1051,17 @@ void EditorRenderer::menu()
                 if (ImGui::MenuItem("Triangulation"))
                         render_state.mode = RenderState::eTriangulation;
 
-                if (ImGui::MenuItem("Wireframe"))
-                        render_state.mode = RenderState::eWireframe;
-
+                // if (ImGui::MenuItem("Wireframe"))
+                //         render_state.mode = RenderState::eWireframe;
+                
                 if (ImGui::MenuItem("Normals"))
                         render_state.mode = RenderState::eNormals;
 
                 if (ImGui::MenuItem("Albedo"))
                         render_state.mode = RenderState::eAlbedo;
 
-                if (ImGui::MenuItem("SparseRTX"))
-                        render_state.mode = RenderState::eSparseRTX;
+                // if (ImGui::MenuItem("SparseRTX"))
+                //         render_state.mode = RenderState::eSparseRTX;
 
                 ImGui::EndMenu();
         }
