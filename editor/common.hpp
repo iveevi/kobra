@@ -77,7 +77,11 @@ struct EditorRenderer {
 
         DepthBuffer depth_buffer = nullptr;
 
+        vk::raii::RenderPass present_render_pass = nullptr;
+
         vk::raii::Framebuffer gbuffer_fb = nullptr;
+        vk::raii::Framebuffer viewport_fb = nullptr;
+        // TODO: store the viewport image here instead of in the App...
 
         // Pipeline resources
         using MeshIndex = std::pair <int, int>; // Entity, mesh index
@@ -93,7 +97,6 @@ struct EditorRenderer {
         } gbuffer;
 
         struct {
-                vk::raii::RenderPass render_pass = nullptr;
                 vk::raii::PipelineLayout pipeline_layout = nullptr;
                 vk::raii::Pipeline pipeline = nullptr;
         
@@ -103,7 +106,6 @@ struct EditorRenderer {
         } albedo;
         
         struct {
-                vk::raii::RenderPass render_pass = nullptr;
                 vk::raii::PipelineLayout pipeline_layout = nullptr;
                 vk::raii::Pipeline pipeline = nullptr;
         
@@ -112,7 +114,6 @@ struct EditorRenderer {
         } normal;
 
         struct {
-                vk::raii::RenderPass render_pass = nullptr;
                 vk::raii::PipelineLayout pipeline_layout = nullptr;
                 vk::raii::Pipeline pipeline = nullptr;
         
@@ -130,6 +131,14 @@ struct EditorRenderer {
                 ImageData output = nullptr;
                 vk::raii::Sampler output_sampler = nullptr;
         } sobel;
+
+        struct {
+                vk::raii::PipelineLayout pipeline_layout = nullptr;
+                vk::raii::Pipeline pipeline = nullptr;
+                
+                vk::raii::DescriptorSetLayout dsl = nullptr;
+                vk::raii::DescriptorSet dset = nullptr;
+        } highlight;
 
         // Current viewport extent
         vk::Extent2D extent;
@@ -154,20 +163,23 @@ struct EditorRenderer {
         // TODO: table mapping render_state to function for presenting
 
         EditorRenderer() = delete;
-        EditorRenderer(const Context &);
+        EditorRenderer(const Context &, const ImageData &);
 
+        void configure_present(const ImageData &);
         void configure_gbuffer_pipeline();
         void configure_albedo_pipeline(const vk::Format &);
         void configure_normals_pipeline(const vk::Format &);
         void configure_triangulation_pipeline(const vk::Format &);
         void configure_sobel_pipeline();
+        void configure_highlight_pipeline(const vk::Format &);
 
-        void resize(const vk::Extent2D &);
+        void resize(const vk::Extent2D &, const ImageData &);
 
         void render_gbuffer(const RenderInfo &, const std::vector <Entity> &);
         void render_albedo(const RenderInfo &, const std::vector <Entity> &);
         void render_normals(const RenderInfo &);
         void render_triangulation(const RenderInfo &);
+        void render_highlight(const RenderInfo &, const std::vector <Entity> &);
 
         void render(const RenderInfo &, const std::vector <Entity> &);
 

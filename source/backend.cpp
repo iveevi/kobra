@@ -978,16 +978,22 @@ vk::raii::Pipeline make_graphics_pipeline(const GraphicsPipelineInfo &info)
 	};
 
 	// Depth stencil state
-	vk::StencilOpState stencil_info {
-		vk::StencilOp::eKeep, vk::StencilOp::eKeep, vk::StencilOp::eKeep,
-		vk::CompareOp::eAlways, 0, 0, 0
-	};
+	vk::PipelineDepthStencilStateCreateInfo depth_stencil_info;
 
-	vk::PipelineDepthStencilStateCreateInfo depth_stencil_info {
-		{}, info.depth_test, info.depth_write,
-		vk::CompareOp::eLessOrEqual, false, false,
-		stencil_info, stencil_info
-	};
+        if (info.depth_stencil_info) {
+                depth_stencil_info = *info.depth_stencil_info;
+        } else {
+                vk::StencilOpState stencil_info {
+                        vk::StencilOp::eKeep, vk::StencilOp::eKeep, vk::StencilOp::eKeep,
+                        vk::CompareOp::eAlways, 0, 0, 0
+                };
+
+                depth_stencil_info = vk::PipelineDepthStencilStateCreateInfo {
+                        {}, info.depth_test, info.depth_write,
+                        vk::CompareOp::eLessOrEqual, false, false,
+                        stencil_info, stencil_info
+                };
+        }
 
 	// Color blend state
 	std::vector <vk::PipelineColorBlendAttachmentState> color_blend_attachments;

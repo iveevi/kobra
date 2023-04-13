@@ -1395,6 +1395,9 @@ struct GraphicsPipelineInfo {
 
 	std::vector <bool> blend_attachments = { true };
 
+        // Optional
+        std::optional <vk::PipelineDepthStencilStateCreateInfo> depth_stencil_info;
+
 	// Constructor
 	GraphicsPipelineInfo(const vk::raii::Device &device,
 			const vk::raii::RenderPass &render_pass,

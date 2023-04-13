@@ -609,7 +609,7 @@ void Editor::resize_viewport(const vk::Extent2D &extent)
 		vk::ImageAspectFlagBits::eColor
 	);
 
-	m_viewport.sampler = kobra::make_sampler(device, m_viewport.image);
+	// m_viewport.sampler = kobra::make_sampler(device, m_viewport.image);
 
 	m_viewport.depth_buffer = std::move(
 		kobra::DepthBuffer {
@@ -767,7 +767,7 @@ public:
                                                         m_editor->m_editor_renderer->resize({
                                                                 (uint32_t) m_old_size.x,
                                                                 (uint32_t) m_old_size.y
-                                                        });
+                                                        }, m_editor->m_viewport.image);
                                                 }
 					}
 				});
@@ -1127,7 +1127,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	// TODO: scene graph...
 
         // EditorRenderer
-        m_editor_renderer = std::make_shared <EditorRenderer> (get_context());
+        m_editor_renderer = std::make_shared <EditorRenderer> (get_context(), m_viewport.image);
 
 	// Load and set the icon
 	std::string icon_path = KOBRA_DIR "/kobra_icon.png";

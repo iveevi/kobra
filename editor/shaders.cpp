@@ -73,6 +73,8 @@ uniform sampler2D albedo_map;
 layout (binding = 1)
 uniform sampler2D normal_map;
 
+// TODO: list of objects to highlight
+
 // Outputs
 layout (location = 0) out vec4 g_position;
 layout (location = 1) out vec4 g_normal;
@@ -101,7 +103,7 @@ void main()
         g_normal.w = 1.0;
 
         // Set material index
-	g_material_index = in_material_index | (gl_PrimitiveID << 16);
+	g_material_index.x = in_material_index | (gl_PrimitiveID << 16);
 }
 )";
 
@@ -162,6 +164,28 @@ void main()
 }
 )";
 
+// Fragment shader for highlighting (outline)
+const char *highlight_frag_shader = R"(
+#version 450
+
+layout (binding = 0)
+uniform isampler2D index_map;
+
+layout (location = 0) in vec2 in_uv;
+layout (location = 0) out vec4 fragment;
+
+void main()
+{
+        int index = texture(index_map, in_uv).x;
+        index = index & 0xFFFF;
+
+        if (index % 2 == 0)
+                fragment = vec4(1.0, 1.0, 0.2, 0.25);
+        else
+                fragment = vec4(0.0, 0.0, 0.0, 0.0);
+}
+)";
+
 // TODO: use a simple mesh shader for this...
 const char *presentation_vert_shader = R"(
 #version 450
@@ -191,23 +215,6 @@ void main()
 {
         vec3 normal = texture(normal_map, in_uv).xyz;
         fragment = vec4(0.5 * normal + 0.5, 1.0);
-}
-)";
-
-const char *selection_frag_shader = R"(
-#version 450
-
-layout (binding = 0)
-uniform sampler2D sobel_map;
-
-layout (location = 0) in vec2 in_uv;
-layout (location = 0) out vec4 fragment;
-
-void main()
-{
-        float sobel = texture(sobel_map, in_uv).r;
-        vec4 hl = vec4(0.89, 0.62, 0.21, 1.0);
-        fragment = mix(vec4(0.0), hl, sobel);
 }
 )";
 
@@ -305,6 +312,8 @@ float sobel_kernel(ivec2 coord)
                         sobel_y += sobel_kernel_y[y + 1][x + 1] * id;
                 }
         }
+
+
 
         return min(abs(sobel_x) + abs(sobel_y), 1.0);
 }
