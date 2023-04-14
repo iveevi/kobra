@@ -1,10 +1,7 @@
-#ifndef KOBRA_APP_H_
-#define KOBRA_APP_H_
+#pragma once
 
 // Engine headers
 #include "backend.hpp"
-#include "coords.hpp"
-// #include "texture.hpp"
 #include "timer.hpp"
 #include "io/event.hpp"
 #include "io/input.hpp"
@@ -42,9 +39,6 @@ protected:
 
 	// Termination status
 	bool				terminated = false;
-
-	// Generate screen coords
-	coordinates::Screen coordinates(float x, float y);
 
 	// Generating aux structures
 	Device get_device();
@@ -141,5 +135,3 @@ public:
 };
 
 }
-
-#endif

@@ -18,13 +18,8 @@ App::App(const vk::raii::PhysicalDevice &phdev_,
 {
 	surface = make_surface(window);
 	auto queue_family = find_queue_families(phdev, surface);
-
-	// TODO: extensions as a device
-	std::cout << "Window extent: " << window.m_extent.width << "x" << window.m_extent.height << std::endl;
 	device = make_device(phdev, queue_family, extensions);
 	swapchain = Swapchain {phdev, device, surface, window.m_extent, queue_family};
-
-	KOBRA_LOG_FUNC(Log::OK) << "Swapchain format: " << vk::to_string(swapchain.format) << std::endl;
 
 	// GLFW things
 	glfwSetWindowUserPointer(window.m_handle, &io);
@@ -82,14 +77,6 @@ void App::terminate_now()
 }
 
 // Protected methods
-coordinates::Screen App::coordinates(float x, float y)
-{
-	return coordinates::Screen {
-		x, y,
-		window.m_extent.width, window.m_extent.height
-	};
-}
-
 Device App::get_device()
 {
 	return Device {

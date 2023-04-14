@@ -1,5 +1,4 @@
-#ifndef VK_FORMATS_H_
-#define VK_FORMATS_H_
+#pragma once
 
 #include <string.h>
 #include <string>
@@ -14,5 +13,3 @@ struct VkFormatInfo {
 };
 
 extern const std::map <VkFormat, VkFormatInfo> vk_format_table;
-
-#endif
