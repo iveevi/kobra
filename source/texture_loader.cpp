@@ -134,6 +134,7 @@ ImageData &TextureLoader::load_texture(const std::string &path)
 	return ret;
 }
 
+// TODO: depracate this function...
 vk::raii::Sampler &TextureLoader::load_sampler(const std::string &path)
 {
 	// TODO: lock guard instead
@@ -141,10 +142,7 @@ vk::raii::Sampler &TextureLoader::load_sampler(const std::string &path)
 		return m_samplers.at(path);
 	}
 
-	auto sampler = make_sampler(
-		*m_device.device,
-		load_texture(path)
-	);
+	auto sampler = make_continuous_sampler(*m_device.device);
 
 	m_samplers.insert({path, std::move(sampler)});
 	vk::raii::Sampler &ret = m_samplers.at(path);

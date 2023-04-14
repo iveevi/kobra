@@ -47,12 +47,16 @@ struct Application {
 
 // Render packet information
 struct RenderInfo {
-        const Camera &camera;
-        const Transform &camera_transform;
-        const vk::raii::CommandBuffer &cmd;
-        const vk::raii::Framebuffer &framebuffer;
-        const vk::Extent2D &extent;
-        const RenderArea &render_area = RenderArea::full();
+        Camera camera;
+        RenderArea render_area = RenderArea::full();
+        Transform camera_transform;
+        std::set <int> highlighted_entities;
+        vk::Extent2D extent;
+        const vk::raii::CommandBuffer &cmd = nullptr;
+        const vk::raii::Framebuffer &framebuffer = nullptr;
+
+        RenderInfo(const vk::raii::CommandBuffer &_cmd, const vk::raii::Framebuffer &_framebuffer)
+                : cmd(_cmd), framebuffer(_framebuffer) {}
 };
 
 // Editor rendering
@@ -77,6 +81,7 @@ struct EditorRenderer {
 
         DepthBuffer depth_buffer = nullptr;
 
+        vk::raii::RenderPass gbuffer_render_pass = nullptr;
         vk::raii::RenderPass present_render_pass = nullptr;
 
         vk::raii::Framebuffer gbuffer_fb = nullptr;
@@ -87,7 +92,6 @@ struct EditorRenderer {
         using MeshIndex = std::pair <int, int>; // Entity, mesh index
         
         struct {
-                vk::raii::RenderPass render_pass = nullptr;
                 vk::raii::PipelineLayout pipeline_layout = nullptr;
                 vk::raii::Pipeline pipeline = nullptr;
        
@@ -143,8 +147,10 @@ struct EditorRenderer {
         // Current viewport extent
         vk::Extent2D extent;
        
-        // Presentation mesh
-        BufferData presentation_mesh = nullptr;
+        // Miscelaneous resources
+        BufferData presentation_mesh_buffer = nullptr;
+        BufferData index_staging_buffer = nullptr;
+        std::vector <uint32_t> index_staging_data;
 
         // Rendering mode and parameters
         struct RenderState {
@@ -175,6 +181,7 @@ struct EditorRenderer {
 
         void resize(const vk::Extent2D &, const ImageData &);
 
+        // Rendering
         void render_gbuffer(const RenderInfo &, const std::vector <Entity> &);
         void render_albedo(const RenderInfo &, const std::vector <Entity> &);
         void render_normals(const RenderInfo &);
@@ -182,6 +189,10 @@ struct EditorRenderer {
         void render_highlight(const RenderInfo &, const std::vector <Entity> &);
 
         void render(const RenderInfo &, const std::vector <Entity> &);
+
+        // Querying objects
+        std::vector <std::pair <int, int>>
+        selection_query(const std::vector <Entity> &, const glm::vec2 &);
 
         // ImGui memu
         void menu();

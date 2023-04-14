@@ -164,28 +164,6 @@ void main()
 }
 )";
 
-// Fragment shader for highlighting (outline)
-const char *highlight_frag_shader = R"(
-#version 450
-
-layout (binding = 0)
-uniform isampler2D index_map;
-
-layout (location = 0) in vec2 in_uv;
-layout (location = 0) out vec4 fragment;
-
-void main()
-{
-        int index = texture(index_map, in_uv).x;
-        index = index & 0xFFFF;
-
-        if (index % 2 == 0)
-                fragment = vec4(1.0, 1.0, 0.2, 0.25);
-        else
-                fragment = vec4(0.0, 0.0, 0.0, 0.0);
-}
-)";
-
 // TODO: use a simple mesh shader for this...
 const char *presentation_vert_shader = R"(
 #version 450
@@ -269,6 +247,34 @@ void main()
 
         // Mix with the outline
         fragment = mix(fragment, vec4(0, 0, 0, 1), sobel);
+}
+)";
+
+// Fragment shader for highlighting (outline)
+const char *highlight_frag_shader = R"(
+#version 450
+
+layout (binding = 0)
+uniform isampler2D index_map;
+
+layout (location = 0) in vec2 in_uv;
+layout (location = 0) out vec4 fragment;
+
+// Push constants
+layout (push_constant) uniform PushConstants {
+        vec4 color;
+        int index;
+} push_constants;
+
+void main()
+{
+        int index = texture(index_map, in_uv).x;
+        index = index & 0xFFFF;
+
+        if (index == push_constants.index)
+                fragment = push_constants.color;
+        else
+                discard;
 }
 )";
 

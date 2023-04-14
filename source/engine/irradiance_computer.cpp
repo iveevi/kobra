@@ -130,7 +130,7 @@ IrradianceComputer::IrradianceComputer
 		}
 	};
 
-	m_environment_sampler = kobra::make_sampler(device, environment_map);
+	m_environment_sampler = kobra::make_continuous_sampler(device);
 
 	// Create destination images
 	uint32_t width = environment_map.extent.width;
@@ -228,7 +228,7 @@ void IrradianceComputer::bind(const vk::raii::Device &device, const vk::raii::De
 
 		for (int i = 0; i < mips; i++) {
 			m_samplers.emplace_back(
-				kobra::make_sampler(device, *irradiance_maps[i])
+				kobra::make_continuous_sampler(device)
 			);
 		}
 	}

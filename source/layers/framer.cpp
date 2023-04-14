@@ -81,7 +81,7 @@ Framer::Framer(const Context &context)
 		vk::ImageAspectFlagBits::eColor
 	);
 
-	m_result_sampler = make_sampler(*context.device, m_result_image);
+	m_result_sampler = make_continuous_sampler(*context.device);
 
 	// Allocate staging buffer
 	vk::DeviceSize stage_size = context.extent.width
@@ -125,7 +125,7 @@ void Framer::resize_callback(const RawImage &frame)
 		vk::ImageAspectFlagBits::eColor
 	);
 
-	m_result_sampler = make_sampler(*m_device, m_result_image);
+	// m_result_sampler = make_sampler(*m_device, m_result_image);
 
 	bind_ds(*m_device,
 		m_dset,

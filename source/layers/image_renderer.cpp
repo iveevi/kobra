@@ -163,7 +163,7 @@ void ImageRenderer::render(const ImageData &image, const RenderContext &render_c
 {
 	// Check if the image is cached
 	if (*image.view != m_prev_image_view) {
-		m_sampler = make_sampler(*m_device, image);
+		m_sampler = make_continuous_sampler(*m_device);
 		m_prev_image_view = *image.view;
 
 		// Add descriptor binding to sync queue

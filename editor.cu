@@ -28,7 +28,6 @@ struct Editor : public kobra::BaseApp {
 	Project m_project;
 
 	layers::ForwardRenderer m_forward_renderer;
-	layers::Objectifier m_objectifier;
 
         std::shared_ptr <kobra::daemons::Transform> transform_daemon;
 
@@ -92,6 +91,7 @@ struct Editor : public kobra::BaseApp {
 
 	std::queue <Request> request_queue;
 	std::pair <int, int> m_selection = {-1, -1};
+        std::set <int> m_highlighted_entities;
 
 	// Input state
 	// TODO: bring all other related fields here
@@ -609,8 +609,6 @@ void Editor::resize_viewport(const vk::Extent2D &extent)
 		vk::ImageAspectFlagBits::eColor
 	);
 
-	// m_viewport.sampler = kobra::make_sampler(device, m_viewport.image);
-
 	m_viewport.depth_buffer = std::move(
 		kobra::DepthBuffer {
 			phdev, device,
@@ -970,7 +968,6 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 
 	// Load all the layers
 	m_forward_renderer = kobra::layers::ForwardRenderer(get_context());
-	m_objectifier = kobra::layers::Objectifier(get_context());
 
 	// Configure ImGui
 	ImGui::CreateContext();
@@ -1082,7 +1079,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 		vk::ImageAspectFlagBits::eColor
 	);
 
-	m_viewport.sampler = kobra::make_sampler(device, m_viewport.image);
+	m_viewport.sampler = kobra::make_continuous_sampler(device);
 
 	m_viewport.depth_buffer = std::move(
 		kobra::DepthBuffer {
@@ -1305,15 +1302,13 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 		} */
 
                 // Editor renderer
-                RenderInfo render_info {
-                        .camera = m_viewport.camera,
-                        .camera_transform = m_viewport.camera_transform,
-                        .cmd = cmd,
-                        .framebuffer = m_viewport.framebuffer,
-                        .extent = m_viewport.image.extent
-                        // .framebuffer = framebuffer,
-                        // .extent = window.m_extent
-                };
+                RenderInfo render_info { cmd, framebuffer };
+                render_info.camera = m_viewport.camera;
+                render_info.camera_transform = m_viewport.camera_transform;
+                // render_info.cmd = &cmd;
+                render_info.extent = m_viewport.image.extent;
+                // render_info.framebuffer = &m_viewport.framebuffer;
+                render_info.highlighted_entities = m_highlighted_entities;
 
                 std::vector <Entity> renderable_entities = m_scene.ecs->tuple_entities <Renderable> ();
                 m_editor_renderer->render(render_info, renderable_entities);
@@ -1346,30 +1341,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 		}
 
 		if (selection_request) {
-			m_objectifier.render(
-				cmd,
-				// TODO: pass extent...
-				*m_scene.ecs,
-				m_viewport.camera,
-				m_viewport.camera_transform
-			);
-
 			request_queue.push(*selection_request);
-		}
-
-		// If there is a selection, highlight it
-		if (m_selection.first >= 0 && m_selection.second >= 0) {
-			// TODO: only render the selected objetcs...
-			// otherwise computtion becomes very wasted...
-			m_objectifier.composite_highlight(
-				cmd,
-				m_viewport.framebuffer,
-				m_viewport.image.extent,
-				*m_scene.ecs,
-				m_viewport.camera,
-				m_viewport.camera_transform,
-				m_selection
-			);
 		}
 
 		m_viewport.image.layout = vk::ImageLayout::ePresentSrcKHR;
@@ -1481,29 +1453,30 @@ void Editor::after_present()
                                 (request.y - min.y) / (max.y - min.y)
                         };
 
-                        /* fixed.x *= window.m_extent.width;
-                        fixed.y *= window.m_extent.height; */
+                        printf("Fixed point query: %f, %f\n", fixed.x, fixed.y);
 
-                        vk::Extent2D extent = m_objectifier.query_extent();
-                        fixed.x *= extent.width;
-                        fixed.y *= extent.height;
+                        std::vector <Entity> renderable_entities = m_scene.ecs->tuple_entities <Renderable> ();
+                        auto indices = m_editor_renderer->selection_query(renderable_entities, {fixed.x, fixed.y});
 
-                        // TODO: get coordinates of the viewport image...
-                        auto ids = m_objectifier.query(fixed.x, fixed.y);
-                        m_selection = {int(ids.first) - 1, int(ids.second) - 1};
+                        std::cout << "Indices: " << indices.size() << std::endl;
+                        for (auto &index : indices) {
+                                std::cout << "{" << index.first << ", "
+                                        << index.second << "} ";
+                        }
+                        std::cout << ")" << std::endl;
+
 
                         // Update the material editor
-                        if (m_selection.first < 0 || m_selection.second < 0) {
+                        if (indices.size() == 0) {
                                 m_material_editor->material_index = -1;
                                 m_ui_attachments.viewport->set_transform();
                         } else {
-                                kobra::Renderable &renderable = m_scene.ecs
-                                        ->get <kobra::Renderable> (m_selection.first);
-
-                                m_ui_attachments.viewport->set_transform(m_scene.ecs->get_entity(m_selection.first));
-
-                                uint32_t material_index = renderable.material_indices[m_selection.second];
+                                auto selection = indices[0];
+                                kobra::Renderable &renderable = m_scene.ecs->get <kobra::Renderable> (selection.first);
+                                m_ui_attachments.viewport->set_transform(m_scene.ecs->get_entity(selection.first));
+                                uint32_t material_index = renderable.material_indices[selection.second];
                                 m_material_editor->material_index = material_index;
+                                m_highlighted_entities = {(int) material_index};
                         }
                 }
 	}

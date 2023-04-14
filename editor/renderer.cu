@@ -114,6 +114,11 @@ struct Albedo_PushConstants {
         int has_albedo;
 };
 
+struct Highlight_PushConstants {
+        glm::vec4 color;
+        int material_index;
+};
+
 // Presentation Vertex format
 struct FlatVertex {
         glm::vec3 position;
@@ -192,7 +197,7 @@ void EditorRenderer::configure_gbuffer_pipeline()
                 framebuffer_images.material_index.format,
         };
 
-        gbuffer.render_pass = make_render_pass(*device,
+        gbuffer_render_pass = make_render_pass(*device,
                 attachment_formats,
                 {
                         vk::AttachmentLoadOp::eClear,
@@ -213,7 +218,7 @@ void EditorRenderer::configure_gbuffer_pipeline()
 
         vk::FramebufferCreateInfo fb_info {
                 vk::FramebufferCreateFlags {},
-                *gbuffer.render_pass,
+                *gbuffer_render_pass,
                 attachment_views,
                 extent.width, extent.height, 1
         };
@@ -249,7 +254,7 @@ void EditorRenderer::configure_gbuffer_pipeline()
         };
 
         GraphicsPipelineInfo gbuffer_grp_info {
-                *device, gbuffer.render_pass,
+                *device, gbuffer_render_pass,
                 nullptr, nullptr,
                 nullptr, nullptr,
                 Vertex::vertex_binding(),
@@ -420,7 +425,7 @@ void EditorRenderer::configure_triangulation_pipeline(const vk::Format &swapchai
         };
 
         // TODO: keep somewhere else
-        presentation_mesh = BufferData {
+        presentation_mesh_buffer = BufferData {
                 *phdev, *device,
                 vertices.size() * sizeof(FlatVertex),
                 vk::BufferUsageFlagBits::eVertexBuffer,
@@ -428,7 +433,7 @@ void EditorRenderer::configure_triangulation_pipeline(const vk::Format &swapchai
                         | vk::MemoryPropertyFlagBits::eHostCoherent
         };
 
-        presentation_mesh.upload(vertices);
+        presentation_mesh_buffer.upload(vertices);
 
         // Configure descriptor set
         triangulation.dset = std::move(vk::raii::DescriptorSets {
@@ -525,7 +530,7 @@ void EditorRenderer::configure_sobel_pipeline()
         device->updateDescriptorSets(sobel_dset_writes, nullptr);
 
         // Create a sampler for the sobel output
-        sobel.output_sampler = make_sampler(*device, sobel.output);
+        sobel.output_sampler = make_continuous_sampler(*device);
         bind_ds(*device, triangulation.dset, sobel.output_sampler, sobel.output, 3);
 }
 
@@ -533,12 +538,17 @@ void EditorRenderer::configure_highlight_pipeline(const vk::Format &swapchain_fo
 {
         // Highlight pipeline
         highlight.dsl = make_descriptor_set_layout(*device, highlight_bindings);
+        
+        vk::PushConstantRange push_constant_range {
+                vk::ShaderStageFlagBits::eFragment,
+                0, sizeof(Highlight_PushConstants)
+        };
 
         highlight.pipeline_layout = vk::raii::PipelineLayout {
                 *device,
                 vk::PipelineLayoutCreateInfo {
                         vk::PipelineLayoutCreateFlags {},
-                        *highlight.dsl, {}
+                        *highlight.dsl, push_constant_range
                 }
         };
 
@@ -637,6 +647,16 @@ void EditorRenderer::resize(const vk::Extent2D &new_extent, const ImageData &vie
                 vk::ImageAspectFlagBits::eColor
         };
 
+        // Allocate staging buffer for querying
+        index_staging_buffer = BufferData {
+                *phdev, *device,
+                new_extent.width * new_extent.height * sizeof(uint32_t),
+                vk::BufferUsageFlagBits::eTransferDst
+                        | vk::BufferUsageFlagBits::eTransferSrc,
+                vk::MemoryPropertyFlagBits::eHostVisible
+                        | vk::MemoryPropertyFlagBits::eHostCoherent
+        };
+
         // If needed, recreate framebuffer and rebind descriptor sets
         if (render_state.initialized) {
                 // Recreate G-buffer framebuffer
@@ -649,7 +669,7 @@ void EditorRenderer::resize(const vk::Extent2D &new_extent, const ImageData &vie
 
                 vk::FramebufferCreateInfo fb_info {
                         vk::FramebufferCreateFlags {},
-                        *gbuffer.render_pass,
+                        *gbuffer_render_pass,
                         attachment_views,
                         new_extent.width, new_extent.height, 1
                 };
@@ -720,9 +740,8 @@ void EditorRenderer::resize(const vk::Extent2D &new_extent, const ImageData &vie
                 // First time initialization
 
                 // Create samplers for the framebuffer images
-                framebuffer_images.position_sampler = make_sampler(*device, framebuffer_images.position);
-                framebuffer_images.normal_sampler = make_sampler(*device, framebuffer_images.normal);
-                // framebuffer_images.material_index_sampler = make_sampler(*device, framebuffer_images.material_index);
+                framebuffer_images.position_sampler = make_continuous_sampler(*device);
+                framebuffer_images.normal_sampler = make_continuous_sampler(*device);
 
                 framebuffer_images.material_index_sampler = vk::raii::Sampler {
                         *device,
@@ -805,7 +824,7 @@ void EditorRenderer::render_gbuffer(const RenderInfo &render_info, const std::ve
 
         render_info.cmd.beginRenderPass(
                 vk::RenderPassBeginInfo {
-                        *gbuffer.render_pass,
+                        *gbuffer_render_pass,
                         *gbuffer_fb,
                         vk::Rect2D { vk::Offset2D {}, extent },
                         clear_values
@@ -1024,8 +1043,8 @@ void EditorRenderer::render_normals(const RenderInfo &render_info)
 
         // Transition framebuffer images to shader read
         // TODO: some way to avoid this hackery
-        framebuffer_images.normal.layout = vk::ImageLayout::ePresentSrcKHR;
-        framebuffer_images.normal.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
+        // framebuffer_images.normal.layout = vk::ImageLayout::ePresentSrcKHR;
+        // framebuffer_images.normal.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
 
         render_info.cmd.beginRenderPass(
                 vk::RenderPassBeginInfo {
@@ -1048,7 +1067,7 @@ void EditorRenderer::render_normals(const RenderInfo &render_info)
         );
 
         // Draw
-        render_info.cmd.bindVertexBuffers(0, { *presentation_mesh.buffer }, { 0 });
+        render_info.cmd.bindVertexBuffers(0, { *presentation_mesh_buffer.buffer }, { 0 });
         render_info.cmd.draw(6, 1, 0, 0);
 
         // render_info.cmd.endRenderPass();
@@ -1090,7 +1109,7 @@ void EditorRenderer::render_triangulation(const RenderInfo &render_info)
         );
 
         // Draw
-        render_info.cmd.bindVertexBuffers(0, { *presentation_mesh.buffer }, { 0 });
+        render_info.cmd.bindVertexBuffers(0, { *presentation_mesh_buffer.buffer }, { 0 });
         render_info.cmd.draw(6, 1, 0, 0);
 
         // render_info.cmd.endRenderPass();
@@ -1098,27 +1117,20 @@ void EditorRenderer::render_triangulation(const RenderInfo &render_info)
 
 void EditorRenderer::render_highlight(const RenderInfo &render_info, const std::vector <Entity> &entities)
 {
-        // Render to screen
-        // render_info.render_area.apply(render_info.cmd, render_info.extent);
+        // Push constants
+        Highlight_PushConstants push_constants;
 
-        // std::vector <vk::ClearValue> clear_values {
-        //         vk::ClearColorValue { std::array <float, 4> { 0.0f, 0.0f, 0.0f, 1.0f } },
-        //         vk::ClearDepthStencilValue { 1.0f, 0 }
-        // };
+        push_constants.color = { 0.89, 0.73, 0.33, 0.5 };
+        if (render_state.mode == RenderState::eTriangulation)
+                push_constants.color = { 0.0, 0.0, 0.0, 0.3 };
+        else if (render_state.mode == RenderState::eNormals)
+                push_constants.color = { 0.0, 0.0, 0.0, 0.3 };
 
-        // Transition framebuffer images to shader read
-        // sobel.output.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
-
-        /* render_info.cmd.beginRenderPass(
-                vk::RenderPassBeginInfo {
-                        *highlight.render_pass,
-                        *render_info.framebuffer,
-                        vk::Rect2D { vk::Offset2D {}, render_info.extent },
-                        {}
-                        // clear_values
-                },
-                vk::SubpassContents::eInline
-        ); */
+        push_constants.material_index = -1;
+        if (!render_info.highlighted_entities.empty()) {
+                push_constants.material_index =
+                        *render_info.highlighted_entities.begin();
+        }
 
         // Start the pipeline
         render_info.cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *highlight.pipeline);
@@ -1130,8 +1142,15 @@ void EditorRenderer::render_highlight(const RenderInfo &render_info, const std::
                 0, { *highlight.dset }, {}
         );
 
+        // Bind push constants
+        render_info.cmd.pushConstants <Highlight_PushConstants> (
+                *highlight.pipeline_layout,
+                vk::ShaderStageFlagBits::eFragment,
+                0, push_constants
+        );
+
         // Draw
-        render_info.cmd.bindVertexBuffers(0, { *presentation_mesh.buffer }, { 0 });
+        render_info.cmd.bindVertexBuffers(0, { *presentation_mesh_buffer.buffer }, { 0 });
         render_info.cmd.draw(6, 1, 0, 0);
 
         render_info.cmd.endRenderPass();
@@ -1170,6 +1189,63 @@ void EditorRenderer::render(const RenderInfo &render_info, const std::vector <En
 
         // Render the highlight
         render_highlight(render_info, entities);
+}
+
+std::vector <std::pair <int, int>>
+EditorRenderer::selection_query(const std::vector <Entity> &entities, const glm::vec2 &loc)
+{
+        // Copy the material index image
+        vk::raii::Queue queue {*device, 0, 0};
+
+        submit_now(*device, queue, *command_pool,
+                [&](const vk::raii::CommandBuffer &cmd) {
+                        transition_image_layout(cmd,
+                                *framebuffer_images.material_index.image,
+                                framebuffer_images.material_index.format,
+                                vk::ImageLayout::eShaderReadOnlyOptimal,
+                                vk::ImageLayout::eTransferSrcOptimal
+                        );
+
+                        copy_image_to_buffer(cmd,
+                                framebuffer_images.material_index.image,
+                                index_staging_buffer.buffer,
+                                framebuffer_images.material_index.format,
+                                extent.width, extent.height
+                        );
+
+                        transition_image_layout(cmd,
+                                *framebuffer_images.material_index.image,
+                                framebuffer_images.material_index.format,
+                                vk::ImageLayout::eTransferSrcOptimal,
+                                vk::ImageLayout::eShaderReadOnlyOptimal
+                        );
+                }
+        );
+
+        // Download to host
+        index_staging_data.resize(index_staging_buffer.size/sizeof(uint32_t));
+        index_staging_buffer.download(index_staging_data);
+
+        // Find the ID of the entity at the location
+        glm::ivec2 iloc = loc * glm::vec2(extent.width, extent.height);
+        uint32_t id = index_staging_data[iloc.y * extent.width + iloc.x];
+        uint32_t material_id = id & 0xFFFF; // Lower 16 bits
+
+        // Find the index of the entity in the selection
+        std::vector <std::pair <int, int>> entity_indices;
+        for (auto &entity : entities) {
+                const Renderable &renderable = entity.get <Renderable> ();
+
+                auto &meshes = renderable.mesh->submeshes;
+                for (int j = 0; j < meshes.size(); j++) {
+                        if (meshes[j].material_index == material_id) {
+                                entity_indices.push_back({ entity.id, j });
+                                break;
+                        }
+                }
+        }
+
+        return entity_indices;
 }
 
 void EditorRenderer::menu()
