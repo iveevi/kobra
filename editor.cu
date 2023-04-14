@@ -62,21 +62,15 @@ struct Editor : public kobra::BaseApp {
 
 	// Viewport
 	struct {
-		kobra::ImageData image = nullptr;
-		vk::raii::Framebuffer framebuffer = nullptr;
-		kobra::DepthBuffer depth_buffer = nullptr;
-		vk::raii::Sampler sampler = nullptr;
-		// TODO: store extent
-
 		// Scene viewing camera
 		Camera camera { 45.0f, 1.0f };
 		Transform camera_transform;
 
 		ImVec2 min = {1/0.0f, 1/0.0f};
 		ImVec2 max = {-1.0f, -1.0f};
+		
+                vk::raii::Sampler sampler = nullptr;
 	} m_viewport;
-
-	void resize_viewport(const vk::Extent2D &);
 
 	// Buffers
 	struct {
@@ -594,46 +588,6 @@ void import_asset(Editor *editor)
 	}
 }
 
-void Editor::resize_viewport(const vk::Extent2D &extent)
-{
-	// TODO: resize with the viewport image window in ImGui
-	m_viewport.image = kobra::ImageData(
-		phdev, device,
-		swapchain.format, extent,
-		vk::ImageTiling::eOptimal,
-		vk::ImageUsageFlagBits::eColorAttachment
-			| vk::ImageUsageFlagBits::eSampled
-			| vk::ImageUsageFlagBits::eTransferDst
-			| vk::ImageUsageFlagBits::eTransferSrc,
-		vk::MemoryPropertyFlagBits::eDeviceLocal,
-		vk::ImageAspectFlagBits::eColor
-	);
-
-	m_viewport.depth_buffer = std::move(
-		kobra::DepthBuffer {
-			phdev, device,
-			vk::Format::eD32Sfloat,
-			m_viewport.image.extent
-		}
-	);
-
-	// Resize the viewport framebuffer
-	// TODO: move all viewport resources to the viewport attchment...
-	std::vector <vk::raii::ImageView> attachments;
-	attachments.emplace_back(std::move(m_viewport.image.view));
-
-	m_viewport.framebuffer = std::move(
-		kobra::make_framebuffers(device,
-			render_pass,
-			attachments, // TODO: pass vk::ImageViews instead of vk::raii::ImageView
-			&m_viewport.depth_buffer.view,
-			extent
-		).front()
-	);
-
-	m_viewport.image.view = std::move(attachments.front());
-}
-
 // Viewport UI attachment
 // TODO: keep all viewport editor state in this class
 // e.g. the renderers, etc...
@@ -736,7 +690,7 @@ public:
 			ImGui::EndMenuBar();
 		}
 
-		vk::Image image = *m_editor->m_viewport.image.image;
+		vk::Image image = *m_editor->m_editor_renderer->viewport_image();
 		if (image == m_old_image) {
 			// Get current window size
 			ImVec2 window_size = ImGui::GetContentRegionAvail();
@@ -749,23 +703,19 @@ public:
 			if (image_size.x != m_old_size.x ||
 				image_size.y != m_old_size.y) {
 				m_old_size = image_size;
-				std::cout << "Need to resize viewport image to: "
-					<< image_size.x << "x" << image_size.y << std::endl;
+
 				// Add to sync queue
 				// TODO: refactor...
 				m_editor->sync_queue.push({
-					"Editor::resize_viewport",
+					"Resizing viewport",
 					[&]() {
                                                 if (m_old_size.x > 0 && m_old_size.y > 0) {
-                                                        m_editor->resize_viewport({
+                                                        vk::Extent2D extent {
                                                                 (uint32_t) m_old_size.x,
                                                                 (uint32_t) m_old_size.y
-                                                        });
+                                                        };
 
-                                                        m_editor->m_editor_renderer->resize({
-                                                                (uint32_t) m_old_size.x,
-                                                                (uint32_t) m_old_size.y
-                                                        }, m_editor->m_viewport.image);
+                                                        m_editor->m_editor_renderer->resize(extent);
                                                 }
 					}
 				});
@@ -795,7 +745,7 @@ public:
 				(*m_editor->m_viewport.sampler),
 
 				static_cast <VkImageView>
-				(*m_editor->m_viewport.image.view),
+				(*m_editor->m_editor_renderer->viewport_image_view()),
 
 				static_cast <VkImageLayout>
 				(vk::ImageLayout::eShaderReadOnlyOptimal)
@@ -938,6 +888,90 @@ public:
 static const char *environment_map_path = KOBRA_DIR
         "/resources/skies/background_1.jpg";
 
+void set_imgui_theme()
+{
+        ImVec4* colors = ImGui::GetStyle().Colors;
+        colors[ImGuiCol_Text]                   = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
+        colors[ImGuiCol_TextDisabled]           = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
+        colors[ImGuiCol_WindowBg]               = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
+        colors[ImGuiCol_ChildBg]                = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+        colors[ImGuiCol_PopupBg]                = ImVec4(0.19f, 0.19f, 0.19f, 0.92f);
+        colors[ImGuiCol_Border]                 = ImVec4(0.19f, 0.19f, 0.19f, 0.29f);
+        colors[ImGuiCol_BorderShadow]           = ImVec4(0.00f, 0.00f, 0.00f, 0.24f);
+        colors[ImGuiCol_FrameBg]                = ImVec4(0.05f, 0.05f, 0.05f, 0.54f);
+        colors[ImGuiCol_FrameBgHovered]         = ImVec4(0.19f, 0.19f, 0.19f, 0.54f);
+        colors[ImGuiCol_FrameBgActive]          = ImVec4(0.20f, 0.22f, 0.23f, 1.00f);
+        colors[ImGuiCol_TitleBg]                = ImVec4(0.00f, 0.00f, 0.00f, 1.00f);
+        colors[ImGuiCol_TitleBgActive]          = ImVec4(0.06f, 0.06f, 0.06f, 1.00f);
+        colors[ImGuiCol_TitleBgCollapsed]       = ImVec4(0.00f, 0.00f, 0.00f, 1.00f);
+        colors[ImGuiCol_MenuBarBg]              = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
+        colors[ImGuiCol_ScrollbarBg]            = ImVec4(0.05f, 0.05f, 0.05f, 0.54f);
+        colors[ImGuiCol_ScrollbarGrab]          = ImVec4(0.34f, 0.34f, 0.34f, 0.54f);
+        colors[ImGuiCol_ScrollbarGrabHovered]   = ImVec4(0.40f, 0.40f, 0.40f, 0.54f);
+        colors[ImGuiCol_ScrollbarGrabActive]    = ImVec4(0.56f, 0.56f, 0.56f, 0.54f);
+        colors[ImGuiCol_CheckMark]              = ImVec4(0.33f, 0.67f, 0.86f, 1.00f);
+        colors[ImGuiCol_SliderGrab]             = ImVec4(0.34f, 0.34f, 0.34f, 0.54f);
+        colors[ImGuiCol_SliderGrabActive]       = ImVec4(0.56f, 0.56f, 0.56f, 0.54f);
+        colors[ImGuiCol_Button]                 = ImVec4(0.05f, 0.05f, 0.05f, 0.54f);
+        colors[ImGuiCol_ButtonHovered]          = ImVec4(0.19f, 0.19f, 0.19f, 0.54f);
+        colors[ImGuiCol_ButtonActive]           = ImVec4(0.20f, 0.22f, 0.23f, 1.00f);
+        colors[ImGuiCol_Header]                 = ImVec4(0.00f, 0.00f, 0.00f, 0.52f);
+        colors[ImGuiCol_HeaderHovered]          = ImVec4(0.00f, 0.00f, 0.00f, 0.36f);
+        colors[ImGuiCol_HeaderActive]           = ImVec4(0.20f, 0.22f, 0.23f, 0.33f);
+        colors[ImGuiCol_Separator]              = ImVec4(0.28f, 0.28f, 0.28f, 0.29f);
+        colors[ImGuiCol_SeparatorHovered]       = ImVec4(0.44f, 0.44f, 0.44f, 0.29f);
+        colors[ImGuiCol_SeparatorActive]        = ImVec4(0.40f, 0.44f, 0.47f, 1.00f);
+        colors[ImGuiCol_ResizeGrip]             = ImVec4(0.28f, 0.28f, 0.28f, 0.29f);
+        colors[ImGuiCol_ResizeGripHovered]      = ImVec4(0.44f, 0.44f, 0.44f, 0.29f);
+        colors[ImGuiCol_ResizeGripActive]       = ImVec4(0.40f, 0.44f, 0.47f, 1.00f);
+        colors[ImGuiCol_Tab]                    = ImVec4(0.00f, 0.00f, 0.00f, 0.52f);
+        colors[ImGuiCol_TabHovered]             = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
+        colors[ImGuiCol_TabActive]              = ImVec4(0.20f, 0.20f, 0.20f, 0.36f);
+        colors[ImGuiCol_TabUnfocused]           = ImVec4(0.00f, 0.00f, 0.00f, 0.52f);
+        colors[ImGuiCol_TabUnfocusedActive]     = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
+        colors[ImGuiCol_DockingPreview]         = ImVec4(0.33f, 0.67f, 0.86f, 1.00f);
+        colors[ImGuiCol_DockingEmptyBg]         = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
+        colors[ImGuiCol_PlotLines]              = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
+        colors[ImGuiCol_PlotLinesHovered]       = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
+        colors[ImGuiCol_PlotHistogram]          = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
+        colors[ImGuiCol_PlotHistogramHovered]   = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
+        colors[ImGuiCol_TableHeaderBg]          = ImVec4(0.00f, 0.00f, 0.00f, 0.52f);
+        colors[ImGuiCol_TableBorderStrong]      = ImVec4(0.00f, 0.00f, 0.00f, 0.52f);
+        colors[ImGuiCol_TableBorderLight]       = ImVec4(0.28f, 0.28f, 0.28f, 0.29f);
+        colors[ImGuiCol_TableRowBg]             = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+        colors[ImGuiCol_TableRowBgAlt]          = ImVec4(1.00f, 1.00f, 1.00f, 0.06f);
+        colors[ImGuiCol_TextSelectedBg]         = ImVec4(0.20f, 0.22f, 0.23f, 1.00f);
+        colors[ImGuiCol_DragDropTarget]         = ImVec4(0.33f, 0.67f, 0.86f, 1.00f);
+        colors[ImGuiCol_NavHighlight]           = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
+        colors[ImGuiCol_NavWindowingHighlight]  = ImVec4(1.00f, 0.00f, 0.00f, 0.70f);
+        colors[ImGuiCol_NavWindowingDimBg]      = ImVec4(1.00f, 0.00f, 0.00f, 0.20f);
+        colors[ImGuiCol_ModalWindowDimBg]       = ImVec4(1.00f, 0.00f, 0.00f, 0.35f);
+
+        ImGuiStyle& style = ImGui::GetStyle();
+        style.WindowPadding                     = ImVec2(8.00f, 8.00f);
+        style.FramePadding                      = ImVec2(5.00f, 2.00f);
+        style.CellPadding                       = ImVec2(6.00f, 6.00f);
+        style.ItemSpacing                       = ImVec2(6.00f, 6.00f);
+        style.ItemInnerSpacing                  = ImVec2(6.00f, 6.00f);
+        style.TouchExtraPadding                 = ImVec2(0.00f, 0.00f);
+        style.IndentSpacing                     = 25;
+        style.ScrollbarSize                     = 15;
+        style.GrabMinSize                       = 10;
+        style.WindowBorderSize                  = 1;
+        style.ChildBorderSize                   = 1;
+        style.PopupBorderSize                   = 1;
+        style.FrameBorderSize                   = 1;
+        style.TabBorderSize                     = 1;
+        style.WindowRounding                    = 7;
+        style.ChildRounding                     = 4;
+        style.FrameRounding                     = 3;
+        style.PopupRounding                     = 4;
+        style.ScrollbarRounding                 = 9;
+        style.GrabRounding                      = 3;
+        style.LogSliderDeadzone                 = 4;
+        style.TabRounding                       = 4;
+}
+
 // Editor implementation
 Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 		const std::vector <const char *> &extensions)
@@ -973,13 +1007,14 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	ImGui::CreateContext();
 	ImPlot::CreateContext();
 	ImGui_ImplGlfw_InitForVulkan(window.m_handle, true);
+        set_imgui_theme();
 
 	// Docking
 	ImGuiIO &imgui_io = ImGui::GetIO();
 	imgui_io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	imgui_io.ConfigWindowsMoveFromTitleBarOnly = true;
 
-	auto font = std::make_pair(KOBRA_FONTS_DIR "/Montserrat/static/Montserrat-SemiBold.ttf", 18);
+	auto font = std::make_pair(KOBRA_FONTS_DIR "/Frutiger/Frutiger.ttf", 18);
 	m_ui = std::make_shared <kobra::layers::UI> (
 		get_context(), window,
 		graphics_queue, font,
@@ -1065,44 +1100,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	m_buffers.traced = kobra::cuda::alloc(size * sizeof(uint32_t));
 	m_buffers.traced_cpu.resize(size);
 
-	// Allocate the viewport resources
-	// TODO: method...
-	m_viewport.image = kobra::ImageData(
-		phdev, device,
-		swapchain.format, window.m_extent,
-		vk::ImageTiling::eOptimal,
-		vk::ImageUsageFlagBits::eColorAttachment
-			| vk::ImageUsageFlagBits::eSampled
-			| vk::ImageUsageFlagBits::eTransferDst
-			| vk::ImageUsageFlagBits::eTransferSrc,
-		vk::MemoryPropertyFlagBits::eDeviceLocal,
-		vk::ImageAspectFlagBits::eColor
-	);
-
 	m_viewport.sampler = kobra::make_continuous_sampler(device);
-
-	m_viewport.depth_buffer = std::move(
-		kobra::DepthBuffer {
-			phdev, device,
-			vk::Format::eD32Sfloat,
-			m_viewport.image.extent
-		}
-	);
-
-	// Create the viewport framebuffer
-	std::vector <vk::raii::ImageView> attachments;
-	attachments.emplace_back(std::move(m_viewport.image.view));
-
-	m_viewport.framebuffer = std::move(
-		kobra::make_framebuffers(device,
-			render_pass,
-			attachments,
-			&m_viewport.depth_buffer.view,
-			window.m_extent
-		).front()
-	);
-
-	m_viewport.image.view = std::move(attachments.front());
 
 	// Attach UI layers
 	m_progress_bar = std::make_shared <ProgressBar> ("Irradiance Computation Progress");
@@ -1124,7 +1122,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	// TODO: scene graph...
 
         // EditorRenderer
-        m_editor_renderer = std::make_shared <EditorRenderer> (get_context(), m_viewport.image);
+        m_editor_renderer = std::make_shared <EditorRenderer> (get_context());
 
 	// Load and set the icon
 	std::string icon_path = KOBRA_DIR "/kobra_icon.png";
@@ -1306,7 +1304,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
                 render_info.camera = m_viewport.camera;
                 render_info.camera_transform = m_viewport.camera_transform;
                 // render_info.cmd = &cmd;
-                render_info.extent = m_viewport.image.extent;
+                render_info.extent = m_editor_renderer->extent;
                 // render_info.framebuffer = &m_viewport.framebuffer;
                 render_info.highlighted_entities = m_highlighted_entities;
 
@@ -1344,8 +1342,9 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 			request_queue.push(*selection_request);
 		}
 
-		m_viewport.image.layout = vk::ImageLayout::ePresentSrcKHR;
-		m_viewport.image.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
+                ImageData &viewport_image = m_editor_renderer->viewport();
+		viewport_image.layout = vk::ImageLayout::ePresentSrcKHR;
+		viewport_image.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
 
 		if (!m_input.capture_requests.empty()) {
 			std::string path = m_input.capture_requests.front();
@@ -1361,8 +1360,8 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 
 				// TODO: get the format in order to compute
 				// size...
-				int size = sizeof(uint32_t) * m_viewport.image.extent.width
-					* m_viewport.image.extent.height;
+				int size = sizeof(uint32_t) * viewport_image.extent.width
+					* viewport_image.extent.height;
 
 				m_input.capture_buffer = kobra::BufferData(
 					phdev, device, size,
@@ -1373,21 +1372,21 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 			}
 
 			// Copy the image to the buffer
-			m_viewport.image.transition_layout(cmd, vk::ImageLayout::eTransferSrcOptimal);
+			viewport_image.transition_layout(cmd, vk::ImageLayout::eTransferSrcOptimal);
 
 			cmd.copyImageToBuffer(
-				*m_viewport.image.image,
+				*viewport_image.image,
 				vk::ImageLayout::eTransferSrcOptimal,
 				*m_input.capture_buffer.buffer,
 				{vk::BufferImageCopy {
 					0, 0, 0,
 					{vk::ImageAspectFlagBits::eColor, 0, 0, 1},
 					{0, 0, 0},
-					{m_viewport.image.extent.width, m_viewport.image.extent.height, 1}
+					{viewport_image.extent.width, viewport_image.extent.height, 1}
 				}}
 			);
 
-			m_viewport.image.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
+			viewport_image.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
 
 			// Add capture to sync queue
 			sync_queue.push({
@@ -1403,17 +1402,17 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 					std::string path = m_input.current_capture_path;
 					/* stbi_write_png(
 						path.c_str(),
-						m_viewport.image.extent.width,
-						m_viewport.image.extent.height,
+						viewport_image.extent.width,
+						viewport_image.extent.height,
 						4,
 						m_input.capture_data.data(),
-						m_viewport.image.extent.width * 4
+						viewport_image.extent.width * 4
 					); */
 
 					RawImage {
 						m_input.capture_data,
-						m_viewport.image.extent.width,
-						m_viewport.image.extent.height,
+						viewport_image.extent.width,
+						viewport_image.extent.height,
 						4
 					}.write(path);
 
@@ -1453,18 +1452,8 @@ void Editor::after_present()
                                 (request.y - min.y) / (max.y - min.y)
                         };
 
-                        printf("Fixed point query: %f, %f\n", fixed.x, fixed.y);
-
                         std::vector <Entity> renderable_entities = m_scene.ecs->tuple_entities <Renderable> ();
                         auto indices = m_editor_renderer->selection_query(renderable_entities, {fixed.x, fixed.y});
-
-                        std::cout << "Indices: " << indices.size() << std::endl;
-                        for (auto &index : indices) {
-                                std::cout << "{" << index.first << ", "
-                                        << index.second << "} ";
-                        }
-                        std::cout << ")" << std::endl;
-
 
                         // Update the material editor
                         if (indices.size() == 0) {

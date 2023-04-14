@@ -142,16 +142,16 @@ static const std::vector <vk::VertexInputAttributeDescription> flat_vertex_attri
 };
         
 // Constructor
-EditorRenderer::EditorRenderer(const Context &context, const ImageData &viewport)
+EditorRenderer::EditorRenderer(const Context &context)
                 : phdev(context.phdev),
                 device(context.device),
                 descriptor_pool(context.descriptor_pool),
                 command_pool(context.command_pool),
                 texture_loader(context.texture_loader)
 {
-        resize(context.extent, viewport);
+        resize(context.extent);
 
-        configure_present(viewport);
+        configure_present();
         configure_gbuffer_pipeline();
         configure_albedo_pipeline(context.swapchain_format);
         configure_normals_pipeline(context.swapchain_format);
@@ -162,11 +162,11 @@ EditorRenderer::EditorRenderer(const Context &context, const ImageData &viewport
         render_state.initialized = true;
 }
 
-void EditorRenderer::configure_present(const ImageData &viewport)
+void EditorRenderer::configure_present()
 {
         // Create a render pass for all presentation pipelines
         present_render_pass = make_render_pass(*device,
-                { viewport.format },
+                { framebuffer_images.viewport.format },
                 { vk::AttachmentLoadOp::eClear },
                 vk::Format::eD32Sfloat,
                 vk::AttachmentLoadOp::eClear
@@ -174,7 +174,7 @@ void EditorRenderer::configure_present(const ImageData &viewport)
 
         // Another framebuffer to render to the actual viewport
         std::vector <vk::ImageView> viewport_attachment_views {
-                *viewport.view,
+                *framebuffer_images.viewport.view,
                 *depth_buffer.view,
         };
 
@@ -593,7 +593,7 @@ void EditorRenderer::configure_highlight_pipeline(const vk::Format &swapchain_fo
                 framebuffer_images.material_index, 0);
 }
         
-void EditorRenderer::resize(const vk::Extent2D &new_extent, const ImageData &viewport)
+void EditorRenderer::resize(const vk::Extent2D &new_extent)
 {
         static vk::Format formats[] = {
                 vk::Format::eR32G32B32A32Sfloat,
@@ -613,15 +613,22 @@ void EditorRenderer::resize(const vk::Extent2D &new_extent, const ImageData &vie
                 | vk::ImageUsageFlagBits::eTransferSrc
                 | vk::ImageUsageFlagBits::eStorage;
 
-        framebuffer_images.position = ImageData {
+        // Allocate viewport image
+        framebuffer_images.viewport = ImageData {
                 *phdev, *device,
                 formats[0], new_extent, tiling,
                 usage, mem_flags, aspect
         };
 
-        framebuffer_images.normal = ImageData {
+        framebuffer_images.position = ImageData {
                 *phdev, *device,
                 formats[1], new_extent, tiling,
+                usage, mem_flags, aspect
+        };
+
+        framebuffer_images.normal = ImageData {
+                *phdev, *device,
+                formats[2], new_extent, tiling,
                 usage, mem_flags, aspect
         };
 
@@ -677,10 +684,8 @@ void EditorRenderer::resize(const vk::Extent2D &new_extent, const ImageData &vie
                 gbuffer_fb = vk::raii::Framebuffer {*device, fb_info};
 
                 // Resize viewport framebuffer
-                printf("Depth buffer extent: %d, %d\n", depth_buffer.extent.width, depth_buffer.extent.height);
-                printf("Viewport extent: %d, %d\n", viewport.extent.width, viewport.extent.height);
                 std::vector <vk::ImageView> viewport_attachment_views {
-                        *viewport.view,
+                        *framebuffer_images.viewport.view,
                         *depth_buffer.view,
                 };
 

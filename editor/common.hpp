@@ -70,6 +70,7 @@ struct EditorRenderer {
 
         // Buffers
         struct framebuffer_images {
+                ImageData viewport = nullptr;
                 ImageData position = nullptr;
                 ImageData normal = nullptr;
                 ImageData material_index = nullptr;
@@ -169,9 +170,9 @@ struct EditorRenderer {
         // TODO: table mapping render_state to function for presenting
 
         EditorRenderer() = delete;
-        EditorRenderer(const Context &, const ImageData &);
+        EditorRenderer(const Context &);
 
-        void configure_present(const ImageData &);
+        void configure_present();
         void configure_gbuffer_pipeline();
         void configure_albedo_pipeline(const vk::Format &);
         void configure_normals_pipeline(const vk::Format &);
@@ -179,7 +180,7 @@ struct EditorRenderer {
         void configure_sobel_pipeline();
         void configure_highlight_pipeline(const vk::Format &);
 
-        void resize(const vk::Extent2D &, const ImageData &);
+        void resize(const vk::Extent2D &);
 
         // Rendering
         void render_gbuffer(const RenderInfo &, const std::vector <Entity> &);
@@ -189,6 +190,19 @@ struct EditorRenderer {
         void render_highlight(const RenderInfo &, const std::vector <Entity> &);
 
         void render(const RenderInfo &, const std::vector <Entity> &);
+
+        // Properties
+        ImageData &viewport() {
+                return framebuffer_images.viewport;
+        }
+
+        vk::raii::Image &viewport_image() {
+                return framebuffer_images.viewport.image;
+        }
+        
+        vk::raii::ImageView &viewport_image_view() {
+                return framebuffer_images.viewport.view;
+        }
 
         // Querying objects
         std::vector <std::pair <int, int>>
