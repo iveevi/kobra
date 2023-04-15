@@ -129,6 +129,15 @@ struct EditorRenderer {
         struct {
                 vk::raii::PipelineLayout pipeline_layout = nullptr;
                 vk::raii::Pipeline pipeline = nullptr;
+
+                std::map <std::pair <int, int>, BoundingBox> cache;
+
+                BufferData buffer = nullptr;
+        } bounding_box;
+
+        struct {
+                vk::raii::PipelineLayout pipeline_layout = nullptr;
+                vk::raii::Pipeline pipeline = nullptr;
         
                 vk::raii::DescriptorSetLayout dsl = nullptr;
                 vk::raii::DescriptorSet dset = nullptr;
@@ -160,7 +169,7 @@ struct EditorRenderer {
                         eWireframe,
                         eNormals,
                         eAlbedo,
-                        eSparseRTX
+                        eSparseGlobalIllumination
                 } mode = eTriangulation;
 
                 bool bounding_boxes = false;
@@ -172,21 +181,24 @@ struct EditorRenderer {
         EditorRenderer() = delete;
         EditorRenderer(const Context &);
 
+        // Configuration methods
         void configure_present();
         void configure_gbuffer_pipeline();
-        void configure_albedo_pipeline(const vk::Format &);
-        void configure_normals_pipeline(const vk::Format &);
-        void configure_triangulation_pipeline(const vk::Format &);
+        void configure_albedo_pipeline();
+        void configure_normals_pipeline();
+        void configure_triangulation_pipeline();
+        void configure_bounding_box_pipeline();
         void configure_sobel_pipeline();
-        void configure_highlight_pipeline(const vk::Format &);
+        void configure_highlight_pipeline();
 
         void resize(const vk::Extent2D &);
 
-        // Rendering
+        // Rendering methods
         void render_gbuffer(const RenderInfo &, const std::vector <Entity> &);
         void render_albedo(const RenderInfo &, const std::vector <Entity> &);
         void render_normals(const RenderInfo &);
         void render_triangulation(const RenderInfo &);
+        void render_bounding_box(const RenderInfo &, const std::vector <Entity> &);
         void render_highlight(const RenderInfo &, const std::vector <Entity> &);
 
         void render(const RenderInfo &, const std::vector <Entity> &);

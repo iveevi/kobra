@@ -1,7 +1,7 @@
-#ifndef KOBRA_MESH_H_
-#define KOBRA_MESH_H_
+#pragma once
 
 // Standard headers
+#include <optional>
 #include <vector>
 
 // Engine headers
@@ -24,13 +24,11 @@ public:
 	VertexList	vertices;
 	Indices		indices;
 	uint32_t	material_index = 0;
-	// Material	material;
 
 	// Constructors
 	// TODO: remove this constructor...
 	Submesh(const VertexList &vs, const Indices &is,
 			uint32_t mat_index = 0,
-			// const Material &mat = Material(),
 			bool calculate_tangents = true)
 			: vertices(vs), indices(is), material_index(mat_index) {
 		/* Process the vertex data
@@ -44,7 +42,7 @@ public:
 	}
 
 	// Generate a bounding box
-	BoundingBox bbox(const Transform &) const;
+	BoundingBox bbox() const;
 
 	// Generate a BVH for this submesh
 	BVHPtr bvh(const Transform &transform) const {
@@ -89,6 +87,7 @@ public:
 };
 
 // A mesh is a collection of submeshes
+// TODO: refactor to Model
 class Mesh {
 	// Source file
 	std::string _source = "";
@@ -179,5 +178,3 @@ public:
 using MeshPtr = std::shared_ptr <Mesh>;
 
 }
-
-#endif

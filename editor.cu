@@ -1459,6 +1459,7 @@ void Editor::after_present()
                         if (indices.size() == 0) {
                                 m_material_editor->material_index = -1;
                                 m_ui_attachments.viewport->set_transform();
+                                m_highlighted_entities.clear();
                         } else {
                                 auto selection = indices[0];
                                 kobra::Renderable &renderable = m_scene.ecs->get <kobra::Renderable> (selection.first);

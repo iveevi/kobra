@@ -107,63 +107,6 @@ void main()
 }
 )";
 
-// Albedo rendering
-const char *albedo_vert_shader = R"(
-#version 450
-
-layout (location = 0) in vec3 in_position;
-layout (location = 2) in vec2 in_uv;
-
-layout (push_constant) uniform PushConstants {
-	mat4 model;
-	mat4 view;
-	mat4 proj;
-        vec4 color;
-        int has_albedo;
-};
-
-layout (location = 0) out vec2 out_uv;
-layout (location = 1) out vec4 out_color;
-layout (location = 2) out int out_has_albedo;
-
-void main()
-{
-	// First compute rendering position
-	gl_Position = proj * view * model * vec4(in_position, 1.0);
-	gl_Position.y = -gl_Position.y;
-	gl_Position.z = (gl_Position.z + gl_Position.w)/2.0;
-	
-	// Pass outputs
-	out_uv = vec2(in_uv.x, 1.0 - in_uv.y);
-        out_color = color;
-        out_has_albedo = has_albedo;
-}
-)";
-
-const char *albedo_frag_shader = R"(
-#version 450
-
-layout (binding = 0)
-uniform sampler2D albedo_map;
-
-layout (location = 0) in vec2 in_uv;
-layout (location = 1) in vec4 in_color;
-layout (location = 2) flat in int in_has_albedo;
-
-layout (location = 0) out vec4 fragment;
-
-void main()
-{
-        if (in_has_albedo != 0) {
-                fragment = texture(albedo_map, in_uv);
-                if (fragment.a < 0.5)
-                        discard;
-        } else {
-                fragment = in_color;
-        }
-}
-)";
-
 // TODO: use a simple mesh shader for this...
 const char *presentation_vert_shader = R"(
 #version 450
@@ -275,6 +218,99 @@ void main()
                 fragment = push_constants.color;
         else
                 discard;
+}
+)";
+
+// Albedo rendering
+const char *albedo_vert_shader = R"(
+#version 450
+
+layout (location = 0) in vec3 in_position;
+layout (location = 2) in vec2 in_uv;
+
+layout (push_constant) uniform PushConstants {
+	mat4 model;
+	mat4 view;
+	mat4 proj;
+        vec4 color;
+        int has_albedo;
+};
+
+layout (location = 0) out vec2 out_uv;
+layout (location = 1) out vec4 out_color;
+layout (location = 2) out int out_has_albedo;
+
+void main()
+{
+	// First compute rendering position
+	gl_Position = proj * view * model * vec4(in_position, 1.0);
+	gl_Position.y = -gl_Position.y;
+	gl_Position.z = (gl_Position.z + gl_Position.w)/2.0;
+	
+	// Pass outputs
+	out_uv = vec2(in_uv.x, 1.0 - in_uv.y);
+        out_color = color;
+        out_has_albedo = has_albedo;
+}
+)";
+
+const char *albedo_frag_shader = R"(
+#version 450
+
+layout (binding = 0)
+uniform sampler2D albedo_map;
+
+layout (location = 0) in vec2 in_uv;
+layout (location = 1) in vec4 in_color;
+layout (location = 2) flat in int in_has_albedo;
+
+layout (location = 0) out vec4 fragment;
+
+void main()
+{
+        if (in_has_albedo != 0) {
+                fragment = texture(albedo_map, in_uv);
+                if (fragment.a < 0.5)
+                        discard;
+        } else {
+                fragment = in_color;
+        }
+}
+)";
+
+// Bounding box shaders
+const char *bounding_box_vert_shader = R"(
+#version 450
+
+layout (location = 0) in vec3 in_position;
+
+layout (push_constant) uniform PushConstants {
+	mat4 model;
+	mat4 view;
+	mat4 proj;
+};
+
+void main()
+{
+	// First compute rendering position
+	gl_Position = proj * view * model * vec4(in_position, 1.0);
+	gl_Position.y = -gl_Position.y;
+	gl_Position.z = (gl_Position.z + gl_Position.w)/2.0;
+}
+)";
+
+const char *bounding_box_frag_shader = R"(
+#version 450
+
+layout (push_constant) uniform PushConstants {
+        layout (offset = 192) vec4 color;
+};
+
+layout (location = 0) out vec4 fragment;
+
+void main()
+{
+        fragment = color;
 }
 )";
 

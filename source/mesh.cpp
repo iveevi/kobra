@@ -92,11 +92,8 @@ inline bool operator==(const kobra::Vertex &a, const kobra::Vertex &b)
 }
 
 // Generate bounding box for submesh
-BoundingBox Submesh::bbox(const Transform &transform) const
+BoundingBox Submesh::bbox() const
 {
-	// TODO: multithread
-	glm::mat4 m = transform.matrix();
-
 	// Create a bounding box
 	BoundingBox box {
 		.min = glm::vec3(std::numeric_limits <float>::max()),
@@ -105,9 +102,8 @@ BoundingBox Submesh::bbox(const Transform &transform) const
 
 	// Add all vertices to the bounding box
 	for (const auto &v : vertices) {
-		glm::vec4 p = m * glm::vec4(v.position, 1.0f);
-		box.min = glm::min(box.min, glm::vec3(p));
-		box.max = glm::max(box.max, glm::vec3(p));
+		box.min = glm::min(box.min, v.position);
+		box.max = glm::max(box.max, v.position);
 	}
 
 	return box;
