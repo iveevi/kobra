@@ -670,25 +670,13 @@ public:
 
 		// TODO: separate attachment for the main menu bar
 		ImGui::Begin("Viewport", nullptr, ImGuiWindowFlags_MenuBar);
+                        
+                MenuOptions options {
+                        .camera = &m_editor->m_viewport.camera,
+                        .speed = &g_application.speed,
+                };
 
-		if (ImGui::BeginMenuBar()) {
-                        m_editor->m_editor_renderer->menu();
-
-			// Camera settings
-			if (ImGui::BeginMenu("Camera")) {
-				if (ImGui::SliderFloat("Speed", &g_application.speed, 0.1f, 100.0f));
-				if (ImGui::SliderFloat("FOV", &m_editor->m_viewport.camera.fov, 1.0f, 179.0f)) {
-					m_editor->m_renderers.movement_mutex.lock();
-					m_editor->m_renderers.movement.push(true);
-					m_editor->m_renderers.movement_mutex.unlock();
-				}
-
-				ImGui::EndMenu();
-			}
-
-			// TODO: overlay # of samples...
-			ImGui::EndMenuBar();
-		}
+                m_editor->m_editor_renderer->menu(options);
 
 		vk::Image image = *m_editor->m_editor_renderer->viewport_image();
 		if (image == m_old_image) {

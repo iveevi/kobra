@@ -61,6 +61,12 @@ struct RenderInfo {
         RenderInfo(const vk::raii::CommandBuffer &_cmd) : cmd(_cmd) {}
 };
 
+// Menu options
+struct MenuOptions {
+        Camera *camera = nullptr;
+        float *speed = nullptr;
+};
+
 // Editor rendering
 struct EditorViewport {
         // Vulkan structures
@@ -232,6 +238,11 @@ struct EditorViewport {
                         ePathTraced
                 } mode = eTriangulation;
 
+                enum {
+                        eRasterized,
+                        eRaytraced
+                } backend = eRasterized;
+
                 bool bounding_boxes = false;
                 bool initialized = false;
         } render_state;
@@ -287,6 +298,5 @@ struct EditorViewport {
         selection_query(const std::vector <Entity> &, const glm::vec2 &);
 
         // ImGui memu
-        void menu();
-
+        void menu(const MenuOptions &);
 };

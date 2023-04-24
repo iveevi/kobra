@@ -3,263 +3,222 @@
 #include "include/cuda/error.cuh"
 #include "push_constants.hpp"
 
-__global__ void overwrite_normals(cudaSurfaceObject_t normal, vk::Extent2D extent, OptixIO io)
-{
-        int x0 = blockDim.x * blockIdx.x + threadIdx.x;
-        int y0 = blockDim.y * blockIdx.y + threadIdx.y;
-
-        for (int x = x0; x < extent.width; x += blockDim.x * gridDim.x) {
-                for (int y = y0; y < extent.height; y += blockDim.y * gridDim.y) {
-                        if (x < extent.width && y < extent.height) {
-                                if (x == 0 && y == 0) {
-                                        optix_io_write_str(&io, "(x, y) matches (0, 0)\n");
-                                }
-
-                                float4 color { 0.0f, 0.0f, 0.0f, 0.0f };
-                                color.x = (float) x / (float) extent.width;
-                                color.y = (float) y / (float) extent.height;
-                                surf2Dwrite(color, normal, x * sizeof(float4), y);
-                        }
-                }
-        }
-}
-
 void EditorViewport::render_gbuffer(const RenderInfo &render_info, const std::vector <Entity> &entities)
 {
-        // The given entities are assumed to have all the necessary
-        // components (Transform and Renderable)
+        if (render_state.backend == RenderState::eRasterized) {
+                // The given entities are assumed to have all the necessary
+                // components (Transform and Renderable)
 
-        for (const auto &entity : entities) {
-                int id = entity.id;
-                const auto &renderable = entity.get <Renderable> ();
+                for (const auto &entity : entities) {
+                        int id = entity.id;
+                        const auto &renderable = entity.get <Renderable> ();
 
-                // Allocat descriptor sets if needed
-                const auto &meshes = renderable.mesh->submeshes;
+                        // Allocat descriptor sets if needed
+                        const auto &meshes = renderable.mesh->submeshes;
 
-                for (int i = 0; i < meshes.size(); i++) {
-                        MeshIndex index { id, i };
+                        for (int i = 0; i < meshes.size(); i++) {
+                                MeshIndex index { id, i };
 
-                        if (gbuffer.dset_refs.find(index) == gbuffer.dset_refs.end()) {
-                                int new_index = gbuffer.dsets.size();
-                                gbuffer.dset_refs[index] = new_index;
-                                
-                                gbuffer.dsets.emplace_back(
-                                        std::move(
-                                                vk::raii::DescriptorSets {
-                                                        *device,
-                                                        { **descriptor_pool, *gbuffer.dsl }
-                                                }.front()
-                                        )
+                                if (gbuffer.dset_refs.find(index) == gbuffer.dset_refs.end()) {
+                                        int new_index = gbuffer.dsets.size();
+                                        gbuffer.dset_refs[index] = new_index;
+                                        
+                                        gbuffer.dsets.emplace_back(
+                                                std::move(
+                                                        vk::raii::DescriptorSets {
+                                                                *device,
+                                                                { **descriptor_pool, *gbuffer.dsl }
+                                                        }.front()
+                                                )
+                                        );
+
+                                        // Bind inforation to descriptor set
+                                        Material material = Material::all[meshes[i].material_index];
+                
+                                        std::string albedo = "blank";
+                                        if (material.has_albedo())
+                                                albedo = material.albedo_texture;
+
+                                        std::string normal = "blank";
+                                        if (material.has_normal())
+                                                normal = material.normal_texture;
+
+                                        texture_loader->bind(gbuffer.dsets[new_index], albedo, 0);
+                                        texture_loader->bind(gbuffer.dsets[new_index], normal, 1);
+                                }
+                        }
+                }
+
+                // Render to G-buffer
+                RenderArea::full().apply(render_info.cmd, extent);
+
+                std::vector <vk::ClearValue> clear_values {
+                        vk::ClearColorValue { std::array <float, 4> { 0.0f, 0.0f, 0.0f, 0.0f } },
+                        vk::ClearColorValue { std::array <float, 4> { 0.0f, 0.0f, 0.0f, 0.0f } },
+                        vk::ClearColorValue { std::array <int32_t, 4> { -1, -1, -1, -1 }},
+                        vk::ClearDepthStencilValue { 1.0f, 0 }
+                };
+
+                render_info.cmd.beginRenderPass(
+                        vk::RenderPassBeginInfo {
+                                *gbuffer_render_pass,
+                                *gbuffer_fb,
+                                vk::Rect2D { vk::Offset2D {}, extent },
+                                clear_values
+                        },
+                        vk::SubpassContents::eInline
+                );
+
+                // Start the pipeline
+                render_info.cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *gbuffer.pipeline);
+
+                GBuffer_PushConstants push_constants;
+
+                push_constants.view = render_info.camera.view_matrix(render_info.camera_transform);
+                push_constants.projection = render_info.camera.perspective_matrix();
+
+                for (auto &entity : entities) {
+                        int id = entity.id;
+                        const auto &transform = entity.get <Transform> ();
+                        const auto &renderable = entity.get <Renderable> ();
+                        const auto &meshes = renderable.mesh->submeshes;
+
+                        for (int i = 0; i < meshes.size(); i++) {
+                                MeshIndex index { id, i };
+
+                                // Bind descriptor set
+                                int dset_index = gbuffer.dset_refs[index];
+                                render_info.cmd.bindDescriptorSets(
+                                        vk::PipelineBindPoint::eGraphics,
+                                        *gbuffer.pipeline_layout,
+                                        0, { *gbuffer.dsets[dset_index] }, {}
                                 );
 
-                                // Bind inforation to descriptor set
-                                Material material = Material::all[meshes[i].material_index];
-        
-                                std::string albedo = "blank";
-                                if (material.has_albedo())
-                                        albedo = material.albedo_texture;
+                                // Bind push constants
+                                push_constants.model = transform.matrix();
 
-                                std::string normal = "blank";
-                                if (material.has_normal())
-                                        normal = material.normal_texture;
+                                int material_index = meshes[i].material_index;
+                                push_constants.material_index = material_index;
 
-                                texture_loader->bind(gbuffer.dsets[new_index], albedo, 0);
-                                texture_loader->bind(gbuffer.dsets[new_index], normal, 1);
+                                Material material = Material::all[material_index];
+                                
+                                int texture_status = 0;
+                                texture_status |= (material.has_albedo());
+                                texture_status |= (material.has_normal() << 1);
+
+                                push_constants.texture_status = texture_status;
+
+                                render_info.cmd.pushConstants <GBuffer_PushConstants> (
+                                        *gbuffer.pipeline_layout,
+                                        vk::ShaderStageFlagBits::eVertex,
+                                        0, push_constants
+                                );
+
+                                // Draw
+                                render_info.cmd.bindVertexBuffers(0, { *renderable.get_vertex_buffer(i).buffer }, { 0 });
+                                render_info.cmd.bindIndexBuffer(*renderable.get_index_buffer(i).buffer, 0, vk::IndexType::eUint32);
+                                render_info.cmd.drawIndexed(renderable.get_index_count(i), 1, 0, 0, 0);
                         }
                 }
-        }
 
-        /* Render to G-buffer
-        RenderArea::full().apply(render_info.cmd, extent);
+                render_info.cmd.endRenderPass();
+        } else if (render_state.backend == RenderState::eRaytraced) {
+                // Load SBT information
+                bool rebuild_tlas = false;
+                bool rebuild_sbt = false;
 
-        std::vector <vk::ClearValue> clear_values {
-                vk::ClearColorValue { std::array <float, 4> { 0.0f, 0.0f, 0.0f, 0.0f } },
-                vk::ClearColorValue { std::array <float, 4> { 0.0f, 0.0f, 0.0f, 0.0f } },
-                vk::ClearColorValue { std::array <int32_t, 4> { -1, -1, -1, -1 }},
-                vk::ClearDepthStencilValue { 1.0f, 0 }
-        };
+                for (const auto &entity : entities) {
+                        int id = entity.id;
+                        const auto &renderable = entity.get <Renderable> ();
+                        const auto &transform = entity.get <Transform> ();
 
-        render_info.cmd.beginRenderPass(
-                vk::RenderPassBeginInfo {
-                        *gbuffer_render_pass,
-                        *gbuffer_fb,
-                        vk::Rect2D { vk::Offset2D {}, extent },
-                        clear_values
-                },
-                vk::SubpassContents::eInline
-        );
+                        // Generate cache data
+                        mesh_memory->cache_cuda(entity);
 
-        // Start the pipeline
-        render_info.cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *gbuffer.pipeline);
+                        // Create SBT record for each submesh
+                        const auto &meshes = renderable.mesh->submeshes;
+                        for (int i = 0; i < meshes.size(); i++) {
+                                MeshIndex index { id, i };
 
-        GBuffer_PushConstants push_constants;
+                                if (gbuffer_rtx.record_refs.find(index) == gbuffer_rtx.record_refs.end()) {
+                                        int new_index = gbuffer_rtx.linearized_records.size();
+                                        gbuffer_rtx.record_refs[index] = new_index;
+                                        gbuffer_rtx.linearized_records.emplace_back();
 
-        push_constants.view = render_info.camera.view_matrix(render_info.camera_transform);
-        push_constants.projection = render_info.camera.perspective_matrix();
+                                        optix::Record <Hit> record;
+                                        optix::pack_header(gbuffer_rtx.closest_hit, record);
 
-        for (auto &entity : entities) {
-                int id = entity.id;
-                const auto &transform = entity.get <Transform> ();
-                const auto &renderable = entity.get <Renderable> ();
-                const auto &meshes = renderable.mesh->submeshes;
+                                        auto cachelet = mesh_memory->get(entity.id, i);
 
-                for (int i = 0; i < meshes.size(); i++) {
-                        MeshIndex index { id, i };
+                                        record.data.vertices = cachelet.m_cuda_vertices;
+                                        record.data.triangles = (uint3 *) cachelet.m_cuda_triangles;
+                                        record.data.model = transform.matrix();
+                                        record.data.index = meshes[i].material_index;
 
-                        // Bind descriptor set
-                        int dset_index = gbuffer.dset_refs[index];
-                        render_info.cmd.bindDescriptorSets(
-                                vk::PipelineBindPoint::eGraphics,
-                                *gbuffer.pipeline_layout,
-                                0, { *gbuffer.dsets[dset_index] }, {}
-                        );
+                                        gbuffer_rtx.linearized_records[new_index] = record;
 
-                        // Bind push constants
-                        push_constants.model = transform.matrix();
+                                        rebuild_tlas = true;
+                                        rebuild_sbt = true;
+                                }
 
-                        int material_index = meshes[i].material_index;
-                        push_constants.material_index = material_index;
-
-                        Material material = Material::all[material_index];
-                        
-                        int texture_status = 0;
-                        texture_status |= (material.has_albedo());
-                        texture_status |= (material.has_normal() << 1);
-
-                        push_constants.texture_status = texture_status;
-
-                        render_info.cmd.pushConstants <GBuffer_PushConstants> (
-                                *gbuffer.pipeline_layout,
-                                vk::ShaderStageFlagBits::eVertex,
-                                0, push_constants
-                        );
-
-                        // Draw
-                        render_info.cmd.bindVertexBuffers(0, { *renderable.get_vertex_buffer(i).buffer }, { 0 });
-                        render_info.cmd.bindIndexBuffer(*renderable.get_index_buffer(i).buffer, 0, vk::IndexType::eUint32);
-                        render_info.cmd.drawIndexed(renderable.get_index_count(i), 1, 0, 0, 0);
-                }
-        }
-
-        render_info.cmd.endRenderPass(); */
-        
-        // Load SBT information
-        bool rebuild_tlas = false;
-        bool rebuild_sbt = false;
-
-        for (const auto &entity : entities) {
-                int id = entity.id;
-                const auto &renderable = entity.get <Renderable> ();
-                const auto &transform = entity.get <Transform> ();
-
-                // Generate cache data
-                mesh_memory->cache_cuda(entity);
-
-                // Create SBT record for each submesh
-                const auto &meshes = renderable.mesh->submeshes;
-                for (int i = 0; i < meshes.size(); i++) {
-                        MeshIndex index { id, i };
-
-                        if (gbuffer_rtx.record_refs.find(index) == gbuffer_rtx.record_refs.end()) {
-                                int new_index = gbuffer_rtx.linearized_records.size();
-                                gbuffer_rtx.record_refs[index] = new_index;
-                                gbuffer_rtx.linearized_records.emplace_back();
-
-                                optix::Record <Hit> record;
-                                optix::pack_header(gbuffer_rtx.closest_hit, record);
-
-                                auto cachelet = mesh_memory->get(entity.id, i);
-
-                                record.data.vertices = cachelet.m_cuda_vertices;
-                                record.data.triangles = (uint3 *) cachelet.m_cuda_triangles;
-                                record.data.model = transform.matrix();
-                                record.data.index = meshes[i].material_index;
-
-                                gbuffer_rtx.linearized_records[new_index] = record;
-
-                                rebuild_tlas = true;
-                                rebuild_sbt = true;
+                                // TODO: checking for transformations...
                         }
-
-                        // TODO: checking for transformations...
                 }
+
+                // Trigger update for System
+                system->update(entities);
+
+                if (rebuild_tlas) {
+                        gbuffer_rtx.launch_params.handle
+                                = system->build_tlas(1, gbuffer_rtx.record_refs);
+                }
+
+                if (rebuild_sbt) {
+                        printf("Rebuilding SBT\n");
+                        if (gbuffer_rtx.sbt.hitgroupRecordBase)
+                                cuda::free(gbuffer_rtx.sbt.hitgroupRecordBase);
+                
+                        gbuffer_rtx.sbt.hitgroupRecordBase = cuda::make_buffer_ptr(gbuffer_rtx.linearized_records);
+                        gbuffer_rtx.sbt.hitgroupRecordStrideInBytes = sizeof(optix::Record <Hit>);
+                        gbuffer_rtx.sbt.hitgroupRecordCount = gbuffer_rtx.linearized_records.size();
+                }
+
+                // Configure launch parameters
+                auto uvw = uvw_frame(render_info.camera, render_info.camera_transform);
+
+                gbuffer_rtx.launch_params.U = cuda::to_f3(uvw.u);
+                gbuffer_rtx.launch_params.V = cuda::to_f3(uvw.v);
+                gbuffer_rtx.launch_params.W = cuda::to_f3(uvw.w);
+                
+                gbuffer_rtx.launch_params.origin = cuda::to_f3(render_info.camera_transform.position);
+                gbuffer_rtx.launch_params.resolution = { extent.width, extent.height };
+                
+                gbuffer_rtx.launch_params.position_surface = framebuffer_images.cu_position_surface;
+                gbuffer_rtx.launch_params.normal_surface = framebuffer_images.cu_normal_surface;
+                gbuffer_rtx.launch_params.index_surface = framebuffer_images.cu_material_index_surface;
+
+                // cuda::copy(gbuffer_rtx.dev_launch_params, &gbuffer_rtx.launch_params, 1);
+                GBufferParameters *dev_params = (GBufferParameters *) gbuffer_rtx.dev_launch_params;
+                cudaMemcpy(dev_params, &gbuffer_rtx.launch_params, sizeof(GBufferParameters), cudaMemcpyHostToDevice);
+                
+                // Launch G-buffer raytracing pipeline
+                // printf("Pipeline: %p\n", gbuffer_rtx.pipeline);
+                
+                OPTIX_CHECK(
+                        optixLaunch(
+                                gbuffer_rtx.pipeline, 0,
+                                gbuffer_rtx.dev_launch_params,
+                                sizeof(GBufferParameters),
+                                &gbuffer_rtx.sbt,
+                                extent.width, extent.height, 1
+                        )
+                );
+
+                CUDA_SYNC_CHECK();
+
+                std::string output = optix_io_read(&gbuffer_rtx.launch_params.io);
+                optix_io_clear(&gbuffer_rtx.launch_params.io);
         }
-
-        // Trigger update for System
-        system->update(entities);
-
-        if (rebuild_tlas) {
-                gbuffer_rtx.launch_params.handle
-                        = system->build_tlas(1, gbuffer_rtx.record_refs);
-        }
-
-        if (rebuild_sbt) {
-                printf("Rebuilding SBT\n");
-                if (gbuffer_rtx.sbt.hitgroupRecordBase)
-                        cuda::free(gbuffer_rtx.sbt.hitgroupRecordBase);
-        
-                gbuffer_rtx.sbt.hitgroupRecordBase = cuda::make_buffer_ptr(gbuffer_rtx.linearized_records);
-                gbuffer_rtx.sbt.hitgroupRecordStrideInBytes = sizeof(optix::Record <Hit>);
-                gbuffer_rtx.sbt.hitgroupRecordCount = gbuffer_rtx.linearized_records.size();
-        }
-
-        // Configure launch parameters
-        auto uvw = uvw_frame(render_info.camera, render_info.camera_transform);
-
-        gbuffer_rtx.launch_params.U = cuda::to_f3(uvw.u);
-        gbuffer_rtx.launch_params.V = cuda::to_f3(uvw.v);
-        gbuffer_rtx.launch_params.W = cuda::to_f3(uvw.w);
-        
-        gbuffer_rtx.launch_params.origin = cuda::to_f3(render_info.camera_transform.position);
-        gbuffer_rtx.launch_params.resolution = { extent.width, extent.height };
-        
-        gbuffer_rtx.launch_params.position_surface = framebuffer_images.cu_position_surface;
-        gbuffer_rtx.launch_params.normal_surface = framebuffer_images.cu_normal_surface;
-        gbuffer_rtx.launch_params.index_surface = framebuffer_images.cu_material_index_surface;
-
-        // cuda::copy(gbuffer_rtx.dev_launch_params, &gbuffer_rtx.launch_params, 1);
-        GBufferParameters *dev_params = (GBufferParameters *) gbuffer_rtx.dev_launch_params;
-        cudaMemcpy(dev_params, &gbuffer_rtx.launch_params, sizeof(GBufferParameters), cudaMemcpyHostToDevice);
-        
-        // Launch G-buffer raytracing pipeline
-        // printf("Pipeline: %p\n", gbuffer_rtx.pipeline);
-        
-        OPTIX_CHECK(
-                optixLaunch(
-                        gbuffer_rtx.pipeline, 0,
-                        gbuffer_rtx.dev_launch_params,
-                        sizeof(GBufferParameters),
-                        &gbuffer_rtx.sbt,
-                        extent.width, extent.height, 1
-                )
-        );
-
-        CUDA_SYNC_CHECK();
-
-        std::string output = optix_io_read(&gbuffer_rtx.launch_params.io);
-        std::cout << "Str size: " << output.size() << "\n";
-        std::cout << "Output: \"" << output << "\"\n";
-        printf("Finished launching G-buffer RTX pipeline\n");
-
-        /* Overwrite normals
-        dim3 block_size { 16, 16 };
-        dim3 grid_size {
-                (extent.width + block_size.x - 1) / block_size.x,
-                (extent.height + block_size.y - 1) / block_size.y
-        };
-
-        overwrite_normals <<< grid_size, block_size >>> (
-                framebuffer_images.cu_normal_surface,
-                extent, gbuffer_rtx.launch_params.io
-        );
-
-        CUDA_SYNC_CHECK();
-        
-        output = optix_io_read(&gbuffer_rtx.launch_params.io);
-        // std::cout << "Again: Str size: " << output.size() << "\n";
-        // std::cout << "Output: \"" << output << "\"\n"; */
-
-        optix_io_clear(&gbuffer_rtx.launch_params.io);
 
         // Transition layout for position and normal map
         // framebuffer_images.material_index.layout = vk::ImageLayout::ePresentSrcKHR;
@@ -745,7 +704,7 @@ EditorViewport::selection_query(const std::vector <Entity> &entities, const glm:
         return entity_indices;
 }
 
-void EditorViewport::menu()
+void EditorViewport::menu(const MenuOptions &options)
 {
         static const char *modes[] = {
                 "Triangulation",
@@ -754,28 +713,53 @@ void EditorViewport::menu()
                 "Albedo",
                 "SparseRTX"
         };
+		
+        if (ImGui::BeginMenuBar()) {
+                if (ImGui::BeginMenu(modes[render_state.mode])) {
+                        if (ImGui::MenuItem("Triangulation"))
+                                render_state.mode = RenderState::eTriangulation;
 
-        if (ImGui::BeginMenu(modes[render_state.mode])) {
-                if (ImGui::MenuItem("Triangulation"))
-                        render_state.mode = RenderState::eTriangulation;
+                        // if (ImGui::MenuItem("Wireframe"))
+                        //         render_state.mode = RenderState::eWireframe;
+                        
+                        if (ImGui::MenuItem("Normals"))
+                                render_state.mode = RenderState::eNormals;
 
-                // if (ImGui::MenuItem("Wireframe"))
-                //         render_state.mode = RenderState::eWireframe;
-                
-                if (ImGui::MenuItem("Normals"))
-                        render_state.mode = RenderState::eNormals;
+                        if (ImGui::MenuItem("Albedo"))
+                                render_state.mode = RenderState::eAlbedo;
 
-                if (ImGui::MenuItem("Albedo"))
-                        render_state.mode = RenderState::eAlbedo;
+                        // if (ImGui::MenuItem("SparseRTX"))
+                        //         render_state.mode = RenderState::eSparseRTX;
 
-                // if (ImGui::MenuItem("SparseRTX"))
-                //         render_state.mode = RenderState::eSparseRTX;
+                        if (ImGui::MenuItem("Path Traced"))
+                                render_state.mode = RenderState::ePathTraced;
 
-                if (ImGui::MenuItem("Path Traced"))
-                        render_state.mode = RenderState::ePathTraced;
+                        if (ImGui::Checkbox("Show bounding boxes", &render_state.bounding_boxes));
 
-                if (ImGui::Checkbox("Show bounding boxes", &render_state.bounding_boxes));
+                        ImGui::EndMenu();
+                }
 
-                ImGui::EndMenu();
+                // Camera settings
+                if (ImGui::BeginMenu("Camera")) {
+                        if (ImGui::SliderFloat("Speed", options.speed, 0.1f, 100.0f));
+                        if (ImGui::SliderFloat("FOV", &options.camera->fov, 1.0f, 179.0f));
+
+                        ImGui::EndMenu();
+                }
+
+                ImGui::Spacing();
+                if (ImGui::BeginMenu("Backend")) {
+                        bool rasterizer = render_state.backend == RenderState::eRasterized;
+                        bool raytraced = render_state.backend == RenderState::eRaytraced;
+                        if (ImGui::Checkbox("Rasterizer", &rasterizer))
+                                render_state.backend = RenderState::eRasterized;
+                        if (ImGui::Checkbox("Raytraced", &raytraced))
+                                render_state.backend = RenderState::eRaytraced;
+
+                        ImGui::EndMenu();
+                }
+
+                // TODO: overlay # of samples...
+                ImGui::EndMenuBar();
         }
 }
