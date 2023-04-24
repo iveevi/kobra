@@ -50,3 +50,6 @@
 [submodule "thirdparty/ImGuizmo"]
 	path = thirdparty/ImGuizmo
 	url = https://github.com/CedricGuillemet/ImGuizmo.git
+[submodule "thirdparty/Vulkan-Hpp"]
+	path = thirdparty/Vulkan-Hpp
+	url = https://github.com/KhronosGroup/Vulkan-Hpp.git

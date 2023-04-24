@@ -119,6 +119,8 @@ extern "C" __global__ void __raygen__()
 	if (isnan(color.x) || isnan(color.y) || isnan(color.z))
 		color = {1, 0, 1, 1};
 
+        printf("Color: %f %f %f\n", color.x, color.y, color.z);
+
 	// Accumulate and store necessary data
 	auto &buffers = parameters.buffers;
 	accumulate(buffers.color[index], color);

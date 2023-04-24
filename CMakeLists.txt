@@ -15,8 +15,11 @@ set(COLOR_FLAGS -fdiagnostics-color=always)
 # Add flags
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${COLOR_FLAGS}")
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler \"${COLOR_FLAGS}\"")
-
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcudafe \"--diag_suppress=20012 --diag_suppress=20013 --diag_suppress=20014\"")
+
+# Disabling warnings
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -w")
 
 # Vulkan
 find_package(Vulkan REQUIRED)
@@ -161,7 +164,14 @@ target_link_libraries(stress
 )
 
 # Set executable sources -- Stress
-add_executable(editor editor.cu editor/renderer.cu editor/shaders.cpp $<TARGET_OBJECTS:Kobra_COMMON>)
+add_executable(editor
+        editor.cu
+        editor/editor_viewport.cu
+        editor/viewport_configure.cu
+        editor/viewport_render.cu
+        editor/shaders.cpp
+        $<TARGET_OBJECTS:Kobra_COMMON>
+)
 
 target_link_libraries(editor
 	${Vulkan_LIBRARIES}
@@ -187,6 +197,7 @@ file(GLOB_RECURSE OPTIX_SHADERS
 	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/amadeus_path_tracer.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/amadeus_restir.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/amadeus_repg.cu
+	${CMAKE_CURRENT_SOURCE_DIR}/editor/gbuffer_rtx_shader.cu
 )
 
 add_library(optix_shaders
@@ -195,14 +206,18 @@ add_library(optix_shaders
 
 set_target_properties(optix_shaders PROPERTIES
 	CUDA_PTX_COMPILATION ON
-	COMPILE_FLAGS "--expt-relaxed-constexpr"
+	COMPILE_FLAGS "-lineinfo --expt-relaxed-constexpr"
 )
 
 # Fake target to copy shader outputs to bin folder
+# TODO: Any cleaner way of doing this? (run a script for example)
 add_custom_target(
 	optix_shaders_copy
 	COMMAND ${CMAKE_COMMAND} -E copy_directory
 		${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/optix_shaders.dir/source/optix
+		${CMAKE_BINARY_DIR}/bin/ptx
+	COMMAND ${CMAKE_COMMAND} -E copy
+		${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/optix_shaders.dir/editor/gbuffer_rtx_shader.ptx
 		${CMAKE_BINARY_DIR}/bin/ptx
 	DEPENDS optix_shaders
 )

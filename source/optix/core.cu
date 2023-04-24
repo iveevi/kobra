@@ -40,9 +40,8 @@ OptixPipeline link_optix_pipeline
 	OptixStackSizes stack_sizes = {};
 	for (auto &program : program_groups) {
 		OPTIX_CHECK(
-			optixUtilAccumulateStackSizes(
-				program, &stack_sizes
-			)
+			optixUtilAccumulateStackSizes
+                                (program, &stack_sizes, pipeline)
 		);
 	}
 

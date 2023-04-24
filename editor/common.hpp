@@ -7,6 +7,7 @@
 #include "include/layers/common.hpp"
 #include "include/layers/forward_renderer.hpp"
 #include "include/layers/image_renderer.hpp"
+#include "include/layers/mesh_memory.hpp"
 #include "include/layers/objectifier.hpp"
 #include "include/layers/ui.hpp"
 #include "include/project.hpp"
@@ -22,6 +23,9 @@
 #include "include/layers/denoiser.cuh"
 #include "include/daemons/transform.hpp"
 #include "include/vertex.hpp"
+
+// Editor headers
+#include "gbuffer_rtx_shader.cuh"
 
 // Native File Dialog
 #include <nfd.h>
@@ -53,20 +57,22 @@ struct RenderInfo {
         std::set <int> highlighted_entities;
         vk::Extent2D extent;
         const vk::raii::CommandBuffer &cmd = nullptr;
-        const vk::raii::Framebuffer &framebuffer = nullptr;
 
-        RenderInfo(const vk::raii::CommandBuffer &_cmd, const vk::raii::Framebuffer &_framebuffer)
-                : cmd(_cmd), framebuffer(_framebuffer) {}
+        RenderInfo(const vk::raii::CommandBuffer &_cmd) : cmd(_cmd) {}
 };
 
 // Editor rendering
-struct EditorRenderer {
+struct EditorViewport {
         // Vulkan structures
         const vk::raii::Device *device = nullptr;
         const vk::raii::PhysicalDevice *phdev = nullptr;
         const vk::raii::DescriptorPool *descriptor_pool = nullptr;
         const vk::raii::CommandPool *command_pool = nullptr;
         TextureLoader *texture_loader = nullptr;
+
+        // Raytracing structures
+        std::shared_ptr <amadeus::System> system = nullptr;
+        std::shared_ptr <layers::MeshMemory> mesh_memory = nullptr;
 
         // Buffers
         struct framebuffer_images {
@@ -75,9 +81,20 @@ struct EditorRenderer {
                 ImageData normal = nullptr;
                 ImageData material_index = nullptr;
 
+                // Vulkan sampler objects
                 vk::raii::Sampler position_sampler = nullptr;
                 vk::raii::Sampler normal_sampler = nullptr;
                 vk::raii::Sampler material_index_sampler = nullptr;
+
+                // CUDA surface objects for write
+                cudaSurfaceObject_t cu_position_surface = 0;
+                cudaSurfaceObject_t cu_normal_surface = 0;
+                cudaSurfaceObject_t cu_material_index_surface = 0;
+
+                // CUDA texture objects for read
+                cudaTextureObject_t cu_position_texture = 0;
+                cudaTextureObject_t cu_normal_texture = 0;
+                cudaTextureObject_t cu_material_index_texture = 0;
         } framebuffer_images;
 
         DepthBuffer depth_buffer = nullptr;
@@ -91,7 +108,8 @@ struct EditorRenderer {
 
         // Pipeline resources
         using MeshIndex = std::pair <int, int>; // Entity, mesh index
-        
+       
+        // G-buffer with rasterization
         struct {
                 vk::raii::PipelineLayout pipeline_layout = nullptr;
                 vk::raii::Pipeline pipeline = nullptr;
@@ -101,6 +119,42 @@ struct EditorRenderer {
                 std::vector <vk::raii::DescriptorSet> dsets;
         } gbuffer;
 
+        // G-buffer with raytracing
+        struct {
+                // Context (TODO: move outside...)
+                OptixDeviceContext context = 0;
+
+                // Program and pipeline
+                OptixPipeline pipeline = 0;
+                OptixModule module = 0;
+
+                OptixProgramGroup ray_generation = 0;
+                OptixProgramGroup closest_hit = 0;
+                OptixProgramGroup miss = 0;
+
+                // SBT related resources
+                OptixShaderBindingTable sbt = {};
+
+                std::map <MeshIndex, int> record_refs;
+                std::vector <optix::Record <Hit>> linearized_records;
+
+                // Launch parameters
+                GBufferParameters launch_params;
+                CUdeviceptr dev_launch_params;
+        } gbuffer_rtx;
+
+        // Path tracer (Amadeus)
+        struct {
+                std::shared_ptr <amadeus::ArmadaRTX> armada;
+                layers::Framer framer;
+
+                // TODO: plus denoisers... maybe in different struct?
+
+                CUdeviceptr dev_traced;
+                std::vector <uint8_t> traced;
+        } path_tracer;
+
+        // Albedo (rasterization)
         struct {
                 vk::raii::PipelineLayout pipeline_layout = nullptr;
                 vk::raii::Pipeline pipeline = nullptr;
@@ -109,7 +163,8 @@ struct EditorRenderer {
                 std::map <MeshIndex, int> dset_refs;
                 std::vector <vk::raii::DescriptorSet> dsets;
         } albedo;
-        
+       
+        // Blitting normal map
         struct {
                 vk::raii::PipelineLayout pipeline_layout = nullptr;
                 vk::raii::Pipeline pipeline = nullptr;
@@ -118,6 +173,7 @@ struct EditorRenderer {
                 vk::raii::DescriptorSet dset = nullptr;
         } normal;
 
+        // Scene triangulation (agnostic)
         struct {
                 vk::raii::PipelineLayout pipeline_layout = nullptr;
                 vk::raii::Pipeline pipeline = nullptr;
@@ -126,6 +182,7 @@ struct EditorRenderer {
                 vk::raii::DescriptorSet dset = nullptr;
         } triangulation;
 
+        // Rendering bounding boxes (rasterization)
         struct {
                 vk::raii::PipelineLayout pipeline_layout = nullptr;
                 vk::raii::Pipeline pipeline = nullptr;
@@ -135,6 +192,7 @@ struct EditorRenderer {
                 BufferData buffer = nullptr;
         } bounding_box;
 
+        // Sobel filter (computer shader)
         struct {
                 vk::raii::PipelineLayout pipeline_layout = nullptr;
                 vk::raii::Pipeline pipeline = nullptr;
@@ -146,6 +204,7 @@ struct EditorRenderer {
                 vk::raii::Sampler output_sampler = nullptr;
         } sobel;
 
+        // Highlighting (rasterized compositing)
         struct {
                 vk::raii::PipelineLayout pipeline_layout = nullptr;
                 vk::raii::Pipeline pipeline = nullptr;
@@ -169,7 +228,8 @@ struct EditorRenderer {
                         eWireframe,
                         eNormals,
                         eAlbedo,
-                        eSparseGlobalIllumination
+                        eSparseGlobalIllumination,
+                        ePathTraced
                 } mode = eTriangulation;
 
                 bool bounding_boxes = false;
@@ -178,8 +238,10 @@ struct EditorRenderer {
 
         // TODO: table mapping render_state to function for presenting
 
-        EditorRenderer() = delete;
-        EditorRenderer(const Context &);
+        EditorViewport() = delete;
+        EditorViewport(const Context &,
+                const std::shared_ptr <amadeus::System> &,
+                const std::shared_ptr <layers::MeshMemory> &);
 
         // Configuration methods
         void configure_present();
@@ -191,17 +253,21 @@ struct EditorRenderer {
         void configure_sobel_pipeline();
         void configure_highlight_pipeline();
 
+        void configure_gbuffer_rtx();
+        void configure_path_tracer(const Context &context);
+
         void resize(const vk::Extent2D &);
 
         // Rendering methods
         void render_gbuffer(const RenderInfo &, const std::vector <Entity> &);
+        void render_path_traced(const RenderInfo &, const std::vector <Entity> &, daemons::Transform &);
         void render_albedo(const RenderInfo &, const std::vector <Entity> &);
         void render_normals(const RenderInfo &);
         void render_triangulation(const RenderInfo &);
         void render_bounding_box(const RenderInfo &, const std::vector <Entity> &);
         void render_highlight(const RenderInfo &, const std::vector <Entity> &);
 
-        void render(const RenderInfo &, const std::vector <Entity> &);
+        void render(const RenderInfo &, const std::vector <Entity> &, daemons::Transform &);
 
         // Properties
         ImageData &viewport() {

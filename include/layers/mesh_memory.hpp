@@ -51,7 +51,7 @@ public:
 
 	// Cache a renderable
 	// void cache(const Renderable &);
-	void cache_cuda(const ECS &, int);
+	void cache_cuda(const Entity &);
 
 	// Get a cache item
 	const Cache &get(int entity) const {

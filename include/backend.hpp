@@ -15,12 +15,12 @@
 #include <vector>
 
 // Vulkan and GLFW
-#include <vulkan/vulkan.hpp>
+#include <Vulkan-Hpp/vulkan/vulkan.hpp>
+#include <Vulkan-Hpp/vulkan/vulkan_enums.hpp>
+#include <Vulkan-Hpp/vulkan/vulkan_handles.hpp>
+#include <Vulkan-Hpp/vulkan/vulkan_raii.hpp>
+#include <Vulkan-Hpp/vulkan/vulkan_structs.hpp>
 #include <vulkan/vulkan_core.h>
-#include <vulkan/vulkan_enums.hpp>
-#include <vulkan/vulkan_handles.hpp>
-#include <vulkan/vulkan_raii.hpp>
-#include <vulkan/vulkan_structs.hpp>
 #include <GLFW/glfw3.h>
 
 #define KOBRA_VALIDATION_LAYERS

@@ -102,7 +102,7 @@ struct Editor : public kobra::BaseApp {
 		std::string current_capture_path;
 	} m_input;
 
-        std::shared_ptr <EditorRenderer> m_editor_renderer;
+        std::shared_ptr <EditorViewport> m_editor_renderer;
 
 	Editor(const vk::raii::PhysicalDevice &, const std::vector <const char *> &);
 	~Editor();
@@ -1093,7 +1093,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 		//	| kobra::layers::Denoiser::eAlbedo
 	);
 
-	m_renderers.framer = kobra::layers::Framer(get_context());
+	// m_renderers.framer = kobra::layers::Framer(get_context());
 
 	// Allocate necessary buffers
 	size_t size = m_renderers.armada_rtx->size();
@@ -1121,8 +1121,9 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	m_ui->attach(scene_graph);
 	// TODO: scene graph...
 
-        // EditorRenderer
-        m_editor_renderer = std::make_shared <EditorRenderer> (get_context());
+        // EditorViewport
+        m_editor_renderer = std::make_shared <EditorViewport>
+                (get_context(), m_renderers.system, m_renderers.mesh_memory);
 
 	// Load and set the icon
 	std::string icon_path = KOBRA_DIR "/kobra_icon.png";
@@ -1300,7 +1301,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 		} */
 
                 // Editor renderer
-                RenderInfo render_info { cmd, framebuffer };
+                RenderInfo render_info { cmd };
                 render_info.camera = m_viewport.camera;
                 render_info.camera_transform = m_viewport.camera_transform;
                 // render_info.cmd = &cmd;
@@ -1309,7 +1310,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
                 render_info.highlighted_entities = m_highlighted_entities;
 
                 std::vector <Entity> renderable_entities = m_scene.ecs->tuple_entities <Renderable> ();
-                m_editor_renderer->render(render_info, renderable_entities);
+                m_editor_renderer->render(render_info, renderable_entities, *transform_daemon);
                 /* m_editor_renderer->render_gbuffer(render_info, renderable_entities);
                 m_editor_renderer->render_present(render_info); */
 

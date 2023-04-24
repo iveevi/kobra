@@ -102,7 +102,7 @@ static constexpr OptixModuleCompileOptions module_options = {
 
 static constexpr OptixPipelineLinkOptions ppl_link_options = {
 	.maxTraceDepth = 10,
-	.debugLevel = KOBRA_OPTIX_DEBUG_LEVEL,
+	// .debugLevel = KOBRA_OPTIX_DEBUG_LEVEL,
 };
 
 // RTX attachment sub-layers
@@ -185,7 +185,7 @@ class ArmadaRTX {
 
 		std::vector <layers::MeshMemory::Cachelet> cachelets;
 
-                std::vector <int> entity_id;
+                std::vector <const Entity *> entities;
 		std::vector <int> submesh_indices;
 		// std::vector <const Submesh *> submeshes;
 		// std::vector <const Transform *> submesh_transforms;
@@ -194,8 +194,6 @@ class ArmadaRTX {
                 int total_meshes;
 		long long int last_updated;
 		std::map <std::string, long long int> times;
-
-		const ECS *cached_ecs;
 	} m_host;
 
 	// Timer
@@ -225,12 +223,13 @@ class ArmadaRTX {
 		const std::set <_instance_ref> &
 	);
 
-	void update_quad_light_buffers(
-		const std::vector <const Light *> &,
-		const std::vector <const Transform *> &
-	);
+	// void update_quad_light_buffers(
+	// 	const std::vector <const Light *> &,
+	// 	const std::vector <const Transform *> &
+	// );
 
-	void update_sbt_data(const ECS &);
+	void update_sbt_data();
+	// void update_sbt_data(const ECS &);
 		// const std::vector <layers::MeshMemory::Cachelet> &,
 		// const std::vector <const Submesh *> &,
 		// const std::vector <const Transform *> &
@@ -242,7 +241,7 @@ class ArmadaRTX {
 		std::vector <HitRecord> *hit_records;
 	};
 
-	preprocess_update preprocess_scene(const ECS &,
+	preprocess_update preprocess_scene(const std::vector <Entity> &,
                 const daemons::Transform &,
                 const Camera &, const Transform &);
 public:
@@ -326,7 +325,7 @@ public:
 
 	// Set depth
 	void set_depth(int depth) {
-		KOBRA_ASSERT(depth >= 0 && depth <= 10, "Depth must be between 0 and 10");
+		KOBRA_ASSERT(depth >= 0 && depth < 10, "Depth must be between 0 and 10");
 		m_launch_info.max_depth = depth;
 	}
 
@@ -338,13 +337,11 @@ public:
 	// Methods
 	void set_envmap(const std::string &);
 
-	void render(
-		const ECS &,
+	void render(const std::vector <Entity> &,
                 const daemons::Transform &,
 		const Camera &,
 		const Transform &,
-		bool = false
-	);
+		bool = false);
 };
 
 }

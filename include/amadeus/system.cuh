@@ -23,7 +23,6 @@ namespace amadeus {
 // Backend management for raytacing
 class System {
         // Reference to ECS transform daemon
-        // TODO: make a member of the ECS itself...
         kobra::daemons::Transform *transform_daemon = nullptr;
 
         // Critical OptiX objects
@@ -32,7 +31,6 @@ class System {
         // Instance type
         struct Instance {
                 // const Renderable *m_renderable = nullptr;
-                int entity_id;
                 int index = 0;
                 glm::mat4 transform;
                 OptixTraversableHandle m_gas = 0;
@@ -45,7 +43,7 @@ class System {
         } m_cache;
 
         // Build GAS for an instance
-        void build_gas(const ECS &ecs, Instance &instance) {
+        void build_gas(const Entity &entity, Instance &instance) {
                 // Build acceleration structures
                 OptixAccelBuildOptions gas_accel_options = {};
                 gas_accel_options.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
@@ -55,7 +53,7 @@ class System {
                 const uint32_t triangle_input_flags[1] = {OPTIX_GEOMETRY_FLAG_NONE};
 
                 // TODO: import buffers later
-                auto &renderable = ecs.get_entity(instance.entity_id).get <Renderable> ();
+                auto &renderable = entity.get <Renderable> ();
 		const Submesh &s = renderable.mesh->submeshes[instance.index];
 
 		// Prepare submesh vertices and triangles
@@ -142,22 +140,21 @@ public:
 		return m_context;
 	}
 
-        // Update from ECS
-        bool update(const ECS &ecs) {
+        // Update from list of valid entities
+        // NOTE: All entities must have a Renderable component
+        bool update(const std::vector <Entity> &entities) {
 		bool updated = false;
 
-                for (int i = 0; i < ecs.size(); i++) {
-                        if (!ecs.exists <Renderable> (i))
-                                continue;
-
-                        const Renderable *renderable = &ecs.get <Renderable> (i);
-                        const Transform *transform = &ecs.get <Transform> (i);
+                for (const Entity &entity : entities) {
+                        int id = entity.id;
+                        auto &renderable = entity.get <Renderable> ();
+                        auto &transform = entity.get <Transform> ();
 
                         // If already cached, just update transform
-                        if (m_cache.instances.count(i) > 0) {
-                                for (Instance &instance : m_cache.instances[i]) {
-                                        if ((*transform_daemon)[i]) {
-                                                instance.transform = transform->matrix();
+                        if (m_cache.instances.count(id) > 0) {
+                                for (Instance &instance : m_cache.instances[id]) {
+                                        if (transform_daemon->changed(id)) {
+                                                instance.transform = transform.matrix();
                                                 updated |= true;
                                         }
                                 }
@@ -165,15 +162,14 @@ public:
                                 continue;
                         }
 
-                        std::cout << "New renderable: " << renderable <<
-                                std::endl;
+                        std::cout << "New renderable: " << &renderable << std::endl;
                         
                         // TODO: if any of the transforms have changed,
                         // then signal an update...
 
                         // Lazily generate GAS by callback
                         // TODO: callback system
-                        int submeshes = renderable->size();
+                        int submeshes = renderable.size();
 
 			std::cout << "\t# of submeshes: " << submeshes << std::endl;
 
@@ -182,11 +178,11 @@ public:
 
                         for (int j = 0; j < submeshes; j++) {
                                 // TODO: build GAS for now...
-                                instances.emplace_back(Instance {i, j, transform->matrix()});
-                                build_gas(ecs, instances.back());
+                                instances.emplace_back(Instance {j, transform.matrix()});
+                                build_gas(entity, instances.back());
                         }
 
-			m_cache.instances.insert({i, instances});
+			m_cache.instances.insert({id, instances});
 			updated = true;
                 }
 
@@ -195,7 +191,10 @@ public:
 
         // Build TLAS from selected renderables
         // TODO: choose a subset of entities to render
-        OptixTraversableHandle build_tlas(int hit_groups, int mask = 0xFF) {
+        // TODO: pass a map of {id, submesh index} -> sbt offset
+        using MeshIndex = std::pair <int, int>;
+
+        OptixTraversableHandle build_tlas(int hit_groups, const std::map <MeshIndex, int> &offsets = {}, int mask = 0xFF) {
                 std::vector <OptixInstance> optix_instances;
 
                 for (auto pr : m_cache.instances) {
@@ -214,8 +213,16 @@ public:
                                 // Set the instance handle
                                 optix_instance.traversableHandle = instance.m_gas;
                                 optix_instance.visibilityMask = mask;
-                                optix_instance.sbtOffset = optix_instances.size() * hit_groups;
+
+                                int id = optix_instances.size();
+
+                                // If the map is available, use it only
+                                MeshIndex index {pr.first, instance.index};
+                                if (offsets.size() > 0)
+                                        id = offsets.at(index);
+
                                 optix_instance.instanceId = optix_instances.size();
+                                optix_instance.sbtOffset = optix_instances.size() * hit_groups;
 
                                 optix_instances.push_back(optix_instance);
                         }

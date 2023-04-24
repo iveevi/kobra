@@ -1,5 +1,4 @@
-#ifndef KOBRA_CUDA_INTEROP_H_
-#define KOBRA_CUDA_INTEROP_H_
+#pragma once
 
 // Engine headers
 #include "../backend.hpp"
@@ -139,5 +138,3 @@ static cudaTextureObject_t import_vulkan_texture_32f(const vk::raii::Device &dev
 }
 
 }
-
-#endif

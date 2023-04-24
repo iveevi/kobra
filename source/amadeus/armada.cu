@@ -40,7 +40,6 @@ ArmadaRTX::ArmadaRTX(const Context &context,
 	// Initialize the host state
 	m_host.total_meshes = 0;
 	m_host.last_updated = 0;
-	m_host.cached_ecs = nullptr;
 
 	// Initialize TLAS state
 	m_tlas.null = true;
@@ -54,7 +53,7 @@ ArmadaRTX::ArmadaRTX(const Context &context,
 		extent.height
 	};
 
-	params.max_depth = 10;
+	params.max_depth = 2;
 	params.samples = 0;
 	params.accumulate = true;
 	params.lights.quad_lights = nullptr;
@@ -208,7 +207,7 @@ void ArmadaRTX::update_triangle_light_buffers
 	}
 }
 
-// Update the light buffers if needed
+/* Update the light buffers if needed
 // TODO: handle extra lights here
 void ArmadaRTX::update_quad_light_buffers
 		(const std::vector <const Light *> &lights,
@@ -246,19 +245,19 @@ void ArmadaRTX::update_quad_light_buffers
 		KOBRA_LOG_FUNC(Log::INFO) << "Uploaded " << quad_lights.size()
 			<< " quad lights to the GPU\n";
 	}
-}
+} */
 
 // Update the SBT data
-void ArmadaRTX::update_sbt_data(const ECS &ecs)
+void ArmadaRTX::update_sbt_data()
 		// (const std::vector <layers::MeshMemory::Cachelet> &cachelets,
 		// const std::vector <const Submesh *> &submeshes,
 		// const std::vector <const Transform *> &submesh_transforms)
 {
-	int submesh_count = m_host.entity_id.size();
+	int submesh_count = m_host.entities.size();
 
 	m_host.hit_records.clear();
 	for (int i = 0; i < submesh_count; i++) {
-		auto &entity = ecs.get_entity(m_host.entity_id[i]);
+		const Entity &entity = *m_host.entities[i];
 		auto &transform = entity.get <Transform> ();
 		auto &renderable = entity.get <Renderable> ();
 		auto *submesh = &renderable.mesh->submeshes[m_host.submesh_indices[i]];
@@ -359,7 +358,7 @@ void ArmadaRTX::update_materials(const std::set <uint32_t> &material_indices)
 
 	// Update the SBT if needed (e.g. when a new emissive submesh is added)
 	if (sbt_needs_update) {
-		update_sbt_data(*m_host.cached_ecs);
+		update_sbt_data();
 			// m_host.submeshes,
 			// m_host.submesh_transforms
 
@@ -437,7 +436,7 @@ cuda::_material convert_material
 // Preprocess scene data
 // TODO: get rid of this method..
 ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
-		(const ECS &ecs,
+		(const std::vector <Entity> &entities,
                 const daemons::Transform &transform_daemon,
 		const Camera &camera,
 		const Transform &transform)
@@ -462,9 +461,10 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 	m_launch_info.time = m_timer.elapsed_start();
 
 	// Update the raytracing system
-	bool updated = m_system->update(ecs);
+        // const auto &entities = ecs.tuple_entities <Renderable, Transform> ();
+	bool updated = m_system->update(entities);
 
-	// Preprocess the entities
+	/* Preprocess the entities
         // TODO: helper method for this... (tuples)
         std::vector <int> renderable_id;
 	std::vector <const Renderable *> renderables;
@@ -484,7 +484,7 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
                         renderable_id.push_back(i);
 			renderables.push_back(renderable);
 			renderable_transforms.push_back(transform);
-                        total_meshes += renderable->size();
+                        total_meshes += renderablrenderable->mesh->submeshes[j];e->size();
 		}
 
 		if (ecs.exists <Light> (i)) {
@@ -494,10 +494,10 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 			lights.push_back(light);
 			light_transforms.push_back(transform);
 		}
-	}
+	} */
 
 	// If no renderables, exit
-	if (renderables.empty())
+	if (entities.empty())
 		return {handle, hit_records};
 
 	// Update data if necessary
@@ -508,33 +508,34 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 		std::vector <const Transform *> submesh_transforms; */
 
 		m_host.cachelets.clear();
-		m_host.entity_id.clear();
+		m_host.entities.clear();
 		m_host.submesh_indices.clear();
 
 		// Reserve material-submesh reference structure
 		m_host.material_submeshes.clear();
 		m_host.material_submeshes.resize(Material::all.size());
 
-		for (int i = 0; i < renderables.size(); i++) {
-                        int id = renderable_id[i];
-			const Renderable *renderable = renderables[i];
-			const Transform *transform = renderable_transforms[i];
+		for (auto &entity : entities) {
+                        int id = entity.id;
+                        const auto &renderable = entity.get <Renderable> ();
+                        const auto &transform = entity.get <Transform> ();
 
 			// Cache the renderables
 			// TODO: all update functions should go to a separate methods
-			m_mesh_memory->cache_cuda(ecs, id);
+			m_mesh_memory->cache_cuda(entity);
 
-			for (int j = 0; j < renderable->mesh->submeshes.size(); j++) {
-				const Submesh *submesh = &renderable->mesh->submeshes[j];
+                        auto &meshes = renderable.mesh->submeshes;
+			for (int j = 0; j < meshes.size(); j++) {
+				const Submesh *submesh = &meshes[j];
 				uint32_t material_index = submesh->material_index;
 				m_host.material_submeshes[material_index].insert(
-					{transform, submesh, id}
+					{&transform, submesh, id}
 				);
 
 				m_host.cachelets.push_back(m_mesh_memory->get(id, j));
 
                                 // TODO: use instance ref vector instead...
-                                m_host.entity_id.push_back(id);
+                                m_host.entities.push_back(&entity);
                                 m_host.submesh_indices.push_back(j);
 				// m_host.submeshes.push_back(submesh);
 				// m_host.submesh_transforms.push_back(transform);
@@ -545,10 +546,9 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 		m_host.emissive_count = 0;
 
 		// TODO: compute before hand
-		for (int i = 0; i < m_host.entity_id.size(); i++) {
-                        int id = m_host.entity_id[i];
+		for (int i = 0; i < m_host.entities.size(); i++) {
+                        const Entity &entity = *m_host.entities[i];
 		
-			auto &entity = ecs.get_entity(id);
 			auto *transform = &entity.get <Transform> ();
 			auto &renderable = entity.get <Renderable> ();
 			auto *submesh = &renderable.mesh->submeshes[m_host.submesh_indices[i]];
@@ -559,7 +559,7 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 			const Material &material = Material::all[submesh->material_index];
 			if (glm::length(material.emission) > 0
 					|| material.has_emission()) {
-				_instance_ref ref {transform, submesh, id};
+				_instance_ref ref {transform, submesh, entity.id};
 				m_host.emissive_submeshes.insert(ref);
 				m_host.emissive_count += submesh->triangles();
 			}
@@ -567,8 +567,8 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 
 		// Update the data
 		update_triangle_light_buffers(&transform_daemon, {});
-		update_quad_light_buffers(lights, light_transforms);
-		update_sbt_data(ecs);
+		// update_quad_light_buffers(lights, light_transforms);
+		update_sbt_data();
 
 		// hit_records = &m_host.hit_records;
 		m_host.last_updated = clock();
@@ -623,10 +623,11 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 			m_host.last_updated = clock();
 		}
                 
-		for (int i = 0; i < m_host.entity_id.size(); i++) {
-                        int id = m_host.entity_id[i];
-                        if (transform_daemon[id]) {
-				auto &transform = ecs.get <Transform> (id);
+		for (int i = 0; i < m_host.entities.size(); i++) {
+                        const Entity *entity = m_host.entities[i];
+
+                        if (transform_daemon[entity->id]) {
+				auto &transform = entity->get <Transform> ();
                                 m_host.hit_records[i].data.model = transform.matrix();
                                 m_host.last_updated = clock();
                         }
@@ -634,55 +635,61 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
         }
 
         // Considering newly added components
+        int total_meshes = 0;
+        for (auto &entity : entities) {
+                const auto &renderable = entity.get <Renderable> ();
+                total_meshes += renderable.mesh->submeshes.size();
+        }
+
         if (total_meshes != m_host.total_meshes && m_host.total_meshes != 0) {
                 std::cout << "Different number of total meshes..." << std::endl;
 
                 // TODO: obtain the list of submeshes in order...
-                int current_size = m_host.entity_id.size();
+                int current_size = m_host.entities.size();
 
-                std::set <int> current_entities
-                        (m_host.entity_id.begin(), m_host.entity_id.end());
+                std::set <const Entity *> current_entities
+                        (m_host.entities.begin(), m_host.entities.end());
                 
                 if (m_host.material_submeshes.size() < Material::all.size())
                         m_host.material_submeshes.resize(Material::all.size());
 
                 // Add the new submeshes to host cache
-		for (int i = 0; i < renderables.size(); i++) {
-                        int id = renderable_id[i];
-			if (current_entities.count(id) > 0)
+		for (auto &entity : entities) {
+                        int id = entity.id;
+			if (current_entities.count(&entity) > 0)
 				continue;
 
-			const Renderable *renderable = renderables[i];
-			const Transform *transform = renderable_transforms[i];
+                        auto &renderable = entity.get <Renderable> ();
+                        auto &transform = entity.get <Transform> ();
 
 			// Cache the renderables
 			// TODO: all update functions should go to a separate methods
-			m_mesh_memory->cache_cuda(ecs, id);
+			m_mesh_memory->cache_cuda(entity);
 
-			for (int j = 0; j < renderable->mesh->submeshes.size(); j++) {
-				const Submesh *submesh = &renderable->mesh->submeshes[j];
+                        auto &meshes = renderable.mesh->submeshes;
+			for (int j = 0; j < meshes.size(); j++) {
+				const Submesh *submesh = &meshes[j];
 
                                 printf("New sbubmesh: %p\n", submesh);
 				uint32_t material_index = submesh->material_index;
                                 print("\tmaterial index = %d\n", material_index);
 				m_host.material_submeshes[material_index].insert(
-					{transform, submesh, id}
+					{&transform, submesh, id}
 				);
 
 				m_host.cachelets.push_back(m_mesh_memory->get(id, j));
 
                                 // TODO: use instance ref vector instead...
-                                m_host.entity_id.push_back(id);
+                                m_host.entities.push_back(&entity);
                                 m_host.submesh_indices.push_back(j);
 				// m_host.submeshes.push_back(submesh);
 				// m_host.submesh_transforms.push_back(transform);
                         }
                 }
 		
-                for (int i = current_size; i < m_host.entity_id.size(); i++) {
-                        int id = m_host.entity_id[i];
-			
-			auto &entity = ecs.get_entity(m_host.entity_id[i]);
+                for (int i = current_size; i < m_host.entities.size(); i++) {
+			const Entity &entity = *m_host.entities[i];
+
 			auto *transform = &entity.get <Transform> ();
 			auto &renderable = entity.get <Renderable> ();
 			auto *submesh = &renderable.mesh->submeshes[m_host.submesh_indices[i]];
@@ -693,7 +700,7 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 			const Material &material = Material::all[submesh->material_index];
 			if (glm::length(material.emission) > 0
 					|| material.has_emission()) {
-				_instance_ref ref {transform, submesh, id};
+				_instance_ref ref {transform, submesh, entity.id};
 				m_host.emissive_submeshes.insert(ref);
 				m_host.emissive_count += submesh->triangles();
 			}
@@ -711,7 +718,7 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
                 m_launch_info.materials = cuda::make_buffer(m_host.materials);
 
                 // TODO: pass a range to update, instead of rebuilding...
-		update_sbt_data(ecs);
+		update_sbt_data();
 
                 printf("SBT state:\n");
                 for (auto record : m_host.hit_records) {
@@ -749,15 +756,11 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 		);
 	}
 
-	// Update the cached ecs
-	m_host.cached_ecs = &ecs;
-
 	return {handle, hit_records};
 }
 
 // Path tracing computation
-void ArmadaRTX::render
-                (const ECS &ecs,
+void ArmadaRTX::render(const std::vector <Entity> &entities,
                 const daemons::Transform &transform_daemon,
 		const Camera &camera,
 		const Transform &transform,
@@ -778,10 +781,10 @@ void ArmadaRTX::render
 		m_attachments[m_previous_attachment]->load();
 	}
 
-	auto out = preprocess_scene(ecs, transform_daemon, camera, transform);
+	auto out = preprocess_scene(entities, transform_daemon, camera, transform);
 	
 	// Skip if nothing to render
-	if (m_host.entity_id.empty()) {
+	if (m_host.entities.empty()) {
 		// TODO: log once function
 		static bool logged = false;
 		if (!logged) {

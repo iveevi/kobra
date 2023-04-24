@@ -42,7 +42,7 @@ struct UVW {
 	glm::vec3 u, v, w;
 };
 
-inline UVW uvw_frame(const Camera &camera, const Transform &transform)
+inline UVW uvw_frame(const Camera &camera, const Transform &transform, float aspect = -1.0f)
 {
 	glm::vec3 eye = transform.position;
 	glm::vec3 lookat = eye + transform.forward();
@@ -56,7 +56,7 @@ inline UVW uvw_frame(const Camera &camera, const Transform &transform)
 	float vlen = wlen * glm::tan(glm::radians(camera.fov) / 2.0f);
 	v *= vlen;
 
-	float ulen = vlen * camera.aspect;
+	float ulen = vlen * (aspect > 0 ? aspect : camera.aspect);
 	u *= ulen;
 
 	return {u, v, w};

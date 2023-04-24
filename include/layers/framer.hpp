@@ -16,11 +16,8 @@ class Framer {
 	// Critical Vulkan structures
 	vk::raii::Device *m_device = nullptr;
 	vk::raii::PhysicalDevice *m_phdev = nullptr;
-	vk::raii::DescriptorPool *m_descriptor_pool = nullptr;
 
 	// Local Vulkan structures
-	vk::raii::RenderPass m_render_pass = nullptr;
-
 	vk::raii::Pipeline m_pipeline = nullptr;
 	vk::raii::PipelineLayout m_ppl = nullptr;
 
@@ -49,16 +46,11 @@ public:
 	Framer() = default;
 
 	// Constructor
-	Framer(const Context &);
+	Framer(const Context &, const vk::raii::RenderPass &);
 
 	// Render image frame to screen
-	// TODO: pack command buffer, frame buffer and render area into a struct
-	// (layer struct...) and use as the first argument
-	void render(const RawImage &,
-		const vk::raii::CommandBuffer &,
-		const vk::raii::Framebuffer &,
-		const vk::Extent2D &,
-		const RenderArea & = {{-1, -1}, {-1, -1}});
+	void pre_render(const vk::raii::CommandBuffer &, const RawImage &);
+	void render(const vk::raii::CommandBuffer &);
 };
 
 }

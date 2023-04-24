@@ -51,6 +51,12 @@ struct Record {
 	T data;
 };
 
+template <>
+struct Record <void> {
+        __align__ (OPTIX_SBT_RECORD_ALIGNMENT)
+        char header[OPTIX_SBT_RECORD_HEADER_SIZE];
+};
+
 // Pack header
 inline void pack_header(const OptixProgramGroup &program, void *r)
 {
@@ -107,6 +113,7 @@ inline OptixDeviceContext make_context()
 	OptixDeviceContextOptions options = {};
 	options.logCallbackFunction       = &context_logger;
 	options.logCallbackLevel          = 4;
+        options.validationMode            = OPTIX_DEVICE_CONTEXT_VALIDATION_MODE_ALL;
 
 	// Associate CUDA context
 	CUcontext cuda_context = 0;
@@ -131,7 +138,7 @@ inline OptixModule load_optix_module
 
 	OptixModule module;
 	OPTIX_CHECK_LOG(
-		optixModuleCreateFromPTX(
+		optixModuleCreate(
 			optix_context,
 			&module_options, &pipeline_options,
 			file.c_str(), file.size(),

@@ -5,8 +5,7 @@ namespace kobra {
 namespace layers {
 
 // Static member variables
-const std::vector <DescriptorSetLayoutBinding>
-		Framer::DESCRIPTOR_SET_BINDINGS = {
+const std::vector <DescriptorSetLayoutBinding> Framer::DESCRIPTOR_SET_BINDINGS = {
 	DescriptorSetLayoutBinding {
 		0, vk::DescriptorType::eCombinedImageSampler,
 		1, vk::ShaderStageFlagBits::eFragment
@@ -14,20 +13,11 @@ const std::vector <DescriptorSetLayoutBinding>
 };
 
 // Create the layer
-Framer::Framer(const Context &context)
+Framer::Framer(const Context &context, const vk::raii::RenderPass &render_pass)
 		: m_device(context.device),
 		m_phdev(context.phdev),
-		m_descriptor_pool(context.descriptor_pool),
 		m_sync_queue(context.sync_queue)
 {
-	// Create the present render pass
-	m_render_pass = make_render_pass(*context.device,
-		{context.swapchain_format},
-		{vk::AttachmentLoadOp::eClear},
-		context.depth_format,
-		vk::AttachmentLoadOp::eClear
-	);
-
 	// Descriptor set layout
 	m_dsl = make_descriptor_set_layout(
 		*context.device,
@@ -55,7 +45,7 @@ Framer::Framer(const Context &context)
 	});
 	
 	GraphicsPipelineInfo present_grp_info {
-		*context.device, m_render_pass,
+		*context.device, render_pass,
 		std::move(shaders[0]), nullptr,
 		std::move(shaders[1]), nullptr,
 		{}, {},
@@ -69,6 +59,7 @@ Framer::Framer(const Context &context)
 	m_pipeline = make_graphics_pipeline(present_grp_info);
 
 	// Allocate resources for rendering results
+        // TODO: upgrade to 32 bit float
 	m_result_image = ImageData(
 		*context.phdev, *context.device,
 		vk::Format::eR8G8B8A8Unorm,
@@ -135,12 +126,7 @@ void Framer::resize_callback(const RawImage &frame)
 }
 
 // Render to the presentable framebuffer
-void Framer::render
-		(const RawImage &frame,
-		const vk::raii::CommandBuffer &cmd,
-		const vk::raii::Framebuffer &framebuffer,
-		const vk::Extent2D &extent,
-		const RenderArea &ra)
+void Framer::pre_render(const vk::raii::CommandBuffer &cmd, const RawImage &frame)
 {
 	if (!m_sync_queue) {
 		// TODO: remove the default constructor, force pointer
@@ -179,40 +165,10 @@ void Framer::render
 
 	// Transition image back to shader read
 	m_result_image.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
-		
-	// Apply render area
-	ra.apply(cmd, extent);
+}	
 
-	// Clear colors
-	// TODO: method
-	std::array <vk::ClearValue, 2> clear_values {
-		vk::ClearValue {
-			vk::ClearColorValue {
-				std::array <float, 4> {0.0f, 0.0f, 0.0f, 1.0f}
-			}
-		},
-		vk::ClearValue {
-			vk::ClearDepthStencilValue {
-				1.0f, 0
-			}
-		}
-	};
-	
-	// Start the render pass
-	cmd.beginRenderPass(
-		vk::RenderPassBeginInfo {
-			*m_render_pass,
-			*framebuffer,
-			vk::Rect2D {
-				vk::Offset2D {0, 0},
-				extent
-			},
-			static_cast <uint32_t> (clear_values.size()),
-			clear_values.data()
-		},
-		vk::SubpassContents::eInline
-	);
-
+void Framer::render(const vk::raii::CommandBuffer &cmd)
+{
 	// Presentation pipeline
 	cmd.bindPipeline(
 		vk::PipelineBindPoint::eGraphics,
@@ -227,7 +183,6 @@ void Framer::render
 
 	// Draw and end
 	cmd.draw(6, 1, 0, 0);
-	cmd.endRenderPass();
 }
 
 }

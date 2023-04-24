@@ -24,19 +24,19 @@ void MeshMemory::fill_cachelet(Cachelet &cachelet, const Submesh &submesh)
 }
 
 // Generate cache information for a renderable for CUDA
-void MeshMemory::cache_cuda(const ECS &ecs, int entity)
+void MeshMemory::cache_cuda(const Entity &entity)
 {
 	// Check if we need to cache
 	// TODO: check if the renderable has changed
-	if (m_cache.find(entity) != m_cache.end()) {
-		Cache cache = m_cache[entity];
+	if (m_cache.find(entity.id) != m_cache.end()) {
+		Cache cache = m_cache[entity.id];
 		
 		int count = 0;
 		for (auto &cachelet : cache.m_cachelets) {
-			if (cachelet.m_cuda_triangles != nullptr)
+			if (cachelet.m_cuda_triangles == nullptr)
 				continue;
 
-			if (cachelet.m_cuda_vertices != nullptr)
+			if (cachelet.m_cuda_vertices == nullptr)
 				continue;
 
 			count++;
@@ -46,7 +46,7 @@ void MeshMemory::cache_cuda(const ECS &ecs, int entity)
 			return;
 	}
 
-        auto &renderable = ecs.get_entity(entity).get <Renderable> ();
+        auto &renderable = entity.get <Renderable> ();
 	int submeshes = renderable.size();
 
 	std::vector <Cachelet> cachelets(submeshes);
@@ -59,7 +59,7 @@ void MeshMemory::cache_cuda(const ECS &ecs, int entity)
 	// Insert into cache
 	Cache cache { cachelets };
 
-	m_cache.insert({ entity, cache });
+	m_cache.insert({ entity.id, cache });
 }
 
 }
