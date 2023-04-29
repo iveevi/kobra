@@ -26,6 +26,7 @@
 
 // Editor headers
 #include "gbuffer_rtx_shader.cuh"
+#include "path_tracer.cuh"
 
 // Native File Dialog
 #include <nfd.h>
@@ -96,11 +97,14 @@ struct EditorViewport {
                 cudaSurfaceObject_t cu_position_surface = 0;
                 cudaSurfaceObject_t cu_normal_surface = 0;
                 cudaSurfaceObject_t cu_material_index_surface = 0;
+                cudaSurfaceObject_t cu_color_surface = 0;
 
                 // CUDA texture objects for read
-                cudaTextureObject_t cu_position_texture = 0;
-                cudaTextureObject_t cu_normal_texture = 0;
-                cudaTextureObject_t cu_material_index_texture = 0;
+                // TODO: do we really need these? anyway we use the surface objects
+                // for pixel accurate measures...
+                // cudaTextureObject_t cu_position_texture = 0;
+                // cudaTextureObject_t cu_normal_texture = 0;
+                // cudaTextureObject_t cu_material_index_texture = 0;
         } framebuffer_images;
 
         DepthBuffer depth_buffer = nullptr;
@@ -127,9 +131,6 @@ struct EditorViewport {
 
         // G-buffer with raytracing
         struct {
-                // Context (TODO: move outside...)
-                OptixDeviceContext context = 0;
-
                 // Program and pipeline
                 OptixPipeline pipeline = 0;
                 OptixModule module = 0;
@@ -149,6 +150,33 @@ struct EditorViewport {
                 CUdeviceptr dev_launch_params;
         } gbuffer_rtx;
 
+        // Path tracer
+        struct {
+                // Program and pipeline
+                OptixPipeline pipeline = 0;
+                OptixModule module = 0;
+
+                OptixProgramGroup ray_generation = 0;
+                OptixProgramGroup closest_hit = 0;
+                OptixProgramGroup miss = 0;
+
+                // SBT related resources
+                OptixShaderBindingTable sbt = {};
+
+                // std::map <MeshIndex, int> record_refs;
+                // std::vector <optix::Record <Hit>> linearized_records;
+
+                // Launch parameters
+                PathTracerParameters launch_params;
+                CUdeviceptr dev_launch_params;
+               
+                // Storage and blitting
+                layers::Framer framer;
+
+                CUdeviceptr dev_traced;
+                std::vector <uint8_t> traced;
+        } path_tracer;
+
         // Path tracer (Amadeus)
         struct {
                 std::shared_ptr <amadeus::ArmadaRTX> armada;
@@ -158,7 +186,7 @@ struct EditorViewport {
 
                 CUdeviceptr dev_traced;
                 std::vector <uint8_t> traced;
-        } path_tracer;
+        } amadeus_path_tracer;
 
         // Albedo (rasterization)
         struct {
@@ -235,7 +263,8 @@ struct EditorViewport {
                         eNormals,
                         eAlbedo,
                         eSparseGlobalIllumination,
-                        ePathTraced
+                        ePathTraced,
+                        ePathTraced_Amadeus
                 } mode = eTriangulation;
 
                 enum {
@@ -265,13 +294,15 @@ struct EditorViewport {
         void configure_highlight_pipeline();
 
         void configure_gbuffer_rtx();
-        void configure_path_tracer(const Context &context);
+        void configure_amadeus_path_tracer(const Context &);
+        void configure_path_tracer(const Context &);
 
         void resize(const vk::Extent2D &);
 
         // Rendering methods
         void render_gbuffer(const RenderInfo &, const std::vector <Entity> &);
-        void render_path_traced(const RenderInfo &, const std::vector <Entity> &, daemons::Transform &);
+        void render_amadeus_path_traced(const RenderInfo &, const std::vector <Entity> &, daemons::Transform &);
+        void render_path_traced(const RenderInfo &, const std::vector <Entity> &);
         void render_albedo(const RenderInfo &, const std::vector <Entity> &);
         void render_normals(const RenderInfo &);
         void render_triangulation(const RenderInfo &);

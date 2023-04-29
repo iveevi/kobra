@@ -3,6 +3,7 @@
 #include "include/cuda/error.cuh"
 #include "push_constants.hpp"
 
+// TODO: pass transform daemon for the raytracing backend
 void EditorViewport::render_gbuffer(const RenderInfo &render_info, const std::vector <Entity> &entities)
 {
         if (render_state.backend == RenderState::eRasterized) {
@@ -199,7 +200,7 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info, const std::ve
 
                 // cuda::copy(gbuffer_rtx.dev_launch_params, &gbuffer_rtx.launch_params, 1);
                 GBufferParameters *dev_params = (GBufferParameters *) gbuffer_rtx.dev_launch_params;
-                cudaMemcpy(dev_params, &gbuffer_rtx.launch_params, sizeof(GBufferParameters), cudaMemcpyHostToDevice);
+                CUDA_CHECK(cudaMemcpy(dev_params, &gbuffer_rtx.launch_params, sizeof(GBufferParameters), cudaMemcpyHostToDevice));
                 
                 // Launch G-buffer raytracing pipeline
                 // printf("Pipeline: %p\n", gbuffer_rtx.pipeline);
@@ -218,6 +219,8 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info, const std::ve
 
                 std::string output = optix_io_read(&gbuffer_rtx.launch_params.io);
                 optix_io_clear(&gbuffer_rtx.launch_params.io);
+
+                std::cout << "G-buffer, read: " << output << "\n";
         }
 
         // Transition layout for position and normal map
@@ -258,11 +261,100 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info, const std::ve
 
 void EditorViewport::render_path_traced
                         (const RenderInfo &render_info,
+                        const std::vector <Entity> &entities)
+{
+        // By the time of running this path tracer, the G-buffer
+        // will have run and updated the necessary buffers
+
+        // Configure launch parameters
+        auto uvw = uvw_frame(render_info.camera, render_info.camera_transform);
+
+        path_tracer.launch_params.U = cuda::to_f3(uvw.u);
+        path_tracer.launch_params.V = cuda::to_f3(uvw.v);
+        path_tracer.launch_params.W = cuda::to_f3(uvw.w);
+        
+        path_tracer.launch_params.origin = cuda::to_f3(render_info.camera_transform.position);
+        path_tracer.launch_params.resolution = { extent.width, extent.height };
+        
+        path_tracer.launch_params.position_surface = framebuffer_images.cu_position_surface;
+        path_tracer.launch_params.normal_surface = framebuffer_images.cu_normal_surface;
+        path_tracer.launch_params.index_surface = framebuffer_images.cu_material_index_surface;
+
+        PathTracerParameters *dev_params = (PathTracerParameters *) path_tracer.dev_launch_params;
+        CUDA_CHECK(cudaMemcpy(dev_params, &path_tracer.launch_params, sizeof(PathTracerParameters), cudaMemcpyHostToDevice));
+        
+        OPTIX_CHECK(
+                optixLaunch(
+                        path_tracer.pipeline, 0,
+                        path_tracer.dev_launch_params,
+                        sizeof(PathTracerParameters),
+                        &path_tracer.sbt,
+                        extent.width, extent.height, 1
+                )
+        );
+
+        CUDA_SYNC_CHECK();
+
+        std::string output = optix_io_read(&path_tracer.launch_params.io);
+        optix_io_clear(&path_tracer.launch_params.io);
+
+        std::cout << "Read: " << output << "\n";
+        
+        // Blitting
+        float4 *buffer = (float4 *) path_tracer.launch_params.color;
+
+        kobra::cuda::hdr_to_ldr(
+                buffer,
+                (uint32_t *) path_tracer.dev_traced,
+                extent.width, extent.height,
+                kobra::cuda::eTonemappingACES
+        );
+
+        kobra::cuda::copy(
+                path_tracer.traced, path_tracer.dev_traced,
+                extent.width * extent.height * sizeof(uint32_t)
+        );
+
+        path_tracer.framer.pre_render(
+                render_info.cmd,
+                kobra::RawImage {
+                        .data = path_tracer.traced,
+                        .width = extent.width,
+                        .height = extent.height,
+                        .channels = 4
+                }
+        );
+        
+        // Start render pass and blit
+        // TODO: function to start render pass for presentation
+        render_info.render_area.apply(render_info.cmd, render_info.extent);
+
+        std::vector <vk::ClearValue> clear_values {
+                vk::ClearColorValue { std::array <float, 4> { 0.0f, 0.0f, 0.0f, 1.0f } },
+                vk::ClearDepthStencilValue { 1.0f, 0 }
+        };
+
+        render_info.cmd.beginRenderPass(
+                vk::RenderPassBeginInfo {
+                        *present_render_pass,
+                        *viewport_fb,
+                        vk::Rect2D { vk::Offset2D {}, extent },
+                        clear_values
+                },
+                vk::SubpassContents::eInline
+        );
+
+        // TODO: import CUDA to Vulkan and render straight to the image
+        path_tracer.framer.render(render_info.cmd);
+}
+
+void EditorViewport::render_amadeus_path_traced
+                        (const RenderInfo &render_info,
                         const std::vector <Entity> &entities,
                         daemons::Transform &transform_daemon)
 {
         // Run the path tracer, then extract image and blit to viewport
-        path_tracer.armada->render(
+        amadeus_path_tracer.armada->render(
                 entities,
                 transform_daemon,
                 render_info.camera,
@@ -270,25 +362,25 @@ void EditorViewport::render_path_traced
                 false
         );
 			
-        float4 *buffer = (float4 *) path_tracer.armada->color_buffer();
+        float4 *buffer = (float4 *) amadeus_path_tracer.armada->color_buffer();
 
-        vk::Extent2D rtx_extent = path_tracer.armada->extent();
+        vk::Extent2D rtx_extent = amadeus_path_tracer.armada->extent();
         kobra::cuda::hdr_to_ldr(
                 buffer,
-                (uint32_t *) path_tracer.dev_traced,
+                (uint32_t *) amadeus_path_tracer.dev_traced,
                 rtx_extent.width, rtx_extent.height,
                 kobra::cuda::eTonemappingACES
         );
 
         kobra::cuda::copy(
-                path_tracer.traced, path_tracer.dev_traced,
-                path_tracer.armada->size() * sizeof(uint32_t)
+                amadeus_path_tracer.traced, amadeus_path_tracer.dev_traced,
+                amadeus_path_tracer.armada->size() * sizeof(uint32_t)
         );
 
-        path_tracer.framer.pre_render(
+        amadeus_path_tracer.framer.pre_render(
                 render_info.cmd,
                 kobra::RawImage {
-                        .data = path_tracer.traced,
+                        .data = amadeus_path_tracer.traced,
                         .width = rtx_extent.width,
                         .height = rtx_extent.height,
                         .channels = 4
@@ -315,7 +407,7 @@ void EditorViewport::render_path_traced
         );
 
         // TODO: import CUDA to Vulkan and render straight to the image
-        path_tracer.framer.render(render_info.cmd);
+        amadeus_path_tracer.framer.render(render_info.cmd);
 }
 
 void EditorViewport::render_albedo(const RenderInfo &render_info, const std::vector <Entity> &entities)
@@ -616,6 +708,8 @@ void EditorViewport::render_highlight(const RenderInfo &render_info, const std::
 
 void EditorViewport::render(const RenderInfo &render_info, const std::vector <Entity> &entities, daemons::Transform &transform_daemon)
 {
+        // TODO: if a click is detected, then we need to run the G-buffer pass
+        // at least once to keep up to date with the latest changes
         switch (render_state.mode) {
         case RenderState::eTriangulation:
                 render_gbuffer(render_info, entities);
@@ -630,9 +724,14 @@ void EditorViewport::render(const RenderInfo &render_info, const std::vector <En
         case RenderState::eAlbedo:
                 render_albedo(render_info, entities);
                 break;
-
+        
         case RenderState::ePathTraced:
-                render_path_traced(render_info, entities, transform_daemon);
+                render_gbuffer(render_info, entities);
+                render_path_traced(render_info, entities);
+                break;
+
+        case RenderState::ePathTraced_Amadeus:
+                render_amadeus_path_traced(render_info, entities, transform_daemon);
                 break;
 
         default:
@@ -730,9 +829,12 @@ void EditorViewport::menu(const MenuOptions &options)
 
                         // if (ImGui::MenuItem("SparseRTX"))
                         //         render_state.mode = RenderState::eSparseRTX;
-
-                        if (ImGui::MenuItem("Path Traced"))
+                        
+                        if (ImGui::MenuItem("Path Traced (G-buffer)"))
                                 render_state.mode = RenderState::ePathTraced;
+
+                        if (ImGui::MenuItem("Path Traced (Amadeus)"))
+                                render_state.mode = RenderState::ePathTraced_Amadeus;
 
                         if (ImGui::Checkbox("Show bounding boxes", &render_state.bounding_boxes));
 

@@ -191,7 +191,7 @@ void _initialize_glfw();
 // Get (or create) the singleton instance
 const vk::raii::Instance &get_vulkan_instance();
 
-// Window type
+// Window typebackend
 struct Window {
 	GLFWwindow	*m_handle;
 	std::string	m_title;

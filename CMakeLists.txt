@@ -198,6 +198,7 @@ file(GLOB_RECURSE OPTIX_SHADERS
 	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/amadeus_restir.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/amadeus_repg.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/editor/gbuffer_rtx_shader.cu
+	${CMAKE_CURRENT_SOURCE_DIR}/editor/path_tracer.cu
 )
 
 add_library(optix_shaders
@@ -217,7 +218,7 @@ add_custom_target(
 		${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/optix_shaders.dir/source/optix
 		${CMAKE_BINARY_DIR}/bin/ptx
 	COMMAND ${CMAKE_COMMAND} -E copy
-		${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/optix_shaders.dir/editor/gbuffer_rtx_shader.ptx
+		${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/optix_shaders.dir/editor/*.ptx
 		${CMAKE_BINARY_DIR}/bin/ptx
 	DEPENDS optix_shaders
 )

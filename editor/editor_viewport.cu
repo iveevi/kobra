@@ -14,6 +14,9 @@ EditorViewport::EditorViewport
                 command_pool(context.command_pool),
                 texture_loader(context.texture_loader)
 {
+        path_tracer.dev_traced = 0;
+        path_tracer.launch_params.color = 0;
+
         resize(context.extent);
 
         configure_present();
@@ -27,6 +30,7 @@ EditorViewport::EditorViewport
         configure_highlight_pipeline();
 
         configure_gbuffer_rtx();
+        configure_amadeus_path_tracer(context);
         configure_path_tracer(context);
 
         render_state.initialized = true;
@@ -35,7 +39,7 @@ EditorViewport::EditorViewport
 static void import_vulkan_texture
                 (const vk::raii::Device &device,
                 const ImageData &image,
-                cudaTextureObject_t &texture,
+                // cudaTextureObject_t &texture,
                 cudaSurfaceObject_t &surface,
                 cudaChannelFormatDesc &channel_desc)
 {
@@ -92,10 +96,10 @@ static void import_vulkan_texture
         if (channel_desc.f != cudaChannelFormatKindFloat)
                 tex_desc.filterMode = cudaFilterModePoint;
         
-        CUDA_CHECK(cudaCreateTextureObject(
-                &texture,
-                &res_desc, &tex_desc, nullptr
-        ));
+        // CUDA_CHECK(cudaCreateTextureObject(
+        //         &texture,
+        //         &res_desc, &tex_desc, nullptr
+        // ));
 }
 
 void EditorViewport::resize(const vk::Extent2D &new_extent)
@@ -116,6 +120,7 @@ void EditorViewport::resize(const vk::Extent2D &new_extent)
         static vk::ImageTiling tiling = vk::ImageTiling::eOptimal;
         static vk::ImageUsageFlags usage = vk::ImageUsageFlagBits::eColorAttachment
                 | vk::ImageUsageFlagBits::eTransferSrc
+                | vk::ImageUsageFlagBits::eTransferDst
                 | vk::ImageUsageFlagBits::eStorage;
 
         // Allocate viewport image
@@ -157,22 +162,42 @@ void EditorViewport::resize(const vk::Extent2D &new_extent)
 
         import_vulkan_texture(*device,
                 framebuffer_images.position,
-                framebuffer_images.cu_position_texture,
+                // framebuffer_images.cu_position_texture,
                 framebuffer_images.cu_position_surface,
                 channel_desc_f32);
 
         import_vulkan_texture(*device,
                 framebuffer_images.normal,
-                framebuffer_images.cu_normal_texture,
+                // framebuffer_images.cu_normal_texture,
                 framebuffer_images.cu_normal_surface,
                 channel_desc_f32);
 
-        // TODO: pass the format...
         import_vulkan_texture(*device,
                 framebuffer_images.material_index,
-                framebuffer_images.cu_material_index_texture,
+                // framebuffer_images.cu_material_index_texture,
                 framebuffer_images.cu_material_index_surface,
                 channel_desc_i32);
+       
+        /* One more surface for the final color target
+        import_vulkan_texture(*device,
+                framebuffer_images.viewport,
+                // framebuffer_images.cu_material_index_texture,
+                framebuffer_images.cu_color_surface,
+                channel_desc_f32); */
+
+        // Allocate resources for the G-buffer based path tracer
+        if (path_tracer.launch_params.color != 0)
+                CUDA_CHECK(cudaFree(path_tracer.launch_params.color));
+
+        CUDA_CHECK(cudaMalloc(&path_tracer.launch_params.color,
+                new_extent.width * new_extent.height * sizeof(float4)));
+        
+        if (path_tracer.dev_traced != 0)
+                CUDA_CHECK(cudaFree((void *) path_tracer.dev_traced));
+
+        CUDA_CHECK(cudaMalloc((void **) &path_tracer.dev_traced, new_extent.width * new_extent.height * sizeof(uint32_t)));
+
+        path_tracer.traced.resize(new_extent.width * new_extent.height * sizeof(uint32_t));
 
         // Allocate Sobel filter output image
         sobel.output = ImageData {

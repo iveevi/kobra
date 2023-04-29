@@ -688,7 +688,7 @@ void EditorViewport::configure_gbuffer_rtx()
         static constexpr const char OPTIX_PTX_FILE[] = "bin/ptx/gbuffer_rtx_shader.ptx";
 
         // Create a context
-        gbuffer_rtx.context = system->context(); // optix::make_context();
+        OptixDeviceContext context = system->context();
 
         std::string contents = common::read_file(OPTIX_PTX_FILE);
 	
@@ -697,7 +697,7 @@ void EditorViewport::configure_gbuffer_rtx()
 
         OPTIX_CHECK(
                 optixModuleCreate(
-                        gbuffer_rtx.context,
+                        context,
                         &module_options,
                         &ppl_compile_options,
                         contents.c_str(),
@@ -719,7 +719,7 @@ void EditorViewport::configure_gbuffer_rtx()
 
                 OPTIX_CHECK(
                         optixProgramGroupCreate(
-                                gbuffer_rtx.context,
+                                context,
                                 &desc, 1,
                                 &program_options,
                                 log, &sizeof_log,
@@ -738,7 +738,7 @@ void EditorViewport::configure_gbuffer_rtx()
 
                 OPTIX_CHECK(
                         optixProgramGroupCreate(
-                                gbuffer_rtx.context,
+                                context,
                                 &desc, 1,
                                 &program_options,
                                 log, &sizeof_log,
@@ -757,7 +757,7 @@ void EditorViewport::configure_gbuffer_rtx()
 
                 OPTIX_CHECK(
                         optixProgramGroupCreate(
-                                gbuffer_rtx.context,
+                                context,
                                 &desc, 1,
                                 &program_options,
                                 log, &sizeof_log,
@@ -776,7 +776,7 @@ void EditorViewport::configure_gbuffer_rtx()
         };
 
         OPTIX_CHECK(
-                optixPipelineCreate(gbuffer_rtx.context,
+                optixPipelineCreate(context,
                         &ppl_compile_options,
                         &ppl_link_options,
                         program_groups, 3,
@@ -852,24 +852,197 @@ void EditorViewport::configure_gbuffer_rtx()
         gbuffer_rtx.launch_params.io = optix_io_create();
 }
 
-void EditorViewport::configure_path_tracer(const Context &context)
+void EditorViewport::configure_amadeus_path_tracer(const Context &context)
 {
         // TODO: adaptive resolution...
-        path_tracer.armada = std::make_shared <amadeus::ArmadaRTX> (
+        amadeus_path_tracer.armada = std::make_shared <amadeus::ArmadaRTX> (
                 context, system, mesh_memory, vk::Extent2D { 1000, 1000 }
         );
 
-        path_tracer.armada->attach(
+        amadeus_path_tracer.armada->attach(
                 "Path Tracer",
                 std::make_shared <amadeus::PathTracer> ()
         );
 
         // Framer and related resources
-	path_tracer.framer = kobra::layers::Framer(context, present_render_pass);
+	amadeus_path_tracer.framer = kobra::layers::Framer(context, present_render_pass);
 
 	// Allocate necessary buffers
-	size_t size = path_tracer.armada->size();
+	size_t size = amadeus_path_tracer.armada->size();
 
-	path_tracer.dev_traced = kobra::cuda::alloc(size * sizeof(uint32_t));
-	path_tracer.traced.resize(size);
+	amadeus_path_tracer.dev_traced = kobra::cuda::alloc(size * sizeof(uint32_t));
+	amadeus_path_tracer.traced.resize(size);
+}
+
+void EditorViewport::configure_path_tracer(const Context &ctx)
+{
+        static constexpr const char OPTIX_PTX_FILE[] = "bin/ptx/path_tracer.ptx";
+
+        // Create a context
+        OptixDeviceContext context = system->context();
+
+        std::string contents = common::read_file(OPTIX_PTX_FILE);
+	
+        static char log[2048];
+	static size_t sizeof_log = sizeof(log);
+
+        OPTIX_CHECK(
+                optixModuleCreate(
+                        context,
+                        &module_options,
+                        &ppl_compile_options,
+                        contents.c_str(),
+                        contents.size(),
+                        log, &sizeof_log,
+                        &path_tracer.module
+                )
+        );
+
+        printf("Loaded module %p: %s\n", path_tracer.module, log);
+
+        OptixProgramGroupOptions program_options = {};
+
+        {
+                OptixProgramGroupDesc desc = {};
+                desc.kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
+                desc.raygen.module = path_tracer.module;
+                desc.raygen.entryFunctionName = "__raygen__";
+
+                OPTIX_CHECK(
+                        optixProgramGroupCreate(
+                                context,
+                                &desc, 1,
+                                &program_options,
+                                log, &sizeof_log,
+                                &path_tracer.ray_generation
+                        )
+                );
+
+                printf("Loaded raygen %p: %s\n", path_tracer.ray_generation, log);
+        }
+
+        {
+                OptixProgramGroupDesc desc = {};
+                desc.kind = OPTIX_PROGRAM_GROUP_KIND_MISS;
+                desc.miss.module = path_tracer.module;
+                desc.miss.entryFunctionName = "__miss__";
+
+                OPTIX_CHECK(
+                        optixProgramGroupCreate(
+                                context,
+                                &desc, 1,
+                                &program_options,
+                                log, &sizeof_log,
+                                &path_tracer.miss
+                        )
+                );
+
+                printf("Loaded miss %p: %s\n", path_tracer.miss, log);
+        }
+
+        {
+                OptixProgramGroupDesc desc = {};
+                desc.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
+                desc.hitgroup.moduleCH = path_tracer.module;
+                desc.hitgroup.entryFunctionNameCH = "__closesthit__";
+
+                OPTIX_CHECK(
+                        optixProgramGroupCreate(
+                                context,
+                                &desc, 1,
+                                &program_options,
+                                log, &sizeof_log,
+                                &path_tracer.closest_hit
+                        )
+                );
+
+                printf("Loaded closest hit %p: %s\n", path_tracer.closest_hit, log);
+        }
+
+        // Create pipeline
+        OptixProgramGroup program_groups[] = {
+                path_tracer.ray_generation,
+                path_tracer.closest_hit,
+                path_tracer.miss,
+        };
+
+        OPTIX_CHECK(
+                optixPipelineCreate(context,
+                        &ppl_compile_options,
+                        &ppl_link_options,
+                        program_groups, 3,
+                        log, &sizeof_log,
+                        &path_tracer.pipeline)
+        );
+
+        printf("Loaded pipeline %p: %s\n", path_tracer.pipeline, log);
+
+        // Configure stacks
+        OptixStackSizes stack_sizes = {};
+        OPTIX_CHECK(optixUtilAccumulateStackSizes(path_tracer.closest_hit, &stack_sizes, path_tracer.pipeline));
+        OPTIX_CHECK(optixUtilAccumulateStackSizes(path_tracer.miss, &stack_sizes, path_tracer.pipeline));
+        OPTIX_CHECK(optixUtilAccumulateStackSizes(path_tracer.ray_generation, &stack_sizes, path_tracer.pipeline));
+
+        uint32_t max_trace_depth = 1;
+        uint32_t max_cc_depth = 0;
+        uint32_t max_dc_depth = 0;
+        uint32_t direct_callable_stack_size_from_traversal = 0;
+        uint32_t direct_callable_stack_size_from_state = 0;
+        uint32_t continuation_stack_size = 0;
+
+        OPTIX_CHECK(
+                optixUtilComputeStackSizes(&stack_sizes,
+                        max_trace_depth, max_cc_depth, max_dc_depth,
+                        &direct_callable_stack_size_from_traversal,
+                        &direct_callable_stack_size_from_state,
+                        &continuation_stack_size)
+        );
+
+        OPTIX_CHECK(
+                optixPipelineSetStackSize(path_tracer.pipeline,
+                        direct_callable_stack_size_from_traversal,
+                        direct_callable_stack_size_from_state,
+                        continuation_stack_size, 2)
+        );
+
+        // Create shader binding table
+        path_tracer.sbt = {};
+
+        // Ray generation
+        CUdeviceptr dev_raygen_record;
+
+        optix::Record <void> raygen_record;
+        OPTIX_CHECK(optixSbtRecordPackHeader(path_tracer.ray_generation, &raygen_record));
+
+        CUDA_CHECK(cudaMalloc((void **) &dev_raygen_record, sizeof(optix::Record <void>)));
+        CUDA_CHECK(cudaMemcpy((void *) dev_raygen_record, &raygen_record, sizeof(optix::Record <void>), cudaMemcpyHostToDevice));
+
+        path_tracer.sbt.raygenRecord = dev_raygen_record;
+
+        // Miss
+        CUdeviceptr dev_miss_record;
+
+        optix::Record <void> miss_record;
+        OPTIX_CHECK(optixSbtRecordPackHeader(path_tracer.miss, &miss_record));
+
+        CUDA_CHECK(cudaMalloc((void **) &dev_miss_record, sizeof(optix::Record <void>)));
+        CUDA_CHECK(cudaMemcpy((void *) dev_miss_record, &miss_record, sizeof(optix::Record <void>), cudaMemcpyHostToDevice));
+
+        path_tracer.sbt.missRecordBase = dev_miss_record;
+        path_tracer.sbt.missRecordStrideInBytes = sizeof(optix::Record <void>);
+        path_tracer.sbt.missRecordCount = 1;
+
+        path_tracer.sbt.hitgroupRecordBase = 0;
+        path_tracer.sbt.hitgroupRecordStrideInBytes = 0;
+        path_tracer.sbt.hitgroupRecordCount = 0;
+
+        // Allocate parameters up front
+        path_tracer.dev_launch_params = cuda::alloc(sizeof(PathTracerParameters));
+
+        // path_tracer.launch_params = {};
+        path_tracer.launch_params.io = optix_io_create();
+	
+       
+        // TODO: render from raw float4 data...
+        path_tracer.framer = kobra::layers::Framer(ctx, present_render_pass);
 }

@@ -178,7 +178,7 @@ void Framer::render(const vk::raii::CommandBuffer &cmd)
 	// Bind descriptor set
 	cmd.bindDescriptorSets(
 		vk::PipelineBindPoint::eGraphics,
-		*m_ppl, 0, {*m_dset}, {}
+		*m_ppl, 0, { *m_dset }, {}
 	);
 
 	// Draw and end
