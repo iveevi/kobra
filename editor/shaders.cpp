@@ -78,7 +78,8 @@ uniform sampler2D normal_map;
 // Outputs
 layout (location = 0) out vec4 g_position;
 layout (location = 1) out vec4 g_normal;
-layout (location = 2) out int g_material_index;
+layout (location = 2) out vec4 g_uv;
+layout (location = 3) out int g_material_index;
 
 void main()
 {
@@ -101,6 +102,9 @@ void main()
         }
 
         g_normal.w = 1.0;
+
+        // Set UV
+        g_uv = vec4(in_uv, 0.0, 1.0);
 
         // Set material index
 	g_material_index.x = in_material_index | (gl_PrimitiveID << 16);
@@ -136,6 +140,22 @@ void main()
 {
         vec3 normal = texture(normal_map, in_uv).xyz;
         fragment = vec4(0.5 * normal + 0.5, 1.0);
+}
+)";
+
+const char *uv_frag_shader = R"(
+#version 450
+
+layout (binding = 0)
+uniform sampler2D uv_map;
+
+layout (location = 0) in vec2 in_uv;
+layout (location = 0) out vec4 fragment;
+
+void main()
+{
+        vec2 uv = texture(uv_map, in_uv).xy;
+        fragment = vec4(uv, 0.0, 1.0);
 }
 )";
 

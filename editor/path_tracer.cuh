@@ -5,6 +5,7 @@
 
 // Engine headers
 #include "include/vertex.hpp"
+#include "include/cuda/material.cuh"
 
 // Editor headers
 #include "optix_io.cuh"
@@ -28,6 +29,9 @@ struct PathTracerParameters {
         cudaSurfaceObject_t position_surface;
         cudaSurfaceObject_t normal_surface;
         cudaSurfaceObject_t index_surface;
+
+        // List of all materials
+        cuda::_material *materials;
 
         // Environment map
         cudaTextureObject_t environment_map;

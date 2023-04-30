@@ -86,25 +86,21 @@ struct EditorViewport {
                 ImageData viewport = nullptr;
                 ImageData position = nullptr;
                 ImageData normal = nullptr;
+                ImageData uv = nullptr;
                 ImageData material_index = nullptr;
 
                 // Vulkan sampler objects
                 vk::raii::Sampler position_sampler = nullptr;
                 vk::raii::Sampler normal_sampler = nullptr;
+                vk::raii::Sampler uv_sampler = nullptr;
                 vk::raii::Sampler material_index_sampler = nullptr;
 
                 // CUDA surface objects for write
                 cudaSurfaceObject_t cu_position_surface = 0;
                 cudaSurfaceObject_t cu_normal_surface = 0;
+                cudaSurfaceObject_t cu_uv_surface = 0;
                 cudaSurfaceObject_t cu_material_index_surface = 0;
-                cudaSurfaceObject_t cu_color_surface = 0;
-
-                // CUDA texture objects for read
-                // TODO: do we really need these? anyway we use the surface objects
-                // for pixel accurate measures...
-                // cudaTextureObject_t cu_position_texture = 0;
-                // cudaTextureObject_t cu_normal_texture = 0;
-                // cudaTextureObject_t cu_material_index_texture = 0;
+                // cudaSurfaceObject_t cu_color_surface = 0;
         } framebuffer_images;
 
         DepthBuffer depth_buffer = nullptr;
@@ -128,6 +124,17 @@ struct EditorViewport {
                 std::map <MeshIndex, int> dset_refs;
                 std::vector <vk::raii::DescriptorSet> dsets;
         } gbuffer;
+
+        // Common raytracing resources
+        struct {
+                std::vector <optix::Record <Hit>> records;
+                std::map <MeshIndex, int> record_refs;
+
+                std::vector <cuda::_material> materials;
+                CUdeviceptr dev_materials = 0;
+
+                bool clk_rise = true;
+        } common_rtx;
 
         // G-buffer with raytracing
         struct {
@@ -206,6 +213,15 @@ struct EditorViewport {
                 vk::raii::DescriptorSetLayout dsl = nullptr;
                 vk::raii::DescriptorSet dset = nullptr;
         } normal;
+        
+        // Blitting UV map
+        struct {
+                vk::raii::PipelineLayout pipeline_layout = nullptr;
+                vk::raii::Pipeline pipeline = nullptr;
+        
+                vk::raii::DescriptorSetLayout dsl = nullptr;
+                vk::raii::DescriptorSet dset = nullptr;
+        } uv;
 
         // Scene triangulation (agnostic)
         struct {
@@ -261,6 +277,7 @@ struct EditorViewport {
                         eTriangulation,
                         eWireframe,
                         eNormals,
+                        eTextureCoordinates,
                         eAlbedo,
                         eSparseGlobalIllumination,
                         ePathTraced,
@@ -288,6 +305,7 @@ struct EditorViewport {
         void configure_gbuffer_pipeline();
         void configure_albedo_pipeline();
         void configure_normals_pipeline();
+        void configure_uv_pipeline();
         void configure_triangulation_pipeline();
         void configure_bounding_box_pipeline();
         void configure_sobel_pipeline();
@@ -305,11 +323,15 @@ struct EditorViewport {
         void render_path_traced(const RenderInfo &, const std::vector <Entity> &);
         void render_albedo(const RenderInfo &, const std::vector <Entity> &);
         void render_normals(const RenderInfo &);
+        void render_uv(const RenderInfo &);
         void render_triangulation(const RenderInfo &);
         void render_bounding_box(const RenderInfo &, const std::vector <Entity> &);
         void render_highlight(const RenderInfo &, const std::vector <Entity> &);
 
         void render(const RenderInfo &, const std::vector <Entity> &, daemons::Transform &);
+
+        // Other methods
+        void prerender_raytrace(const std::vector <Entity> &);
 
         // Properties
         ImageData &viewport() {

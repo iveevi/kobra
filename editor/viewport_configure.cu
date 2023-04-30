@@ -17,6 +17,7 @@ extern const char *presentation_vert_shader;
 
 extern const char *highlight_frag_shader;
 extern const char *normal_frag_shader;
+extern const char *uv_frag_shader;
 extern const char *triangulation_frag_shader;
 
 extern const char *albedo_vert_shader;
@@ -52,6 +53,14 @@ static const std::vector <DescriptorSetLayoutBinding> albedo_bindings {
 
 static const std::vector <DescriptorSetLayoutBinding> normal_bindings {
         // Normal framebuffer
+        DescriptorSetLayoutBinding {
+		0, vk::DescriptorType::eCombinedImageSampler,
+		1, vk::ShaderStageFlagBits::eFragment
+	},
+};
+
+static const std::vector <DescriptorSetLayoutBinding> uv_bindings {
+        // UV framebuffer
         DescriptorSetLayoutBinding {
 		0, vk::DescriptorType::eCombinedImageSampler,
 		1, vk::ShaderStageFlagBits::eFragment
@@ -162,12 +171,14 @@ void EditorViewport::configure_gbuffer_pipeline()
         std::vector <vk::Format> attachment_formats {
                 framebuffer_images.position.format,
                 framebuffer_images.normal.format,
+                framebuffer_images.uv.format,
                 framebuffer_images.material_index.format,
         };
 
         gbuffer_render_pass = make_render_pass(*device,
                 attachment_formats,
                 {
+                        vk::AttachmentLoadOp::eClear,
                         vk::AttachmentLoadOp::eClear,
                         vk::AttachmentLoadOp::eClear,
                         vk::AttachmentLoadOp::eClear,
@@ -180,6 +191,7 @@ void EditorViewport::configure_gbuffer_pipeline()
         std::vector <vk::ImageView> attachment_views {
                 *framebuffer_images.position.view,
                 *framebuffer_images.normal.view,
+                *framebuffer_images.uv.view,
                 *framebuffer_images.material_index.view,
                 *depth_buffer.view
         };
@@ -191,7 +203,7 @@ void EditorViewport::configure_gbuffer_pipeline()
                 extent.width, extent.height, 1
         };
 
-        gbuffer_fb = vk::raii::Framebuffer {*device, fb_info};
+        gbuffer_fb = vk::raii::Framebuffer { *device, fb_info };
 
         // G-buffer pipeline
         gbuffer.dsl = make_descriptor_set_layout(*device, gbuffer_bindings);
@@ -232,7 +244,7 @@ void EditorViewport::configure_gbuffer_pipeline()
 
         gbuffer_grp_info.vertex_shader = std::move(*gbuffer_vertex.compile(*device));
         gbuffer_grp_info.fragment_shader = std::move(*gbuffer_fragment.compile(*device));
-        gbuffer_grp_info.blend_attachments = { true, true, false };
+        gbuffer_grp_info.blend_attachments = { true, true, true, false };
         gbuffer_grp_info.cull_mode = vk::CullModeFlagBits::eNone;
 
         // Create the final pipeline
@@ -334,6 +346,56 @@ void EditorViewport::configure_normals_pipeline()
         }.front());
         
         bind_ds(*device, normal.dset, framebuffer_images.normal_sampler, framebuffer_images.normal, 0);
+}
+
+void EditorViewport::configure_uv_pipeline()
+{
+        uv.dsl = make_descriptor_set_layout(*device, uv_bindings);
+
+        uv.pipeline_layout = vk::raii::PipelineLayout {
+                *device,
+                vk::PipelineLayoutCreateInfo {
+                        vk::PipelineLayoutCreateFlags {},
+                        *uv.dsl, {}
+                }
+        };
+
+        // Load shaders and compile pipeline
+        ShaderProgram uv_vertex {
+                presentation_vert_shader,
+                vk::ShaderStageFlagBits::eVertex
+        };
+
+        ShaderProgram uv_fragment {
+                uv_frag_shader,
+                vk::ShaderStageFlagBits::eFragment
+        };
+
+        GraphicsPipelineInfo uv_grp_info {
+                *device, present_render_pass,
+                nullptr, nullptr,
+                nullptr, nullptr,
+                flat_vertex_binding,
+                flat_vertex_attributes,
+                uv.pipeline_layout,
+        };
+
+        uv_grp_info.vertex_shader = std::move(*uv_vertex.compile(*device));
+        uv_grp_info.fragment_shader = std::move(*uv_fragment.compile(*device));
+        uv_grp_info.cull_mode = vk::CullModeFlagBits::eNone;
+
+        uv.pipeline = make_graphics_pipeline(uv_grp_info);
+        
+        // Configure descriptor set
+        uv.dset = std::move(vk::raii::DescriptorSets {
+                *device,
+                vk::DescriptorSetAllocateInfo {
+                        **descriptor_pool,
+                        *uv.dsl
+                }
+        }.front());
+        
+        bind_ds(*device, uv.dset, framebuffer_images.uv_sampler, framebuffer_images.uv, 0);
 }
 
 void EditorViewport::configure_triangulation_pipeline()

@@ -1,7 +1,153 @@
 #include "common.hpp"
 #include "include/cuda/cast.cuh"
 #include "include/cuda/error.cuh"
+#include "include/cuda/interop.cuh"
 #include "push_constants.hpp"
+
+cuda::_material convert_material
+                (const Material &material,
+                TextureLoader &texture_loader,
+                const vk::raii::Device &device)
+{
+        cuda::_material mat;
+
+        // Scalar/vector values
+        mat.diffuse = cuda::to_f3(material.diffuse);
+        mat.specular = cuda::to_f3(material.specular);
+        mat.emission = cuda::to_f3(material.emission);
+        mat.ambient = cuda::to_f3(material.ambient);
+        mat.shininess = material.shininess;
+        mat.roughness = material.roughness;
+        mat.refraction = material.refraction;
+        mat.type = material.type;
+
+        // Textures
+        if (material.has_albedo()) {
+                const ImageData &diffuse = texture_loader
+                        .load_texture(material.albedo_texture);
+
+                mat.textures.diffuse
+                        = cuda::import_vulkan_texture(device, diffuse);
+                mat.textures.has_diffuse = true;
+        }
+
+        if (material.has_normal()) {
+                const ImageData &normal = texture_loader
+                        .load_texture(material.normal_texture);
+
+                mat.textures.normal
+                        = cuda::import_vulkan_texture(device, normal);
+                mat.textures.has_normal = true;
+        }
+
+        if (material.has_specular()) {
+                const ImageData &specular = texture_loader
+                        .load_texture(material.specular_texture);
+
+                mat.textures.specular
+                        = cuda::import_vulkan_texture(device, specular);
+                mat.textures.has_specular = true;
+        }
+
+        if (material.has_emission()) {
+                const ImageData &emission = texture_loader
+                        .load_texture(material.emission_texture);
+
+                mat.textures.emission
+                        = cuda::import_vulkan_texture(device, emission);
+                mat.textures.has_emission = true;
+        }
+
+        if (material.has_roughness()) {
+                const ImageData &roughness = texture_loader
+                        .load_texture(material.roughness_texture);
+
+                mat.textures.roughness
+                        = cuda::import_vulkan_texture(device, roughness);
+                mat.textures.has_roughness = true;
+        }
+
+        return mat;
+}
+
+// Prerender process for raytracing
+void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities)
+{
+        if (!common_rtx.clk_rise)
+                return;
+
+        // Load SBT information
+        bool rebuild_tlas = false;
+        bool rebuild_sbt = false;
+
+        for (const auto &entity : entities) {
+                int id = entity.id;
+                const auto &renderable = entity.get <Renderable> ();
+                const auto &transform = entity.get <Transform> ();
+
+                // Generate cache data
+                mesh_memory->cache_cuda(entity);
+
+                // Create SBT record for each submesh
+                const auto &meshes = renderable.mesh->submeshes;
+                for (int i = 0; i < meshes.size(); i++) {
+                        MeshIndex index { id, i };
+
+                        if (gbuffer_rtx.record_refs.find(index) == gbuffer_rtx.record_refs.end()) {
+                                int new_index = gbuffer_rtx.linearized_records.size();
+                                gbuffer_rtx.record_refs[index] = new_index;
+                                gbuffer_rtx.linearized_records.emplace_back();
+
+                                optix::Record <Hit> record;
+                                optix::pack_header(gbuffer_rtx.closest_hit, record);
+
+                                auto cachelet = mesh_memory->get(entity.id, i);
+
+                                record.data.vertices = cachelet.m_cuda_vertices;
+                                record.data.triangles = (uint3 *) cachelet.m_cuda_triangles;
+                                record.data.model = transform.matrix();
+                                record.data.index = meshes[i].material_index;
+
+                                gbuffer_rtx.linearized_records[new_index] = record;
+
+                                rebuild_tlas = true;
+                                rebuild_sbt = true;
+                        }
+
+                        // TODO: checking for transformations...
+                }
+        }
+
+        // Trigger update for System
+        system->update(entities);
+
+        if (rebuild_tlas) {
+                gbuffer_rtx.launch_params.handle
+                        = system->build_tlas(1, gbuffer_rtx.record_refs);
+        }
+
+        if (rebuild_sbt) {
+                printf("Rebuilding SBT\n");
+                if (gbuffer_rtx.sbt.hitgroupRecordBase)
+                        cuda::free(gbuffer_rtx.sbt.hitgroupRecordBase);
+        
+                gbuffer_rtx.sbt.hitgroupRecordBase = cuda::make_buffer_ptr(gbuffer_rtx.linearized_records);
+                gbuffer_rtx.sbt.hitgroupRecordStrideInBytes = sizeof(optix::Record <Hit>);
+                gbuffer_rtx.sbt.hitgroupRecordCount = gbuffer_rtx.linearized_records.size();
+
+                common_rtx.materials.clear();
+                for (const auto &material : Material::all) {
+                        common_rtx.materials.push_back(
+                                convert_material(material, *texture_loader, *device)
+                        );
+                }
+
+                common_rtx.dev_materials = cuda::make_buffer_ptr(common_rtx.materials);
+        }
+
+        // Turn off signal
+        common_rtx.clk_rise = false;
+}
 
 // TODO: pass transform daemon for the raytracing backend
 void EditorViewport::render_gbuffer(const RenderInfo &render_info, const std::vector <Entity> &entities)
@@ -54,6 +200,7 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info, const std::ve
                 RenderArea::full().apply(render_info.cmd, extent);
 
                 std::vector <vk::ClearValue> clear_values {
+                        vk::ClearColorValue { std::array <float, 4> { 0.0f, 0.0f, 0.0f, 0.0f } },
                         vk::ClearColorValue { std::array <float, 4> { 0.0f, 0.0f, 0.0f, 0.0f } },
                         vk::ClearColorValue { std::array <float, 4> { 0.0f, 0.0f, 0.0f, 0.0f } },
                         vk::ClearColorValue { std::array <int32_t, 4> { -1, -1, -1, -1 }},
@@ -124,65 +271,8 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info, const std::ve
 
                 render_info.cmd.endRenderPass();
         } else if (render_state.backend == RenderState::eRaytraced) {
-                // Load SBT information
-                bool rebuild_tlas = false;
-                bool rebuild_sbt = false;
-
-                for (const auto &entity : entities) {
-                        int id = entity.id;
-                        const auto &renderable = entity.get <Renderable> ();
-                        const auto &transform = entity.get <Transform> ();
-
-                        // Generate cache data
-                        mesh_memory->cache_cuda(entity);
-
-                        // Create SBT record for each submesh
-                        const auto &meshes = renderable.mesh->submeshes;
-                        for (int i = 0; i < meshes.size(); i++) {
-                                MeshIndex index { id, i };
-
-                                if (gbuffer_rtx.record_refs.find(index) == gbuffer_rtx.record_refs.end()) {
-                                        int new_index = gbuffer_rtx.linearized_records.size();
-                                        gbuffer_rtx.record_refs[index] = new_index;
-                                        gbuffer_rtx.linearized_records.emplace_back();
-
-                                        optix::Record <Hit> record;
-                                        optix::pack_header(gbuffer_rtx.closest_hit, record);
-
-                                        auto cachelet = mesh_memory->get(entity.id, i);
-
-                                        record.data.vertices = cachelet.m_cuda_vertices;
-                                        record.data.triangles = (uint3 *) cachelet.m_cuda_triangles;
-                                        record.data.model = transform.matrix();
-                                        record.data.index = meshes[i].material_index;
-
-                                        gbuffer_rtx.linearized_records[new_index] = record;
-
-                                        rebuild_tlas = true;
-                                        rebuild_sbt = true;
-                                }
-
-                                // TODO: checking for transformations...
-                        }
-                }
-
-                // Trigger update for System
-                system->update(entities);
-
-                if (rebuild_tlas) {
-                        gbuffer_rtx.launch_params.handle
-                                = system->build_tlas(1, gbuffer_rtx.record_refs);
-                }
-
-                if (rebuild_sbt) {
-                        printf("Rebuilding SBT\n");
-                        if (gbuffer_rtx.sbt.hitgroupRecordBase)
-                                cuda::free(gbuffer_rtx.sbt.hitgroupRecordBase);
-                
-                        gbuffer_rtx.sbt.hitgroupRecordBase = cuda::make_buffer_ptr(gbuffer_rtx.linearized_records);
-                        gbuffer_rtx.sbt.hitgroupRecordStrideInBytes = sizeof(optix::Record <Hit>);
-                        gbuffer_rtx.sbt.hitgroupRecordCount = gbuffer_rtx.linearized_records.size();
-                }
+                // Prerender
+                prerender_raytrace(entities);
 
                 // Configure launch parameters
                 auto uvw = uvw_frame(render_info.camera, render_info.camera_transform);
@@ -196,7 +286,10 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info, const std::ve
                 
                 gbuffer_rtx.launch_params.position_surface = framebuffer_images.cu_position_surface;
                 gbuffer_rtx.launch_params.normal_surface = framebuffer_images.cu_normal_surface;
+                gbuffer_rtx.launch_params.uv_surface = framebuffer_images.cu_uv_surface;
                 gbuffer_rtx.launch_params.index_surface = framebuffer_images.cu_material_index_surface;
+
+                gbuffer_rtx.launch_params.materials = (cuda::_material *) common_rtx.dev_materials;
 
                 // cuda::copy(gbuffer_rtx.dev_launch_params, &gbuffer_rtx.launch_params, 1);
                 GBufferParameters *dev_params = (GBufferParameters *) gbuffer_rtx.dev_launch_params;
@@ -224,8 +317,6 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info, const std::ve
         }
 
         // Transition layout for position and normal map
-        // framebuffer_images.material_index.layout = vk::ImageLayout::ePresentSrcKHR;
-        // framebuffer_images.material_index.transition_layout(render_info.cmd, vk::ImageLayout::eGeneral);
         framebuffer_images.material_index.layout = vk::ImageLayout::eUndefined;
         framebuffer_images.material_index.transition_layout(render_info.cmd, vk::ImageLayout::eGeneral);
 
@@ -247,15 +338,16 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info, const std::ve
 
         // Transition framebuffer images to shader read for later stages
         // TODO: some way to avoid this hackery
-        // framebuffer_images.position.layout = vk::ImageLayout::ePresentSrcKHR;
-        // framebuffer_images.normal.layout = vk::ImageLayout::ePresentSrcKHR;
         framebuffer_images.position.layout = vk::ImageLayout::eUndefined;
         framebuffer_images.normal.layout = vk::ImageLayout::eUndefined;
+        framebuffer_images.uv.layout = vk::ImageLayout::eUndefined;
         framebuffer_images.material_index.layout = vk::ImageLayout::eGeneral;
 
         framebuffer_images.position.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
         framebuffer_images.normal.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
+        framebuffer_images.uv.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
         framebuffer_images.material_index.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
+        
         sobel.output.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
 }
 
@@ -263,8 +355,8 @@ void EditorViewport::render_path_traced
                         (const RenderInfo &render_info,
                         const std::vector <Entity> &entities)
 {
-        // By the time of running this path tracer, the G-buffer
-        // will have run and updated the necessary buffers
+        // Make sure the prerender step runs regardless of backend
+        prerender_raytrace(entities);
 
         // Configure launch parameters
         auto uvw = uvw_frame(render_info.camera, render_info.camera_transform);
@@ -279,6 +371,8 @@ void EditorViewport::render_path_traced
         path_tracer.launch_params.position_surface = framebuffer_images.cu_position_surface;
         path_tracer.launch_params.normal_surface = framebuffer_images.cu_normal_surface;
         path_tracer.launch_params.index_surface = framebuffer_images.cu_material_index_surface;
+
+        path_tracer.launch_params.materials = (cuda::_material *) common_rtx.dev_materials;
 
         PathTracerParameters *dev_params = (PathTracerParameters *) path_tracer.dev_launch_params;
         CUDA_CHECK(cudaMemcpy(dev_params, &path_tracer.launch_params, sizeof(PathTracerParameters), cudaMemcpyHostToDevice));
@@ -565,6 +659,41 @@ void EditorViewport::render_normals(const RenderInfo &render_info)
         // render_info.cmd.endRenderPass();
 }
 
+void EditorViewport::render_uv(const RenderInfo &render_info)
+{
+        // Render to screen
+        render_info.render_area.apply(render_info.cmd, render_info.extent);
+
+        std::vector <vk::ClearValue> clear_values {
+                vk::ClearColorValue { std::array <float, 4> { 0.0f, 0.0f, 0.0f, 1.0f } },
+                vk::ClearDepthStencilValue { 1.0f, 0 }
+        };
+
+        render_info.cmd.beginRenderPass(
+                vk::RenderPassBeginInfo {
+                        *present_render_pass,
+                        *viewport_fb,
+                        vk::Rect2D { vk::Offset2D {}, render_info.extent },
+                        clear_values
+                },
+                vk::SubpassContents::eInline
+        );
+
+        // Start the pipeline
+        render_info.cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *uv.pipeline);
+
+        // Bind descriptor set
+        render_info.cmd.bindDescriptorSets(
+                vk::PipelineBindPoint::eGraphics,
+                *uv.pipeline_layout,
+                0, { *uv.dset }, {}
+        );
+
+        // Draw
+        render_info.cmd.bindVertexBuffers(0, { *presentation_mesh_buffer.buffer }, { 0 });
+        render_info.cmd.draw(6, 1, 0, 0);
+}
+
 void EditorViewport::render_triangulation(const RenderInfo &render_info)
 {
         // Render to screen
@@ -708,6 +837,9 @@ void EditorViewport::render_highlight(const RenderInfo &render_info, const std::
 
 void EditorViewport::render(const RenderInfo &render_info, const std::vector <Entity> &entities, daemons::Transform &transform_daemon)
 {
+        // Set state
+        common_rtx.clk_rise = true;
+
         // TODO: if a click is detected, then we need to run the G-buffer pass
         // at least once to keep up to date with the latest changes
         switch (render_state.mode) {
@@ -719,6 +851,11 @@ void EditorViewport::render(const RenderInfo &render_info, const std::vector <En
         case RenderState::eNormals:
                 render_gbuffer(render_info, entities);
                 render_normals(render_info);
+                break;
+        
+        case RenderState::eTextureCoordinates:
+                render_gbuffer(render_info, entities);
+                render_uv(render_info);
                 break;
 
         case RenderState::eAlbedo:
@@ -823,6 +960,9 @@ void EditorViewport::menu(const MenuOptions &options)
                         
                         if (ImGui::MenuItem("Normals"))
                                 render_state.mode = RenderState::eNormals;
+                        
+                        if (ImGui::MenuItem("Texture Coordinates"))
+                                render_state.mode = RenderState::eTextureCoordinates;
 
                         if (ImGui::MenuItem("Albedo"))
                                 render_state.mode = RenderState::eAlbedo;

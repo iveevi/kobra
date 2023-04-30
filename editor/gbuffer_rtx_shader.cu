@@ -45,6 +45,7 @@ void make_ray(uint3 idx, float3 &direction, float3 &seed)
 struct Packet {
         float4 position;
         float4 normal;
+        float4 uv;
         int32_t id;
 };
 
@@ -68,6 +69,7 @@ extern "C" __global__ void __raygen__()
 
         packet.position = { 0.0f, 0.0f, 0.0f, 0.0f };
         packet.normal = { 0.0f, 0.0f, 0.0f, 0.0f };
+        packet.uv = { 0.0f, 0.0f, 0.0f, 0.0f };
         packet.id = -1;
  
 	unsigned int i0, i1;
@@ -85,6 +87,7 @@ extern "C" __global__ void __raygen__()
         
         surf2Dwrite(packet.position, parameters.position_surface, idx.x * sizeof(float4), idx.y);
         surf2Dwrite(packet.normal, parameters.normal_surface, idx.x * sizeof(float4), idx.y);
+        surf2Dwrite(packet.uv, parameters.uv_surface, idx.x * sizeof(float4), idx.y);
         surf2Dwrite(packet.id, parameters.index_surface, idx.x * sizeof(int32_t), idx.y);
 }
 
@@ -122,6 +125,8 @@ extern "C" __global__ void __closesthit__()
         float2 uv2 = { v2.tex_coords.x, v2.tex_coords.y };
         float2 uv = bw * uv0 + bu * uv1 + bv * uv2;
 
+        packet->uv = { uv.x, uv.y, 0.0f, 0.0f };
+
         glm::vec3 glm_pos = bw * v0.position + bu * v1.position + bv * v2.position;
         glm_pos = hit->model * glm::vec4(glm_pos, 1.0f);
 
@@ -144,6 +149,7 @@ extern "C" __global__ void __closesthit__()
                 glm_shading_normal = -glm_shading_normal;
 
         float3 normal = { glm_shading_normal.x, glm_shading_normal.y, glm_shading_normal.z };
+        normal = normalize(normal);
 
         // Transfer to packet
         packet->normal = { normal.x, normal.y, normal.z, 0.0f };

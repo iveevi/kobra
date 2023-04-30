@@ -62,6 +62,10 @@ extern "C" __global__ void __raygen__()
         float4 raw_position;
         surf2Dread(&raw_position, parameters.position_surface, idx.x * sizeof(float4),
                 parameters.resolution.y - (idx.y + 1));
+        
+        float4 raw_normal;
+        surf2Dread(&raw_normal, parameters.normal_surface, idx.x * sizeof(float4),
+                parameters.resolution.y - (idx.y + 1));
 
         int32_t raw_index;
         surf2Dread(&raw_index, parameters.index_surface, idx.x * sizeof(int32_t),
@@ -69,20 +73,33 @@ extern "C" __global__ void __raygen__()
 
         int32_t triangle_id = raw_index >> 16;
         int32_t material_id = raw_index & 0xFFFF;
+        
+        int index = idx.x + idx.y * parameters.resolution.x;
+        if (raw_index == -1) {
+                parameters.color[index] = make_float4(0.0f, 0.0f, 0.0f, 1.0f);
+                return;
+        }
+
+        cuda::_material material = parameters.materials[material_id];
 
         float3 position = { raw_position.x, raw_position.y, raw_position.z };
+        float3 normal = { raw_normal.x, raw_normal.y, raw_normal.z };
+
         float depth = length(parameters.origin - position);
         depth = (depth - 1) / (100 - 1);
         depth = clamp(depth, 0.0f, 1.0f);
 
-        float4 color = { depth, depth, depth, 1.0f };
-        int index = idx.x + idx.y * parameters.resolution.x;
-        parameters.color[index] = (raw_index == -1) ? make_float4(0.0f, 0.0f, 0.0f, 1.0f) : color;
+        float3 color = material.diffuse;
+        parameters.color[index] = make_float4(color, 1.0f);
         
         // printf("Tracing ray at %d, %d\n", idx.x, idx.y);
         if (idx.x == 0 && idx.y == 0) {
                 optix_io_write_str(&parameters.io, "Path tracing raygeneration kernel!\n");
         }
+
+        // TODO: if shadow ray fails (e.g. hits a surface), cache that
+        // information and use it to accumulate radiance (or skip new ray
+        // altogether...)
 
  //        float3 direction;
  //        float3 origin = parameters.origin;

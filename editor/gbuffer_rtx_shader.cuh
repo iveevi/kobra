@@ -5,6 +5,7 @@
 
 // Engine headers
 #include "include/vertex.hpp"
+#include "include/cuda/material.cuh"
 
 // Editor headers
 #include "optix_io.cuh"
@@ -24,7 +25,11 @@ struct GBufferParameters {
         // Surfaces to write onto
         cudaSurfaceObject_t position_surface;
         cudaSurfaceObject_t normal_surface;
+        cudaSurfaceObject_t uv_surface;
         cudaSurfaceObject_t index_surface;
+
+        // List of materials
+        cuda::_material *materials;
 
         // IO interface
         OptixIO io;

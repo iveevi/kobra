@@ -24,6 +24,7 @@ EditorViewport::EditorViewport
         configure_gbuffer_pipeline();
         configure_albedo_pipeline();
         configure_normals_pipeline();
+        configure_uv_pipeline();
         configure_triangulation_pipeline();
         configure_bounding_box_pipeline();
         configure_sobel_pipeline();
@@ -105,13 +106,11 @@ static void import_vulkan_texture
 void EditorViewport::resize(const vk::Extent2D &new_extent)
 {
         static vk::Format formats[] = {
-                vk::Format::eR32G32B32A32Sfloat,
-                vk::Format::eR32G32B32A32Sfloat,
-                vk::Format::eR32G32B32A32Sfloat,
-                
-                // NOTE:
-                // R: material index & triangle index,
-                vk::Format::eR32Sint
+                vk::Format::eR32G32B32A32Sfloat, // Viewport
+                vk::Format::eR32G32B32A32Sfloat, // Position
+                vk::Format::eR32G32B32A32Sfloat, // Normal
+                vk::Format::eR32G32B32A32Sfloat, // UV
+                vk::Format::eR32Sint,            // Material index
         };
 
         // Other image propreties
@@ -142,9 +141,15 @@ void EditorViewport::resize(const vk::Extent2D &new_extent)
                 usage, mem_flags, aspect, true
         };
 
-        framebuffer_images.material_index = ImageData {
+        framebuffer_images.uv = ImageData {
                 *phdev, *device,
                 formats[3], new_extent, tiling,
+                usage, mem_flags, aspect, true
+        };
+
+        framebuffer_images.material_index = ImageData {
+                *phdev, *device,
+                formats[4], new_extent, tiling,
                 usage, mem_flags, aspect, true
         };
 
@@ -158,32 +163,28 @@ void EditorViewport::resize(const vk::Extent2D &new_extent)
         KOBRA_LOG_FUNC(Log::OK) << "Importing Vulkan textures into CUDA\n";
 
         cudaChannelFormatDesc channel_desc_f32 = cudaCreateChannelDesc(32, 32, 32, 32, cudaChannelFormatKindFloat);
+        // cudaChannelFormatDesc channel_desc_f32_rg = cudaCreateChannelDesc(32, 32, 0, 0, cudaChannelFormatKindFloat);
         cudaChannelFormatDesc channel_desc_i32 = cudaCreateChannelDesc(32, 0, 0, 0, cudaChannelFormatKindSigned);
 
         import_vulkan_texture(*device,
                 framebuffer_images.position,
-                // framebuffer_images.cu_position_texture,
                 framebuffer_images.cu_position_surface,
                 channel_desc_f32);
 
         import_vulkan_texture(*device,
                 framebuffer_images.normal,
-                // framebuffer_images.cu_normal_texture,
                 framebuffer_images.cu_normal_surface,
                 channel_desc_f32);
 
         import_vulkan_texture(*device,
+                framebuffer_images.uv,
+                framebuffer_images.cu_uv_surface,
+                channel_desc_f32);
+
+        import_vulkan_texture(*device,
                 framebuffer_images.material_index,
-                // framebuffer_images.cu_material_index_texture,
                 framebuffer_images.cu_material_index_surface,
                 channel_desc_i32);
-       
-        /* One more surface for the final color target
-        import_vulkan_texture(*device,
-                framebuffer_images.viewport,
-                // framebuffer_images.cu_material_index_texture,
-                framebuffer_images.cu_color_surface,
-                channel_desc_f32); */
 
         // Allocate resources for the G-buffer based path tracer
         if (path_tracer.launch_params.color != 0)
@@ -222,10 +223,12 @@ void EditorViewport::resize(const vk::Extent2D &new_extent)
 
         // If needed, recreate framebuffer and rebind descriptor sets
         if (render_state.initialized) {
+                // TODO: put the framebuffer code into a smaller function
                 // Recreate G-buffer framebuffer
                 std::vector <vk::ImageView> attachment_views {
                         *framebuffer_images.position.view,
                         *framebuffer_images.normal.view,
+                        *framebuffer_images.uv.view,
                         *framebuffer_images.material_index.view,
                         *depth_buffer.view
                 };
@@ -293,6 +296,7 @@ void EditorViewport::resize(const vk::Extent2D &new_extent)
                 bind_ds(*device, triangulation.dset, sobel.output_sampler, sobel.output, 3);
 
                 bind_ds(*device, normal.dset, framebuffer_images.normal_sampler, framebuffer_images.normal, 0);
+                bind_ds(*device, uv.dset, framebuffer_images.uv_sampler, framebuffer_images.uv, 0);
         
                 bind_ds(*device, highlight.dset,
                         framebuffer_images.material_index_sampler,
@@ -303,6 +307,7 @@ void EditorViewport::resize(const vk::Extent2D &new_extent)
                 // Create samplers for the framebuffer images
                 framebuffer_images.position_sampler = make_continuous_sampler(*device);
                 framebuffer_images.normal_sampler = make_continuous_sampler(*device);
+                framebuffer_images.uv_sampler = make_continuous_sampler(*device);
 
                 framebuffer_images.material_index_sampler = vk::raii::Sampler {
                         *device,
