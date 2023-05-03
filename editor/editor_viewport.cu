@@ -14,6 +14,8 @@ EditorViewport::EditorViewport
                 command_pool(context.command_pool),
                 texture_loader(context.texture_loader)
 {
+        common_rtx.timer.start();
+
         path_tracer.dev_traced = 0;
         path_tracer.launch_params.color = 0;
 

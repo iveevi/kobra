@@ -144,6 +144,7 @@ extern "C" __global__ void __closesthit__()
         // Shading normal
         glm::vec3 glm_shading_normal = bw * v0.normal + bu * v1.normal + bv * v2.normal;
         glm_shading_normal = hit->model * glm::vec4(glm_shading_normal, 0.0f);
+        // TODO: multiply by inverse transpose of model matrix?
 
         if (glm::dot(glm_normal, glm_shading_normal) < 0.0f)
                 glm_shading_normal = -glm_shading_normal;

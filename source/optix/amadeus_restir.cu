@@ -110,7 +110,7 @@ extern "C" __global__ void __raygen__initial()
 
 	// TODO: seed generatoin method
 	rp.seed = make_float3(
-		sin(idx.x - idx.y),
+		sinf(idx.x - idx.y),
 		parameters.samples,
 		parameters.time
 	);

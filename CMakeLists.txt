@@ -13,9 +13,9 @@ endif()
 set(COLOR_FLAGS -fdiagnostics-color=always)
 
 # Add flags
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${COLOR_FLAGS}")
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler \"${COLOR_FLAGS}\"")
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcudafe \"--diag_suppress=20012 --diag_suppress=20013 --diag_suppress=20014\"")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+# set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler \"${COLOR_FLAGS}\"")
+# set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcudafe \"--diag_suppress=20012 --diag_suppress=20013 --diag_suppress=20014\"")
 
 # Disabling warnings
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
@@ -207,7 +207,7 @@ add_library(optix_shaders
 
 set_target_properties(optix_shaders PROPERTIES
 	CUDA_PTX_COMPILATION ON
-	COMPILE_FLAGS "-lineinfo --expt-relaxed-constexpr"
+	COMPILE_FLAGS "-lineinfo"
 )
 
 # Fake target to copy shader outputs to bin folder

@@ -13,7 +13,7 @@ struct OptixIO {
 };
 
 // Returns a structure with the device size information
-inline OptixIO optix_io_create(int size = 1024)
+inline OptixIO optix_io_create(int size = 1 << 10)
 {
         char *buffer = (char *) cuda::alloc(size);
  
@@ -71,12 +71,38 @@ void optix_io_write_str(OptixIO *io, const char *str)
 __forceinline__ __device__
 void optix_io_write_int(OptixIO *io, int i)
 {
+        if (i == 0) {
+                optix_io_write_char(io, '0');
+                return;
+        }
+
         char str[32] { 0 };
 
         int digits = 0;
         while (i > 0) {
                 str[digits++] = '0' + (i % 10);
                 i /= 10;
+        }
+
+        for (int j = digits - 1; j >= 0; j--)
+                optix_io_write_char(io, str[j]);
+}
+
+__forceinline__ __device__
+void optix_io_write_float(OptixIO *io, float f)
+{
+        if (f == 0.0f) {
+                optix_io_write_str(io, "0.0f");
+                return;
+        }
+
+        char str[128] { 0 };
+
+        int digits = 0;
+        while (f > 0.0f) {
+                str[digits++] = '0' + (int) (f * 10.0f);
+                f *= 10.0f;
+                f -= (int) f;
         }
 
         for (int j = digits - 1; j >= 0; j--)

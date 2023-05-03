@@ -1,5 +1,4 @@
-#ifndef KOBRA_CUDA_BRDF_H_
-#define KOBRA_CUDA_BRDF_H_
+#pragma once
 
 // Engine headers
 #include "core.cuh"
@@ -21,6 +20,8 @@ struct SurfaceHit {
 	float3		x;
 };
 
+#define PI 3.14159265358979323846f
+
 // Smith shadow-masking function (single)
 KCUDA_INLINE KCUDA_HOST_DEVICE
 float G1(float3 n, float3 v, Material mat)
@@ -29,11 +30,11 @@ float G1(float3 n, float3 v, Material mat)
 		return 0.0f;
 
 	float alpha = mat.roughness;
-	float theta = acos(clamp(dot(n, v), 0.0f, 0.999f));
+	float theta = acosf(clamp(dot(n, v), 0.0f, 0.999f));
 
-	float tan_theta = tan(theta);
+	float tan_theta = tanf(theta);
 
-	float denom = 1 + sqrt(1 + alpha * alpha * tan_theta * tan_theta);
+	float denom = 1 + sqrtf(1 + alpha * alpha * tan_theta * tan_theta);
 	return 2.0f/denom;
 }
 
@@ -48,7 +49,7 @@ float G(float3 n, float3 wi, float3 wo, Material mat)
 KCUDA_INLINE KCUDA_HOST_DEVICE
 float3 shlick_F(float3 wi, float3 h, Material mat)
 {
-	float k = pow(1 - dot(wi, h), 5);
+	float k = powf(1 - dot(wi, h), 5);
 	return mat.specular + (1 - mat.specular) * k;
 }
 
@@ -57,11 +58,11 @@ struct Microfacets {
 	KCUDA_INLINE KCUDA_HOST_DEVICE
 	static float GGX(float3 n, float3 h, const Material &mat) {
 		float alpha = mat.roughness;
-		float theta = acos(clamp(dot(n, h), 0.0f, 1.0f));
+		float theta = acosf(clamp(dot(n, h), 0.0f, 1.0f));
 
 		return (alpha * alpha)
-			/ (M_PI * pow(cos(theta), 4)
-			* pow(alpha * alpha + tan(theta) * tan(theta), 2.0f));
+			/ (PI * powf(cosf(theta), 4)
+			* powf(alpha * alpha + tanf(theta) * tanf(theta), 2.0f));
 	}
 };
 
@@ -76,11 +77,11 @@ float fr_dielectric(float cosThetaI, float etaI, float etaT)
 		float temp = etaI;
 		etaI = etaT;
 		etaT = temp;
-		cosThetaI = fabs(cosThetaI);
+		cosThetaI = fabsf(cosThetaI);
 	}
 
 	// Compute _cosThetaT_ using Snell's law
-	float sinThetaI = sqrt(fmax((float) 0, 1 - cosThetaI * cosThetaI));
+	float sinThetaI = sqrt(fmaxf((float) 0, 1 - cosThetaI * cosThetaI));
 	float sinThetaT = etaI / etaT * sinThetaI;
 
 	// Handle total internal reflection
@@ -264,7 +265,7 @@ struct GGX {
 		if (avg_Kd + avg_Ks > 0.0f)
 			t = fmax(avg_Ks/(avg_Kd + avg_Ks), 0.25f);
 
-		float term1 = dot(n, wi)/M_PI;
+		float term1 = dot(n, wi)/PI;
 		// float term2 = Microfacets::GGX(n, h, mat) * G(n, wi, wo, mat)
 		//	* dot(wo, h) / (4 * dot(wi, h) * dot(wo, n));
 
@@ -294,14 +295,14 @@ struct GGX {
 		float3 eta = rand_uniform_3f(seed);
 		if (eta.x < t) {
 			// Specular sampling
-			float k = sqrt(eta.y/(1 - eta.y));
-			float theta = atan(k * mat.roughness);
-			float phi = 2.0f * M_PI * eta.z;
+			float k = sqrtf(eta.y/(1 - eta.y));
+			float theta = atanf(k * mat.roughness);
+			float phi = 2.0f * PI * eta.z;
 
 			float3 h = float3 {
-				sin(theta) * cos(phi),
-				sin(theta) * sin(phi),
-				cos(theta)
+				sinf(theta) * cosf(phi),
+				sinf(theta) * sinf(phi),
+				cosf(theta)
 			};
 
 			h = rotate(h, n);
@@ -313,13 +314,13 @@ struct GGX {
 		}
 
 		// Diffuse sampling
-		float theta = acos(sqrt(eta.y));
-		float phi = 2.0f * M_PI * eta.z;
+		float theta = acosf(sqrtf(eta.y));
+		float phi = 2.0f * PI * eta.z;
 
 		float3 s = float3 {
-			sin(theta) * cos(phi),
-			sin(theta) * sin(phi),
-			cos(theta)
+			sinf(theta) * cosf(phi),
+			sinf(theta) * sinf(phi),
+			cosf(theta)
 		};
 
 		out = Shading::eDiffuse;
@@ -336,9 +337,9 @@ float3 brdf(const SurfaceHit &sh, float3 wi, Shading out)
 	// TODO: Implement PBRT specular transmission with Tr...
 	// also fresnel transmission and microfacet transmission
 	if (out & Shading::eTransmission)
-		return sh.mat.diffuse/M_PI + FresnelSpecular::brdf(sh.mat, sh.n, wi, sh.wo, sh.entering, out);
+		return sh.mat.diffuse/PI + FresnelSpecular::brdf(sh.mat, sh.n, wi, sh.wo, sh.entering, out);
 
-	return sh.mat.diffuse/M_PI + GGX::brdf(sh.mat, sh.n, wi, sh.wo, sh.entering, out);
+	return sh.mat.diffuse/PI + GGX::brdf(sh.mat, sh.n, wi, sh.wo, sh.entering, out);
 }
 
 // Evaluate PDF of BRDF
@@ -399,7 +400,7 @@ float3 eval <SpecularTransmission>
 	in_pdf = 1;
 
 	float fr = fr_dielectric(dot(n, wi), eta_i, eta_t);
-	return make_float3(1 - fr) * (eta * eta)/abs(dot(n, wi));
+	return make_float3(1 - fr) * (eta * eta)/fabsf(dot(n, wi));
 }
 
 template <>
@@ -418,7 +419,7 @@ float3 eval <SpecularReflection>
 	in_pdf = 1;
 
 	float fr = fr_dielectric(dot(n, wi), eta_i, eta_t);
-	return make_float3(fr)/abs(dot(n, wi));
+	return make_float3(fr)/fabsf(dot(n, wi));
 }
 
 template <>
@@ -464,5 +465,3 @@ float3 eval(const SurfaceHit &sh, float3 &wi, float &in_pdf, Shading &out, Seed 
 }
 
 }
-
-#endif

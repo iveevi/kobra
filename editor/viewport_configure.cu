@@ -8,6 +8,12 @@
 #include "push_constants.hpp"
 #include "include/cuda/error.cuh"
 
+namespace extra {
+
+#include "source/amadeus/naive_path_tracer.cu"
+
+}
+
 // Editor renderer shaders
 extern const char *gbuffer_vert_shader;
 extern const char *gbuffer_frag_shader;
@@ -724,24 +730,26 @@ void EditorViewport::configure_highlight_pipeline()
 }
 
 // OptiX compilation options
-static constexpr OptixPipelineCompileOptions ppl_compile_options = {
+static constexpr OptixPipelineCompileOptions pipeline_compile_options = {
 	.usesMotionBlur = false,
 	.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING,
 	.numPayloadValues = 2,
 	.numAttributeValues = 0,
-	.exceptionFlags = KOBRA_OPTIX_EXCEPTION_FLAGS,
+	// .exceptionFlags = OPTIX_EXCEPTION_FLAG_DEBUG,
+	.exceptionFlags = OPTIX_EXCEPTION_FLAG_NONE,
 	.pipelineLaunchParamsVariableName = "parameters",
 	.usesPrimitiveTypeFlags = (unsigned int) OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE,
 };
 
-static constexpr OptixModuleCompileOptions module_options = {
-	.optLevel = KOBRA_OPTIX_OPTIMIZATION_LEVEL,
-	.debugLevel = KOBRA_OPTIX_DEBUG_LEVEL,
+static constexpr OptixModuleCompileOptions module_compile_options = {
+	// .optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_0,
+	// .debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL,
+	.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_3,
+	.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_NONE,
 };
 
-static constexpr OptixPipelineLinkOptions ppl_link_options = {
+static constexpr OptixPipelineLinkOptions pipeline_link_options = {
 	.maxTraceDepth = 1,
-	// .debugLevel = KOBRA_OPTIX_DEBUG_LEVEL,
 };
 
 // Configuring G-buffer raytracing pipeline
@@ -754,14 +762,14 @@ void EditorViewport::configure_gbuffer_rtx()
 
         std::string contents = common::read_file(OPTIX_PTX_FILE);
 	
-        static char log[2048];
-	static size_t sizeof_log = sizeof(log);
+        char log[2048];
+	size_t sizeof_log = sizeof(log);
 
         OPTIX_CHECK(
                 optixModuleCreate(
                         context,
-                        &module_options,
-                        &ppl_compile_options,
+                        &module_compile_options,
+                        &pipeline_compile_options,
                         contents.c_str(),
                         contents.size(),
                         log, &sizeof_log,
@@ -839,8 +847,8 @@ void EditorViewport::configure_gbuffer_rtx()
 
         OPTIX_CHECK(
                 optixPipelineCreate(context,
-                        &ppl_compile_options,
-                        &ppl_link_options,
+                        &pipeline_compile_options,
+                        &pipeline_link_options,
                         program_groups, 3,
                         log, &sizeof_log,
                         &gbuffer_rtx.pipeline)
@@ -923,8 +931,12 @@ void EditorViewport::configure_amadeus_path_tracer(const Context &context)
 
         amadeus_path_tracer.armada->attach(
                 "Path Tracer",
-                std::make_shared <amadeus::PathTracer> ()
+                // std::make_shared <amadeus::PathTracer> ()
+                // std::make_shared <extra::NaivePathTracer> ()
+                std::shared_ptr <amadeus::AttachmentRTX> (extra::load_attachment().ptr)
         );
+
+        amadeus_path_tracer.armada->set_depth(1);
 
         // Framer and related resources
 	amadeus_path_tracer.framer = kobra::layers::Framer(context, present_render_pass);
@@ -945,14 +957,14 @@ void EditorViewport::configure_path_tracer(const Context &ctx)
 
         std::string contents = common::read_file(OPTIX_PTX_FILE);
 	
-        static char log[2048];
-	static size_t sizeof_log = sizeof(log);
+        char log[2048];
+	size_t sizeof_log = sizeof(log);
 
         OPTIX_CHECK(
                 optixModuleCreate(
                         context,
-                        &module_options,
-                        &ppl_compile_options,
+                        &module_compile_options,
+                        &pipeline_compile_options,
                         contents.c_str(),
                         contents.size(),
                         log, &sizeof_log,
@@ -1030,8 +1042,8 @@ void EditorViewport::configure_path_tracer(const Context &ctx)
 
         OPTIX_CHECK(
                 optixPipelineCreate(context,
-                        &ppl_compile_options,
-                        &ppl_link_options,
+                        &pipeline_compile_options,
+                        &pipeline_link_options,
                         program_groups, 3,
                         log, &sizeof_log,
                         &path_tracer.pipeline)

@@ -18,36 +18,30 @@ using namespace kobra;
 using namespace kobra::cuda;
 using namespace kobra::optix;
 
-// static KCUDA_INLINE KCUDA_HOST_DEVICE
-// void make_ray(uint3 idx, float3 &direction, float3 &seed)
-// {
-// 	// TODO: use a Blue noise sequence
-//
-// 	// Jittered halton
-// 	seed = make_float3(idx.x, idx.y, 0);
-//
-// 	// int xoff = rand_uniform(parameters.resolution.x, seed);
-// 	// int yoff = rand_uniform(parameters.resolution.y, seed);
-//
-//         float xoff = rand_uniform(seed) - 0.5f;
-//         float yoff = rand_uniform(seed) - 0.5f;
-//
-// 	// Compute ray origin and direction
-//         float2 d = 2.0f * make_float2(
-// 		float(idx.x + xoff)/parameters.resolution.x,
-// 		float(idx.y + yoff)/parameters.resolution.y
-// 	) - 1.0f;
-//
-// 	direction = normalize(d.x * parameters.U - d.y * parameters.V + parameters.W);
-//
-//         // TODO: generate wavefront of rays
-// }
+static KCUDA_INLINE KCUDA_HOST_DEVICE
+void make_ray(uint3 idx, float3 &direction, float3 &seed)
+{
+	// TODO: use a Blue noise sequence
 
-struct Packet {
-        float4 position;
-        float4 normal;
-        int32_t id;
-};
+	// Jittered halton
+	seed = make_float3(idx.x, idx.y, 0);
+
+	// int xoff = rand_uniform(parameters.resolution.x, seed);
+	// int yoff = rand_uniform(parameters.resolution.y, seed);
+
+        float xoff = rand_uniform(seed) - 0.5f;
+        float yoff = rand_uniform(seed) - 0.5f;
+
+	// Compute ray origin and direction
+        float2 d = 2.0f * make_float2(
+		float(idx.x + xoff)/parameters.resolution.x,
+		float(idx.y + yoff)/parameters.resolution.y
+	) - 1.0f;
+
+	direction = normalize(d.x * parameters.U + d.y * parameters.V + parameters.W);
+
+        // TODO: generate wavefront of rays
+}
 
 extern "C" __global__ void __raygen__()
 {
@@ -67,6 +61,10 @@ extern "C" __global__ void __raygen__()
         surf2Dread(&raw_normal, parameters.normal_surface, idx.x * sizeof(float4),
                 parameters.resolution.y - (idx.y + 1));
 
+        float4 raw_uv;
+        surf2Dread(&raw_uv, parameters.uv_surface, idx.x * sizeof(float4),
+                parameters.resolution.y - (idx.y + 1));
+
         int32_t raw_index;
         surf2Dread(&raw_index, parameters.index_surface, idx.x * sizeof(int32_t),
                 parameters.resolution.y - (idx.y + 1));
@@ -76,120 +74,167 @@ extern "C" __global__ void __raygen__()
         
         int index = idx.x + idx.y * parameters.resolution.x;
         if (raw_index == -1) {
-                parameters.color[index] = make_float4(0.0f, 0.0f, 0.0f, 1.0f);
+                parameters.color[index] = make_float4(0.5f, 0.5f, 0.5f, 1.0f);
                 return;
         }
 
-        cuda::_material material = parameters.materials[material_id];
+        cuda::_material m = parameters.materials[material_id];
 
         float3 position = { raw_position.x, raw_position.y, raw_position.z };
         float3 normal = { raw_normal.x, raw_normal.y, raw_normal.z };
+        float2 uv = { raw_uv.x, raw_uv.y };
 
-        float depth = length(parameters.origin - position);
-        depth = (depth - 1) / (100 - 1);
-        depth = clamp(depth, 0.0f, 1.0f);
+        float3 color = m.diffuse;
+        if (m.textures.has_diffuse)
+                color = make_float3(tex2D <float4> (m.textures.diffuse, uv.x, uv.y));
 
-        float3 color = material.diffuse;
-        parameters.color[index] = make_float4(color, 1.0f);
+        // Randomly select a light to sample from
+        float3 seed = make_float3(idx.x, idx.y, parameters.time);
+        uint light_index = cuda::rand_uniform(parameters.area.count, seed);
+
+        AreaLight light = parameters.area.lights[light_index];
+        uint triangle_index = cuda::rand_uniform(light.triangles, seed);
+
+        float3 bary = cuda::pcg3f(seed);
+
+        float u = bary.x;
+        float v = bary.y;
+        if (u + v > 1.0f) {
+                u = 1.0f - u;
+                v = 1.0f - v;
+        }
+
+        uint3 triangle = light.indices[triangle_index];
+
+        glm::vec3 v0 = light.vertices[triangle.x].position;
+        glm::vec3 v1 = light.vertices[triangle.y].position;
+        glm::vec3 v2 = light.vertices[triangle.z].position;
+
+        v0 = light.model * glm::vec4(v0, 1.0f);
+        v1 = light.model * glm::vec4(v1, 1.0f);
+        v2 = light.model * glm::vec4(v2, 1.0f);
+
+        glm::vec3 gpoint = v0 * (1.0f - u - v) + v1 * u + v2 * v;
+
+        glm::vec3 gnormal = glm::normalize(glm::cross(v1 - v0, v2 - v0));
+        // gnormal = glm::normalize(glm::transpose(glm::inverse(light.model)) *
+        //                          glm::vec4(gnormal, 0.0f));
+
+        float3 point = { gpoint.x, gpoint.y, gpoint.z };
+        float3 nl = { gnormal.x, gnormal.y, gnormal.z };
+        float light_area = length(glm::cross(v1 - v0, v2 - v0));
+        // TODO: multiply by determinant instead?
+
+        // TODO: get material index for confirmation (already have primitive
+        // index...)
+
+        // Ray from point to light
+        float3 direction = normalize(point - position);
+        float3 origin = position;
+
+        if (isnan(normal.x) || isnan(normal.y) || isnan(normal.z)) {
+                origin += direction * 1e-3f;
+        } else {
+                origin += normal * 1e-3f;
+        }
         
-        // printf("Tracing ray at %d, %d\n", idx.x, idx.y);
+        uint i0 = 0;
+        uint i1 = 0;
+
+        float hit = 0;
+        pack_pointer(&hit, i0, i1);
+
+        optixTrace(
+                parameters.handle,
+                origin, direction,
+                0.0f, length(point - origin) - 1e-3f, 0.0f,
+                OptixVisibilityMask(0xFF),
+                OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+                0, 1, 0, i0, i1
+        );
+
+        // float3 color
+        cuda::Material material;
+        material.diffuse = m.diffuse;
+        material.specular = m.specular;
+        material.emission = m.emission;
+        material.roughness = m.roughness;
+	material.refraction = m.refraction;
+        material.type = m.type;
+
+        if (m.textures.has_diffuse)
+                material.diffuse = make_float3(tex2D <float4> (m.textures.diffuse, uv.x, uv.y));
+
+        color = material.emission;
+        if (hit == 0 && length(color) < 1e-3f) {
+                // TODO: need to explicitly calculate the total number of
+                // traingles...
+                float light_pdf = 1.0f / (parameters.area.count * light.triangles * light_area);
+
+                float3 wi = normalize(point - position);
+                float R = length(point - position);
+
+                SurfaceHit sh;
+                sh.x = position;
+                sh.wo = normalize(parameters.origin - position);
+                sh.n = normalize(normal);
+                sh.entering = false;
+                sh.mat = material;
+	
+                float3 brdf = cuda::brdf(sh, wi, eDiffuse);
+                color += brdf * light.emission * abs(dot(nl, wi)) * abs(dot(sh.n, wi))/(light_pdf * R * R);
+        }
+
+        parameters.color[index] = make_float4(color);
+        
         if (idx.x == 0 && idx.y == 0) {
-                optix_io_write_str(&parameters.io, "Path tracing raygeneration kernel!\n");
+                optix_io_write_str(&parameters.io, "Chose light: ");
+                optix_io_write_int(&parameters.io, light_index);
+                optix_io_write_str(&parameters.io, "\n");
+                optix_io_write_str(&parameters.io, "Chose triangle: ");
+                optix_io_write_int(&parameters.io, triangle_index);
+                optix_io_write_str(&parameters.io, "/");
+                optix_io_write_int(&parameters.io, light.triangles);
+                optix_io_write_str(&parameters.io, "\n");
+                optix_io_write_str(&parameters.io, "Triangle with ids: ");
+                optix_io_write_int(&parameters.io, triangle.x);
+                optix_io_write_str(&parameters.io, ", ");
+                optix_io_write_int(&parameters.io, triangle.y);
+                optix_io_write_str(&parameters.io, ", ");
+                optix_io_write_int(&parameters.io, triangle.z);
+                optix_io_write_str(&parameters.io, "\n");
+                optix_io_write_str(&parameters.io, "shadow hit? ");
+                optix_io_write_int(&parameters.io, i0);
+                optix_io_write_str(&parameters.io, " or ");
+                optix_io_write_int(&parameters.io, hit);
+                optix_io_write_str(&parameters.io, "\n");
+                optix_io_write_str(&parameters.io, "point: ");
+                optix_io_write_int(&parameters.io, point.x * 1000);
+                optix_io_write_str(&parameters.io, ", ");
+                optix_io_write_int(&parameters.io, point.y * 1000);
+                optix_io_write_str(&parameters.io, ", ");
+                optix_io_write_int(&parameters.io, point.z * 1000);
         }
 
         // TODO: if shadow ray fails (e.g. hits a surface), cache that
         // information and use it to accumulate radiance (or skip new ray
         // altogether...)
-
- //        float3 direction;
- //        float3 origin = parameters.origin;
- //        float3 seed;
- //
- //        make_ray(idx, direction, seed);
- //
- //        Packet packet;
- //
- //        packet.position = { 0.0f, 0.0f, 0.0f, 0.0f };
- //        packet.normal = { 0.0f, 0.0f, 0.0f, 0.0f };
- //        packet.id = -1;
- // 
-	// unsigned int i0, i1;
-	// pack_pointer(&packet, i0, i1);
- //
- //        optixTrace(
- //                parameters.handle,
- //                origin, direction,
- //                0.0f, 1e16f, 0.0f,
- //                OptixVisibilityMask(0xFF),
- //                OPTIX_RAY_FLAG_DISABLE_ANYHIT,
- //                0, 1, 0,
- //                i0, i1
- //        );
- //        
- //        surf2Dwrite(packet.position, parameters.position_surface, idx.x * sizeof(float4), idx.y);
- //        surf2Dwrite(packet.normal, parameters.normal_surface, idx.x * sizeof(float4), idx.y);
- //        surf2Dwrite(packet.id, parameters.index_surface, idx.x * sizeof(int32_t), idx.y);
 }
 
 extern "C" __global__ void __closesthit__()
 {
- //        // Get information
- //        Packet *packet;
-	// unsigned int i0 = optixGetPayload_0();
-	// unsigned int i1 = optixGetPayload_1();
-	// packet = unpack_pointer <Packet> (i0, i1);
- //        
- //        Hit *hit = (Hit *) optixGetSbtDataPointer();
-	//
- //        // Indices
- //        int32_t mat_id = hit->index;
- //        int32_t tri_id = optixGetPrimitiveIndex();
-	//
- //        packet->id = mat_id | (tri_id << 16);
-	//
- //        // Compute position and normal
- //        // TODO: UV as well?
- //        float2 bary = optixGetTriangleBarycentrics();
-	//
- //        float bu = bary.x;
- //        float bv = bary.y;
- //        float bw = 1.0f - bu - bv;
-	//
- //        uint3 triangle = hit->triangles[tri_id];
- //        Vertex v0 = hit->vertices[triangle.x];
- //        Vertex v1 = hit->vertices[triangle.y];
- //        Vertex v2 = hit->vertices[triangle.z];
-	//
- //        float2 uv0 = { v0.tex_coords.x, v0.tex_coords.y };
- //        float2 uv1 = { v1.tex_coords.x, v1.tex_coords.y };
- //        float2 uv2 = { v2.tex_coords.x, v2.tex_coords.y };
- //        float2 uv = bw * uv0 + bu * uv1 + bv * uv2;
-	//
- //        glm::vec3 glm_pos = bw * v0.position + bu * v1.position + bv * v2.position;
- //        glm_pos = hit->model * glm::vec4(glm_pos, 1.0f);
-	//
- //        packet->position = { glm_pos.x, glm_pos.y, glm_pos.z, 1.0f };
-	//
- //        // Compute normal
- //        glm::vec3 e1 = v1.position - v0.position;
- //        glm::vec3 e2 = v2.position - v0.position;
-	//
- //        e1 = hit->model * glm::vec4(e1, 0.0f);
- //        e2 = hit->model * glm::vec4(e2, 0.0f);
-	//
- //        glm::vec3 glm_normal = glm::normalize(glm::cross(e1, e2));
-	//
- //        // Shading normal
- //        glm::vec3 glm_shading_normal = bw * v0.normal + bu * v1.normal + bv * v2.normal;
- //        glm_shading_normal = hit->model * glm::vec4(glm_shading_normal, 0.0f);
-	//
- //        if (glm::dot(glm_normal, glm_shading_normal) < 0.0f)
- //                glm_shading_normal = -glm_shading_normal;
-	//
- //        float3 normal = { glm_shading_normal.x, glm_shading_normal.y, glm_shading_normal.z };
-	//
- //        // Transfer to packet
- //        packet->normal = { normal.x, normal.y, normal.z, 0.0f };
+        uint i0 = optixGetPayload_0();
+        uint i1 = optixGetPayload_1();
+
+        float *hit = unpack_pointer <float> (i0, i1);
+        *hit = 1;
 }
 
-extern "C" __global__ void __miss__() {}
+extern "C" __global__ void __miss__()
+{
+        uint i0 = optixGetPayload_0();
+        uint i1 = optixGetPayload_1();
+
+        float *hit = unpack_pointer <float> (i0, i1);
+        *hit = 0;
+}

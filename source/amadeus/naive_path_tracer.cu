@@ -307,6 +307,7 @@ ret load_attachment()
 		"-g",
 		"-DKOBRA_OPTIX_SHADER=0",
 		"--expt-relaxed-constexpr",
+                "-Xcudafe \"--diag_suppress=20012 --diag_suppress=20013 --diag_suppress=20014 --diag_suppress=2190\""
 	};
 
 	for (auto &path : include_paths) {

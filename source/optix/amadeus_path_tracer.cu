@@ -97,7 +97,7 @@ extern "C" __global__ void __raygen__()
 
 	// TODO: seed generatoin method
 	rp.seed = make_float3(
-		sin(idx.x - idx.y),
+		sinf(idx.x - idx.y),
 		parameters.samples,
 		parameters.time
 	);
@@ -207,8 +207,8 @@ extern "C" __global__ void __miss__()
 	// Get direction
 	const float3 ray_direction = optixGetWorldRayDirection();
 
-	float u = atan2(ray_direction.x, ray_direction.z)/(2.0f * M_PI) + 0.5f;
-	float v = asin(ray_direction.y)/M_PI + 0.5f;
+	float u = atan2f(ray_direction.x, ray_direction.z)/(2.0f * M_PI) + 0.5f;
+	float v = asinf(ray_direction.y)/M_PI + 0.5f;
 
 	float4 c = make_float4(0);
 	if (parameters.has_environment_map)

@@ -16,7 +16,7 @@
 #include "../common.hpp"
 
 // Debugging options
-// #define KOBRA_OPTIX_DEBUG
+#define KOBRA_OPTIX_DEBUG
 
 #ifdef KOBRA_OPTIX_DEBUG
 
@@ -25,7 +25,7 @@
 		| OPTIX_EXCEPTION_FLAG_TRACE_DEPTH \
 		| OPTIX_EXCEPTION_FLAG_STACK_OVERFLOW
 
-#define KOBRA_OPTIX_DEBUG_LEVEL OPTIX_COMPILE_DEBUG_LEVEL_FULL
+#define KOBRA_OPTIX_DEBUG_LEVEL OPTIX_COMPILE_DEBUG_LEVEL_MINIMAL
 #define KOBRA_OPTIX_OPTIMIZATION_LEVEL OPTIX_COMPILE_OPTIMIZATION_LEVEL_0
 
 #else
@@ -120,6 +120,7 @@ inline OptixDeviceContext make_context()
 
 	OptixDeviceContext context = 0;
 	OPTIX_CHECK(optixDeviceContextCreate(cuda_context, &options, &context));
+        // OPTIX_CHECK(optixDeviceContextSetCacheEnabled(context, 0));
 
 	return context;
 }
@@ -131,8 +132,8 @@ inline OptixModule load_optix_module
 		const OptixPipelineCompileOptions &pipeline_options,
 		const OptixModuleCompileOptions &module_options)
 {
-	static char log[2048];
-	static size_t sizeof_log = sizeof(log);
+	char log[2048];
+	size_t sizeof_log = sizeof(log);
 
 	std::string file = common::read_file(path);
 

@@ -10,10 +10,22 @@
 // Editor headers
 #include "optix_io.cuh"
 
+// Light structures
+struct AreaLight {
+        glm::mat4 model;
+        Vertex* vertices;
+        uint3 *indices;
+        uint triangles;
+        float3 emission;
+};
+
 // Launch info for the G-buffer raytracer
 struct PathTracerParameters {
         // Acceleration structure
         OptixTraversableHandle handle;
+
+        // Global parameters
+        float time;
 
         // Camera parameters
         float3 U;
@@ -28,10 +40,17 @@ struct PathTracerParameters {
         // G-buffer source surfaces
         cudaSurfaceObject_t position_surface;
         cudaSurfaceObject_t normal_surface;
+        cudaSurfaceObject_t uv_surface;
         cudaSurfaceObject_t index_surface;
 
         // List of all materials
         cuda::_material *materials;
+
+        // Lighting information
+        struct {
+                AreaLight *lights;
+                uint count;
+        } area;
 
         // Environment map
         cudaTextureObject_t environment_map;

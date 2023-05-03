@@ -133,6 +133,7 @@ struct EditorViewport {
                 std::vector <cuda::_material> materials;
                 CUdeviceptr dev_materials = 0;
 
+                Timer timer;
                 bool clk_rise = true;
         } common_rtx;
 
@@ -149,8 +150,8 @@ struct EditorViewport {
                 // SBT related resources
                 OptixShaderBindingTable sbt = {};
 
-                std::map <MeshIndex, int> record_refs;
-                std::vector <optix::Record <Hit>> linearized_records;
+                // std::map <MeshIndex, int> record_refs;
+                // std::vector <optix::Record <Hit>> linearized_records;
 
                 // Launch parameters
                 GBufferParameters launch_params;
@@ -170,8 +171,8 @@ struct EditorViewport {
                 // SBT related resources
                 OptixShaderBindingTable sbt = {};
 
-                // std::map <MeshIndex, int> record_refs;
-                // std::vector <optix::Record <Hit>> linearized_records;
+                // Lighting information
+                std::vector <AreaLight> lights;
 
                 // Launch parameters
                 PathTracerParameters launch_params;

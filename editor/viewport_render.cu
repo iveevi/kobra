@@ -4,10 +4,7 @@
 #include "include/cuda/interop.cuh"
 #include "push_constants.hpp"
 
-cuda::_material convert_material
-                (const Material &material,
-                TextureLoader &texture_loader,
-                const vk::raii::Device &device)
+static cuda::_material convert_material(const Material &material, TextureLoader &texture_loader, const vk::raii::Device &device)
 {
         cuda::_material mat;
 
@@ -93,13 +90,13 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities)
                 for (int i = 0; i < meshes.size(); i++) {
                         MeshIndex index { id, i };
 
-                        if (gbuffer_rtx.record_refs.find(index) == gbuffer_rtx.record_refs.end()) {
-                                int new_index = gbuffer_rtx.linearized_records.size();
-                                gbuffer_rtx.record_refs[index] = new_index;
-                                gbuffer_rtx.linearized_records.emplace_back();
+                        if (common_rtx.record_refs.find(index) == common_rtx.record_refs.end()) {
+                                int new_index = common_rtx.records.size();
+                                common_rtx.record_refs[index] = new_index;
+                                common_rtx.records.emplace_back();
 
                                 optix::Record <Hit> record;
-                                optix::pack_header(gbuffer_rtx.closest_hit, record);
+                                // optix::pack_header(gbuffer_rtx.closest_hit, record);
 
                                 auto cachelet = mesh_memory->get(entity.id, i);
 
@@ -108,7 +105,39 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities)
                                 record.data.model = transform.matrix();
                                 record.data.index = meshes[i].material_index;
 
-                                gbuffer_rtx.linearized_records[new_index] = record;
+                                common_rtx.records[new_index] = record;
+
+                                // If this is an area light, also add
+                                // information...
+                                const Material &material = Material::all[meshes[i].material_index];
+                                if (glm::length(material.emission) > 1e-3f) {
+                                        // TODO: do we really need another
+                                        // buffer for this?
+                                        std::cout << "Adding area light: # of triangles = "
+                                                << meshes[i].triangles() << ": "
+                                                << meshes[i].vertices.size() << ", "
+                                                << meshes[i].indices.size() << std::endl;
+                                        for (int j = 0; j < meshes[i].triangles(); j++) {
+                                                int i0 = meshes[i].indices[3 * j];
+                                                int i1 = meshes[i].indices[3 * j + 1];
+                                                int i2 = meshes[i].indices[3 * j + 2];
+
+                                                std::cout << "Triangle " << j << ": " << i0 << ", " << i1 << ", " << i2 << std::endl;
+                                        }
+
+                                        for (int j = 0; j < meshes[i].vertices.size(); j++) {
+                                                std::cout << "Vertex " << j << ": "
+                                                        << glm::to_string(meshes[i].vertices[j].position) << std::endl;
+                                        }
+
+                                        AreaLight light;
+                                        light.model = transform.matrix();
+                                        light.vertices = (Vertex *) cachelet.m_cuda_vertices;
+                                        light.indices = (uint3 *) cachelet.m_cuda_triangles;
+                                        light.triangles = meshes[i].triangles();
+                                        light.emission = cuda::to_f3(material.emission);
+                                        path_tracer.lights.push_back(light);
+                                }
 
                                 rebuild_tlas = true;
                                 rebuild_sbt = true;
@@ -122,19 +151,37 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities)
         system->update(entities);
 
         if (rebuild_tlas) {
-                gbuffer_rtx.launch_params.handle
-                        = system->build_tlas(1, gbuffer_rtx.record_refs);
+                OptixTraversableHandle handle = system->build_tlas(1, common_rtx.record_refs);
+                gbuffer_rtx.launch_params.handle = handle;
+                path_tracer.launch_params.handle = handle;
         }
 
         if (rebuild_sbt) {
                 printf("Rebuilding SBT\n");
+
+                // G-buffer hit SBT
+                for (auto &record : common_rtx.records)
+                        optix::pack_header(gbuffer_rtx.closest_hit, record);
+
                 if (gbuffer_rtx.sbt.hitgroupRecordBase)
                         cuda::free(gbuffer_rtx.sbt.hitgroupRecordBase);
         
-                gbuffer_rtx.sbt.hitgroupRecordBase = cuda::make_buffer_ptr(gbuffer_rtx.linearized_records);
+                gbuffer_rtx.sbt.hitgroupRecordBase = cuda::make_buffer_ptr(common_rtx.records);
                 gbuffer_rtx.sbt.hitgroupRecordStrideInBytes = sizeof(optix::Record <Hit>);
-                gbuffer_rtx.sbt.hitgroupRecordCount = gbuffer_rtx.linearized_records.size();
+                gbuffer_rtx.sbt.hitgroupRecordCount = common_rtx.records.size();
 
+                // Path tracer hit SBT
+                for (auto &record : common_rtx.records)
+                        optix::pack_header(path_tracer.closest_hit, record);
+
+                if (path_tracer.sbt.hitgroupRecordBase)
+                        cuda::free(path_tracer.sbt.hitgroupRecordBase);
+
+                path_tracer.sbt.hitgroupRecordBase = cuda::make_buffer_ptr(common_rtx.records);
+                path_tracer.sbt.hitgroupRecordStrideInBytes = sizeof(optix::Record <Hit>);
+                path_tracer.sbt.hitgroupRecordCount = common_rtx.records.size();
+
+                // Load all materials
                 common_rtx.materials.clear();
                 for (const auto &material : Material::all) {
                         common_rtx.materials.push_back(
@@ -143,6 +190,10 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities)
                 }
 
                 common_rtx.dev_materials = cuda::make_buffer_ptr(common_rtx.materials);
+
+                // Update lights for the path tracer
+                path_tracer.launch_params.area.lights = cuda::make_buffer(path_tracer.lights);
+                path_tracer.launch_params.area.count = path_tracer.lights.size();
         }
 
         // Turn off signal
@@ -313,7 +364,7 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info, const std::ve
                 std::string output = optix_io_read(&gbuffer_rtx.launch_params.io);
                 optix_io_clear(&gbuffer_rtx.launch_params.io);
 
-                std::cout << "G-buffer, read: " << output << "\n";
+                // std::cout << "G-buffer, read: " << output << "\n";
         }
 
         // Transition layout for position and normal map
@@ -351,6 +402,102 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info, const std::ve
         sobel.output.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
 }
 
+__global__ void test(PathTracerParameters parameters)
+{
+	// Get the launch index
+	const uint3 idx = threadIdx + blockDim * blockIdx;
+
+        // printf("Tracing ray at %d, %d\n", idx.x, idx.y);
+
+        float4 raw_position;
+        surf2Dread(&raw_position, parameters.position_surface, idx.x * sizeof(float4),
+                parameters.resolution.y - (idx.y + 1));
+        
+        float4 raw_normal;
+        surf2Dread(&raw_normal, parameters.normal_surface, idx.x * sizeof(float4),
+                parameters.resolution.y - (idx.y + 1));
+
+        float4 raw_uv;
+        surf2Dread(&raw_uv, parameters.uv_surface, idx.x * sizeof(float4),
+                parameters.resolution.y - (idx.y + 1));
+
+        int32_t raw_index;
+        surf2Dread(&raw_index, parameters.index_surface, idx.x * sizeof(int32_t),
+                parameters.resolution.y - (idx.y + 1));
+
+        int32_t triangle_id = raw_index >> 16;
+        int32_t material_id = raw_index & 0xFFFF;
+        
+        int index = idx.x + idx.y * parameters.resolution.x;
+        if (raw_index == -1)
+                return;
+
+        cuda::_material material = parameters.materials[material_id];
+
+        float3 position = { raw_position.x, raw_position.y, raw_position.z };
+        float3 normal = { raw_normal.x, raw_normal.y, raw_normal.z };
+        float2 uv = { raw_uv.x, raw_uv.y };
+
+        float3 color = material.diffuse;
+        if (material.textures.has_diffuse)
+                color = make_float3(tex2D <float4> (material.textures.diffuse, uv.x, uv.y));
+
+        // Randomly select a light to sample from
+        float3 seed = make_float3(idx.x, idx.y, parameters.time);
+        uint light_index = cuda::rand_uniform(parameters.area.count, seed);
+
+        AreaLight light = parameters.area.lights[light_index];
+        uint triangle_index = cuda::rand_uniform(light.triangles, seed);
+
+        float3 bary = cuda::pcg3f(seed);
+
+        float u = bary.x;
+        float v = bary.y;
+        if (u + v > 1.0f) {
+                u = 1.0f - u;
+                v = 1.0f - v;
+        }
+
+        uint3 triangle = light.indices[triangle_index];
+
+        const glm::vec3 &v0 = light.vertices[triangle.x].position;
+        const glm::vec3 &v1 = light.vertices[triangle.y].position;
+        const glm::vec3 &v2 = light.vertices[triangle.z].position;
+
+        glm::vec3 gpoint = (v0 + v1 + v2)/3.0f;
+        gpoint = light.model * glm::vec4(gpoint, 1.0f);
+
+        float3 point = { gpoint.x, gpoint.y, gpoint.z };
+
+        // Ray from point to light
+        float3 direction = normalize(parameters.origin - position);
+        float3 origin = position + normal * 1e-3f;
+
+        if (isnan(direction.x) || isnan(direction.y) || isnan(direction.z)) {
+                printf("NaN direction %f, %f, %f\n", direction.x, direction.y, direction.z);
+                return;
+        }
+
+        if (isinf(direction.x) || isinf(direction.y) || isinf(direction.z)) {
+                printf("Inf direction %f, %f, %f\n", direction.x, direction.y, direction.z);
+                return;
+        }
+
+        if (isnan(origin.x) || isnan(origin.y) || isnan(origin.z)) {
+                printf("NaN origin %f, %f, %f\n", origin.x, origin.y, origin.z);
+                printf("\tPosition %f, %f, %f\n", position.x, position.y, position.z);
+                printf("\tNormal %f, %f, %f\n", normal.x, normal.y, normal.z);
+                return;
+        }
+
+        if (isinf(origin.x) || isinf(origin.y) || isinf(origin.z)) {
+                printf("Inf origin %f, %f, %f\n", origin.x, origin.y, origin.z);
+                printf("\tPosition %f, %f, %f\n", position.x, position.y, position.z);
+                printf("\tNormal %f, %f, %f\n", normal.x, normal.y, normal.z);
+                return;
+        }
+}
+
 void EditorViewport::render_path_traced
                         (const RenderInfo &render_info,
                         const std::vector <Entity> &entities)
@@ -359,6 +506,8 @@ void EditorViewport::render_path_traced
         prerender_raytrace(entities);
 
         // Configure launch parameters
+        path_tracer.launch_params.time = common_rtx.timer.elapsed_start();
+
         auto uvw = uvw_frame(render_info.camera, render_info.camera_transform);
 
         path_tracer.launch_params.U = cuda::to_f3(uvw.u);
@@ -370,6 +519,7 @@ void EditorViewport::render_path_traced
         
         path_tracer.launch_params.position_surface = framebuffer_images.cu_position_surface;
         path_tracer.launch_params.normal_surface = framebuffer_images.cu_normal_surface;
+        path_tracer.launch_params.uv_surface = framebuffer_images.cu_uv_surface;
         path_tracer.launch_params.index_surface = framebuffer_images.cu_material_index_surface;
 
         path_tracer.launch_params.materials = (cuda::_material *) common_rtx.dev_materials;
@@ -387,12 +537,13 @@ void EditorViewport::render_path_traced
                 )
         );
 
-        CUDA_SYNC_CHECK();
-
         std::string output = optix_io_read(&path_tracer.launch_params.io);
         optix_io_clear(&path_tracer.launch_params.io);
 
-        std::cout << "Read: " << output << "\n";
+        test <<<1, 1>>> (path_tracer.launch_params);
+        CUDA_SYNC_CHECK();
+
+        // std::cout << "\n==> Read <==\n" << output << "\n";
         
         // Blitting
         float4 *buffer = (float4 *) path_tracer.launch_params.color;
@@ -837,6 +988,8 @@ void EditorViewport::render_highlight(const RenderInfo &render_info, const std::
 
 void EditorViewport::render(const RenderInfo &render_info, const std::vector <Entity> &entities, daemons::Transform &transform_daemon)
 {
+        // TODO: pass camera as an entity, and then check if its moved using the
+                                // daemon...
         // Set state
         common_rtx.clk_rise = true;
 
@@ -942,16 +1095,21 @@ EditorViewport::selection_query(const std::vector <Entity> &entities, const glm:
 
 void EditorViewport::menu(const MenuOptions &options)
 {
-        static const char *modes[] = {
-                "Triangulation",
-                "Wireframe",
-                "Normals",
-                "Albedo",
-                "SparseRTX"
+        static const std::map <decltype(RenderState::mode), const char *> modes = {
+                { RenderState::eTriangulation, "Triangulation" },
+                { RenderState::eNormals, "Normals" },
+                { RenderState::eTextureCoordinates, "Texture Coordinates" },
+                { RenderState::eAlbedo, "Albedo" },
+                { RenderState::ePathTraced, "Path Traced (G-buffer)" },
+                { RenderState::ePathTraced_Amadeus, "Path Traced (Amadeus)" }
         };
 		
         if (ImGui::BeginMenuBar()) {
-                if (ImGui::BeginMenu(modes[render_state.mode])) {
+                std::string mode_string = "?";
+                if (modes.count(render_state.mode))
+                        mode_string = modes.at(render_state.mode);
+
+                if (ImGui::BeginMenu(mode_string.c_str())) {
                         if (ImGui::MenuItem("Triangulation"))
                                 render_state.mode = RenderState::eTriangulation;
 

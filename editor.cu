@@ -1061,13 +1061,13 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	);
 
 	m_renderers.armada_rtx->attach(
-		"ReSTIR",
-		std::make_shared <kobra::amadeus::ReSTIR> ()
+		"Path Tracer",
+		std::make_shared <kobra::amadeus::PathTracer> ()
 	);
 
 	m_renderers.armada_rtx->attach(
-		"Path Tracer",
-		std::make_shared <kobra::amadeus::PathTracer> ()
+		"ReSTIR",
+		std::make_shared <kobra::amadeus::ReSTIR> ()
 	);
 
 	// m_renderers.armada_rtx->set_envmap(KOBRA_DIR "/resources/skies/background_1.jpg");

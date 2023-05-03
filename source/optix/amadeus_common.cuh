@@ -221,7 +221,7 @@ float3 Ld_Environment(const LightingContext &lc, const SurfaceHit &sh, float &pd
 	// Sample random direction
 	seed = rand_uniform_3f(seed);
 	float theta = acosf(sqrtf(1.0f - fract(seed.x)));
-	float phi = 2.0f * M_PI * fract(seed.y);
+	float phi = 2.0f * PI * fract(seed.y);
 
 	float3 wi = make_float3(
 		sinf(theta) * cosf(phi),
@@ -229,8 +229,8 @@ float3 Ld_Environment(const LightingContext &lc, const SurfaceHit &sh, float &pd
 		cosf(theta)
 	);
 
-	float u = atan2(wi.x, wi.z)/(2.0f * M_PI) + 0.5f;
-	float v = asin(wi.y)/M_PI + 0.5f;
+	float u = atan2f(wi.x, wi.z)/(2.0f * M_PI) + 0.5f;
+	float v = asinf(wi.y)/M_PI + 0.5f;
 
 	float4 sample = tex2D <float4> (lc.envmap, u, v);
 	float3 Li = make_float3(sample);

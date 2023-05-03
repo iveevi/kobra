@@ -168,7 +168,7 @@ struct LightVisibility {
 };
 
 KCUDA_INLINE KCUDA_DEVICE
-LightVisibility  query_occlusion(float3 origin, float3 dir, float R, bool no_hit)
+LightVisibility query_occlusion(float3 origin, float3 dir, float R, bool no_hit)
 {
 	static float eps = 0.05f;
 

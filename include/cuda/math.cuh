@@ -1,17 +1,16 @@
-#ifndef KOBRA_CUDA_MATH_H_
-#define KOBRA_CUDA_MATH_H_
+#pragma once
 
 #include "core.cuh"
 
 #include <vector_functions.h>
 #include <vector_types.h>
 
-#if !defined(__CUDACC_RTC__)
-
-#include <cmath>
-#include <cstdlib>
-
-#endif
+// #if !defined(__CUDACC_RTC__)
+//
+// // #include <cmath>
+// // #include <cstdlib>
+//
+// #endif
 
 /* scalar functions used in vector functions */
 #ifndef M_PI
@@ -2672,5 +2671,3 @@ KCUDA_INLINE KCUDA_HOST_DEVICE float max(float3 v)
 {
 	return fmaxf(v.x, fmaxf(v.y, v.z));
 }
-
-#endif
