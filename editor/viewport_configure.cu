@@ -931,12 +931,12 @@ void EditorViewport::configure_amadeus_path_tracer(const Context &context)
 
         amadeus_path_tracer.armada->attach(
                 "Path Tracer",
-                // std::make_shared <amadeus::PathTracer> ()
-                // std::make_shared <extra::NaivePathTracer> ()
-                std::shared_ptr <amadeus::AttachmentRTX> (extra::load_attachment().ptr)
+                std::make_shared <amadeus::PathTracer> ()
+                // std::shared_ptr <amadeus::AttachmentRTX> (extra::load_attachment().ptr)
         );
 
         amadeus_path_tracer.armada->set_depth(1);
+        // amadeus_path_tracer.armada->set_depth(0);
 
         // Framer and related resources
 	amadeus_path_tracer.framer = kobra::layers::Framer(context, present_render_pass);
@@ -949,8 +949,11 @@ void EditorViewport::configure_amadeus_path_tracer(const Context &context)
 }
 
 void EditorViewport::configure_path_tracer(const Context &ctx)
-{
+{ 
+        KOBRA_ASSERT(ctx.device != nullptr, "Editor (1): null device");
+
         static constexpr const char OPTIX_PTX_FILE[] = "bin/ptx/path_tracer.ptx";
+
 
         // Create a context
         OptixDeviceContext context = system->context();
@@ -972,6 +975,7 @@ void EditorViewport::configure_path_tracer(const Context &ctx)
                 )
         );
 
+        KOBRA_ASSERT(ctx.device != nullptr, "Editor (1.1): null device");
         printf("Loaded module %p: %s\n", path_tracer.module, log);
 
         OptixProgramGroupOptions program_options = {};
@@ -993,6 +997,7 @@ void EditorViewport::configure_path_tracer(const Context &ctx)
                 );
 
                 printf("Loaded raygen %p: %s\n", path_tracer.ray_generation, log);
+                KOBRA_ASSERT(ctx.device != nullptr, "Editor (1.12): null device");
         }
 
         {
@@ -1012,6 +1017,7 @@ void EditorViewport::configure_path_tracer(const Context &ctx)
                 );
 
                 printf("Loaded miss %p: %s\n", path_tracer.miss, log);
+                KOBRA_ASSERT(ctx.device != nullptr, "Editor (1.2): null device");
         }
 
         {
@@ -1031,6 +1037,7 @@ void EditorViewport::configure_path_tracer(const Context &ctx)
                 );
 
                 printf("Loaded closest hit %p: %s\n", path_tracer.closest_hit, log);
+                KOBRA_ASSERT(ctx.device != nullptr, "Editor (1.3): null device");
         }
 
         // Create pipeline
@@ -1050,6 +1057,7 @@ void EditorViewport::configure_path_tracer(const Context &ctx)
         );
 
         printf("Loaded pipeline %p: %s\n", path_tracer.pipeline, log);
+        KOBRA_ASSERT(ctx.device != nullptr, "Editor (2): null device");
 
         // Configure stacks
         OptixStackSizes stack_sizes = {};
@@ -1078,6 +1086,7 @@ void EditorViewport::configure_path_tracer(const Context &ctx)
                         direct_callable_stack_size_from_state,
                         continuation_stack_size, 2)
         );
+        KOBRA_ASSERT(ctx.device != nullptr, "Editor (3): null device");
 
         // Create shader binding table
         path_tracer.sbt = {};
@@ -1118,5 +1127,6 @@ void EditorViewport::configure_path_tracer(const Context &ctx)
 	
        
         // TODO: render from raw float4 data...
+        KOBRA_ASSERT(ctx.device != nullptr, "Editor (-1): null device");
         path_tracer.framer = kobra::layers::Framer(ctx, present_render_pass);
 }

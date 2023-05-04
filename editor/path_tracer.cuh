@@ -9,11 +9,12 @@
 
 // Editor headers
 #include "optix_io.cuh"
+#include "gbuffer_rtx_shader.cuh"
 
 // Light structures
 struct AreaLight {
         glm::mat4 model;
-        Vertex* vertices;
+        Vertex *vertices;
         uint3 *indices;
         uint triangles;
         float3 emission;
@@ -50,6 +51,7 @@ struct PathTracerParameters {
         struct {
                 AreaLight *lights;
                 uint count;
+                uint triangle_count;
         } area;
 
         // Environment map

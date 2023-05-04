@@ -14,6 +14,7 @@ EditorViewport::EditorViewport
                 command_pool(context.command_pool),
                 texture_loader(context.texture_loader)
 {
+        KOBRA_ASSERT(context.device != nullptr, "Editor constructor: null device");
         common_rtx.timer.start();
 
         path_tracer.dev_traced = 0;
@@ -33,7 +34,9 @@ EditorViewport::EditorViewport
         configure_highlight_pipeline();
 
         configure_gbuffer_rtx();
+        KOBRA_ASSERT(context.device != nullptr, "Editor constructor: null device");
         configure_amadeus_path_tracer(context);
+        KOBRA_ASSERT(context.device != nullptr, "Editor constructor: null device");
         configure_path_tracer(context);
 
         render_state.initialized = true;

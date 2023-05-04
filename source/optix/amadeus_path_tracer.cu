@@ -173,6 +173,7 @@ extern "C" __global__ void __closesthit__()
 
 	float3 f = eval(surface_hit, wi, pdf, out, rp->seed);
 
+
 	// Get threshold value for current ray
 	float3 T = f * abs(dot(wi, n))/pdf;
 

@@ -152,6 +152,10 @@ extern "C" __global__ void __closesthit__()
         float3 normal = { glm_shading_normal.x, glm_shading_normal.y, glm_shading_normal.z };
         normal = normalize(normal);
 
+        float3 wo = optixGetWorldRayDirection();
+        if (dot(wo, normal) > 0.0f)
+                normal = -normal;
+
         // Transfer to packet
         packet->normal = { normal.x, normal.y, normal.z, 0.0f };
 }

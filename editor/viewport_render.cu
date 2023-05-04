@@ -194,6 +194,12 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities)
                 // Update lights for the path tracer
                 path_tracer.launch_params.area.lights = cuda::make_buffer(path_tracer.lights);
                 path_tracer.launch_params.area.count = path_tracer.lights.size();
+               
+                // TODO: do we really need this?
+                uint triangles = 0;
+                for (const auto &light : path_tracer.lights)
+                        triangles += light.triangles;
+                path_tracer.launch_params.area.triangle_count = triangles;
         }
 
         // Turn off signal

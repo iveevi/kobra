@@ -16,7 +16,7 @@
 #include "../common.hpp"
 
 // Debugging options
-#define KOBRA_OPTIX_DEBUG
+// #define KOBRA_OPTIX_DEBUG
 
 #ifdef KOBRA_OPTIX_DEBUG
 
@@ -113,7 +113,7 @@ inline OptixDeviceContext make_context()
 	OptixDeviceContextOptions options = {};
 	options.logCallbackFunction       = &context_logger;
 	options.logCallbackLevel          = 4;
-        options.validationMode            = OPTIX_DEVICE_CONTEXT_VALIDATION_MODE_ALL;
+        // options.validationMode            = OPTIX_DEVICE_CONTEXT_VALIDATION_MODE_ALL;
 
 	// Associate CUDA context
 	CUcontext cuda_context = 0;

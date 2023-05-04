@@ -18,6 +18,8 @@ Framer::Framer(const Context &context, const vk::raii::RenderPass &render_pass)
 		m_phdev(context.phdev),
 		m_sync_queue(context.sync_queue)
 {
+        KOBRA_ASSERT(context.device != nullptr, "Framer: null device");
+
 	// Descriptor set layout
 	m_dsl = make_descriptor_set_layout(
 		*context.device,
