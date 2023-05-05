@@ -151,12 +151,12 @@ struct Editor : public kobra::BaseApp {
 	void resize(const vk::Extent2D &) override;
 	void after_present() override;
 
-	static void mouse_callback(void *, const kobra::io::MouseEvent &);
-	static void keyboard_callback(void *, const kobra::io::KeyboardEvent &);
-
 	// TODO: frustrum culling structure to cull once per pass (store status
 	// in a map) and then is passed to other layers for rendering
 };
+	
+void mouse_callback(void *, const kobra::io::MouseEvent &);
+void keyboard_callback(void *, const kobra::io::KeyboardEvent &);
 
 int main()
 {
@@ -1501,7 +1501,7 @@ void Editor::after_present()
         input_context.requests = std::queue <InputRequest> ();
 }
 
-void Editor::mouse_callback(void *us, const kobra::io::MouseEvent &event)
+void mouse_callback(void *us, const kobra::io::MouseEvent &event)
 {
 	static const int select_button = GLFW_MOUSE_BUTTON_LEFT;
 	static const int pan_button = GLFW_MOUSE_BUTTON_RIGHT;
@@ -1563,7 +1563,7 @@ void Editor::mouse_callback(void *us, const kobra::io::MouseEvent &event)
         input_context.requests.push(request);
 }
 
-void Editor::keyboard_callback(void *us, const kobra::io::KeyboardEvent &event)
+void keyboard_callback(void *us, const kobra::io::KeyboardEvent &event)
 {
 	Editor *editor = static_cast <Editor *> (us);
 	if (event.action == GLFW_PRESS) {

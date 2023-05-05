@@ -141,10 +141,20 @@ extern "C" __global__ void __closesthit__()
 
         glm::vec3 glm_normal = glm::normalize(glm::cross(e1, e2));
 
+        float3 ng = { glm_normal.x, glm_normal.y, glm_normal.z };
+        float3 wo = optixGetWorldRayDirection();
+
+        bool entering = false;
+        if (dot(wo, ng) > 0.0f) {
+                glm_normal = -glm_normal;
+                entering = false;
+        } else {
+                entering = true;
+        }
+
         // Shading normal
         glm::vec3 glm_shading_normal = bw * v0.normal + bu * v1.normal + bv * v2.normal;
         glm_shading_normal = hit->model * glm::vec4(glm_shading_normal, 0.0f);
-        // TODO: multiply by inverse transpose of model matrix?
 
         if (glm::dot(glm_normal, glm_shading_normal) < 0.0f)
                 glm_shading_normal = -glm_shading_normal;
@@ -152,12 +162,8 @@ extern "C" __global__ void __closesthit__()
         float3 normal = { glm_shading_normal.x, glm_shading_normal.y, glm_shading_normal.z };
         normal = normalize(normal);
 
-        float3 wo = optixGetWorldRayDirection();
-        if (dot(wo, normal) > 0.0f)
-                normal = -normal;
-
         // Transfer to packet
-        packet->normal = { normal.x, normal.y, normal.z, 0.0f };
+        packet->normal = { normal.x, normal.y, normal.z, (float) entering };
 }
 
 extern "C" __global__ void __miss__() {}

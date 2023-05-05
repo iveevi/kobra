@@ -122,11 +122,12 @@ float3 radiance(const SurfaceHit &sh, float3 &seed, int depth)
         float3 direction = normalize(light_info.position - sh.x);
         float3 origin = sh.x;
 
-        float sign = (sh.mat.type == eTransmission) ? -1.0f : 1.0f;
-        if (isnan(sh.n.x) || isnan(sh.n.y) || isnan(sh.n.z))
-                origin += sign * direction * 1e-3f;
-        else
-                origin += sign * sh.n * 1e-3f;
+        // float sign = (sh.mat.type == eTransmission) ? -1.0f : 1.0f;
+        // sh.x += sign * sh.n * 1e-3f;
+        // if (isnan(sh.n.x) || isnan(sh.n.y) || isnan(sh.n.z))
+        //         origin += sign * direction * 1e-3f;
+        // else
+        //         origin += sign * sh.n * 1e-3f;
         
         uint i0 = 0;
         uint i1 = 0;
@@ -144,14 +145,13 @@ float3 radiance(const SurfaceHit &sh, float3 &seed, int depth)
                 OPTIX_RAY_FLAG_DISABLE_ANYHIT
                 | OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT
                 | OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT,
-                // TODO: use miss instead of hit and disable closest hit, etc
                 0, 1, 0, i0, i1
         );
 
         float3 out_radiance = sh.mat.emission;
         if (packet.miss && length(out_radiance) < 1e-3f) {
-                float3 wi = normalize(light_info.position - sh.x);
-                float R = length(light_info.position - sh.x);
+                float3 wi = normalize(light_info.position - origin);
+                float R = length(light_info.position - origin);
 	
                 float3 brdf = cuda::brdf(sh, wi, sh.mat.type);
                 out_radiance = brdf * light_info.emission * abs(dot(light_info.normal, wi)) * abs(dot(sh.n, wi))/(light_pdf * R * R);
@@ -204,17 +204,21 @@ extern "C" __global__ void __raygen__()
         cuda::_material m = parameters.materials[material_id];
         
         SurfaceHit sh;
-        sh.x = position; // TODO: offset...
+        sh.x = position;
         sh.wo = normalize(parameters.origin - position);
         sh.n = normalize(normal);
-        sh.entering = false;
-
+        sh.entering = (raw_normal.w > 0.0f);
+        
         convert_material(m, sh.mat, uv);
 
         float3 color = make_float3(0.0f);
         float3 beta = make_float3(1.0f);
 
         for (int depth = 0; depth < parameters.depth; depth++) {
+                // Offset the position
+                float sign = (sh.mat.type == eTransmission) ? -1.0f : 1.0f;
+                sh.x += sign * sh.n * 1e-3f;
+
                 color += beta * radiance(sh, seed, depth);
                 
                 float3 wi;
@@ -227,9 +231,6 @@ extern "C" __global__ void __raygen__()
                         packet.miss = false;
                         packet.entering = false;
 
-                        float sign = (sh.mat.type == eTransmission) ? -1.0f : 1.0f;
-                        float3 origin = sh.x + sign * sh.n * 1e-3f;
-
                         uint i0;
                         uint i1;
 
@@ -237,11 +238,10 @@ extern "C" __global__ void __raygen__()
 
                         optixTrace(
                                 parameters.handle,
-                                origin, wi,
+                                sh.x, wi,
                                 0.0f, 1e16f, 0.0f,
                                 OptixVisibilityMask(0xFF),
                                 OPTIX_RAY_FLAG_DISABLE_ANYHIT,
-                                // TODO: use miss instead of hit and disable closest hit, etc
                                 0, 1, 0, i0, i1
                         );
 
@@ -251,7 +251,7 @@ extern "C" __global__ void __raygen__()
                                 sh.x = packet.x;
                                 sh.wo = -wi;
                                 sh.n = packet.n;
-                                sh.entering = false;
+                                sh.entering = packet.entering;
 
                                 convert_material(m, sh.mat, packet.uv);
 
@@ -318,6 +318,16 @@ extern "C" __global__ void __closesthit__()
         e2 = hit->model * glm::vec4(e2, 0.0f);
 
         glm::vec3 glm_normal = glm::normalize(glm::cross(e1, e2));
+        
+        float3 ng = { glm_normal.x, glm_normal.y, glm_normal.z };
+        float3 wo = optixGetWorldRayDirection();
+
+        if (dot(wo, ng) > 0.0f) {
+                glm_normal = -glm_normal;
+                packet->entering = false;
+        } else {
+                packet->entering = true;
+        }
 
         // Shading normal
         glm::vec3 glm_shading_normal = bw * v0.normal + bu * v1.normal + bv * v2.normal;
@@ -328,12 +338,6 @@ extern "C" __global__ void __closesthit__()
 
         float3 normal = { glm_shading_normal.x, glm_shading_normal.y, glm_shading_normal.z };
         normal = normalize(normal);
-
-        float3 wo = optixGetWorldRayDirection();
-        if (dot(wo, normal) > 0.0f) {
-                normal = -normal;
-                packet->entering = true;
-        }
 
         // Transfer to packet
         packet->n = { normal.x, normal.y, normal.z };
