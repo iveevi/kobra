@@ -778,7 +778,7 @@ static Submesh process_mesh(aiMesh *mesh, const aiScene *scene, const std::strin
 
 	// Mesh data
 	VertexList vertices;
-	Indices indices;
+        std::vector <uint32_t> indices;
 
 	// Process all the mesh's vertices
 	for (size_t i = 0; i < mesh->mNumVertices; i++) {

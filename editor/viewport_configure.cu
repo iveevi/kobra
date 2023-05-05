@@ -922,31 +922,28 @@ void EditorViewport::configure_gbuffer_rtx()
         gbuffer_rtx.launch_params.io = optix_io_create();
 }
 
-void EditorViewport::configure_amadeus_path_tracer(const Context &context)
-{
-        // TODO: adaptive resolution...
-        amadeus_path_tracer.armada = std::make_shared <amadeus::ArmadaRTX> (
-                context, system, mesh_memory, vk::Extent2D { 1000, 1000 }
-        );
-
-        amadeus_path_tracer.armada->attach(
-                "Path Tracer",
-                std::make_shared <amadeus::PathTracer> ()
-                // std::shared_ptr <amadeus::AttachmentRTX> (extra::load_attachment().ptr)
-        );
-
-        amadeus_path_tracer.armada->set_depth(1);
-        // amadeus_path_tracer.armada->set_depth(0);
-
-        // Framer and related resources
-	amadeus_path_tracer.framer = kobra::layers::Framer(context, present_render_pass);
-
-	// Allocate necessary buffers
-	size_t size = amadeus_path_tracer.armada->size();
-
-	amadeus_path_tracer.dev_traced = kobra::cuda::alloc(size * sizeof(uint32_t));
-	amadeus_path_tracer.traced.resize(size);
-}
+// void EditorViewport::configure_amadeus_path_tracer(const Context &context)
+// {
+//         // TODO: adaptive resolution...
+//         amadeus_path_tracer.armada = std::make_shared <amadeus::ArmadaRTX> (
+//                 context, system, mesh_memory, vk::Extent2D { 1000, 1000 }
+//         );
+//
+//         amadeus_path_tracer.armada->attach(
+//                 "Path Tracer",
+//                 std::make_shared <amadeus::PathTracer> ()
+//                 // std::shared_ptr <amadeus::AttachmentRTX> (extra::load_attachment().ptr)
+//         );
+//
+//         // Framer and related resources
+// 	amadeus_path_tracer.framer = kobra::layers::Framer(context, present_render_pass);
+//
+// 	// Allocate necessary buffers
+// 	size_t size = amadeus_path_tracer.armada->size();
+//
+// 	amadeus_path_tracer.dev_traced = kobra::cuda::alloc(size * sizeof(uint32_t));
+// 	amadeus_path_tracer.traced.resize(size);
+// }
 
 void EditorViewport::configure_path_tracer(const Context &ctx)
 { 

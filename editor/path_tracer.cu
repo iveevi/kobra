@@ -166,20 +166,20 @@ extern "C" __global__ void __raygen__()
 	const uint3 idx = optixGetLaunchIndex();
        
         float4 raw_position;
-        surf2Dread(&raw_position, parameters.position_surface, idx.x * sizeof(float4),
-                parameters.resolution.y - (idx.y + 1));
+        surf2Dread(&raw_position, parameters.position_surface,
+                idx.x * sizeof(float4), parameters.resolution.y - (idx.y + 1));
         
         float4 raw_normal;
-        surf2Dread(&raw_normal, parameters.normal_surface, idx.x * sizeof(float4),
-                parameters.resolution.y - (idx.y + 1));
+        surf2Dread(&raw_normal, parameters.normal_surface,
+                idx.x * sizeof(float4), parameters.resolution.y - (idx.y + 1));
 
         float4 raw_uv;
-        surf2Dread(&raw_uv, parameters.uv_surface, idx.x * sizeof(float4),
-                parameters.resolution.y - (idx.y + 1));
+        surf2Dread(&raw_uv, parameters.uv_surface,
+                idx.x * sizeof(float4), parameters.resolution.y - (idx.y + 1));
 
         int32_t raw_index;
-        surf2Dread(&raw_index, parameters.index_surface, idx.x * sizeof(int32_t),
-                parameters.resolution.y - (idx.y + 1));
+        surf2Dread(&raw_index, parameters.index_surface,
+                idx.x * sizeof(int32_t), parameters.resolution.y - (idx.y + 1));
 
         int32_t triangle_id = raw_index >> 16;
         int32_t material_id = raw_index & 0xFFFF;
@@ -211,12 +211,10 @@ extern "C" __global__ void __raygen__()
 
         convert_material(m, sh.mat, uv);
 
-        // float3 color = radiance(sh, seed, 0);
         float3 color = make_float3(0.0f);
         float3 beta = make_float3(1.0f);
 
-        static constexpr int MAX_DEPTH = 8;
-        for (int depth = 0; depth < MAX_DEPTH; depth++) {
+        for (int depth = 0; depth < parameters.depth; depth++) {
                 color += beta * radiance(sh, seed, depth);
                 
                 float3 wi;
@@ -224,7 +222,7 @@ extern "C" __global__ void __raygen__()
                 Shading out;
 
                 float3 brdf = eval(sh, wi, pdf, out, seed);
-                if (pdf > 0.0 && depth < MAX_DEPTH - 1) {
+                if (pdf > 0.0 && depth < parameters.depth - 1) {
                         Packet packet;
                         packet.miss = false;
                         packet.entering = false;
@@ -281,7 +279,6 @@ extern "C" __global__ void __closesthit__()
 
         Packet *packet = unpack_pointer <Packet> (i0, i1);
 
-        // packet->miss = false;
         ::Hit *hit = (::Hit *) optixGetSbtDataPointer();
 
         // Indices

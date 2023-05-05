@@ -68,6 +68,37 @@ struct MenuOptions {
         float *speed = nullptr;
 };
 
+// Editor render state
+struct RenderState {
+        enum {
+                eTriangulation,
+                eWireframe,
+                eNormals,
+                eTextureCoordinates,
+                eAlbedo,
+                eSparseGlobalIllumination,
+                ePathTraced,
+                // ePathTraced_Amadeus
+        } mode = eTriangulation;
+
+        enum {
+                eRasterized,
+                eRaytraced
+        } backend = eRasterized;
+
+        bool bounding_boxes = false;
+        bool initialized = false;
+};
+
+// Modules within the editor rendering pipeline
+struct SimplePipeline {
+        vk::raii::PipelineLayout pipeline_layout = nullptr;
+        vk::raii::Pipeline pipeline = nullptr;
+
+        vk::raii::DescriptorSetLayout dsl = nullptr;
+        vk::raii::DescriptorSet dset = nullptr;
+};
+
 // Editor rendering
 struct EditorViewport {
         // Vulkan structures
@@ -82,7 +113,7 @@ struct EditorViewport {
         std::shared_ptr <layers::MeshMemory> mesh_memory = nullptr;
 
         // Buffers
-        struct framebuffer_images {
+        struct FramebufferImages {
                 ImageData viewport = nullptr;
                 ImageData position = nullptr;
                 ImageData normal = nullptr;
@@ -116,7 +147,7 @@ struct EditorViewport {
         using MeshIndex = std::pair <int, int>; // Entity, mesh index
        
         // G-buffer with rasterization
-        struct {
+        struct GBuffer_Rasterized {
                 vk::raii::PipelineLayout pipeline_layout = nullptr;
                 vk::raii::Pipeline pipeline = nullptr;
        
@@ -138,7 +169,9 @@ struct EditorViewport {
         } common_rtx;
 
         // G-buffer with raytracing
-        struct {
+        struct GBuffer_Raytraced {
+                // TODO: compute the tangents and bitangents to correctly do
+                // G-buffer raytracing and get valid normals...
                 // Program and pipeline
                 OptixPipeline pipeline = 0;
                 OptixModule module = 0;
@@ -159,7 +192,7 @@ struct EditorViewport {
         } gbuffer_rtx;
 
         // Path tracer
-        struct {
+        struct PathTracer {
                 // Program and pipeline
                 OptixPipeline pipeline = 0;
                 OptixModule module = 0;
@@ -183,21 +216,25 @@ struct EditorViewport {
 
                 CUdeviceptr dev_traced;
                 std::vector <uint8_t> traced;
+                
+                int32_t depth;
         } path_tracer;
 
         // Path tracer (Amadeus)
-        struct {
-                std::shared_ptr <amadeus::ArmadaRTX> armada;
-                layers::Framer framer;
-
-                // TODO: plus denoisers... maybe in different struct?
-
-                CUdeviceptr dev_traced;
-                std::vector <uint8_t> traced;
-        } amadeus_path_tracer;
+        // struct AmadeusPathTracer {
+        //         std::shared_ptr <amadeus::ArmadaRTX> armada;
+        //         layers::Framer framer;
+        //
+        //         // TODO: plus denoisers... maybe in different struct?
+        //
+        //         CUdeviceptr dev_traced;
+        //         std::vector <uint8_t> traced;
+        //
+        //         int32_t depth;
+        // } amadeus_path_tracer;
 
         // Albedo (rasterization)
-        struct {
+        struct Albedo {
                 vk::raii::PipelineLayout pipeline_layout = nullptr;
                 vk::raii::Pipeline pipeline = nullptr;
         
@@ -205,36 +242,9 @@ struct EditorViewport {
                 std::map <MeshIndex, int> dset_refs;
                 std::vector <vk::raii::DescriptorSet> dsets;
         } albedo;
-       
-        // Blitting normal map
-        struct {
-                vk::raii::PipelineLayout pipeline_layout = nullptr;
-                vk::raii::Pipeline pipeline = nullptr;
-        
-                vk::raii::DescriptorSetLayout dsl = nullptr;
-                vk::raii::DescriptorSet dset = nullptr;
-        } normal;
-        
-        // Blitting UV map
-        struct {
-                vk::raii::PipelineLayout pipeline_layout = nullptr;
-                vk::raii::Pipeline pipeline = nullptr;
-        
-                vk::raii::DescriptorSetLayout dsl = nullptr;
-                vk::raii::DescriptorSet dset = nullptr;
-        } uv;
-
-        // Scene triangulation (agnostic)
-        struct {
-                vk::raii::PipelineLayout pipeline_layout = nullptr;
-                vk::raii::Pipeline pipeline = nullptr;
-        
-                vk::raii::DescriptorSetLayout dsl = nullptr;
-                vk::raii::DescriptorSet dset = nullptr;
-        } triangulation;
 
         // Rendering bounding boxes (rasterization)
-        struct {
+        struct Boxes {
                 vk::raii::PipelineLayout pipeline_layout = nullptr;
                 vk::raii::Pipeline pipeline = nullptr;
 
@@ -244,7 +254,7 @@ struct EditorViewport {
         } bounding_box;
 
         // Sobel filter (computer shader)
-        struct {
+        struct SobelFilter {
                 vk::raii::PipelineLayout pipeline_layout = nullptr;
                 vk::raii::Pipeline pipeline = nullptr;
         
@@ -255,14 +265,11 @@ struct EditorViewport {
                 vk::raii::Sampler output_sampler = nullptr;
         } sobel;
 
-        // Highlighting (rasterized compositing)
-        struct {
-                vk::raii::PipelineLayout pipeline_layout = nullptr;
-                vk::raii::Pipeline pipeline = nullptr;
-                
-                vk::raii::DescriptorSetLayout dsl = nullptr;
-                vk::raii::DescriptorSet dset = nullptr;
-        } highlight;
+        // Simple pipelines
+        SimplePipeline normal;
+        SimplePipeline uv;
+        SimplePipeline triangulation;
+        SimplePipeline highlight;
 
         // Current viewport extent
         vk::Extent2D extent;
@@ -273,26 +280,7 @@ struct EditorViewport {
         std::vector <uint32_t> index_staging_data;
 
         // Rendering mode and parameters
-        struct RenderState {
-                enum {
-                        eTriangulation,
-                        eWireframe,
-                        eNormals,
-                        eTextureCoordinates,
-                        eAlbedo,
-                        eSparseGlobalIllumination,
-                        ePathTraced,
-                        ePathTraced_Amadeus
-                } mode = eTriangulation;
-
-                enum {
-                        eRasterized,
-                        eRaytraced
-                } backend = eRasterized;
-
-                bool bounding_boxes = false;
-                bool initialized = false;
-        } render_state;
+        RenderState render_state;
 
         // TODO: table mapping render_state to function for presenting
 
@@ -313,14 +301,14 @@ struct EditorViewport {
         void configure_highlight_pipeline();
 
         void configure_gbuffer_rtx();
-        void configure_amadeus_path_tracer(const Context &);
+        // void configure_amadeus_path_tracer(const Context &);
         void configure_path_tracer(const Context &);
 
         void resize(const vk::Extent2D &);
 
         // Rendering methods
         void render_gbuffer(const RenderInfo &, const std::vector <Entity> &);
-        void render_amadeus_path_traced(const RenderInfo &, const std::vector <Entity> &, daemons::Transform &);
+        // void render_amadeus_path_traced(const RenderInfo &, const std::vector <Entity> &, daemons::Transform &);
         void render_path_traced(const RenderInfo &, const std::vector <Entity> &);
         void render_albedo(const RenderInfo &, const std::vector <Entity> &);
         void render_normals(const RenderInfo &);
@@ -350,7 +338,7 @@ struct EditorViewport {
         // Querying objects
         std::vector <std::pair <int, int>>
         selection_query(const std::vector <Entity> &, const glm::vec2 &);
-
-        // ImGui memu
-        void menu(const MenuOptions &);
 };
+
+// Functions
+void show_menu(const std::shared_ptr <EditorViewport> &, const MenuOptions &);

@@ -18,8 +18,8 @@ OptixPipeline link_optix_pipeline
 		 const OptixPipelineCompileOptions &ppl_compile_options,
 		 const OptixPipelineLinkOptions &ppl_link_options)
 {
-	static char log[2048];
-	static size_t sizeof_log = sizeof(log);
+	char log[2048];
+	size_t sizeof_log = sizeof(log);
 
 	OptixPipeline pipeline;
 

@@ -141,10 +141,10 @@ detail::LogStream &logger(const std::string &, Log level, const std::string & = 
 
 #define KOBRA_LOG_FILE(level) kobra::logger(__FILE__ ": " LINE_TO_STRING2(__LINE__), level, "", true)
 
-#define KOBRA_ASSERT(cond, msg)					\
-	if (!(cond)) {						\
-		KOBRA_LOG_FUNC(Log::ERROR) << msg << std::endl;	\
-		throw std::runtime_error(msg);			\
+#define KOBRA_ASSERT(cond, msg)					        \
+	if (!(cond)) {						        \
+		KOBRA_LOG_FUNC(kobra::Log::ERROR) << msg << std::endl;	\
+		throw std::runtime_error(msg);			        \
 	}
 
 #endif

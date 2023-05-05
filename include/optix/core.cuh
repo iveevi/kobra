@@ -185,8 +185,8 @@ inline OptixProgramGroup load_program_group
 		const OptixProgramGroupDesc &desc,
 		const OptixProgramGroupOptions &options)
 {
-	static char log[2048];
-	static size_t sizeof_log = sizeof(log);
+	char log[2048];
+	size_t sizeof_log = sizeof(log);
 
 	OptixProgramGroup group;
 	OPTIX_CHECK_LOG(

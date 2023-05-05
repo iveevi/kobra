@@ -35,11 +35,11 @@ struct alignas(16) aligned_mat4 {
 };
 
 // Buffer type aliases
-using Buffer = std::vector <aligned_vec4>;	// TODO: remove?
-using Indices = std::vector <uint32_t>;
+// using Buffer = std::vector <aligned_vec4>;	// TODO: remove?
+// using Indices = std::vector <uint32_t>;
 
 // Other type aliases
-using byte = uint8_t;
-using bytes = std::vector <byte>;
+// using byte = uint8_t;
+// using bytes = std::vector <byte>;
 
 #endif

@@ -185,6 +185,45 @@ ShaderProgram::ShaderProgram
 		: m_source(source), m_shader_type(shader_type) {}
 
 // Compile shader
+std::optional <vk::ShaderModule> ShaderProgram::compile(const vk::Device &device, const std::map <std::string, std::string> &defines)
+{
+	// If has failed before, don't try again
+	if (m_failed)
+		return std::nullopt;
+
+	// Check that file exists
+	glslang::InitializeProcess();
+
+	// Compile shader
+	_compile_out out = glsl_to_spriv(m_source, defines, m_shader_type);
+	if (!out.log.empty()) {
+		// TODO: show the errornous line(s)
+		KOBRA_LOG_FUNC(Log::ERROR)
+			<< "Shader compilation failed:\n" << out.log
+			<< "\nSource:\n" << fmt_lines(out.source) << "\n";
+
+		m_failed = true;
+		return std::nullopt;
+	}
+
+	// Create shader module
+	// return vk::raii::ShaderModule(
+	// 	device,
+	// 	vk::ShaderModuleCreateInfo(
+	// 		vk::ShaderModuleCreateFlags(),
+	// 		out.spirv
+	// 	)
+	// );
+
+        vk::ShaderModuleCreateInfo create_info(
+                vk::ShaderModuleCreateFlags(),
+                out.spirv.size() * sizeof(uint32_t),
+                out.spirv.data()
+        );
+
+        return device.createShaderModule(create_info);
+}
+
 std::optional <vk::raii::ShaderModule> ShaderProgram::compile
 		(const vk::raii::Device &device,
 		const std::map <std::string, std::string> &defines)

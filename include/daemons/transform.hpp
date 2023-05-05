@@ -27,6 +27,7 @@ struct Transform {
                 return status.size();
         }
 
+        // TODO: skip update function and just signal to update...
         void update() {
                 int entities = ecs->size();
                 // TODO: store by address, to avoid

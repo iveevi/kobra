@@ -1,10 +1,11 @@
 #include "editor/common.hpp"
+#include "editor/material_preview.hpp"
 
 // Forward declarations
 struct ProgressBar;
 struct Console;
 struct MaterialEditor;
-struct RTXRenderer;
+// struct RTXRenderer;
 struct Viewport;
 struct SceneGraph;
 struct EntityProperties;
@@ -17,15 +18,70 @@ struct EntityProperties;
 
 Application g_application;
 
-enum Mode : uint32_t {
-	eRasterizer = 0,
-	eRaytracer = 1,
+struct WindowBounds {
+        glm::vec2 min;
+        glm::vec2 max;
 };
+
+inline bool within(const glm::vec2 &x, const WindowBounds &wb)
+{
+        return x.x >= wb.min.x && x.x <= wb.max.x
+                && x.y >= wb.min.y && x.y <= wb.max.y;
+}
+
+inline glm::vec2 normalize(const glm::vec2 &x, const WindowBounds &wb)
+{
+        return glm::vec2 {
+                (x.x - wb.min.x) / (wb.max.x - wb.min.x),
+                (x.y - wb.min.y) / (wb.max.y - wb.min.y),
+        };
+}
+
+struct InputRequest {
+        glm::vec2 position;
+        glm::vec2 delta;
+        glm::vec2 start;
+        
+        enum {
+                eNone,
+                ePress,
+                eRelease,
+                eDrag
+        } type;
+};
+
+struct InputContext {
+        // Viewport window
+        struct : WindowBounds {
+                float sensitivity = 0.001f;
+                float yaw = 0.0f;
+                float pitch = 0.0f;
+                bool dragging = false;
+        } viewport;
+
+        // Material preview window
+        struct : WindowBounds {
+                float sensitivity = 0.001f;
+                float yaw = 0.0f;
+                float pitch = 0.0f;
+                bool dragging = false;
+        } material_preview;
+
+        // Input requests
+        std::queue <InputRequest> requests;
+
+        // Dragging states
+        bool dragging = false;
+        bool alt_dragging = false;
+        glm::vec2 drag_start;
+} input_context;
 
 // TODO: only keep the state here...
 struct Editor : public kobra::BaseApp {
 	Scene m_scene;
 	Project m_project;
+
+        MaterialPreview *material_preview;
 
 	layers::ForwardRenderer m_forward_renderer;
 
@@ -33,7 +89,6 @@ struct Editor : public kobra::BaseApp {
 
 	std::shared_ptr <kobra::layers::UI> m_ui;
 
-	std::shared_ptr <ProgressBar> m_progress_bar;
 	std::shared_ptr <Console> m_console;
 	std::shared_ptr <MaterialEditor> m_material_editor;
 
@@ -41,14 +96,10 @@ struct Editor : public kobra::BaseApp {
                 std::shared_ptr <Viewport> viewport;
         } m_ui_attachments;
 
-	kobra::engine::IrradianceComputer m_irradiance_computer;
-	bool m_saved_irradiance = false;
-
 	// Renderers
 	struct {
 		std::shared_ptr <kobra::amadeus::System> system;
 		std::shared_ptr <kobra::layers::MeshMemory> mesh_memory;
-		std::shared_ptr <kobra::amadeus::ArmadaRTX> armada_rtx;
 
 		kobra::layers::Denoiser denoiser;
 		kobra::layers::Framer framer;
@@ -56,7 +107,6 @@ struct Editor : public kobra::BaseApp {
 		std::mutex movement_mutex;
 		std::queue <uint32_t> movement;
 
-		int mode = eRaytracer;
 		bool denoise = false;
 	} m_renderers;
 
@@ -78,12 +128,6 @@ struct Editor : public kobra::BaseApp {
 		std::vector <uint8_t> traced_cpu;
 	} m_buffers;
 
-	struct Request {
-		float x;
-		float y;
-	};
-
-	std::queue <Request> request_queue;
 	std::pair <int, int> m_selection = {-1, -1};
         std::set <int> m_highlighted_entities;
 
@@ -92,8 +136,6 @@ struct Editor : public kobra::BaseApp {
 	struct {
 		bool viewport_hovered = false;
 		bool viewport_focused = false;
-		bool dragging = false;
-		bool alt_dragging = false;
 
 		// TODO: put this into another struct...
 		std::queue <std::string> capture_requests;
@@ -144,23 +186,6 @@ int main()
 
 	editor.run();
 }
-
-// Progress bar UI Attachment
-struct ProgressBar : public kobra::ui::ImGuiAttachment {
-	std::string m_title;
-	float m_progress = 0.0f;
-
-	ProgressBar(const std::string &title)
-		: m_title {title} {}
-
-	void render() override {
-		// Set font size
-		ImGui::Begin(m_title.c_str());
-		ImGui::SetWindowSize(ImVec2(500, 100), ImGuiCond_FirstUseEver);
-		ImGui::ProgressBar(m_progress);
-		ImGui::End();
-	}
-};
 
 // Info UI Attachment
 struct Console : public kobra::ui::ImGuiAttachment {
@@ -254,6 +279,9 @@ struct Console : public kobra::ui::ImGuiAttachment {
 class MaterialEditor : public kobra::ui::ImGuiAttachment {
 	int m_prev_material_index = -1;
 
+        vk::Sampler sampler;
+        vk::DescriptorSet dset_material_preview;
+
 	vk::DescriptorSet m_diffuse_set;
 	vk::DescriptorSet m_normal_set;
 
@@ -278,14 +306,55 @@ public:
 
 	MaterialEditor() = delete;
 	MaterialEditor(Editor *editor, kobra::TextureLoader *texture_loader)
-			: m_editor {editor}, m_texture_loader {texture_loader} {}
+			: m_editor {editor}, m_texture_loader {texture_loader} {
+                // Allocate the material preview descriptor set
+                vk::SamplerCreateInfo sampler_info {
+                        {}, vk::Filter::eLinear, vk::Filter::eLinear,
+                        vk::SamplerMipmapMode::eLinear,
+                        vk::SamplerAddressMode::eRepeat,
+                        vk::SamplerAddressMode::eRepeat,
+                        vk::SamplerAddressMode::eRepeat,
+                        0.0f, VK_FALSE, 16.0f, VK_FALSE,
+                        vk::CompareOp::eNever, 0.0f, 0.0f,
+                        vk::BorderColor::eFloatOpaqueWhite, VK_FALSE
+                };
+
+                sampler = (*m_editor->device).createSampler(sampler_info);
+
+                MaterialPreview *mp = m_editor->material_preview;
+                dset_material_preview = ImGui_ImplVulkan_AddTexture(
+                        static_cast <VkSampler> (sampler),
+                        static_cast <VkImageView> (mp->display.view),
+                        static_cast <VkImageLayout> (vk::ImageLayout::eGeneral)
+                );
+        }
+
+        ~MaterialEditor() {
+                (*m_editor->device).destroySampler(sampler);
+                // ImGui_ImplVulkan_RemoveTexture(static_cast <VkDescriptorSet> (dset_material_preview));
+        }
 
 	void render() override {
 		ImGui::Begin("Material Editor");
 		if (material_index < 0) {
+                        input_context.material_preview.min = glm::vec2 { -1.0f, -1.0f };
+                        input_context.material_preview.max = glm::vec2 { -1.0f, -1.0f };
 			ImGui::End();
 			return;
 		}
+
+                // TODO: need to make this a bit more dynamic
+                // and leave space for the material data...
+
+                ImGui::Image(dset_material_preview, ImVec2(256, 256));
+
+                ImVec2 pmin = ImGui::GetItemRectMin();
+                ImVec2 pmax = ImGui::GetItemRectMax();
+
+                ImGui::GetForegroundDrawList()->AddRect(pmin, pmax, IM_COL32(255, 255, 0, 255));
+
+                input_context.material_preview.min = glm::vec2 { pmin.x, pmin.y };
+                input_context.material_preview.max = glm::vec2 { pmax.x, pmax.y };
 
 		// Check if it is a new material
 		bool is_not_loaded = m_prev_material_index != material_index;
@@ -394,157 +463,157 @@ public:
 	}
 };
 
-void load_attachment(Editor *editor)
-{
-	std::cout << "Loading RTX plugin..." << std::endl;
-
-	std::string current_path = std::filesystem::current_path();
-	nfdchar_t *path = nullptr;
-	nfdfilteritem_t filter = {"RTX Plugin", "rtxa"};
-	nfdresult_t result = NFD_OpenDialog(&path, &filter, 1, current_path.c_str());
-
-	if (result == NFD_OKAY) {
-		std::cout << "Loading " << path << std::endl;
-
-		void *handle = dlopen(path, RTLD_LAZY);
-		if (!handle) {
-			std::cerr << "Error: " << dlerror() << std::endl;
-			return;
-		}
-
-		// Load the plugin
-		struct Attachment {
-			const char *name;
-			kobra::amadeus::AttachmentRTX *ptr;
-		};
-
-		typedef Attachment (*plugin_t)();
-
-		plugin_t plugin = (plugin_t) dlsym(handle, "load_attachment");
-		if (!plugin) {
-			kobra::logger("Editor::load_attachment", kobra::Log::ERROR)
-				<< "Error: " << dlerror() << "\n";
-			return;
-		}
-
-		// TODO: use rtxa extension, and ignore metadata
-		std::cout << "Loading plugin..." << std::endl;
-		Attachment attachment = plugin();
-		std::cout << "Attachment loaded: " << attachment.name << "@" << attachment.ptr << std::endl;
-		if (!attachment.ptr) {
-			KOBRA_LOG_FILE(kobra::Log::ERROR) << "Error: plugin is null\n";
-			dlclose(handle);
-			return;
-		}
-
-		editor->m_renderers.armada_rtx->attach(
-			attachment.name,
-			std::shared_ptr <kobra::amadeus::AttachmentRTX> (attachment.ptr)
-		);
-
-		{
-			std::lock_guard <std::mutex> lock_guard
-				(editor->m_renderers.movement_mutex);
-			editor->m_renderers.movement.push(0);
-		}
-
-		std::cout << "All attachments:" << std::endl;
-		for (auto &attachment : editor->m_renderers.armada_rtx->attachments()) {
-			std::cout << "\t" << attachment << std::endl;
-		}
-
-		dlclose(handle);
-
-		// Signal
-	} else if (result == NFD_CANCEL) {
-		std::cout << "User cancelled" << std::endl;
-	} else {
-		std::cout << "Error: " << NFD_GetError() << std::endl;
-	}
-}
-
-// RTX Renderer UI attachment
-// TODO: put all these attachments in separate headers
-class RTXRenderer : public kobra::ui::ImGuiAttachment {
-	Editor *m_editor = nullptr;
-	int m_path_depth = 0;
-	bool m_enable_envmap = true;
-public:
-	RTXRenderer() = delete;
-	RTXRenderer(Editor *editor)
-			: m_editor {editor},
-			m_path_depth {2},
-			m_enable_envmap {true} {
-		m_editor->m_renderers.armada_rtx->set_depth(m_path_depth);
-		m_editor->m_renderers.armada_rtx->set_envmap_enabled(m_enable_envmap);
-	}
-
-	void render() override {
-		ImGui::Begin("RTX Renderer");
-
-		// Setting the path depth
-		if (ImGui::SliderInt("Path Depth", &m_path_depth, 0, 10)) {
-			m_editor->m_renderers.armada_rtx->set_depth(m_path_depth);
-			std::lock_guard <std::mutex> lock_guard
-				(m_editor->m_renderers.movement_mutex);
-			m_editor->m_renderers.movement.push(0);
-		}
-
-		// TODO: roussian roulette, different integrators, and loading
-		// RTX attachments
-
-		// Drop down to choose the RTX attachment
-		auto attachments = m_editor->m_renderers.armada_rtx->attachments();
-		auto current = m_editor->m_renderers.armada_rtx->active_attachment();
-		if (ImGui::BeginCombo("RTX Attachment", current.c_str())) {
-			for (auto &attachment : attachments) {
-				bool is_selected = (current == attachment);
-				if (ImGui::Selectable(attachment.c_str(), is_selected)) {
-					m_editor->m_renderers.armada_rtx->activate(attachment);
-					std::lock_guard <std::mutex> lock_guard
-						(m_editor->m_renderers.movement_mutex);
-					m_editor->m_renderers.movement.push(0);
-				}
-
-				if (is_selected)
-					ImGui::SetItemDefaultFocus();
-			}
-
-			ImGui::EndCombo();
-		}
-
-		// Checkboxes for enabling/disabling denoising
-		ImGui::Checkbox("Denoise", &m_editor->m_renderers.denoise);
-
-		bool russian_roulette = false;
-		auto opt = m_editor->m_renderers.armada_rtx->get_option("russian_roulette");
-		if (std::holds_alternative <bool> (opt))
-			russian_roulette = std::get <bool> (opt);
-
-		if (ImGui::Checkbox("Russian Roulette", &russian_roulette)) {
-			m_editor->m_renderers.armada_rtx->set_option("russian_roulette", russian_roulette);
-			std::lock_guard <std::mutex> lock_guard
-				(m_editor->m_renderers.movement_mutex);
-			m_editor->m_renderers.movement.push(0);
-		}
-
-		// Environment map
-		if (ImGui::Checkbox("Environment Map", &m_enable_envmap)) {
-			m_editor->m_renderers.armada_rtx->set_envmap_enabled(m_enable_envmap);
-			std::lock_guard <std::mutex> lock_guard
-				(m_editor->m_renderers.movement_mutex);
-			m_editor->m_renderers.movement.push(0);
-		}
-
-		ImGui::Spacing();
-		if (ImGui::Button("Load RTX Plugin")) {
-			// TODO: do this async...
-			load_attachment(m_editor);
-		}
-
-		ImGui::End();
-	}
-};
+// void load_attachment(Editor *editor)
+// {
+// 	std::cout << "Loading RTX plugin..." << std::endl;
+//
+// 	std::string current_path = std::filesystem::current_path();
+// 	nfdchar_t *path = nullptr;
+// 	nfdfilteritem_t filter = {"RTX Plugin", "rtxa"};
+// 	nfdresult_t result = NFD_OpenDialog(&path, &filter, 1, current_path.c_str());
+//
+// 	if (result == NFD_OKAY) {
+// 		std::cout << "Loading " << path << std::endl;
+//
+// 		void *handle = dlopen(path, RTLD_LAZY);
+// 		if (!handle) {
+// 			std::cerr << "Error: " << dlerror() << std::endl;
+// 			return;
+// 		}
+//
+// 		// Load the plugin
+// 		struct Attachment {
+// 			const char *name;
+// 			kobra::amadeus::AttachmentRTX *ptr;
+// 		};
+//
+// 		typedef Attachment (*plugin_t)();
+//
+// 		plugin_t plugin = (plugin_t) dlsym(handle, "load_attachment");
+// 		if (!plugin) {
+// 			kobra::logger("Editor::load_attachment", kobra::Log::ERROR)
+// 				<< "Error: " << dlerror() << "\n";
+// 			return;
+// 		}
+//
+// 		// TODO: use rtxa extension, and ignore metadata
+// 		std::cout << "Loading plugin..." << std::endl;
+// 		Attachment attachment = plugin();
+// 		std::cout << "Attachment loaded: " << attachment.name << "@" << attachment.ptr << std::endl;
+// 		if (!attachment.ptr) {
+// 			KOBRA_LOG_FILE(kobra::Log::ERROR) << "Error: plugin is null\n";
+// 			dlclose(handle);
+// 			return;
+// 		}
+//
+// 		editor->m_renderers.armada_rtx->attach(
+// 			attachment.name,
+// 			std::shared_ptr <kobra::amadeus::AttachmentRTX> (attachment.ptr)
+// 		);
+//
+// 		{
+// 			std::lock_guard <std::mutex> lock_guard
+// 				(editor->m_renderers.movement_mutex);
+// 			editor->m_renderers.movement.push(0);
+// 		}
+//
+// 		std::cout << "All attachments:" << std::endl;
+// 		for (auto &attachment : editor->m_renderers.armada_rtx->attachments()) {
+// 			std::cout << "\t" << attachment << std::endl;
+// 		}
+//
+// 		dlclose(handle);
+//
+// 		// Signal
+// 	} else if (result == NFD_CANCEL) {
+// 		std::cout << "User cancelled" << std::endl;
+// 	} else {
+// 		std::cout << "Error: " << NFD_GetError() << std::endl;
+// 	}
+// }
+//
+// // RTX Renderer UI attachment
+// // TODO: put all these attachments in separate headers
+// class RTXRenderer : public kobra::ui::ImGuiAttachment {
+// 	Editor *m_editor = nullptr;
+// 	int m_path_depth = 0;
+// 	bool m_enable_envmap = true;
+// public:
+// 	RTXRenderer() = delete;
+// 	RTXRenderer(Editor *editor)
+// 			: m_editor {editor},
+// 			m_path_depth {2},
+// 			m_enable_envmap {true} {
+// 		m_editor->m_renderers.armada_rtx->set_depth(m_path_depth);
+// 		m_editor->m_renderers.armada_rtx->set_envmap_enabled(m_enable_envmap);
+// 	}
+//
+// 	void render() override {
+// 		ImGui::Begin("RTX Renderer");
+//
+// 		// Setting the path depth
+// 		if (ImGui::SliderInt("Path Depth", &m_path_depth, 0, 10)) {
+// 			m_editor->m_renderers.armada_rtx->set_depth(m_path_depth);
+// 			std::lock_guard <std::mutex> lock_guard
+// 				(m_editor->m_renderers.movement_mutex);
+// 			m_editor->m_renderers.movement.push(0);
+// 		}
+//
+// 		// TODO: roussian roulette, different integrators, and loading
+// 		// RTX attachments
+//
+// 		// Drop down to choose the RTX attachment
+// 		auto attachments = m_editor->m_renderers.armada_rtx->attachments();
+// 		auto current = m_editor->m_renderers.armada_rtx->active_attachment();
+// 		if (ImGui::BeginCombo("RTX Attachment", current.c_str())) {
+// 			for (auto &attachment : attachments) {
+// 				bool is_selected = (current == attachment);
+// 				if (ImGui::Selectable(attachment.c_str(), is_selected)) {
+// 					m_editor->m_renderers.armada_rtx->activate(attachment);
+// 					std::lock_guard <std::mutex> lock_guard
+// 						(m_editor->m_renderers.movement_mutex);
+// 					m_editor->m_renderers.movement.push(0);
+// 				}
+//
+// 				if (is_selected)
+// 					ImGui::SetItemDefaultFocus();
+// 			}
+//
+// 			ImGui::EndCombo();
+// 		}
+//
+// 		// Checkboxes for enabling/disabling denoising
+// 		ImGui::Checkbox("Denoise", &m_editor->m_renderers.denoise);
+//
+// 		bool russian_roulette = false;
+// 		auto opt = m_editor->m_renderers.armada_rtx->get_option("russian_roulette");
+// 		if (std::holds_alternative <bool> (opt))
+// 			russian_roulette = std::get <bool> (opt);
+//
+// 		if (ImGui::Checkbox("Russian Roulette", &russian_roulette)) {
+// 			m_editor->m_renderers.armada_rtx->set_option("russian_roulette", russian_roulette);
+// 			std::lock_guard <std::mutex> lock_guard
+// 				(m_editor->m_renderers.movement_mutex);
+// 			m_editor->m_renderers.movement.push(0);
+// 		}
+//
+// 		// Environment map
+// 		if (ImGui::Checkbox("Environment Map", &m_enable_envmap)) {
+// 			m_editor->m_renderers.armada_rtx->set_envmap_enabled(m_enable_envmap);
+// 			std::lock_guard <std::mutex> lock_guard
+// 				(m_editor->m_renderers.movement_mutex);
+// 			m_editor->m_renderers.movement.push(0);
+// 		}
+//
+// 		ImGui::Spacing();
+// 		if (ImGui::Button("Load RTX Plugin")) {
+// 			// TODO: do this async...
+// 			load_attachment(m_editor);
+// 		}
+//
+// 		ImGui::End();
+// 	}
+// };
 
 void request_capture(Editor *editor)
 {
@@ -627,11 +696,6 @@ public:
                 proxy = transform->matrix();
         }
 
-        /* void set_camera(const kobra::Entity &ecamera) {
-                camera = &ecamera.get <kobra::Camera> ();
-                camera_transform = &ecamera.get <kobra::Transform> ();
-        } */
-
 	// TODO: pass commandbuffer to this function
 	void render() override {
 		if (ImGui::BeginMainMenuBar()) {
@@ -676,7 +740,8 @@ public:
                         .speed = &g_application.speed,
                 };
 
-                m_editor->m_editor_renderer->menu(options);
+                // m_editor->m_editor_renderer->menu(options);
+                show_menu(m_editor->m_editor_renderer, options);
 
 		vk::Image image = *m_editor->m_editor_renderer->viewport_image();
 		if (image == m_old_image) {
@@ -685,6 +750,13 @@ public:
 
 			// TODO: set the window aspect ratio
 			ImGui::Image(m_dset, window_size);
+               
+                        // TODO: function to extract window bounds...
+                        ImVec2 pmin = ImGui::GetItemRectMin();
+                        ImVec2 pmax = ImGui::GetItemRectMax();
+
+                        input_context.viewport.min = glm::vec2 { pmin.x, pmin.y };
+                        input_context.viewport.max = glm::vec2 { pmax.x, pmax.y };
 
 			// Check if the image has changed size
 			ImVec2 image_size = ImGui::GetItemRectSize();
@@ -758,13 +830,20 @@ public:
                         glm::mat4 view = camera->view_matrix(*camera_transform);
                         glm::mat4 proj = camera->perspective_matrix();
 
-                        ImGuizmo::Manipulate(
+                        bool changed = ImGuizmo::Manipulate(
                                 glm::value_ptr(view),
                                 glm::value_ptr(proj),
                                 current_operation, current_mode,
                                 glm::value_ptr(proxy),
                                 nullptr, nullptr
                         );
+
+                        // NOTE: the code below works...
+                        // if (changed)
+                        //         std::cout << "Transforedm Updated (via Gizmo)!" << std::endl;
+
+                        // TODO: check if the transform has changed, and if so
+                        // then signal the daemon...
 
                         *transform = proxy;
                 }
@@ -980,13 +1059,11 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	kobra::ImageData &environment_map = m_texture_loader
 		.load_texture(environment_map_path);
 
-	m_irradiance_computer = kobra::engine::IrradianceComputer(
-		get_context(), environment_map,
-		MIP_LEVELS, 16,
-		"irradiance_maps"
-	);
-
 	KOBRA_LOG_FUNC(kobra::Log::WARN) << "Starting irradiance computations...\n";
+
+        // Material preview
+        material_preview = make_material_preview(get_context());
+        load_environment_map(material_preview, environment_map_path);
 
 	// Load all the layers
 	m_forward_renderer = kobra::layers::ForwardRenderer(get_context());
@@ -1010,8 +1087,6 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	);
 
 	// Load scene
-	// kobra::Project project = kobra::Project(".kobra/project");
-	// m_project = kobra::Project(".kobra/project");
  	m_project.load_project("scene");
 	
 	// m_scene.load(get_context(), project.scene);
@@ -1024,27 +1099,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	io.mouse_events.subscribe(mouse_callback, this);
 	io.keyboard_events.subscribe(keyboard_callback, this);
 
-	/* Create the image viewer
-	std::vector <const kobra::ImageData *> images;
-	for (int i = 0; i < MIP_LEVELS; i++)
-		images.emplace_back(m_irradiance_computer.irradiance_maps[i]); */
-
 	// TODO: irradiance computer load from cache...
-
-	/* Configure the forward renderer
-	m_forward_renderer.add_pipeline(
-		"environment",
-		KOBRA_DIR "/source/shaders/environment_lighter.frag",
-		{
-			kobra::DescriptorSetLayoutBinding {
-				5, vk::DescriptorType::eCombinedImageSampler,
-				5, vk::ShaderStageFlagBits::eFragment
-			}
-		},
-		[&](const vk::raii::DescriptorSet &descriptor_set) {
-			m_irradiance_computer.bind(device, descriptor_set, 5);
-		}
-	); */
 
 	// TODO: each layer that renders should have its own frmebuffer, or at
 	// least a way to specify the image to render to (and then the layer
@@ -1053,45 +1108,9 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	// Load all the renderers
 	m_renderers.system = std::make_shared <kobra::amadeus::System> (transform_daemon.get());
 	m_renderers.mesh_memory = std::make_shared <kobra::layers::MeshMemory> (get_context());
-
-	constexpr vk::Extent2D raytracing_extent = {1000, 1000};
-	m_renderers.armada_rtx = std::make_shared <kobra::amadeus::ArmadaRTX> (
-		get_context(), m_renderers.system,
-		m_renderers.mesh_memory, raytracing_extent
-	);
-
-	m_renderers.armada_rtx->attach(
-		"Path Tracer",
-		std::make_shared <kobra::amadeus::PathTracer> ()
-	);
-
-	m_renderers.armada_rtx->attach(
-		"ReSTIR",
-		std::make_shared <kobra::amadeus::ReSTIR> ()
-	);
-
-	// m_renderers.armada_rtx->set_envmap(KOBRA_DIR "/resources/skies/background_1.jpg");
-	m_renderers.armada_rtx->set_envmap(environment_map_path);
-
-	// Create the denoiser layer
-	m_renderers.denoiser = kobra::layers::Denoiser::make(
-		raytracing_extent,
-		kobra::layers::Denoiser::eNone
-		// kobra::layers::Denoiser::eNormal
-		//	| kobra::layers::Denoiser::eAlbedo
-	);
-
-	// m_renderers.framer = kobra::layers::Framer(get_context());
-
-	// Allocate necessary buffers
-	size_t size = m_renderers.armada_rtx->size();
-	m_buffers.traced = kobra::cuda::alloc(size * sizeof(uint32_t));
-	m_buffers.traced_cpu.resize(size);
-
 	m_viewport.sampler = kobra::make_continuous_sampler(device);
 
 	// Attach UI layers
-	m_progress_bar = std::make_shared <ProgressBar> ("Irradiance Computation Progress");
 	m_material_editor = std::make_shared <MaterialEditor> (this, &m_texture_loader);
 
 	auto scene_graph = std::make_shared <SceneGraph> ();
@@ -1100,14 +1119,14 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
         m_ui_attachments.viewport = std::make_shared <Viewport> (this);
 
 	// m_ui->attach(m_image_viewer);
-	m_ui->attach(m_progress_bar);
 	m_ui->attach(m_console);
 	m_ui->attach(m_material_editor);
-	m_ui->attach(std::make_shared <RTXRenderer> (this));
+	// m_ui->attach(std::make_shared <RTXRenderer> (this));
 	m_ui->attach(std::make_shared <Performance> ());
         m_ui->attach(m_ui_attachments.viewport);
 	m_ui->attach(scene_graph);
-	// TODO: scene graph...
+        
+        // TODO: UI attachemtn that shows frametime as little chunks per frame
 
         // EditorViewport
         m_editor_renderer = std::make_shared <EditorViewport>
@@ -1130,6 +1149,8 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 
 Editor::~Editor()
 {
+        destroy_material_preview(material_preview);
+
 	device.waitIdle();
 
 	// TODO: method for total destruction
@@ -1138,49 +1159,56 @@ Editor::~Editor()
 	ImGui::DestroyContext();
 }
 
+void handle_camera_input(Editor *editor)
+{
+	auto &transform = editor->m_viewport.camera_transform;
+        auto &io = editor->io;
+
+        float speed = g_application.speed * editor->frame_time;
+
+        glm::vec3 forward = transform.forward();
+        glm::vec3 right = transform.right();
+        glm::vec3 up = transform.up();
+
+        bool moved = false;
+        if (io.input->is_key_down(GLFW_KEY_W)) {
+                transform.move(forward * speed);
+                moved = true;
+        } else if (io.input->is_key_down(GLFW_KEY_S)) {
+                transform.move(-forward * speed);
+                moved = true;
+        }
+
+        if (io.input->is_key_down(GLFW_KEY_A)) {
+                transform.move(-right * speed);
+                moved = true;
+        } else if (io.input->is_key_down(GLFW_KEY_D)) {
+                transform.move(right * speed);
+                moved = true;
+        }
+
+        if (io.input->is_key_down(GLFW_KEY_E)) {
+                transform.move(up * speed);
+                moved = true;
+        } else if (io.input->is_key_down(GLFW_KEY_Q)) {
+                transform.move(-up * speed);
+                moved = true;
+        }
+
+        if (moved) {
+                std::lock_guard <std::mutex> lock(editor->m_renderers.movement_mutex);
+                // TODO: signal to transform daeon instead? but the
+                // viewport camera is not an ECS entity
+                editor->m_renderers.movement.push(0);
+        }
+}
+
 void Editor::record(const vk::raii::CommandBuffer &cmd,
 		const vk::raii::Framebuffer &framebuffer)
 {
 	// Camera movement
-	if (m_input.viewport_focused || m_input.dragging || m_input.alt_dragging) {
-		auto &transform = m_viewport.camera_transform;
-
-		float speed = g_application.speed * frame_time;
-
-		glm::vec3 forward = transform.forward();
-		glm::vec3 right = transform.right();
-		glm::vec3 up = transform.up();
-
-		bool moved = false;
-		if (io.input->is_key_down(GLFW_KEY_W)) {
-			transform.move(forward * speed);
-			moved = true;
-		} else if (io.input->is_key_down(GLFW_KEY_S)) {
-			transform.move(-forward * speed);
-			moved = true;
-		}
-
-		if (io.input->is_key_down(GLFW_KEY_A)) {
-			transform.move(-right * speed);
-			moved = true;
-		} else if (io.input->is_key_down(GLFW_KEY_D)) {
-			transform.move(right * speed);
-			moved = true;
-		}
-
-		if (io.input->is_key_down(GLFW_KEY_E)) {
-			transform.move(up * speed);
-			moved = true;
-		} else if (io.input->is_key_down(GLFW_KEY_Q)) {
-			transform.move(-up * speed);
-			moved = true;
-		}
-
-		if (moved) {
-			std::lock_guard <std::mutex> lock(m_renderers.movement_mutex);
-			m_renderers.movement.push(0);
-		}
-	}
+	if (m_input.viewport_focused || input_context.dragging || input_context.alt_dragging)
+                handle_camera_input(this);
 
 	std::vector <const kobra::Renderable *> renderables;
 	std::vector <const kobra::Transform *> renderable_transforms;
@@ -1219,75 +1247,6 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 	params.environment_map = environment_map_path;
 
 	cmd.begin({});
-		/* TODO: also see the normal and albedo and depth buffers from
-		// deferred renderer
-		// TODO: drop down menu for selecting the renderer
-		if (m_renderers.mode) {
-			bool accumulate = m_renderers.movement.empty();
-
-			{
-				// Clear queue
-				std::lock_guard <std::mutex> lock(m_renderers.movement_mutex);
-				m_renderers.movement = std::queue <uint32_t> ();
-			}
-
-			m_renderers.armada_rtx->render(
-				*m_scene.ecs,
-                                *transform_daemon,
-				m_viewport.camera,
-				m_viewport.camera_transform,
-				accumulate
-			);
-
-			float4 *buffer = (float4 *) m_renderers.armada_rtx->color_buffer();
-			if (m_renderers.denoise) {
-				kobra::layers::denoise(m_renderers.denoiser, {
-					.color = (CUdeviceptr) m_renderers.armada_rtx->color_buffer(),
-					.normal = (CUdeviceptr) m_renderers.armada_rtx->normal_buffer(),
-					.albedo = (CUdeviceptr) m_renderers.armada_rtx->albedo_buffer()
-				});
-
-				buffer = (float4 *) m_renderers.denoiser.result;
-			}
-
-			vk::Extent2D rtx_extent = m_renderers.armada_rtx->extent();
-
-			kobra::cuda::hdr_to_ldr(
-				buffer,
-				(uint32_t *) m_buffers.traced,
-				rtx_extent.width, rtx_extent.height,
-				kobra::cuda::eTonemappingACES
-			);
-
-			kobra::cuda::copy(
-				m_buffers.traced_cpu, m_buffers.traced,
-				m_renderers.armada_rtx->size() * sizeof(uint32_t)
-			);
-
-			// TODO: import CUDA to Vulkan and render straight to the image
-			m_renderers.framer.render(
-				kobra::RawImage {
-					.data = m_buffers.traced_cpu,
-					.width = rtx_extent.width,
-					.height = rtx_extent.height,
-					.channels = 4
-				},
-				cmd,
-				m_viewport.framebuffer,
-				m_viewport.image.extent
-			);
-		} else {
-			m_forward_renderer.render(
-				params,
-				m_viewport.camera,
-				m_viewport.camera_transform,
-				// TODO: pass these rest as parameters
-				cmd,
-				m_viewport.framebuffer,
-				m_viewport.image.extent
-			);
-		} */
-
                 // Editor renderer
                 RenderInfo render_info { cmd };
                 render_info.camera = m_viewport.camera;
@@ -1299,6 +1258,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 
                 std::vector <Entity> renderable_entities = m_scene.ecs->tuple_entities <Renderable> ();
                 m_editor_renderer->render(render_info, renderable_entities, *transform_daemon);
+
                 /* m_editor_renderer->render_gbuffer(render_info, renderable_entities);
                 m_editor_renderer->render_present(render_info); */
 
@@ -1314,22 +1274,17 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 			m_saved_irradiance = true;
 		} */
 
-		// TODO: progress bar...
-		// std::cout << "Sample count: " << m_irradiance_computer.samples << std::endl;
-		m_progress_bar->m_progress = m_irradiance_computer.samples/16.0f;
-
 		// Handle requests
-		std::optional <Request> selection_request;
-		while (!request_queue.empty()) {
-			Request request = request_queue.front();
-			request_queue.pop();
+		std::optional <InputRequest> selection_request;
+		while (!input_context.requests.empty()) {
+			InputRequest request = input_context.requests.front();
+			input_context.requests.pop();
 
 			selection_request = request;
 		}
 
-		if (selection_request) {
-			request_queue.push(*selection_request);
-		}
+		if (selection_request)
+			input_context.requests.push(*selection_request);
 
                 ImageData &viewport_image = m_editor_renderer->viewport();
 		viewport_image.layout = vk::ImageLayout::ePresentSrcKHR;
@@ -1389,15 +1344,6 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 						std::swap(m_input.capture_data[i], m_input.capture_data[i + 2]);
 
 					std::string path = m_input.current_capture_path;
-					/* stbi_write_png(
-						path.c_str(),
-						viewport_image.extent.width,
-						viewport_image.extent.height,
-						4,
-						m_input.capture_data.data(),
-						viewport_image.extent.width * 4
-					); */
-
 					RawImage {
 						m_input.capture_data,
 						viewport_image.extent.width,
@@ -1412,6 +1358,11 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 			});
 		}
 
+                // Material preview
+                // TODO: only if there is an active material
+                // and input has been received on the corresponding window
+                render_material_preview(*cmd, material_preview);
+
 		// Render the UI last
 		m_ui->render(cmd,
 			framebuffer, window.m_extent,
@@ -1424,40 +1375,106 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 
 void Editor::resize(const vk::Extent2D &) {}
 
-void Editor::after_present()
+void handle_viewport_input(Editor *editor, const InputRequest &request)
 {
-	if (!request_queue.empty()) {
-		// TODO: ideally should only be one type of request per after_present
-		Request request = request_queue.front();
-		request_queue.pop();
+        auto &viewport = input_context.viewport;
 
+        // Clicking on entities
+        if (request.type == InputRequest::ePress) {
                 // If using Gizmo, ignore
-                if (!ImGuizmo::IsOver()) {
-                        ImVec2 min = m_viewport.min;
-                        ImVec2 max = m_viewport.max;
+                if (within(request.position, input_context.viewport) && !ImGuizmo::IsOver()) {
+                        glm::vec2 fixed = normalize(request.position, input_context.viewport);
 
-                        ImVec2 fixed {
-                                (request.x - min.x) / (max.x - min.x),
-                                (request.y - min.y) / (max.y - min.y)
-                        };
-
-                        std::vector <Entity> renderable_entities = m_scene.ecs->tuple_entities <Renderable> ();
-                        auto indices = m_editor_renderer->selection_query(renderable_entities, {fixed.x, fixed.y});
+                        std::vector <Entity> renderable_entities = editor->m_scene.ecs->tuple_entities <Renderable> ();
+                        auto indices = editor->m_editor_renderer->selection_query(renderable_entities, fixed);
 
                         // Update the material editor
                         if (indices.size() == 0) {
-                                m_material_editor->material_index = -1;
-                                m_ui_attachments.viewport->set_transform();
-                                m_highlighted_entities.clear();
+                                editor->m_material_editor->material_index = -1;
+                                editor->m_ui_attachments.viewport->set_transform();
+                                editor->m_highlighted_entities.clear();
                         } else {
                                 auto selection = indices[0];
-                                kobra::Renderable &renderable = m_scene.ecs->get <kobra::Renderable> (selection.first);
-                                m_ui_attachments.viewport->set_transform(m_scene.ecs->get_entity(selection.first));
+                                kobra::Renderable &renderable = editor->m_scene.ecs->get <kobra::Renderable> (selection.first);
+                                editor->m_ui_attachments.viewport->set_transform(editor->m_scene.ecs->get_entity(selection.first));
                                 uint32_t material_index = renderable.material_indices[selection.second];
-                                m_material_editor->material_index = material_index;
-                                m_highlighted_entities = {(int) material_index};
+                                editor->m_material_editor->material_index = material_index;
+                                editor->m_highlighted_entities = {(int) material_index};
                         }
                 }
+        } else if (request.type == InputRequest::eRelease) {
+		glfwSetInputMode(editor->window.m_handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                viewport.dragging = false;
+        } else if (request.type == InputRequest::eDrag) {
+                bool started_within = within(request.start, input_context.viewport);
+                bool currently_within = within(request.position, input_context.viewport);
+
+                if (started_within && (currently_within || viewport.dragging)) {
+                        if (!viewport.dragging)
+                                glfwSetInputMode(editor->window.m_handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+                        viewport.yaw -= viewport.sensitivity * request.delta.x;
+                        viewport.pitch -= viewport.sensitivity * request.delta.y;
+
+                        if (viewport.pitch > 89.0f)
+                                viewport.pitch = 89.0f;
+                        if (viewport.pitch < -89.0f)
+                                viewport.pitch = -89.0f;
+                
+                        kobra::Transform &transform = editor->m_viewport.camera_transform;
+                        transform.rotation.x = viewport.pitch;
+                        transform.rotation.y = viewport.yaw;
+
+                        std::lock_guard <std::mutex> lock(editor->m_renderers.movement_mutex);
+                        editor->m_renderers.movement.push(0);
+                        viewport.dragging = true;
+                }
+	}
+}
+
+void handle_material_preview_input(Editor *editor, const InputRequest &request)
+{
+        // TODO: zoom in and out as well
+        auto &mp = input_context.material_preview;
+
+        // Clicking on entities
+        if (request.type == InputRequest::eRelease) {
+		glfwSetInputMode(editor->window.m_handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                mp.dragging = false;
+        } else if (request.type == InputRequest::eDrag) {
+                bool started_within = within(request.start, input_context.material_preview);
+                bool currently_within = within(request.position, input_context.material_preview);
+
+                if (started_within && (currently_within || mp.dragging)) {
+                        if (!mp.dragging)
+                                glfwSetInputMode(editor->window.m_handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+                        mp.yaw -= mp.sensitivity * request.delta.x;
+                        mp.pitch -= mp.sensitivity * request.delta.y;
+
+                        if (mp.pitch > 89.0f)
+                                mp.pitch = 89.0f;
+                        if (mp.pitch < -89.0f)
+                                mp.pitch = -89.0f;
+                
+                        kobra::Transform &transform = editor->material_preview->view_transform;
+                        transform.rotation.x = mp.pitch;
+                        transform.rotation.y = mp.yaw;
+                        mp.dragging = true;
+                }
+	}
+}
+
+void Editor::after_present()
+{
+        // TODO: handle all requests
+	if (!input_context.requests.empty()) {
+		// TODO: ideally should only be one type of request per after_present
+		InputRequest request = input_context.requests.front();
+		input_context.requests.pop();
+
+                handle_viewport_input(this, request);
+                handle_material_preview_input(this, request);
 	}
 
 	// Ping all systems using materials
@@ -1467,7 +1484,7 @@ void Editor::after_present()
         transform_daemon->update();
 
         // Make sure the queue is empty
-        request_queue = std::queue <Request> ();
+        input_context.requests = std::queue <InputRequest> ();
 }
 
 void Editor::mouse_callback(void *us, const kobra::io::MouseEvent &event)
@@ -1475,75 +1492,61 @@ void Editor::mouse_callback(void *us, const kobra::io::MouseEvent &event)
 	static const int select_button = GLFW_MOUSE_BUTTON_LEFT;
 	static const int pan_button = GLFW_MOUSE_BUTTON_RIGHT;
 
-	// Check if selecting in the viewport
-	Editor *editor = static_cast <Editor *> (us);
-	if (event.action == GLFW_PRESS
-			&& event.button == select_button
-			&& editor->m_input.viewport_hovered) {
-		editor->request_queue.push({
-			float(event.xpos),
-			float(event.ypos)
-		});
-	}
+        InputRequest request;
+        request.type = InputRequest::eNone;
+
+        // TODO: use glm vec2 for position...
+        request.position = { float(event.xpos), float(event.ypos) };
+        if (event.action == GLFW_PRESS)
+                request.type = InputRequest::ePress;
+        else if (event.action == GLFW_RELEASE)
+                request.type = InputRequest::eRelease;
 
 	// Panning around
-	static const float sensitivity = 0.001f;
-
+        // TODO: move all the stuff below to the input context
 	static float px = 0.0f;
 	static float py = 0.0f;
-
-	static float yaw = 0.0f;
-	static float pitch = 0.0f;
 
 	// Deltas and directions
 	float dx = event.xpos - px;
 	float dy = event.ypos - py;
 
 	// Check if panning
-	// static bool dragging = false;
-	// static bool alt_dragging = false;
-	bool &dragging = editor->m_input.dragging;
-	bool &alt_dragging = editor->m_input.alt_dragging;
-
 	bool is_drag_button = (event.button == pan_button);
-	if (event.action == GLFW_PRESS && is_drag_button && editor->m_input.viewport_hovered) {
-		dragging = true;
-		glfwSetInputMode(editor->window.m_handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-	} else if (event.action == GLFW_RELEASE && is_drag_button && !editor->m_input.viewport_hovered) {
-		dragging = false;
-		glfwSetInputMode(editor->window.m_handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-	}
+	if (event.action == GLFW_PRESS && is_drag_button) {
+                input_context.drag_start = request.position;
+		input_context.dragging = true;
+        } else if (event.action == GLFW_RELEASE && is_drag_button) {
+                input_context.drag_start = { -1.0f, -1.0f };
+		input_context.dragging = false;
+        }
 
-	bool is_alt_down = editor->io.input->is_key_down(GLFW_KEY_LEFT_ALT);
-	if (!alt_dragging && is_alt_down && editor->m_input.viewport_hovered) {
-		alt_dragging = true;
-		glfwSetInputMode(editor->window.m_handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-	} else if (alt_dragging && !is_alt_down && !editor->m_input.viewport_hovered) {
-		alt_dragging = false;
-		glfwSetInputMode(editor->window.m_handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-	}
+        // TODO: put the io in the input context
+        // bool &alt_dragging = input_context.alt_dragging;
+	// bool is_alt_down = editor->io.input->is_key_down(GLFW_KEY_LEFT_ALT);
+	// if (!alt_dragging && is_alt_down && editor->m_input.viewport_hovered) {
+	// 	alt_dragging = true;
+	// } else if (alt_dragging && !is_alt_down && !editor->m_input.viewport_hovered) {
+	// 	alt_dragging = false;
+	// }
 
-	// Pan only when dragging
-	if (dragging | alt_dragging) {
-		yaw -= dx * sensitivity;
-		pitch -= dy * sensitivity;
-
-		if (pitch > 89.0f)
-			pitch = 89.0f;
-		if (pitch < -89.0f)
-			pitch = -89.0f;
-
-		kobra::Transform &transform = editor->m_viewport.camera_transform;
-		transform.rotation.x = pitch;
-		transform.rotation.y = yaw;
-
-		std::lock_guard <std::mutex> lock(editor->m_renderers.movement_mutex);
-		editor->m_renderers.movement.push(0);
-	}
+        // if (dragging || alt_dragging) {
+        //         request.type = InputRequest::eDrag;
+        //         request.delta = { dx, dy };
+        // }
+        
+        if (input_context.dragging) {
+                request.type = InputRequest::eDrag;
+                request.delta = { dx, dy };
+                request.start = input_context.drag_start;
+        }
 
 	// Update previous position
 	px = event.xpos;
 	py = event.ypos;
+
+        // Signal the input
+        input_context.requests.push(request);
 }
 
 void Editor::keyboard_callback(void *us, const kobra::io::KeyboardEvent &event)
@@ -1552,12 +1555,11 @@ void Editor::keyboard_callback(void *us, const kobra::io::KeyboardEvent &event)
 	if (event.action == GLFW_PRESS) {
                 auto &viewport = editor->m_ui_attachments.viewport;
 		
-                if (event.key == GLFW_KEY_TAB)
-			editor->m_renderers.mode = !editor->m_renderers.mode;
 		if (event.key == GLFW_KEY_ESCAPE) {
                         // TODO: callback
 			editor->m_selection = {-1, -1};
 			editor->m_material_editor->material_index = -1;
+                        editor->m_highlighted_entities.clear();
                         viewport->set_transform();
 		}
 

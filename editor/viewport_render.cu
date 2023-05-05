@@ -513,6 +513,7 @@ void EditorViewport::render_path_traced
 
         // Configure launch parameters
         path_tracer.launch_params.time = common_rtx.timer.elapsed_start();
+        path_tracer.launch_params.depth = path_tracer.depth;
 
         auto uvw = uvw_frame(render_info.camera, render_info.camera_transform);
 
@@ -599,67 +600,68 @@ void EditorViewport::render_path_traced
         path_tracer.framer.render(render_info.cmd);
 }
 
-void EditorViewport::render_amadeus_path_traced
-                        (const RenderInfo &render_info,
-                        const std::vector <Entity> &entities,
-                        daemons::Transform &transform_daemon)
-{
-        // Run the path tracer, then extract image and blit to viewport
-        amadeus_path_tracer.armada->render(
-                entities,
-                transform_daemon,
-                render_info.camera,
-                render_info.camera_transform,
-                false
-        );
-			
-        float4 *buffer = (float4 *) amadeus_path_tracer.armada->color_buffer();
-
-        vk::Extent2D rtx_extent = amadeus_path_tracer.armada->extent();
-        kobra::cuda::hdr_to_ldr(
-                buffer,
-                (uint32_t *) amadeus_path_tracer.dev_traced,
-                rtx_extent.width, rtx_extent.height,
-                kobra::cuda::eTonemappingACES
-        );
-
-        kobra::cuda::copy(
-                amadeus_path_tracer.traced, amadeus_path_tracer.dev_traced,
-                amadeus_path_tracer.armada->size() * sizeof(uint32_t)
-        );
-
-        amadeus_path_tracer.framer.pre_render(
-                render_info.cmd,
-                kobra::RawImage {
-                        .data = amadeus_path_tracer.traced,
-                        .width = rtx_extent.width,
-                        .height = rtx_extent.height,
-                        .channels = 4
-                }
-        );
-
-        // Start render pass and blit
-        // TODO: function to start render pass for presentation
-        render_info.render_area.apply(render_info.cmd, render_info.extent);
-
-        std::vector <vk::ClearValue> clear_values {
-                vk::ClearColorValue { std::array <float, 4> { 0.0f, 0.0f, 0.0f, 1.0f } },
-                vk::ClearDepthStencilValue { 1.0f, 0 }
-        };
-
-        render_info.cmd.beginRenderPass(
-                vk::RenderPassBeginInfo {
-                        *present_render_pass,
-                        *viewport_fb,
-                        vk::Rect2D { vk::Offset2D {}, render_info.extent },
-                        clear_values
-                },
-                vk::SubpassContents::eInline
-        );
-
-        // TODO: import CUDA to Vulkan and render straight to the image
-        amadeus_path_tracer.framer.render(render_info.cmd);
-}
+// void EditorViewport::render_amadeus_path_traced
+//                         (const RenderInfo &render_info,
+//                         const std::vector <Entity> &entities,
+//                         daemons::Transform &transform_daemon)
+// {
+//         // Run the path tracer, then extract image and blit to viewport
+//         amadeus_path_tracer.armada->set_depth(amadeus_path_tracer.depth);
+//         amadeus_path_tracer.armada->render(
+//                 entities,
+//                 transform_daemon,
+//                 render_info.camera,
+//                 render_info.camera_transform,
+//                 false
+//         );
+// 			
+//         float4 *buffer = (float4 *) amadeus_path_tracer.armada->color_buffer();
+//
+//         vk::Extent2D rtx_extent = amadeus_path_tracer.armada->extent();
+//         kobra::cuda::hdr_to_ldr(
+//                 buffer,
+//                 (uint32_t *) amadeus_path_tracer.dev_traced,
+//                 rtx_extent.width, rtx_extent.height,
+//                 kobra::cuda::eTonemappingACES
+//         );
+//
+//         kobra::cuda::copy(
+//                 amadeus_path_tracer.traced, amadeus_path_tracer.dev_traced,
+//                 amadeus_path_tracer.armada->size() * sizeof(uint32_t)
+//         );
+//
+//         amadeus_path_tracer.framer.pre_render(
+//                 render_info.cmd,
+//                 kobra::RawImage {
+//                         .data = amadeus_path_tracer.traced,
+//                         .width = rtx_extent.width,
+//                         .height = rtx_extent.height,
+//                         .channels = 4
+//                 }
+//         );
+//
+//         // Start render pass and blit
+//         // TODO: function to start render pass for presentation
+//         render_info.render_area.apply(render_info.cmd, render_info.extent);
+//
+//         std::vector <vk::ClearValue> clear_values {
+//                 vk::ClearColorValue { std::array <float, 4> { 0.0f, 0.0f, 0.0f, 1.0f } },
+//                 vk::ClearDepthStencilValue { 1.0f, 0 }
+//         };
+//
+//         render_info.cmd.beginRenderPass(
+//                 vk::RenderPassBeginInfo {
+//                         *present_render_pass,
+//                         *viewport_fb,
+//                         vk::Rect2D { vk::Offset2D {}, render_info.extent },
+//                         clear_values
+//                 },
+//                 vk::SubpassContents::eInline
+//         );
+//
+//         // TODO: import CUDA to Vulkan and render straight to the image
+//         amadeus_path_tracer.framer.render(render_info.cmd);
+// }
 
 void EditorViewport::render_albedo(const RenderInfo &render_info, const std::vector <Entity> &entities)
 {
@@ -1026,10 +1028,6 @@ void EditorViewport::render(const RenderInfo &render_info, const std::vector <En
                 render_path_traced(render_info, entities);
                 break;
 
-        case RenderState::ePathTraced_Amadeus:
-                render_amadeus_path_traced(render_info, entities, transform_daemon);
-                break;
-
         default:
                 printf("ERROR: EditorViewport::render called in invalid mode\n");
         }
@@ -1099,7 +1097,38 @@ EditorViewport::selection_query(const std::vector <Entity> &entities, const glm:
         return entity_indices;
 }
 
-void EditorViewport::menu(const MenuOptions &options)
+static void show_mode_menu(RenderState *render_state)
+{
+        if (ImGui::BeginMenu("Mode")) {
+                if (ImGui::MenuItem("Triangulation"))
+                        render_state->mode = RenderState::eTriangulation;
+
+                // if (ImGui::MenuItem("Wireframe"))
+                //         render_state->mode = RenderState::eWireframe;
+                
+                if (ImGui::MenuItem("Normals"))
+                        render_state->mode = RenderState::eNormals;
+                
+                if (ImGui::MenuItem("Texture Coordinates"))
+                        render_state->mode = RenderState::eTextureCoordinates;
+
+                if (ImGui::MenuItem("Albedo"))
+                        render_state->mode = RenderState::eAlbedo;
+
+                if (ImGui::MenuItem("Path Traced (G-buffer)"))
+                        render_state->mode = RenderState::ePathTraced;
+
+                if (ImGui::Checkbox("Show bounding boxes", &render_state->bounding_boxes));
+
+                ImGui::EndMenu();
+        }
+}
+
+struct _submenu_args {
+        EditorViewport::PathTracer *path_tracer;
+};
+
+static void show_mode_submenu(RenderState *render_state, const _submenu_args &args)
 {
         static const std::map <decltype(RenderState::mode), const char *> modes = {
                 { RenderState::eTriangulation, "Triangulation" },
@@ -1107,43 +1136,42 @@ void EditorViewport::menu(const MenuOptions &options)
                 { RenderState::eTextureCoordinates, "Texture Coordinates" },
                 { RenderState::eAlbedo, "Albedo" },
                 { RenderState::ePathTraced, "Path Traced (G-buffer)" },
-                { RenderState::ePathTraced_Amadeus, "Path Traced (Amadeus)" }
         };
 		
+        // Mode-specific settings
+        std::string mode_string = "?";
+        if (modes.count(render_state->mode))
+                mode_string = modes.at(render_state->mode);
+
+        if (ImGui::BeginMenu(mode_string.c_str())) {
+                if (render_state->mode == RenderState::ePathTraced)
+                        if (ImGui::SliderInt("Depth", &args.path_tracer->depth, 1, 10));
+
+                ImGui::EndMenu();
+        }
+}
+
+static void show_backend_menu(RenderState *render_state)
+{
+        if (ImGui::BeginMenu("Backend")) {
+                bool rasterizer = render_state->backend == RenderState::eRasterized;
+                bool raytraced = render_state->backend == RenderState::eRaytraced;
+
+                if (ImGui::Checkbox("Rasterizer", &rasterizer))
+                        render_state->backend = RenderState::eRasterized;
+
+                if (ImGui::Checkbox("Raytraced", &raytraced))
+                        render_state->backend = RenderState::eRaytraced;
+
+                ImGui::EndMenu();
+        }
+}
+
+void show_menu(const std::shared_ptr <EditorViewport> &ev, const MenuOptions &options)
+{
         if (ImGui::BeginMenuBar()) {
-                std::string mode_string = "?";
-                if (modes.count(render_state.mode))
-                        mode_string = modes.at(render_state.mode);
-
-                if (ImGui::BeginMenu(mode_string.c_str())) {
-                        if (ImGui::MenuItem("Triangulation"))
-                                render_state.mode = RenderState::eTriangulation;
-
-                        // if (ImGui::MenuItem("Wireframe"))
-                        //         render_state.mode = RenderState::eWireframe;
-                        
-                        if (ImGui::MenuItem("Normals"))
-                                render_state.mode = RenderState::eNormals;
-                        
-                        if (ImGui::MenuItem("Texture Coordinates"))
-                                render_state.mode = RenderState::eTextureCoordinates;
-
-                        if (ImGui::MenuItem("Albedo"))
-                                render_state.mode = RenderState::eAlbedo;
-
-                        // if (ImGui::MenuItem("SparseRTX"))
-                        //         render_state.mode = RenderState::eSparseRTX;
-                        
-                        if (ImGui::MenuItem("Path Traced (G-buffer)"))
-                                render_state.mode = RenderState::ePathTraced;
-
-                        if (ImGui::MenuItem("Path Traced (Amadeus)"))
-                                render_state.mode = RenderState::ePathTraced_Amadeus;
-
-                        if (ImGui::Checkbox("Show bounding boxes", &render_state.bounding_boxes));
-
-                        ImGui::EndMenu();
-                }
+                show_mode_menu(&ev->render_state);
+                show_mode_submenu(&ev->render_state, { &ev->path_tracer });
 
                 // Camera settings
                 if (ImGui::BeginMenu("Camera")) {
@@ -1153,17 +1181,7 @@ void EditorViewport::menu(const MenuOptions &options)
                         ImGui::EndMenu();
                 }
 
-                ImGui::Spacing();
-                if (ImGui::BeginMenu("Backend")) {
-                        bool rasterizer = render_state.backend == RenderState::eRasterized;
-                        bool raytraced = render_state.backend == RenderState::eRaytraced;
-                        if (ImGui::Checkbox("Rasterizer", &rasterizer))
-                                render_state.backend = RenderState::eRasterized;
-                        if (ImGui::Checkbox("Raytraced", &raytraced))
-                                render_state.backend = RenderState::eRaytraced;
-
-                        ImGui::EndMenu();
-                }
+                show_backend_menu(&ev->render_state);
 
                 // TODO: overlay # of samples...
                 ImGui::EndMenuBar();

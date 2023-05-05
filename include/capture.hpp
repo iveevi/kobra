@@ -44,8 +44,8 @@ private:
 	std::ofstream	file;
 
 	// Stream buffer
-	byte		*buffer		= nullptr;
-	size_t		buffer_size	= 0;
+	uint8_t *buffer	= nullptr;
+	size_t buffer_size = 0;
 
 	// Current frame
 	size_t		frame_count	= 0;
@@ -113,7 +113,7 @@ public:
 			delete[] buffer;
 		
 		buffer_size = fmt.width * fmt.height * 4;
-		buffer = new byte[buffer_size];
+		buffer = new uint8_t[buffer_size];
 
 		// Allocate frame
 		av_image_alloc(
@@ -133,7 +133,7 @@ public:
 	}
 
 	// Write frame
-	void write(const std::vector <byte> &data) {
+	void write(const std::vector <uint8_t> &data) {
 		// Make frame writable
 		av_frame_make_writable(frame);
 

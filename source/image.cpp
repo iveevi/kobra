@@ -95,7 +95,7 @@ RawImage load_texture(const std::filesystem::path &path)
 	// Otherwise load with STB
 	stbi_set_flip_vertically_on_load(true);
 	
-	byte *data = stbi_load(
+	uint8_t *data = stbi_load(
 		path.string().c_str(),
 		&width, &height, &channels, 4
 	);

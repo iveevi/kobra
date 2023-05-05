@@ -21,13 +21,13 @@ class Submesh {
 	void _process_vertex_data();
 public:
 	// Data
-	VertexList	vertices;
-	Indices		indices;
-	uint32_t	material_index = 0;
+	VertexList vertices;
+        std::vector <uint32_t> indices;
+	uint32_t material_index = 0;
 
 	// Constructors
 	// TODO: remove this constructor...
-	Submesh(const VertexList &vs, const Indices &is,
+	Submesh(const VertexList &vs, const std::vector <uint32_t> &is,
 			uint32_t mat_index = 0,
 			bool calculate_tangents = true)
 			: vertices(vs), indices(is), material_index(mat_index) {

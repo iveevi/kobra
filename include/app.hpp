@@ -10,14 +10,13 @@ namespace kobra {
 
 // Application class
 // (single window)
-class App {
-public:
+struct App {
 	struct IO {
 		io::MouseEventQueue	mouse_events;
 		io::KeyboardEventQueue	keyboard_events;
 		io::Input		*input;
 	};
-protected:
+
 	// Stored window info
 	vk::raii::PhysicalDevice	phdev = nullptr;
 	vk::raii::Device 		device = nullptr;
@@ -42,8 +41,8 @@ protected:
 
 	// Generating aux structures
 	Device get_device();
-public:
-	// Constructor
+	
+        // Constructor
 	App(const vk::raii::PhysicalDevice &,
 			const std::string &,
 			const vk::Extent2D &,

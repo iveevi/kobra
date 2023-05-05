@@ -30,7 +30,11 @@ public:
 	ShaderProgram(const std::string &, const vk::ShaderStageFlagBits &);
 
 	// Compile shader
-	std::optional <vk::raii::ShaderModule>
+        // TODO: alias for the definitions map
+        std::optional <vk::ShaderModule>
+        compile(const vk::Device &, const std::map <std::string, std::string> & = {});
+	
+        std::optional <vk::raii::ShaderModule>
 	compile(const vk::raii::Device &, const std::map <std::string, std::string> & = {});
 };
 

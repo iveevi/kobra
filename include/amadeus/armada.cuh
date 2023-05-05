@@ -101,8 +101,7 @@ static constexpr OptixModuleCompileOptions module_options = {
 };
 
 static constexpr OptixPipelineLinkOptions ppl_link_options = {
-	.maxTraceDepth = 10,
-	// .debugLevel = KOBRA_OPTIX_DEBUG_LEVEL,
+	.maxTraceDepth = 11,
 };
 
 // RTX attachment sub-layers
@@ -325,7 +324,6 @@ public:
 
 	// Set depth
 	void set_depth(int depth) {
-		KOBRA_ASSERT(depth >= 0 && depth < 10, "Depth must be between 0 and 10");
 		m_launch_info.max_depth = depth;
 	}
 
