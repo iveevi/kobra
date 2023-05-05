@@ -23,6 +23,9 @@ private:
 	std::string m_source;
 	vk::ShaderStageFlagBits	m_shader_type;
 public:
+        using Defines = std::map <std::string, std::string>;
+        using Includes = std::set <std::string>;
+
 	// Default constructor
 	ShaderProgram() = default;
 
@@ -32,10 +35,10 @@ public:
 	// Compile shader
         // TODO: alias for the definitions map
         std::optional <vk::ShaderModule>
-        compile(const vk::Device &, const std::map <std::string, std::string> & = {});
+        compile(const vk::Device &, const Defines & = {}, const Includes & = {});
 	
         std::optional <vk::raii::ShaderModule>
-	compile(const vk::raii::Device &, const std::map <std::string, std::string> & = {});
+	compile(const vk::raii::Device &, const Defines & = {}, const Includes & = {});
 };
 
 }

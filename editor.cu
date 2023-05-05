@@ -61,9 +61,7 @@ struct InputContext {
 
         // Material preview window
         struct : WindowBounds {
-                float sensitivity = 0.001f;
-                float yaw = 0.0f;
-                float pitch = 0.0f;
+                float sensitivity = 0.05f;
                 bool dragging = false;
         } material_preview;
 
@@ -345,6 +343,10 @@ public:
 
                 // TODO: need to make this a bit more dynamic
                 // and leave space for the material data...
+
+                // Transfer material properties to the material preview renderer
+                MaterialPreview *mp = m_editor->material_preview;
+                mp->index = material_index;
 
                 ImGui::Image(dset_material_preview, ImVec2(256, 256));
 
@@ -1449,17 +1451,29 @@ void handle_material_preview_input(Editor *editor, const InputRequest &request)
                         if (!mp.dragging)
                                 glfwSetInputMode(editor->window.m_handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-                        mp.yaw -= mp.sensitivity * request.delta.x;
-                        mp.pitch -= mp.sensitivity * request.delta.y;
+                        static float theta = 0.0f;
+                        static float phi = 0.0f;
 
-                        if (mp.pitch > 89.0f)
-                                mp.pitch = 89.0f;
-                        if (mp.pitch < -89.0f)
-                                mp.pitch = -89.0f;
-                
-                        kobra::Transform &transform = editor->material_preview->view_transform;
-                        transform.rotation.x = mp.pitch;
-                        transform.rotation.y = mp.yaw;
+                        float dtheta = mp.sensitivity * request.delta.x;
+                        float dphi = -mp.sensitivity * request.delta.y;
+
+                        theta += dtheta;
+                        phi += dphi;
+
+                        if (phi > 89.0f)
+                                phi = 89.0f;
+                        if (phi < -89.0f)
+                                phi = -89.0f;
+
+                        glm::vec3 eye = 3.0f * glm::vec3 {
+                                cos(glm::radians(theta)) * cos(glm::radians(phi)),
+                                sin(glm::radians(phi)),
+                                sin(glm::radians(theta)) * cos(glm::radians(phi))
+                        };
+                        
+                        // editor->material_preview->view_transform = glm::lookAt(eye, glm::vec3(0), up);
+                        editor->material_preview->origin = eye;
+
                         mp.dragging = true;
                 }
 	}

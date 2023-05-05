@@ -6,17 +6,18 @@
 // Engine headers
 #include "api.hpp"
 #include "include/backend.hpp"
+#include "include/material.hpp"
 #include "include/shader_program.hpp"
 #include "include/transform.hpp"
 
 struct PushConstants {
-        // Camera properties
+        // Camera location
         alignas(16) glm::vec3 origin;
-        alignas(16) glm::vec3 forward;
-        alignas(16) glm::vec3 up;
-        alignas(16) glm::vec3 right;
-        
-        // Pass the material properties
+
+        // Material properties
+        alignas(16) glm::vec3 diffuse;
+        alignas(16) glm::vec3 specular;
+        float roughness;
 };
 
 struct MaterialPreview {
@@ -39,8 +40,9 @@ struct MaterialPreview {
         api::Image environment;
         vk::Sampler sampler;
 
-        // Camera configuration
-        kobra::Transform view_transform;
+        // Camera and material
+        glm::vec3 origin;
+        int32_t index;
 };
 
 void load_environment_map(MaterialPreview *mp, const std::filesystem::path &path)
@@ -185,15 +187,13 @@ MaterialPreview *make_material_preview(const kobra::Context &context)
         mp->phdev = **context.phdev;
         mp->command_pool = **context.command_pool;
         mp->descriptor_pool = **context.descriptor_pool;
-
-        // Set initial viewing parameters
-        mp->view_transform = kobra::Transform { {0, 0, -5.0f} };
+        mp->index = -1;
 
         // Compile the shader
         std::string content = kobra::common::read_file(SHADER_SOURCE);
         kobra::ShaderProgram program { content, vk::ShaderStageFlagBits::eCompute };
 
-        auto opt_shader = program.compile(mp->device, {});
+        auto opt_shader = program.compile(mp->device, {}, { KOBRA_DIR "/editor/shaders" });
         KOBRA_ASSERT(opt_shader.has_value(), "Failed to compile shader");
 
         // Create the pipeline layout
@@ -301,37 +301,18 @@ void destroy_material_preview(MaterialPreview *mp)
         delete mp;
 }
 
-static void compute_uvw_frame(const kobra::Transform &transform, PushConstants &push_constants)
-{
-        static constexpr float FOV = 45.0f;
-        static constexpr float ASPECT = 1.0f;
-
-	glm::vec3 eye = transform.position;
-	glm::vec3 lookat = eye + transform.forward();
-	glm::vec3 up = transform.up();
-
-	glm::vec3 w = lookat - eye;
-	float wlen = glm::length(w);
-	glm::vec3 u = glm::normalize(glm::cross(w, up));
-	glm::vec3 v = glm::normalize(glm::cross(u, w));
-
-	float vlen = wlen * glm::tan(glm::radians(FOV) / 2.0f);
-	v *= vlen;
-
-	float ulen = vlen * ASPECT;
-	u *= ulen;
-
-        push_constants.origin = eye;
-        push_constants.forward = w;
-        push_constants.up = v;
-        push_constants.right = u;
-}
-
 // TODO: pass the actual material
 void render_material_preview(const vk::CommandBuffer &cmd, MaterialPreview *mp)
 {
         PushConstants push_constants;
-        compute_uvw_frame(mp->view_transform, push_constants);
+        push_constants.origin = mp->origin;
+
+        if (mp->index >= 0) {
+                const kobra::Material &material = kobra::Material::all[mp->index];
+                push_constants.diffuse = material.diffuse;
+                push_constants.specular = material.specular;
+                push_constants.roughness = material.roughness;
+        }
 
         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, mp->pipeline);
         cmd.bindDescriptorSets(

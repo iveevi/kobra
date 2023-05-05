@@ -58,9 +58,9 @@ inline EShLanguage translate_shader_stage(const vk::ShaderStageFlagBits &stage)
 // Includer class
 static constexpr const char KOBRA_SHADER_INCLUDE_DIR[] = KOBRA_DIR "/source/shaders/";
 
-std::string preprocess
-		(const std::string &source,
-		const std::map <std::string, std::string> &defines)
+static std::string preprocess(const std::string &source,
+		const std::map <std::string, std::string> &defines,
+                const std::set <std::string> &paths)
 {
 	// Defines contains string values to be relpaced
 	// e.g. if {"VERSION", "450"} is in defines, then
@@ -88,11 +88,32 @@ std::string preprocess
 			}
 
 			// Read the file
-			std::string path = KOBRA_SHADER_INCLUDE_DIR + match[1].str();
-			std::string source = common::read_file(path);
+                        std::string source = "";
+
+                        for (const std::string &dir : paths) {
+                                std::filesystem::path path = dir;
+                                path /= match[1].str();
+
+                                source = common::read_file(path);
+                                if (source != "") {
+                                        break;
+                                }
+                        }
+
+                        if (source == "") {
+                                KOBRA_LOG_FUNC(Log::ERROR)
+                                        << "Failed to locate included file: "
+                                        << match[1].str() << std::endl;
+                                continue;
+                        }
+
+			// std::string path = KOBRA_SHADER_INCLUDE_DIR + match[1].str();
+			// std::string source = common::read_file(path);
+
+                        // TODO: add self's directory to paths
 
 			// Replace the include with the file contents
-			out += preprocess(source, defines);
+			out += preprocess(source, defines, paths);
 
 			// TODO: allow simoultaneous features
 			// e.g. add the includes file lines into the stream...
@@ -119,12 +140,19 @@ std::string preprocess
 	return out;
 }
 
-_compile_out glsl_to_spriv
-		(const std::string &source,
+static _compile_out glsl_to_spriv(const std::string &source,
 		const std::map <std::string, std::string> &defines,
+                const std::set <std::string> &paths,
 		const vk::ShaderStageFlagBits &shader_type)
 {
-	std::string source_copy = preprocess(source, defines);
+        // Get possible include paths
+        std::set <std::string> include_paths = paths;
+
+        std::filesystem::path path = KOBRA_SHADER_INCLUDE_DIR;
+        include_paths.insert(path.string());
+
+        // Get the directory of the source file
+	std::string source_copy = preprocess(source, defines, include_paths);
 
 	// Output
 	_compile_out out;
@@ -179,13 +207,14 @@ std::string fmt_lines(const std::string &str)
 }
 
 // Constructor
+// TODO: pass source file, not source itself...
 ShaderProgram::ShaderProgram
 		(const std::string &source,
 		const vk::ShaderStageFlagBits &shader_type)
 		: m_source(source), m_shader_type(shader_type) {}
 
 // Compile shader
-std::optional <vk::ShaderModule> ShaderProgram::compile(const vk::Device &device, const std::map <std::string, std::string> &defines)
+std::optional <vk::ShaderModule> ShaderProgram::compile(const vk::Device &device, const Defines &defines, const Includes &includes)
 {
 	// If has failed before, don't try again
 	if (m_failed)
@@ -195,7 +224,7 @@ std::optional <vk::ShaderModule> ShaderProgram::compile(const vk::Device &device
 	glslang::InitializeProcess();
 
 	// Compile shader
-	_compile_out out = glsl_to_spriv(m_source, defines, m_shader_type);
+	_compile_out out = glsl_to_spriv(m_source, defines, includes, m_shader_type);
 	if (!out.log.empty()) {
 		// TODO: show the errornous line(s)
 		KOBRA_LOG_FUNC(Log::ERROR)
@@ -224,9 +253,7 @@ std::optional <vk::ShaderModule> ShaderProgram::compile(const vk::Device &device
         return device.createShaderModule(create_info);
 }
 
-std::optional <vk::raii::ShaderModule> ShaderProgram::compile
-		(const vk::raii::Device &device,
-		const std::map <std::string, std::string> &defines)
+std::optional <vk::raii::ShaderModule> ShaderProgram::compile(const vk::raii::Device &device, const Defines &defines, const Includes &includes)
 {
 	// If has failed before, don't try again
 	if (m_failed)
@@ -236,7 +263,7 @@ std::optional <vk::raii::ShaderModule> ShaderProgram::compile
 	glslang::InitializeProcess();
 
 	// Compile shader
-	_compile_out out = glsl_to_spriv(m_source, defines, m_shader_type);
+	_compile_out out = glsl_to_spriv(m_source, defines, includes, m_shader_type);
 	if (!out.log.empty()) {
 		// TODO: show the errornous line(s)
 		KOBRA_LOG_FUNC(Log::ERROR)
