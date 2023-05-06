@@ -58,7 +58,7 @@ static byte *load_texture_magick(const std::filesystem::path &path,
 
 // Load an image
 // TODO: return an optional...
-RawImage load_texture(const std::filesystem::path &path)
+RawImage load_texture(const std::filesystem::path &path, bool flip)
 {
 	int width;
 	int height;
@@ -93,7 +93,7 @@ RawImage load_texture(const std::filesystem::path &path)
 	}
 
 	// Otherwise load with STB
-	stbi_set_flip_vertically_on_load(true);
+	stbi_set_flip_vertically_on_load(flip);
 	
 	uint8_t *data = stbi_load(
 		path.string().c_str(),

@@ -26,6 +26,38 @@ struct Scene {
 	void populate_mesh_cache(std::set <const Submesh *> &submesh_cache) const {
 		ecs->populate_mesh_cache(submesh_cache);
 	}
+
+        // Default scene
+        static Scene basic(const Context &context) {
+                // TODO: add camera, plane, and 2 boxes...
+
+                Scene scene;
+                scene.name = "Example";
+                scene.ecs = std::make_shared <ECS> ();
+
+                // Add a plane
+                Mesh plane = Mesh::plane();
+
+                // Manually allocate materials
+                Material::all.clear();
+                Material plane_material;
+
+                int index = Material::all.size();
+                Material::all.push_back(plane_material);
+
+                for (auto &submesh : plane.submeshes)
+                        submesh.material_index = index;
+               
+                // Create the plane entity
+                Entity entity;
+                entity = scene.ecs->make_entity("Plane");
+                entity.add <Mesh> (plane);
+
+                Mesh *mesh = &entity.get <Mesh> ();
+                entity.add <Renderable> (context, mesh);
+
+                return scene;
+        }
 };
 
 }

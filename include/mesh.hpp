@@ -90,6 +90,7 @@ public:
 // TODO: refactor to Model
 class Mesh {
 	// Source file
+        // TODO: rmove this field, it is not being used...
 	std::string _source = "";
 public:
 	// Data

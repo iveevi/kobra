@@ -4,9 +4,9 @@
 #include <optix_stack_size.h>
 
 // Engine headers
-#include "common.hpp"
-#include "push_constants.hpp"
+#include "editor_viewport.cuh"
 #include "include/cuda/error.cuh"
+#include "push_constants.hpp"
 
 namespace extra {
 

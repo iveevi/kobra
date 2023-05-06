@@ -86,10 +86,10 @@ public:
 	TextureLoader(const Device &);
 
 	// Texture loading and related operations
-	ImageData &load_texture(const std::string &);
+	ImageData &load_texture(const std::string &, bool = true);
 	vk::raii::Sampler &load_sampler(const std::string &);
-	vk::DescriptorImageInfo make_descriptor(const std::string &);
-	void bind(const vk::raii::DescriptorSet &, const std::string &, uint32_t);
+	vk::DescriptorImageInfo make_descriptor(const std::string &, bool = true);
+	void bind(const vk::raii::DescriptorSet &, const std::string &, uint32_t, bool = true);
 private:
 	Device m_device;
 	std::unordered_map <std::string, size_t> m_image_map;

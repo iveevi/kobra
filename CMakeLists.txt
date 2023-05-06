@@ -167,9 +167,11 @@ target_link_libraries(stress
 add_executable(editor
         editor.cu
         editor/editor_viewport.cu
+        editor/scene_graph.cpp
+        editor/shaders.cpp
+        editor/startup.cpp
         editor/viewport_configure.cu
         editor/viewport_render.cu
-        editor/shaders.cpp
         $<TARGET_OBJECTS:Kobra_COMMON>
 )
 

@@ -17,24 +17,24 @@ namespace kobra {
 class Renderable {
 public:
 	// Uniform buffer object
-	struct UBO {
-		alignas(16) glm::vec3 diffuse;
-		alignas(16) glm::vec3 specular;
-		alignas(16) glm::vec3 emission;
-		alignas(16) glm::vec3 ambient;
-
-		float shininess;
-		float roughness;
-
-		int type;
-		float has_albedo; // TODO: encode into a single int
-		float has_normal;
-	};
+	// struct UBO {
+	// 	alignas(16) glm::vec3 diffuse;
+	// 	alignas(16) glm::vec3 specular;
+	// 	alignas(16) glm::vec3 emission;
+	// 	alignas(16) glm::vec3 ambient;
+	//
+	// 	float shininess;
+	// 	float roughness;
+	//
+	// 	int type;
+	// 	float has_albedo; // TODO: encode into a single int
+	// 	float has_normal;
+	// };
 
 	// TODO: move to another layer...
 	std::vector <BufferData>	vertex_buffer;
 	std::vector <BufferData>	index_buffer;
-	std::vector <BufferData>	ubo; // TODO: one single buffer, using
+	// std::vector <BufferData>	ubo; // TODO: one single buffer, using
 					     // offsets...
 	
 	std::vector <uint32_t>		index_count;

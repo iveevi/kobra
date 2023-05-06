@@ -1,4 +1,4 @@
-#include "common.hpp"
+#include "editor_viewport.cuh"
 #include "include/cuda/cast.cuh"
 #include "include/cuda/error.cuh"
 #include "include/cuda/interop.cuh"

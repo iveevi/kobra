@@ -44,7 +44,7 @@ struct RawImage {
 };
 
 // Load an image
-RawImage load_texture(const std::filesystem::path &);
+RawImage load_texture(const std::filesystem::path &, bool = true);
 
 }
 

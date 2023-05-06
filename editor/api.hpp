@@ -14,7 +14,8 @@ struct Buffer {
         vk::MemoryRequirements requirements;
 };
 
-Buffer make_buffer(const vk::Device &device, size_t size, const vk::PhysicalDeviceMemoryProperties &properties)
+// TODO: move to source file
+inline Buffer make_buffer(const vk::Device &device, size_t size, const vk::PhysicalDeviceMemoryProperties &properties)
 {
         Buffer buffer;
 
@@ -41,7 +42,7 @@ Buffer make_buffer(const vk::Device &device, size_t size, const vk::PhysicalDevi
         return buffer;
 }
 
-void upload(const vk::Device &device, const Buffer &buffer, const void *data)
+inline void upload(const vk::Device &device, const Buffer &buffer, const void *data)
 {
         void *mapped = device.mapMemory(buffer.memory, 0, buffer.requirements.size);
         std::memcpy(mapped, data, buffer.requirements.size);
@@ -49,7 +50,7 @@ void upload(const vk::Device &device, const Buffer &buffer, const void *data)
 }
 
 template <typename T>
-void upload(const vk::Device &device, const Buffer &buffer, const std::vector <T> &vec)
+inline void upload(const vk::Device &device, const Buffer &buffer, const std::vector <T> &vec)
 {
         size_t size = std::min(buffer.requirements.size, vec.size() * sizeof(T));
         void *mapped = device.mapMemory(buffer.memory, 0, size);
@@ -69,7 +70,7 @@ void upload(const vk::Device &device, const Buffer &buffer, const std::vector <T
         }
 }
 
-void destroy_buffer(const vk::Device &device, const Buffer &buffer)
+inline void destroy_buffer(const vk::Device &device, const Buffer &buffer)
 {
         device.destroyBuffer(buffer.buffer);
         device.freeMemory(buffer.memory);
@@ -90,7 +91,7 @@ struct ImageCreateInfo {
         vk::ImageUsageFlags usage;
 };
 
-Image make_image(const vk::Device &device, const ImageCreateInfo &info, const vk::PhysicalDeviceMemoryProperties &properties)
+inline Image make_image(const vk::Device &device, const ImageCreateInfo &info, const vk::PhysicalDeviceMemoryProperties &properties)
 {
         Image image;
 
@@ -135,7 +136,7 @@ Image make_image(const vk::Device &device, const ImageCreateInfo &info, const vk
         return image;
 }
 
-void transition_image_layout(const vk::CommandBuffer &cmd,
+inline void transition_image_layout(const vk::CommandBuffer &cmd,
 		const Image &image,
 		const vk::ImageLayout old_layout,
 		const vk::ImageLayout new_layout)
@@ -273,7 +274,7 @@ void transition_image_layout(const vk::CommandBuffer &cmd,
 	return cmd.pipelineBarrier(source_stage, destination_stage, {}, {}, {}, barrier);
 }
 
-void destroy_image(const vk::Device &device, const Image &image)
+inline void destroy_image(const vk::Device &device, const Image &image)
 {
         device.destroyImageView(image.view);
         device.destroyImage(image.image);

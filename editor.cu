@@ -1,5 +1,8 @@
 #include "editor/common.hpp"
+#include "editor/startup.hpp"
+#include "editor/editor_viewport.cuh"
 #include "editor/material_preview.hpp"
+#include "editor/scene_graph.hpp"
 
 // Forward declarations
 struct ProgressBar;
@@ -7,7 +10,7 @@ struct Console;
 struct MaterialEditor;
 // struct RTXRenderer;
 struct Viewport;
-struct SceneGraph;
+// struct SceneGraph;
 struct EntityProperties;
 
 // TODO: add updated (emissive) materials as lights...
@@ -157,9 +160,12 @@ struct Editor : public kobra::BaseApp {
 	
 void mouse_callback(void *, const kobra::io::MouseEvent &);
 void keyboard_callback(void *, const kobra::io::KeyboardEvent &);
+void set_imgui_theme();
 
 int main()
 {
+	NFD_Init();
+
 	// Load Vulkan physical device
 	auto predicate = [](const vk::raii::PhysicalDevice &dev) {
 		return kobra::physical_device_able(dev,  {
@@ -173,16 +179,30 @@ int main()
 
 	vk::raii::PhysicalDevice phdev = kobra::pick_physical_device(predicate);
 
-	Editor editor {
+        Startup *startup  = new Startup {
 		phdev, {
 			VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 			VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
 			VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
-			// VK_NV_FILL_RECTANGLE_EXTENSION_NAME,
+		},
+        };
+
+        startup->run();
+        delete startup;
+
+        if (g_application.project.empty())
+                return 0;
+
+	Editor *editor = new Editor{
+		phdev, {
+			VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+			VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
+			VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
 		},
 	};
 
-	editor.run();
+	editor->run();
+        delete editor;
 }
 
 // Info UI Attachment
@@ -680,7 +700,6 @@ class Viewport : public kobra::ui::ImGuiAttachment {
 public:
 	Viewport() = delete;
 	Viewport(Editor *editor) : m_editor {editor} {
-		NFD_Init();
 		m_old_aspect = m_editor->m_viewport.camera.aspect;
 		m_old_size = {0, 0};
 	}
@@ -900,60 +919,6 @@ public:
 };
 
 // Scene graph
-struct SceneGraph : public kobra::ui::ImGuiAttachment {
-	const kobra::Scene *m_scene = nullptr;
-public:
-	SceneGraph() = default;
-
-	void set_scene(const kobra::Scene *scene) {
-		m_scene = scene;
-	}
-
-	void render() override {
-		ImGui::Begin("Scene Graph");
-		
-		if (m_scene != nullptr) {
-			auto &ecs = *m_scene->ecs;
-			for (auto &entity : ecs)
-				ImGui::Text("%s", entity.name.c_str());
-		}
-
-		// Open a popup when the user right clicks on the scene graph
-		if (ImGui::BeginPopupContextWindow()) {
-			if (ImGui::BeginMenu("Add Entity")) {
-				if (ImGui::BeginMenu("Renderable")) {
-					if (ImGui::MenuItem("Box")) {
-						Mesh box = Mesh::box();
-						// TODO: method to request new material from a daemon...
-						box.submeshes[0].material_index = Material::all.size();
-						Material::all.push_back(Material::default_material());
-						auto &entity = m_scene->ecs->make_entity("Box");
-						entity.add <Mesh> (box);
-						entity.add <Renderable> (g_application.context, &entity.get <Mesh> ());
-					}
-
-					if (ImGui::MenuItem("Plane")) {
-						Mesh plane = Mesh::plane();
-						plane.submeshes[0].material_index = Material::all.size();
-						Material::all.push_back(Material::default_material());
-						auto &entity = m_scene->ecs->make_entity("Plane");
-						entity.add <Mesh> (plane);
-						entity.add <Renderable> (g_application.context, &entity.get <Mesh> ());
-					}
-
-					ImGui::EndMenu();
-				}
-
-				ImGui::EndMenu();
-			}
-
-			ImGui::EndPopup();
-		}
-
-		ImGui::End();
-	}
-};
-
 static const char *environment_map_path = KOBRA_DIR
         "/resources/skies/background_1.jpg";
 
@@ -1089,7 +1054,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	);
 
 	// Load scene
- 	m_project.load_project("scene");
+ 	m_project.load_project(g_application.project);
 	
 	// m_scene.load(get_context(), project.scene);
 	m_scene = m_project.load_scene(get_context());
@@ -1479,6 +1444,16 @@ void handle_material_preview_input(Editor *editor, const InputRequest &request)
 	}
 }
 
+void handle_application_communications()
+{
+        while (!g_application.packets.empty()) {
+                Packet packet = g_application.packets.front();
+                g_application.packets.pop();
+
+                std::cout << "Packet received: " << packet.header  << std::endl;
+        }
+}
+
 void Editor::after_present()
 {
         // TODO: handle all requests
@@ -1489,16 +1464,20 @@ void Editor::after_present()
 
                 handle_viewport_input(this, request);
                 handle_material_preview_input(this, request);
+
+                // Reset the input context
+                input_context.requests = std::queue <InputRequest> ();
 	}
 
+        // Handle application communications
+        handle_application_communications();
+
 	// Ping all systems using materials
+        // TODO: formalize material daemon
 	kobra::Material::daemon.ping_all();
 
         // Daemon update cycle
         transform_daemon->update();
-
-        // Make sure the queue is empty
-        input_context.requests = std::queue <InputRequest> ();
 }
 
 void mouse_callback(void *us, const kobra::io::MouseEvent &event)

@@ -19,7 +19,7 @@ TextureLoader::TextureLoader(const Device &device)
 }
 
 // Load a texture
-ImageData &TextureLoader::load_texture(const std::string &path)
+ImageData &TextureLoader::load_texture(const std::string &path, bool flip)
 {
 	if (m_image_map.find(path) != m_image_map.end()) {
 		size_t index = m_image_map[path];
@@ -55,7 +55,7 @@ ImageData &TextureLoader::load_texture(const std::string &path)
 		); */
 
 		// Raw image data
-		RawImage raw_image = kobra::load_texture(path);
+		RawImage raw_image = kobra::load_texture(path, flip);
 	
 		// Queue to submit commands to
 		vk::raii::Queue queue {*m_device.device, 0, 0};
@@ -149,10 +149,10 @@ vk::raii::Sampler &TextureLoader::load_sampler(const std::string &path)
 	return ret;
 }
 
-vk::DescriptorImageInfo TextureLoader::make_descriptor(const std::string &path)
+vk::DescriptorImageInfo TextureLoader::make_descriptor(const std::string &path, bool flip)
 {
 	const vk::raii::Sampler &sampler = load_sampler(path);
-	const ImageData &img = load_texture(path);
+	const ImageData &img = load_texture(path, flip);
 
 	return vk::DescriptorImageInfo {
 		*sampler,
@@ -162,9 +162,9 @@ vk::DescriptorImageInfo TextureLoader::make_descriptor(const std::string &path)
 }
 
 // Bind an image to a descriptor set
-void TextureLoader::bind(const vk::raii::DescriptorSet &dset, const std::string &path, uint32_t binding)
+void TextureLoader::bind(const vk::raii::DescriptorSet &dset, const std::string &path, uint32_t binding, bool flip)
 {
-	auto descriptor = make_descriptor(path);
+	auto descriptor = make_descriptor(path, flip);
 
 	vk::WriteDescriptorSet dset_write {
 		*dset,

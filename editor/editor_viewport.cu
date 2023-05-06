@@ -1,4 +1,4 @@
-#include "common.hpp"
+#include "editor_viewport.cuh"
 #include "include/cuda/error.cuh"
         
 // Constructor

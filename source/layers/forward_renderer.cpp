@@ -144,7 +144,7 @@ void ForwardRenderer::configure_renderable_dset
 	assert(dset.size() == rasterizer->material_indices.size());
 
 	auto &materials = rasterizer->material_indices;
-	auto &ubo = rasterizer->ubo;
+	// auto &ubo = rasterizer->ubo;
 
 	for (size_t i = 0; i < dset.size(); ++i) {
 		auto &d = dset[i];
@@ -164,10 +164,11 @@ void ForwardRenderer::configure_renderable_dset
 		loader->bind(d, normal, RASTER_BINDING_NORMAL_MAP);
 
 		// Bind material UBO
-		bind_ds(*device, d, ubo[i],
-			vk::DescriptorType::eUniformBuffer,
-			RASTER_BINDING_MATERIAL
-		);
+                KOBRA_LOG_FILE(Log::WARN) << "TODO: bind material UBO\n";
+		// bind_ds(*device, d, ubo[i],
+		// 	vk::DescriptorType::eUniformBuffer,
+		// 	RASTER_BINDING_MATERIAL
+		// );
 
 		// If there is a provided configure function, call it
 		if (pipeline_package.configure_dset)

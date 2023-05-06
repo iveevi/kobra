@@ -24,7 +24,7 @@ struct Project {
 	std::vector <std::string> scenes_files = {};
 
 	// Default constructor
-	Project() {}
+	Project() = default;
 
 	// Load project from a file
 	// NOTE: currently a bootstrap
@@ -289,6 +289,19 @@ struct Project {
 
 		file.close();
 	}
+
+        // Default project
+        static Project basic(const Context &context, const std::filesystem::path &dir) {
+                Project project;
+
+                Scene basic = Scene::basic(context);
+                project.scenes.push_back(basic);
+                project.scenes_files.push_back(dir / "example.kobra");
+                project.default_save_path = dir;
+                project.default_scene_index = 0;
+
+                return project;
+        }
 };
 
 }
