@@ -1099,6 +1099,9 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
         m_editor_renderer = std::make_shared <EditorViewport>
                 (get_context(), m_renderers.system, m_renderers.mesh_memory);
 
+        load_environment_map(&m_editor_renderer->environment_map,
+                             &m_texture_loader, environment_map_path);
+
 	// Load and set the icon
 	std::string icon_path = KOBRA_DIR "/kobra_icon.png";
 	std::cout << "Loading icon from " << icon_path << std::endl;

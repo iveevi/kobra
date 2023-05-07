@@ -192,8 +192,10 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities)
                 common_rtx.dev_materials = cuda::make_buffer_ptr(common_rtx.materials);
 
                 // Update lights for the path tracer
-                path_tracer.launch_params.area.lights = cuda::make_buffer(path_tracer.lights);
+                path_tracer.launch_params.area.lights = 0;
                 path_tracer.launch_params.area.count = path_tracer.lights.size();
+                if (path_tracer.lights.size() > 0)
+                        path_tracer.launch_params.area.lights = cuda::make_buffer(path_tracer.lights);
                
                 // TODO: do we really need this?
                 uint triangles = 0;
@@ -531,6 +533,9 @@ void EditorViewport::render_path_traced
 
         path_tracer.launch_params.materials = (cuda::_material *) common_rtx.dev_materials;
 
+        path_tracer.launch_params.sky.texture = environment_map.texture;
+        path_tracer.launch_params.sky.enabled = environment_map.valid;
+        
         PathTracerParameters *dev_params = (PathTracerParameters *) path_tracer.dev_launch_params;
         CUDA_CHECK(cudaMemcpy(dev_params, &path_tracer.launch_params, sizeof(PathTracerParameters), cudaMemcpyHostToDevice));
         

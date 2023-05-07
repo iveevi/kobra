@@ -90,8 +90,9 @@ public:
 	vk::raii::Sampler &load_sampler(const std::string &);
 	vk::DescriptorImageInfo make_descriptor(const std::string &, bool = true);
 	void bind(const vk::raii::DescriptorSet &, const std::string &, uint32_t, bool = true);
+	
+        Device m_device;
 private:
-	Device m_device;
 	std::unordered_map <std::string, size_t> m_image_map;
 	std::unordered_map <std::string, vk::raii::Sampler> m_samplers;
 	std::vector <ImageData> m_images;

@@ -32,69 +32,96 @@ struct LightInfo {
         float3 normal;
         float3 emission;
         float area;
+        bool sky;
 };
 
 __device__
-void make_ray(uint3 idx, float3 &direction, float3 &seed)
+float3 ray_at(uint3 idx)
 {
-	// Jittered halton
-	seed = make_float3(idx.x, idx.y, 0);
-
-        float xoff = rand_uniform(seed) - 0.5f;
-        float yoff = rand_uniform(seed) - 0.5f;
-
-	// Compute ray origin and direction
         idx.y = parameters.resolution.y - (idx.y + 1);
+        float u = 2.0f * float(idx.x) / float(parameters.resolution.x) - 1.0f;
+        float v = 2.0f * float(idx.y) / float(parameters.resolution.y) - 1.0f;
+	return normalize(u * parameters.U - v * parameters.V + parameters.W);
+}
 
-        float2 d = 2.0f * make_float2(
-		float(idx.x + xoff)/parameters.resolution.x,
-		float(idx.y + yoff)/parameters.resolution.y
-	) - 1.0f;
+__device__
+float4 sky_at(float3 direction)
+{
+        if (!parameters.sky.enabled)
+                return make_float4(0.0f);
 
-	direction = normalize(d.x * parameters.U - d.y * parameters.V + parameters.W);
+        float theta = acos(direction.y);
+        float phi = atan2(direction.z, direction.x);
+
+        float u = phi / (2.0f * M_PI);
+        float v = theta / M_PI;
+
+        return tex2D <float4> (parameters.sky.texture, u, 1 - v);
 }
 
 __device__
 float sample_light(LightInfo &light_info, float3 &seed)
 {
+        uint total = parameters.area.count + parameters.sky.enabled;
+        if (total == 0)
+                return -1.0f;
+
         // Choose light
-        uint light_index = cuda::rand_uniform(parameters.area.count, seed);
+        uint light_index = cuda::rand_uniform(total, seed);
 
-        // Choose triangle
-        AreaLight light = parameters.area.lights[light_index];
-        light_info.emission = light.emission;
+        if (light_index < parameters.area.count) {
+                // Choose triangle
+                AreaLight light = parameters.area.lights[light_index];
 
-        uint triangle_index = cuda::rand_uniform(light.triangles, seed);
-        uint3 triangle = light.indices[triangle_index];
+                uint triangle_index = cuda::rand_uniform(light.triangles, seed);
+                uint3 triangle = light.indices[triangle_index];
 
-        glm::vec3 v0 = light.vertices[triangle.x].position;
-        glm::vec3 v1 = light.vertices[triangle.y].position;
-        glm::vec3 v2 = light.vertices[triangle.z].position;
+                glm::vec3 v0 = light.vertices[triangle.x].position;
+                glm::vec3 v1 = light.vertices[triangle.y].position;
+                glm::vec3 v2 = light.vertices[triangle.z].position;
 
-        v0 = light.model * glm::vec4(v0, 1.0f);
-        v1 = light.model * glm::vec4(v1, 1.0f);
-        v2 = light.model * glm::vec4(v2, 1.0f);
+                v0 = light.model * glm::vec4(v0, 1.0f);
+                v1 = light.model * glm::vec4(v1, 1.0f);
+                v2 = light.model * glm::vec4(v2, 1.0f);
 
-        glm::vec3 gnormal = glm::normalize(glm::cross(v1 - v0, v2 - v0));
+                glm::vec3 gnormal = glm::normalize(glm::cross(v1 - v0, v2 - v0));
 
-        light_info.normal = make_float3(gnormal.x, gnormal.y, gnormal.z);
-        light_info.area = glm::length(glm::cross(v1 - v0, v2 - v0));
+                // Sample point on triangle
+                float3 bary = cuda::pcg3f(seed);
 
-        // Sample point on triangle
-        float3 bary = cuda::pcg3f(seed);
+                float u = bary.x;
+                float v = bary.y;
+                if (u + v > 1.0f) {
+                        u = 1.0f - u;
+                        v = 1.0f - v;
+                }
 
-        float u = bary.x;
-        float v = bary.y;
-        if (u + v > 1.0f) {
-                u = 1.0f - u;
-                v = 1.0f - v;
+                glm::vec3 gpoint = v0 * (1.0f - u - v) + v1 * u + v2 * v;
+                
+                light_info.sky = false;
+                light_info.position = make_float3(gpoint.x, gpoint.y, gpoint.z);
+                light_info.normal = make_float3(gnormal.x, gnormal.y, gnormal.z);
+                light_info.emission = light.emission;
+                light_info.area = glm::length(glm::cross(v1 - v0, v2 - v0));
+        } else {
+                // Environment light, sample direction
+                float theta = 2 * PI * cuda::rand_uniform(seed);
+                float phi = PI * cuda::rand_uniform(seed);
+
+                float x = sin(phi) * cos(theta);
+                float y = cos(phi);
+                float z = sin(phi) * sin(theta);
+
+                float3 dir = make_float3(x, y, z);
+
+                light_info.sky = true;
+                light_info.position = 1000 * dir;
+                light_info.emission = make_float3(sky_at(dir));
+                light_info.area = 4 * PI;
         }
 
-        glm::vec3 gpoint = v0 * (1.0f - u - v) + v1 * u + v2 * v;
-        light_info.position = make_float3(gpoint.x, gpoint.y, gpoint.z);
-
         // Return the pdf of sampling this point light
-        return 1.0f / (light_info.area * parameters.area.count);
+        return 1.0f / (light_info.area * total);
 }
 
 __device__
@@ -117,17 +144,13 @@ __device__
 float3 radiance(const SurfaceHit &sh, float3 &seed, int depth)
 {
         LightInfo light_info;
+
         float light_pdf = sample_light(light_info, seed);
+        if (light_pdf < 0.0f)
+                return make_float3(0.0f);
 
         float3 direction = normalize(light_info.position - sh.x);
         float3 origin = sh.x;
-
-        // float sign = (sh.mat.type == eTransmission) ? -1.0f : 1.0f;
-        // sh.x += sign * sh.n * 1e-3f;
-        // if (isnan(sh.n.x) || isnan(sh.n.y) || isnan(sh.n.z))
-        //         origin += sign * direction * 1e-3f;
-        // else
-        //         origin += sign * sh.n * 1e-3f;
         
         uint i0 = 0;
         uint i1 = 0;
@@ -154,7 +177,12 @@ float3 radiance(const SurfaceHit &sh, float3 &seed, int depth)
                 float R = length(light_info.position - origin);
 	
                 float3 brdf = cuda::brdf(sh, wi, sh.mat.type);
-                out_radiance = brdf * light_info.emission * abs(dot(light_info.normal, wi)) * abs(dot(sh.n, wi))/(light_pdf * R * R);
+
+                float ldotn = light_info.sky ? 1.0f : abs(dot(light_info.normal, wi));
+                float ndotwi = abs(dot(sh.n, wi));
+                float falloff = light_info.sky ? 1.0f : (R * R);
+
+                out_radiance = brdf * light_info.emission * ldotn * ndotwi/(light_pdf * falloff);
         }
 
         return out_radiance;
@@ -186,7 +214,9 @@ extern "C" __global__ void __raygen__()
         
         int index = idx.x + idx.y * parameters.resolution.x;
         if (raw_index == -1) {
-                parameters.color[index] = make_float4(0.5f, 0.5f, 0.5f, 1.0f);
+                float3 ray = ray_at(idx);
+                // parameters.color[index] = make_float4(0.5f, 0.5f, 0.5f, 1.0f);
+                parameters.color[index] = sky_at(ray);
                 return;
         }
 

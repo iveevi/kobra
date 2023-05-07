@@ -55,8 +55,10 @@ struct PathTracerParameters {
                 uint triangle_count;
         } area;
 
-        // Environment map
-        cudaTextureObject_t environment_map;
+        struct {
+                cudaTextureObject_t texture;
+                bool enabled;
+        } sky;
 
         // IO interface
         OptixIO io;

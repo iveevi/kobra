@@ -3,6 +3,16 @@
 // Editor headers
 #include "common.hpp"
 
+// Environment map state
+struct EnvironmentMap {
+        // kobra::ImageData image = nullptr;
+        cudaTextureObject_t texture;
+        // vk::raii::Sampler sampler;
+        bool valid = false;
+};
+
+void load_environment_map(EnvironmentMap *, kobra::TextureLoader *, const std::filesystem::path &);
+
 // Editor rendering
 struct EditorViewport {
         // Vulkan structures
@@ -185,6 +195,9 @@ struct EditorViewport {
 
         // Rendering mode and parameters
         RenderState render_state;
+
+        // Other resources
+        EnvironmentMap environment_map;
 
         // TODO: table mapping render_state to function for presenting
 
