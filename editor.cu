@@ -1,8 +1,9 @@
 #include "editor/common.hpp"
-#include "editor/startup.hpp"
 #include "editor/editor_viewport.cuh"
+#include "editor/inspector.hpp"
 #include "editor/material_preview.hpp"
 #include "editor/scene_graph.hpp"
+#include "editor/startup.hpp"
 
 // Forward declarations
 struct ProgressBar;
@@ -88,7 +89,10 @@ struct Editor : public kobra::BaseApp {
 
         std::shared_ptr <kobra::daemons::Transform> transform_daemon;
 
-	std::shared_ptr <kobra::layers::UI> m_ui;
+	std::shared_ptr <kobra::layers::UserInterface> m_ui;
+        
+        // User interface attachments
+        Inspector *m_inspector;
 
 	std::shared_ptr <Console> m_console;
 	std::shared_ptr <MaterialEditor> m_material_editor;
@@ -179,17 +183,18 @@ int main()
 
 	vk::raii::PhysicalDevice phdev = kobra::pick_physical_device(predicate);
 
-        Startup *startup  = new Startup {
-		phdev, {
-			VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-			VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
-			VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
-		},
-        };
+  //       Startup *startup  = new Startup {
+		// phdev, {
+		// 	VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+		// 	VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
+		// 	VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
+		// },
+  //       };
+		//
+  //       startup->run();
+  //       delete startup;
 
-        startup->run();
-        delete startup;
-
+        g_application.project = "scene";
         if (g_application.project.empty())
                 return 0;
 
@@ -1047,7 +1052,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	imgui_io.ConfigWindowsMoveFromTitleBarOnly = true;
 
 	auto font = std::make_pair(KOBRA_FONTS_DIR "/Frutiger/Frutiger.ttf", 18);
-	m_ui = std::make_shared <kobra::layers::UI> (
+	m_ui = std::make_shared <kobra::layers::UserInterface> (
 		get_context(), window,
 		graphics_queue, font,
 		vk::AttachmentLoadOp::eClear
@@ -1092,6 +1097,8 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	m_ui->attach(std::make_shared <Performance> ());
         m_ui->attach(m_ui_attachments.viewport);
 	m_ui->attach(scene_graph);
+
+        m_inspector = make_inspector(m_scene.ecs.get());
         
         // TODO: UI attachemtn that shows frametime as little chunks per frame
 
@@ -1333,11 +1340,27 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
                 // and input has been received on the corresponding window
                 render_material_preview(*cmd, material_preview);
 
-		// Render the UI last
+		/* Render the UI last
 		m_ui->render(cmd,
 			framebuffer, window.m_extent,
 			kobra::RenderArea::full(), {true}
-		);
+		); */
+
+                RenderContext rc {
+                        .cmd = cmd,
+                        .framebuffer = framebuffer,
+                        .extent = window.m_extent,
+                        .render_area = kobra::RenderArea::full(),
+                };
+
+                layers::start_user_interface(m_ui.get(), rc);
+
+                for (auto &attachment : m_ui->attachments)
+                        attachment->render();
+
+                render(m_inspector);
+
+                layers::end_user_interface(m_ui.get(), rc);
 	cmd.end();
 
 	// TODO: after present actions...
@@ -1447,13 +1470,18 @@ void handle_material_preview_input(Editor *editor, const InputRequest &request)
 	}
 }
 
-void handle_application_communications()
+void handle_application_communications(Editor *editor)
 {
         while (!g_application.packets.empty()) {
                 Packet packet = g_application.packets.front();
                 g_application.packets.pop();
 
                 std::cout << "Packet received: " << packet.header  << std::endl;
+
+                if (packet.header == "select_entity") {
+                        int32_t entity_id = packet.data[0];
+                        select(editor->m_inspector, entity_id);
+                }
         }
 }
 
@@ -1473,7 +1501,7 @@ void Editor::after_present()
 	}
 
         // Handle application communications
-        handle_application_communications();
+        handle_application_communications(this);
 
 	// Ping all systems using materials
         // TODO: formalize material daemon

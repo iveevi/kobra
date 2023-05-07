@@ -1025,6 +1025,7 @@ void EditorViewport::render(const RenderInfo &render_info, const std::vector <En
                 break;
 
         case RenderState::eAlbedo:
+                render_gbuffer(render_info, entities);
                 render_albedo(render_info, entities);
                 break;
         

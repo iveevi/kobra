@@ -275,7 +275,10 @@ extern "C" __global__ void __raygen__()
                                 0, 1, 0, i0, i1
                         );
 
-                        if (!packet.miss) {
+                        if (packet.miss) {
+                                color += beta * make_float3(sky_at(wi));
+                                break;
+                        } else {
                                 cuda::_material m = parameters.materials[packet.id];
                                 
                                 sh.x = packet.x;
@@ -286,8 +289,6 @@ extern "C" __global__ void __raygen__()
                                 convert_material(m, sh.mat, packet.uv);
 
                                 beta *= brdf * abs(dot(sh.n, wi)) / pdf;
-                        } else {
-                                break;
                         }
                 } else {
                         break;

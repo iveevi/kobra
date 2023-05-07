@@ -12,13 +12,14 @@
 // Engine headers
 #include "../backend.hpp"
 #include "../ui/attachment.hpp"
+#include "common.hpp"
 
 namespace kobra {
 
 namespace layers {
 
 // UI rendering backend
-class UI {
+struct UserInterface {
 	// TODO: GraphicalLayer abstract for these common structures
 	// 	.initialize(phdev, dev, ...)
 
@@ -31,12 +32,12 @@ class UI {
 	vk::raii::RenderPass render_pass = nullptr;
 	
 	std::vector <std::shared_ptr <ui::ImGuiAttachment>> attachments;
-public:
+
 	// Default constructor
-	UI() = default;
+	UserInterface() = default;
 
 	// Constructor
-	UI(const Context &context,
+	UserInterface(const Context &context,
 			const Window &window,
 			const vk::raii::Queue &queue,
 			const std::pair <std::string, size_t> font,
@@ -171,6 +172,64 @@ public:
 		attachments.emplace_back(attachment);
 	}
 };
+
+inline void start_user_interface(const UserInterface *ui, const RenderContext &rc, bool dockspace = false)
+{
+        // Apply the render area
+        rc.render_area.apply(rc.cmd, rc.extent);
+
+        // Start render pass
+        std::array <vk::ClearValue, 2> clear_values {
+                vk::ClearValue {
+                        vk::ClearColorValue {
+                                std::array <float, 4> {0.0f, 0.0f, 0.0f, 1.0f}
+                        }
+                },
+                vk::ClearValue {
+                        vk::ClearDepthStencilValue {
+                                1.0f, 0
+                        }
+                }
+        };
+
+        rc.cmd.beginRenderPass(
+                vk::RenderPassBeginInfo {
+                        *ui->render_pass,
+                        *rc.framebuffer,
+                        vk::Rect2D {
+                                vk::Offset2D {0, 0},
+                                rc.extent
+                        },
+                        static_cast <uint32_t> (clear_values.size()),
+                        clear_values.data()
+                },
+                vk::SubpassContents::eInline
+        );
+
+        // Start ImGUI frame
+        ImGui_ImplVulkan_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+
+        // Render ImGUI
+        ImGui::NewFrame();
+
+        // If the dockspace is enabled, create it
+        if (dockspace)
+                ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
+}
+
+inline void end_user_interface(const UserInterface *ui, const RenderContext &rc)
+{
+        ImGui::Render();
+
+        // Write to the command buffer
+        ImGui_ImplVulkan_RenderDrawData(
+                ImGui::GetDrawData(),
+                *rc.cmd
+        );
+
+        rc.cmd.endRenderPass();
+}
 
 }
 

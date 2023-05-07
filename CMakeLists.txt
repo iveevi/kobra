@@ -167,6 +167,7 @@ target_link_libraries(stress
 add_executable(editor
         editor.cu
         editor/editor_viewport.cu
+        editor/inspector.cpp
         editor/scene_graph.cpp
         editor/shaders.cpp
         editor/startup.cpp

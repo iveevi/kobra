@@ -23,7 +23,7 @@ void SceneGraph::render()
                                 std::cout << "Selected entity: " << entity.name << std::endl;
                                 g_application.packets.push(Packet {
                                         .header = "select_entity",
-                                        .data = {entity.id}
+                                        .data = { entity.id }
                                 });
                         }
 

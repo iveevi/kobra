@@ -3,7 +3,204 @@
 
 namespace kobra {
 
-std::string trim_whitespace(const std::string &str)
+// Saving projects
+static std::string transcribe_submesh(const Submesh &submesh) {
+        // TODO: generate the tangent and bitangent vectors
+        // if they are not present yet
+
+        // Setup the stream
+        std::ostringstream stream;
+
+        int vertices = submesh.vertices.size();
+        int indices = submesh.indices.size();
+
+        stream.write((char *) &vertices, sizeof(int));
+        stream.write((char *) &indices, sizeof(int));
+        stream.write((char *) submesh.vertices.data(), sizeof(Vertex) * vertices);
+        stream.write((char *) submesh.indices.data(), sizeof(int) * indices);
+
+        return stream.str();
+}
+
+// Transcribe material into binary data
+constexpr char material_fmt[] = R"(name: %s
+diffuse: %f,%f,%f
+specular: %f,%f,%f
+ambient: %f,%f,%f
+emission: %f,%f,%f
+roughness: %f
+refraction: %f
+type: %d
+albedo_texture: %s
+normal_texture: %s
+roughness_texture: %s)";
+
+static std::string transcribe_material(const Material &material) {
+        char buffer[1 << 12] = {0};
+
+        sprintf(buffer, material_fmt,
+                material.name.c_str(),
+                material.diffuse.x, material.diffuse.y, material.diffuse.z,
+                material.specular.x, material.specular.y, material.specular.z,
+                material.ambient.x, material.ambient.y, material.ambient.z,
+                material.emission.x, material.emission.y, material.emission.z,
+                material.roughness,
+                material.refraction,
+                material.type,
+                material.albedo_texture.c_str(),
+                material.normal_texture.c_str(),
+                material.roughness_texture.c_str());
+
+        return buffer;
+}
+
+// Save project
+void Project::save(const std::string &dir)
+{
+        // TODO: detect parts that have changed...
+        printf("Saving to %s\n", dir.c_str());
+        std::filesystem::path path = dir;
+
+        // Create the necessary directories
+        std::filesystem::create_directory(path);			// Root directory
+        std::filesystem::create_directory(path / ".cache");	// Cache directory
+        std::filesystem::create_directory(path / "assets");	// Assets directory (user home)
+
+        std::filesystem::path cache_path = path / ".cache";
+        std::filesystem::path assets_path = path / "assets";
+
+        // Collect all SUBMESHES to populate the cache
+        // TODO: need to find similar enough meshes (e.g. translated or
+        // scaled)
+        std::set <const Submesh *> submesh_cache;
+        for (auto &scene : scenes)
+                scene.populate_mesh_cache(submesh_cache);
+
+        // ID each submesh in the cache
+        std::vector <std::pair <const Submesh *, std::string>> submesh_ids;
+        std::map <const Submesh *, size_t> submesh_id_map;
+
+        // TODO: use the name of the entity for the mesh...
+        size_t id = 0;
+        for (auto &submesh : submesh_cache) {
+                submesh_ids.push_back({submesh, "submesh-" + std::to_string(id)});
+                submesh_id_map[submesh] = id;
+                id++;
+        }
+
+        tf::Taskflow taskflow;
+        tf::Executor executor;
+
+        taskflow.for_each(submesh_ids.begin(), submesh_ids.end(),
+                [&](const auto &pr) {
+                        // TODO: ID each submesh in the cache...
+                        std::filesystem::path filename = cache_path/(pr.second + ".submesh");
+                        std::ofstream file(filename, std::ios::binary);
+
+                        // Write the submesh to the file
+                        std::string data = transcribe_submesh(*pr.first);
+                        file.write(data.data(), data.size());
+
+                        file.close();
+                }
+        );
+
+        executor.run(taskflow).wait();
+
+        // Collect all materials
+        // TODO: save in the same location as creation (in the assets
+        // directory...)
+
+        int index = 0;
+        for (auto &mat : Material::all) {
+                mat.name = "material-" + std::to_string(index++);
+        }
+
+        // For now, store in the cache directory
+        taskflow.for_each(Material::all.begin(), Material::all.end(),
+                [&](const Material &mat) {
+                        // TODO: ID each submesh in the cache...
+                        std::filesystem::path filename = assets_path/(mat.name + ".mat");
+                        std::ofstream file(filename, std::ios::binary);
+
+                        // Write the submesh to the file
+                        std::string data = transcribe_material(mat);
+                        file.write(data.data(), data.size());
+
+                        file.close();
+                }
+        );
+        
+        executor.run(taskflow).wait();
+
+        // Scene description file (.kobra)
+        for (auto &scene : scenes) {
+                std::filesystem::path filename = path / (scene.name + ".kobra");
+                std::ofstream file(filename);
+
+                // Write all used materials, in order
+                file << "@materials\n"
+                        << ".list " << Material::all.size() << "\n";
+                for (int i = 0; i < Material::all.size(); i++)
+                        file << "\tmaterial-" << std::to_string(i) << ".mat\n";
+
+                // Write the scene description
+                for (auto &entity : *scene.ecs) {
+                        file << "\n@entity " << entity.name << "\n";
+
+                        const Transform &transform = entity.get <Transform> ();
+                        file << ".transform "
+                                << transform.position.x << " " << transform.position.y << " " << transform.position.z << " "
+                                << transform.rotation.x << " " << transform.rotation.y << " " << transform.rotation.z << " "
+                                << transform.scale.x << " " << transform.scale.y << " " << transform.scale.z << "\n";
+
+                        if (entity.exists <Mesh> ()) {
+                                file << ".mesh " << entity.get <Mesh> ().submeshes.size() << "\n";
+                                auto &submeshes = entity.get <Mesh> ().submeshes;
+                                for (auto &submesh : submeshes) {
+                                        size_t id = submesh_id_map[&submesh];
+                                        // TODO: find the path instead...
+                                        std::string material = Material::all[submesh.material_index].name;
+                                        file << "\tsubmesh-" << id << ".submesh, " << material << "\n";
+                                }
+
+                                // TODO: material indices...
+                        }
+
+                        if (entity.exists <Renderable> ()) {
+                                file << ".renderable\n";
+                                // TODO: material ids
+                        }
+
+                        if (entity.exists <Camera> ()) {
+                                const Camera &camera = entity.get <Camera> ();
+                                file << ".camera "
+                                        << camera.fov << " "
+                                        << camera.aspect << "\n";
+                        }
+                }
+
+                file.close();
+        }
+
+        // Top level project file, describing all the scenes (.den)
+        std::filesystem::path filename = path / "project.den";
+        std::ofstream file(filename);
+
+        // Write all the scenes
+        file << "@scenes " << scenes.size() << "\n";
+        for (auto &scene : scenes)
+                file << scene.name << ".kobra\n";
+
+        // TODO: use fmt library
+
+        // TODO: other project information
+
+        file.close();
+}
+
+// Loading projects
+static std::string trim_whitespace(const std::string &str)
 {
         std::string result = str;
         result.erase(0, result.find_first_not_of(' '));
@@ -11,85 +208,70 @@ std::string trim_whitespace(const std::string &str)
         return result;
 }
 
-Material load_material(std::ifstream &file)
+static Material load_material(std::ifstream &file)
 {
-        Material mat;
+        Material material;
 
-        int name_length;
-        file.read((char *) &name_length, sizeof(int));
-        std::string name;
-        name.resize(name_length);
-        file.read((char *) name.data(), name_length);
+        char buf_name[1024] = {0};
+	char buf_albedo[1024] = {0};
+	char buf_normal[1024] = {0};
+	char buf_roughness[1024] = {0};
+        int32_t type = 0;
 
-        glm::vec3 diffuse;
-        file.read((char *) &diffuse, sizeof(glm::vec3));
+        std::string name_line;
+        std::getline(file, name_line);
+        std::sscanf(name_line.c_str(), "name: %s", buf_name);
 
-        glm::vec3 specular;
-        file.read((char *) &specular, sizeof(glm::vec3));
+        std::string diffuse_line;
+        std::getline(file, diffuse_line);
+        std::sscanf(diffuse_line.c_str(), "diffuse: %f,%f,%f", &material.diffuse.x, &material.diffuse.y, &material.diffuse.z);
 
-        glm::vec3 ambient;
-        file.read((char *) &ambient, sizeof(glm::vec3));
+        std::string specular_line;
+        std::getline(file, specular_line);
+        std::sscanf(specular_line.c_str(), "specular: %f,%f,%f", &material.specular.x, &material.specular.y, &material.specular.z);
 
-        glm::vec3 emission;
-        file.read((char *) &emission, sizeof(glm::vec3));
+        std::string ambient_line;
+        std::getline(file, ambient_line);
+        std::sscanf(ambient_line.c_str(), "ambient: %f,%f,%f", &material.ambient.x, &material.ambient.y, &material.ambient.z);
 
-        float roughness;
-        file.read((char *) &roughness, sizeof(float));
+        std::string emission_line;
+        std::getline(file, emission_line);
+        std::sscanf(emission_line.c_str(), "emission: %f,%f,%f", &material.emission.x, &material.emission.y, &material.emission.z);
 
-        float refraction;
-        file.read((char *) &refraction, sizeof(float));
+        std::string roughness_line;
+        std::getline(file, roughness_line);
+        std::sscanf(roughness_line.c_str(), "roughness: %f", &material.roughness);
 
-        Shading type;
-        file.read((char *) &type, sizeof(Shading));
+        std::string refraction_line;
+        std::getline(file, refraction_line);
+        std::sscanf(refraction_line.c_str(), "refraction: %f", &material.refraction);
 
-        int normal_texture_length;
-        file.read((char *) &normal_texture_length, sizeof(int));
-        std::string normal_texture;
-        normal_texture.resize(normal_texture_length);
-        file.read((char *) normal_texture.data(), normal_texture_length);
+        std::string type_line;
+        std::getline(file, type_line);
+        std::sscanf(type_line.c_str(), "type: %d", &type);
 
-        int diffuse_texture_length;
-        file.read((char *) &diffuse_texture_length, sizeof(int));
-        std::string diffuse_texture;
-        diffuse_texture.resize(diffuse_texture_length);
-        file.read((char *) diffuse_texture.data(), diffuse_texture_length);
+        std::string albedo_line;
+        std::getline(file, albedo_line);
+        std::sscanf(albedo_line.c_str(), "albedo_texture: %s", buf_albedo);
 
-        int specular_texture_length;
-        file.read((char *) &specular_texture_length, sizeof(int));
-        std::string specular_texture;
-        specular_texture.resize(specular_texture_length);
-        file.read((char *) specular_texture.data(), specular_texture_length);
+        std::string normal_line;
+        std::getline(file, normal_line);
+        std::sscanf(normal_line.c_str(), "normal_texture: %s", buf_normal);
 
-        int emission_texture_length;
-        file.read((char *) &emission_texture_length, sizeof(int));
-        std::string emission_texture;
-        emission_texture.resize(emission_texture_length);
-        file.read((char *) emission_texture.data(), emission_texture_length);
+        std::string roughness_texture_line;
+        std::getline(file, roughness_texture_line);
+        std::sscanf(roughness_texture_line.c_str(), "roughness_texture: %s", buf_roughness);
 
-        int roughness_texture_length;
-        file.read((char *) &roughness_texture_length, sizeof(int));
-        std::string roughness_texture;
-        roughness_texture.resize(roughness_texture_length);
-        file.read((char *) roughness_texture.data(), roughness_texture_length);
+        material.name = buf_name;
+        material.albedo_texture = buf_albedo;
+        material.normal_texture = buf_normal;
+        material.roughness_texture = buf_roughness;
+        material.type = (Shading) type;
 
-        mat.name = name;
-        mat.diffuse = diffuse;
-        mat.specular = specular;
-        mat.ambient = ambient;
-        mat.emission = emission;
-        mat.roughness = roughness;
-        mat.refraction = refraction;
-        mat.type = type;
-        mat.normal_texture = normal_texture;
-        mat.albedo_texture = diffuse_texture;
-        mat.specular_texture = specular_texture;
-        mat.emission_texture = emission_texture;
-        mat.roughness_texture = roughness_texture;
-
-        return mat;
+        return material;
 }
 
-Submesh load_mesh(std::ifstream &file)
+static Submesh load_mesh(std::ifstream &file)
 {
         int num_vertices;
         file.read((char *) &num_vertices, sizeof(int));
@@ -108,7 +290,7 @@ Submesh load_mesh(std::ifstream &file)
         return Submesh { vertices, indices, 0};
 }
 
-void s_load_scene(const std::filesystem::path &path, const Context &context, Scene &scene, std::ifstream &file)
+static void s_load_scene(const std::filesystem::path &path, const Context &context, Scene &scene, std::ifstream &file)
 {
         std::vector <std::string> lines;
 
@@ -119,11 +301,6 @@ void s_load_scene(const std::filesystem::path &path, const Context &context, Sce
         }
 
         struct Element {
-                enum Type {
-                        ENTITY,
-                        MATERIALS
-                } type;
-
                 using FieldValue = std::variant <
                         int,
                         float,
@@ -160,13 +337,15 @@ void s_load_scene(const std::filesystem::path &path, const Context &context, Sce
                         iss >> type;
 
                         if (type == "entity") {
-                                elements.push_back(Element { Element::ENTITY });
+                                // elements.push_back(Element { Element::ENTITY });
+                                elements.push_back(Element {});
                                 printf("Entity\n");
 
                                 std::string name = line.substr(7);
                                 elements.back().fields["name"] = trim_whitespace(name);
                         } else if (type == "materials") {
-                                elements.push_back(Element { Element::MATERIALS });
+                                // elements.push_back(Element { Element::MATERIALS });
+                                elements.push_back(Element {});
                                 printf("Materials\n");
                         } else {
                                 KOBRA_LOG_FILE(Log::WARN) << "Unknown element type: " << type << std::endl;
@@ -211,37 +390,32 @@ void s_load_scene(const std::filesystem::path &path, const Context &context, Sce
                                 int mesh_count = std::stoi(field.substr(5));
 
                                 std::vector <std::string> meshes;
-                                std::vector <int> materials;
+                                std::vector <std::string> materials_paths;
 
                                 for (int j = 0; j < mesh_count; j++) {
                                         std::istringstream iss(lines[i++]);
 
                                         std::string mesh;
-                                        int material_index;
+                                        std::string material_path;
 
                                         // Skip whitespace
                                         iss >> std::ws;
                                         
                                         // Cut the trailing comma
                                         std::getline(iss, mesh, ',');
-                                        iss >> material_index;
+                                        iss >> material_path;
 
-                                        printf("\t\t%s, %d\n", mesh.c_str(), material_index);
+                                        printf("\t\t%s, %s\n", mesh.c_str(), material_path.c_str());
                                         meshes.push_back(mesh);
-                                        materials.push_back(material_index);
+                                        materials_paths.push_back(material_path);
                                 }
 
                                 current_element->fields["mesh"] = meshes;
-                                current_element->fields["material"] = materials;
+                                current_element->fields["material"] = materials_paths;
                         } else if (field.rfind("renderable", 0) == 0) {
                                 printf("\tRenderable\n");
                                 current_element->fields["renderable"] = true;
                         } else if (field.rfind("list", 0) == 0) {
-                                if (current_element->type != Element::MATERIALS) {
-                                        KOBRA_LOG_FILE(Log::WARN) << "List field without materials element: " << line << std::endl;
-                                        continue;
-                                }
-                                
                                 if (field.length() <= 5) {
                                         KOBRA_LOG_FILE(Log::WARN) << "List field without count: " << line << std::endl;
                                         continue;
@@ -283,83 +457,44 @@ void s_load_scene(const std::filesystem::path &path, const Context &context, Sce
         }
 
         // Print the elements
-        printf("-----------------------------------------\n");
-        printf("Elements: %lu\n", elements.size());
-        for (Element &element : elements) {
-                if (element.type == Element::ENTITY) {
-                        printf("Entity:\n");
-                } else if (element.type == Element::MATERIALS) {
-                        printf("Materials:\n");
-                }
-
-                for (auto &field : element.fields) {
-                        printf("\t%s: ", field.first.c_str());
-
-                        if (std::holds_alternative <int> (field.second)) {
-                                printf("%d\n", std::get <int> (field.second));
-                        } else if (std::holds_alternative <float> (field.second)) {
-                                printf("%f\n", std::get <float> (field.second));
-                        } else if (std::holds_alternative <Transform> (field.second)) {
-                                Transform &transform = std::get <Transform> (field.second);
-
-                                glm::vec3 position = transform.position;
-                                printf("Transform: %f %f %f\n", position.x, position.y, position.z);
-                        } else if (std::holds_alternative <std::string> (field.second)) {
-                                printf("%s\n", std::get <std::string> (field.second).c_str());
-                        } else if (std::holds_alternative <std::vector <std::string>> (field.second)) {
-                                printf("\n");
-                                for (const std::string &str : std::get <std::vector <std::string>> (field.second))
-                                        printf("\t\t%s\n", str.c_str());
-                        } else {
-                                printf("Unknown type\n");
-                        }
-                }
-        }
+        // printf("-----------------------------------------\n");
+        // printf("Elements: %lu\n", elements.size());
+        // for (Element &element : elements) {
+        //         if (element.type == Element::ENTITY) {
+        //                 printf("Entity:\n");
+        //         } else if (element.type == Element::MATERIALS) {
+        //                 printf("Materials:\n");
+        //         }
+        //
+        //         for (auto &field : element.fields) {
+        //                 printf("\t%s: ", field.first.c_str());
+        //
+        //                 if (std::holds_alternative <int> (field.second)) {
+        //                         printf("%d\n", std::get <int> (field.second));
+        //                 } else if (std::holds_alternative <float> (field.second)) {
+        //                         printf("%f\n", std::get <float> (field.second));
+        //                 } else if (std::holds_alternative <Transform> (field.second)) {
+        //                         Transform &transform = std::get <Transform> (field.second);
+        //
+        //                         glm::vec3 position = transform.position;
+        //                         printf("Transform: %f %f %f\n", position.x, position.y, position.z);
+        //                 } else if (std::holds_alternative <std::string> (field.second)) {
+        //                         printf("%s\n", std::get <std::string> (field.second).c_str());
+        //                 } else if (std::holds_alternative <std::vector <std::string>> (field.second)) {
+        //                         printf("\n");
+        //                         for (const std::string &str : std::get <std::vector <std::string>> (field.second))
+        //                                 printf("\t\t%s\n", str.c_str());
+        //                 } else {
+        //                         printf("Unknown type\n");
+        //                 }
+        //         }
+        // }
 
         // Initilize the ECS
         scene.ecs = std::make_shared <ECS> ();
 
         // Add the entities
-        bool loaded_materials = false;
         for (Element &element : elements) {
-                if (element.type == Element::MATERIALS) {
-                        // First clear the current global list
-                        // TODO: should also signal the daemon
-                        Material::all.clear();
-                        if (element.fields.find("list") == element.fields.end()) {
-                                KOBRA_LOG_FILE(Log::WARN) << "No materials listed, missing .list?" << std::endl;
-                                continue;
-                        }
-
-                        std::vector <std::string> &materials = std::get
-                                <std::vector <std::string>> (element.fields["list"]);
-
-                        for (const std::string &material : materials) {
-                                printf("Material: %s\n", material.c_str());
-
-                                // Check the assets path
-                                std::filesystem::path material_path = path / "assets" / material;
-                                if (!std::filesystem::exists(material_path)) {
-                                        KOBRA_LOG_FILE(Log::WARN) << "Material file does not exist: " << material_path << std::endl;
-                                        continue;
-                                }
-
-                                std::ifstream material_file(material_path);
-
-                                Material mat = load_material(material_file);
-                                Material::all.push_back(mat);
-                        }
-
-                        loaded_materials = true;
-                        continue;
-                }
-
-                // Make sure all the materials are loaded
-                if (!loaded_materials) {
-                        KOBRA_LOG_FILE(Log::WARN) << "Entities defined before materials" << std::endl;
-                        continue;
-                }
-
                 // Create the entity
                 std::string name = std::get <std::string> (element.fields["name"]);
                 Entity entity = scene.ecs->make_entity(name);
@@ -373,20 +508,26 @@ void s_load_scene(const std::filesystem::path &path, const Context &context, Sce
                                 std::vector <std::string> &meshes = std::get
                                         <std::vector <std::string>> (field.second);
                                 
-                                std::vector <int> &materials = std::get
-                                        <std::vector <int>> (element.fields["material"]);
+                                std::vector <std::string> &material_paths = std::get
+                                        <std::vector <std::string>> (element.fields["material"]);
 
                                 std::vector <Submesh> mesh_list;
                                 for (int i = 0; i < meshes.size(); i++) {
                                         std::string &mesh = meshes[i];
-                                        int material = materials[i];
+                                        std::string &material_path = material_paths[i];
 
-                                        if (material >= Material::all.size()) {
-                                                KOBRA_LOG_FILE(Log::WARN) << "Material index out of range: " << material << std::endl;
+                                        std::filesystem::path material_path_full = path / "assets" / material_path;
+                                        if (!std::filesystem::exists(material_path_full)) {
+                                                KOBRA_LOG_FILE(Log::WARN) << "Material file does not exist: " << material_path_full << std::endl;
                                                 continue;
                                         }
 
-                                        printf("Mesh: %s, material: %d\n", mesh.c_str(), material);
+                                        std::ifstream material_file(material_path_full);
+                                        Material material = load_material(material_file);
+                                        int32_t index = Material::all.size();
+                                        Material::all.push_back(material);
+
+                                        printf("Mesh: %s, material: %s\n", mesh.c_str(), material_path_full.c_str());
 
                                         // Check the assets path
                                         std::filesystem::path mesh_path = path / ".cache" / mesh;
@@ -398,7 +539,7 @@ void s_load_scene(const std::filesystem::path &path, const Context &context, Sce
                                         std::ifstream mesh_file(mesh_path);
 
                                         Submesh mesh_object = load_mesh(mesh_file);
-                                        mesh_object.material_index = material;
+                                        mesh_object.material_index = index;
                                         mesh_list.push_back(mesh_object);                                        
                                 }
 
