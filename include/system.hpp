@@ -61,7 +61,7 @@ struct System {
 	Archetype <RenderablePtr> rasterizers;
 	Archetype <Transform> transforms;
 
-        daemons::MaterialDaemon *material_daemon;
+        MaterialDaemon *material_daemon;
 
 	std::unordered_map <std::string, int> lookup;
 	Archetype <Entity> entities;
@@ -114,7 +114,7 @@ struct System {
 	};
 
         // Constructor
-        System(daemons::MaterialDaemon *md) : material_daemon(md) {}
+        System(MaterialDaemon *md) : material_daemon(md) {}
 
 	// The get functions will need to be specialized
 	template <class T>

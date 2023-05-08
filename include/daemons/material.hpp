@@ -11,8 +11,6 @@
 
 namespace kobra {
 
-namespace daemons {
-
 struct MaterialDaemon {
         using Forward = std::queue <int32_t> *;
 
@@ -31,7 +29,5 @@ void update(MaterialDaemon *);
 
 int32_t load(MaterialDaemon *, const std::filesystem::path &);
 int32_t load(MaterialDaemon *, const Material &);
-
-}
 
 }

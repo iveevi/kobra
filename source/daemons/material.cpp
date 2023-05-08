@@ -2,8 +2,6 @@
 
 namespace kobra {
 
-namespace daemons {
-
 MaterialDaemon *make_material_daemon()
 {
         return new MaterialDaemon;
@@ -128,8 +126,6 @@ int32_t load(MaterialDaemon *daemon, const Material &material)
         daemon->status.push_back(0);
 
         return id;
-}
-
 }
 
 }

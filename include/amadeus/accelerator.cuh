@@ -23,7 +23,7 @@ namespace amadeus {
 class Accelerator {
         // Reference to System transform daemon
         // TODO: embed in the System itself
-        kobra::daemons::Transform *transform_daemon = nullptr;
+        TransformDaemon *transform_daemon = nullptr;
 
         // Critical OptiX objects
         OptixDeviceContext m_context = 0;
@@ -132,7 +132,7 @@ class Accelerator {
         }
 public:
         // Default constructor
-        Accelerator(kobra::daemons::Transform *td)
+        Accelerator(TransformDaemon *td)
                 : transform_daemon(td), m_context(optix::make_context()) {}
 
 	// Propreties

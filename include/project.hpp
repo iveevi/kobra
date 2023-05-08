@@ -24,7 +24,7 @@ struct Project {
 	std::vector <Scene> scenes = {};
 	std::vector <std::string> scenes_files = {};
 
-        daemons::MaterialDaemon *material_daemon = nullptr;
+        MaterialDaemon *material_daemon = nullptr;
 
 	// Default constructor
 	Project() = default;
@@ -89,7 +89,7 @@ struct Project {
 		scenes.resize(scenes_files.size());
 
                 // Allocate material daemon
-                material_daemon = daemons::make_material_daemon();
+                material_daemon = make_material_daemon();
 	}
 
 	// Load scene
@@ -101,7 +101,7 @@ struct Project {
         // Default project
         static Project basic(const Context &context, const std::filesystem::path &dir) {
                 Project project;
-                project.material_daemon = daemons::make_material_daemon();
+                project.material_daemon = make_material_daemon();
 
                 Scene basic = Scene::basic(context, project.material_daemon);
                 project.scenes.push_back(basic);

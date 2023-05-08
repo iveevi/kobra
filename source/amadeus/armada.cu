@@ -27,7 +27,7 @@ namespace amadeus {
 // TODO: all custom extent...
 ArmadaRTX::ArmadaRTX(const Context &context,
 		const std::shared_ptr <amadeus::Accelerator> &system,
-		const std::shared_ptr <daemons::MeshDaemon> &mesh_memory,
+		const std::shared_ptr <MeshDaemon> &mesh_memory,
 		const vk::Extent2D &extent)
 		: m_system(system), m_mesh_memory(mesh_memory),
 		m_device(context.device), m_phdev(context.phdev),
@@ -96,8 +96,8 @@ void ArmadaRTX::set_envmap(const std::string &path)
 }
 
 void ArmadaRTX::update_triangle_light_buffers
-		(const daemons::Transform *transform_daemon,
-                const daemons::MaterialDaemon *md,
+		(const TransformDaemon *transform_daemon,
+                const MaterialDaemon *md,
 		const std::set <_instance_ref> &emissive_submeshes_to_update)
 {
 	// TODO: share this setup with the renderables (another layer for
@@ -212,7 +212,7 @@ void ArmadaRTX::update_triangle_light_buffers
 }
 
 // Update the SBT data
-void ArmadaRTX::update_sbt_data(const daemons::MaterialDaemon *md)
+void ArmadaRTX::update_sbt_data(const MaterialDaemon *md)
 {
 	int submesh_count = m_host.entities.size();
 
@@ -249,7 +249,7 @@ void ArmadaRTX::update_sbt_data(const daemons::MaterialDaemon *md)
 	}
 }
 
-void ArmadaRTX::update_materials(const daemons::MaterialDaemon *md, const std::set <uint32_t> &material_indices)
+void ArmadaRTX::update_materials(const MaterialDaemon *md, const std::set <uint32_t> &material_indices)
 {
 	// If host buffer is empty, assume the armada is not initialized
 	if (m_host.materials.size() == 0)
@@ -400,8 +400,8 @@ cuda::_material convert_material
 // TODO: get rid of this method..
 ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
                 (const std::vector <Entity> &entities,
-                const daemons::Transform &transform_daemon,
-		const daemons::MaterialDaemon *md,
+                const TransformDaemon &transform_daemon,
+		const MaterialDaemon *md,
 		const Camera &camera,
 		const Transform &transform)
 {
@@ -732,7 +732,7 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 // Path tracing computation
 void ArmadaRTX::render(const System *system,
                 const std::vector <Entity> &entities,
-                const daemons::Transform &transform_daemon,
+                const TransformDaemon &transform_daemon,
 		const Camera &camera,
 		const Transform &transform,
 		bool accumulate)

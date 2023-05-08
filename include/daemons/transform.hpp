@@ -5,11 +5,9 @@
 
 namespace kobra {
 
-namespace daemons {
-
 // TODO: template?
 // then specialize comparison function and retrieval function?
-struct Transform {
+struct TransformDaemon {
         enum : uint8_t {
                 eSame,
                 eChanged,
@@ -21,7 +19,7 @@ struct Transform {
         std::vector <uint8_t> status;
         std::vector <kobra::Transform> transforms;
 
-        Transform(System *ref) : system(ref) {}
+        TransformDaemon(System *ref) : system(ref) {}
 
         size_t size() const {
                 return status.size();
@@ -68,7 +66,5 @@ struct Transform {
                 return status[index];
         }
 };
-
-}
 
 }

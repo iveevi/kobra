@@ -10,8 +10,6 @@
 
 namespace kobra {
 
-namespace daemons {
-
 // Contains memory relating to a renderable, about its mesh and submeshes
 struct MeshDaemon {
 	// Information for a single submesh
@@ -60,7 +58,5 @@ struct MeshDaemon {
 		return m_cache.at(entity).m_cachelets.at(submesh);
 	}
 };
-
-}
 
 }

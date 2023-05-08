@@ -14,7 +14,7 @@ void SceneGraph::set_scene(const Scene *scene)
 void SceneGraph::render()
 {
         System *system = m_scene->system.get();
-        daemons::MaterialDaemon *md = system->material_daemon;
+        MaterialDaemon *md = system->material_daemon;
 
         ImGui::Begin("Scene Graph");
         
@@ -47,7 +47,7 @@ void SceneGraph::render()
                                         // TODO: method to request new material from a daemon...
                                         // box.submeshes[0].material_index = Material::all.size();
                                         // Material::all.push_back(Material::default_material());
-                                        int32_t index = daemons::load(md, Material::default_material());
+                                        int32_t index = load(md, Material::default_material());
                                         box.submeshes[0].material_index = index;
                                         auto &entity = system->make_entity("Box");
                                         entity.add <Mesh> (box);
@@ -58,7 +58,7 @@ void SceneGraph::render()
                                         Mesh plane = Mesh::plane();
                                         // plane.submeshes[0].material_index = Material::all.size();
                                         // Material::all.push_back(Material::default_material());
-                                        int32_t index = daemons::load(md, Material::default_material());
+                                        int32_t index = load(md, Material::default_material());
                                         plane.submeshes[0].material_index = index;
                                         auto &entity = system->make_entity("Plane");
                                         entity.add <Mesh> (plane);

@@ -3,8 +3,6 @@
 
 namespace kobra {
 
-namespace daemons {
-
 // Fill out cachelet data for a single submesh
 void MeshDaemon::fill_cachelet(Cachelet &cachelet, const Submesh &submesh)
 {
@@ -60,8 +58,6 @@ void MeshDaemon::cache_cuda(const Entity &entity)
 	Cache cache { cachelets };
 
 	m_cache.insert({ entity.id, cache });
-}
-
 }
 
 }

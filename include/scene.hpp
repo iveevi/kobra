@@ -28,7 +28,7 @@ struct Scene {
 	}
 
         // Default scene
-        static Scene basic(const Context &context, daemons::MaterialDaemon *md) {
+        static Scene basic(const Context &context, MaterialDaemon *md) {
                 // TODO: add camera, plane, and 2 boxes...
 
                 Scene scene;
@@ -43,7 +43,7 @@ struct Scene {
                 Material plane_material;
                 plane_material.name = "Plane";
 
-                int32_t index = daemons::load(md, plane_material);
+                int32_t index = kobra::load(md, plane_material);
                 // int index = Material::all.size();
                 // Material::all.push_back(plane_material);
 

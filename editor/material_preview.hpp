@@ -303,7 +303,7 @@ void destroy_material_preview(MaterialPreview *mp)
 }
 
 // TODO: pass the actual material
-void render_material_preview(const vk::CommandBuffer &cmd, MaterialPreview *mp, const kobra::daemons::MaterialDaemon *md)
+void render_material_preview(const vk::CommandBuffer &cmd, MaterialPreview *mp, const kobra::MaterialDaemon *md)
 {
         PushConstants push_constants;
         push_constants.origin = mp->origin;

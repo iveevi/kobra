@@ -87,7 +87,7 @@ struct Editor : public kobra::BaseApp {
 
 	layers::ForwardRenderer m_forward_renderer;
 
-        std::shared_ptr <kobra::daemons::Transform> transform_daemon;
+        std::shared_ptr <kobra::TransformDaemon> transform_daemon;
 
 	std::shared_ptr <kobra::layers::UserInterface> m_ui;
         
@@ -104,7 +104,7 @@ struct Editor : public kobra::BaseApp {
 	// Renderers
 	struct {
 		std::shared_ptr <kobra::amadeus::Accelerator> system;
-		std::shared_ptr <kobra::daemons::MeshDaemon> mesh_memory;
+		std::shared_ptr <kobra::MeshDaemon> mesh_memory;
 
 		kobra::layers::Denoiser denoiser;
 		kobra::layers::Framer framer;
@@ -393,7 +393,7 @@ public:
 
 		// kobra::Material *material = &kobra::Material::all[material_index];
                 System *system = m_editor->m_scene.system.get();
-                daemons::MaterialDaemon *md = system->material_daemon;
+                MaterialDaemon *md = system->material_daemon;
                 kobra::Material *material = &md->materials[material_index];
 
 		glm::vec3 diffuse = material->diffuse;
@@ -1069,7 +1069,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	m_scene = m_project.load_scene(get_context());
 	assert(m_scene.system);
 
-        transform_daemon = std::make_shared <kobra::daemons::Transform> (m_scene.system.get());
+        transform_daemon = std::make_shared <kobra::TransformDaemon> (m_scene.system.get());
 
 	// IO callbacks
 	io.mouse_events.subscribe(mouse_callback, this);
@@ -1083,7 +1083,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 
 	// Load all the renderers
 	m_renderers.system = std::make_shared <kobra::amadeus::Accelerator> (transform_daemon.get());
-	m_renderers.mesh_memory = std::make_shared <kobra::daemons::MeshDaemon> (get_context());
+	m_renderers.mesh_memory = std::make_shared <kobra::MeshDaemon> (get_context());
 	m_viewport.sampler = kobra::make_continuous_sampler(device);
 
 	// Attach UI layers
@@ -1239,7 +1239,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 
                 // TODO: pass the system itself...
                 std::vector <Entity> renderable_entities = m_scene.system->tuple_entities <Renderable> ();
-                const daemons::MaterialDaemon *md = system->material_daemon;
+                const MaterialDaemon *md = system->material_daemon;
                 m_editor_renderer->render(render_info, renderable_entities, *transform_daemon, md);
 
                 /* m_editor_renderer->render_gbuffer(render_info, renderable_entities);

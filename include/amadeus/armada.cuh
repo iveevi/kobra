@@ -142,7 +142,7 @@ public:
 class ArmadaRTX {
 	// Raytracing backend
 	std::shared_ptr <Accelerator> m_system;
-	std::shared_ptr <daemons::MeshDaemon> m_mesh_memory;
+	std::shared_ptr <MeshDaemon> m_mesh_memory;
 
 	// Critical Vulkan structures
 	vk::raii::Device *m_device = nullptr;
@@ -181,7 +181,7 @@ class ArmadaRTX {
 		std::vector <cuda::_material> materials;
 		std::vector <std::set <_instance_ref>> material_submeshes;
 
-		std::vector <daemons::MeshDaemon::Cachelet> cachelets;
+		std::vector <MeshDaemon::Cachelet> cachelets;
 
                 std::vector <const Entity *> entities;
 		std::vector <int> submesh_indices;
@@ -217,13 +217,13 @@ class ArmadaRTX {
 
 	// Private methods
 	void update_triangle_light_buffers(
-		const daemons::Transform *,
-		const daemons::MaterialDaemon *,
+		const TransformDaemon *,
+		const MaterialDaemon *,
 		const std::set <_instance_ref> &
 	);
 
-	void update_sbt_data(const daemons::MaterialDaemon *);
-	void update_materials(const daemons::MaterialDaemon *, const std::set <uint32_t> &);
+	void update_sbt_data(const MaterialDaemon *);
+	void update_materials(const MaterialDaemon *, const std::set <uint32_t> &);
 
 	struct preprocess_update {
 		std::optional <OptixTraversableHandle> handle;
@@ -232,8 +232,8 @@ class ArmadaRTX {
 
 	preprocess_update preprocess_scene(
                 const std::vector <Entity> &,
-                const daemons::Transform &,
-                const daemons::MaterialDaemon *,
+                const TransformDaemon &,
+                const MaterialDaemon *,
                 const Camera &, const Transform &);
 public:
 	// Default constructor
@@ -243,7 +243,7 @@ public:
 	ArmadaRTX(
 		const Context &,
 		const std::shared_ptr <Accelerator> &,
-		const std::shared_ptr <daemons::MeshDaemon> &,
+		const std::shared_ptr <MeshDaemon> &,
 		const vk::Extent2D &
 	);
 
@@ -329,7 +329,7 @@ public:
 
 	void render(const System *,
                 const std::vector <Entity> &,
-                const daemons::Transform &,
+                const TransformDaemon &,
 		const Camera &,
 		const Transform &,
 		bool = false);

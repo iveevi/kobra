@@ -1,5 +1,8 @@
-#include "../include/project.hpp"
+// Standard headers
 #include <sstream>
+
+// Engine headers
+#include "include/project.hpp"
 
 namespace kobra {
 
@@ -306,7 +309,7 @@ static Submesh load_mesh(std::ifstream &file)
         return Submesh { vertices, indices, 0};
 }
 
-static void s_load_scene(const std::filesystem::path &path, const Context &context, Scene &scene, daemons::MaterialDaemon *material_daemon, std::ifstream &file)
+static void s_load_scene(const std::filesystem::path &path, const Context &context, Scene &scene, MaterialDaemon *material_daemon, std::ifstream &file)
 {
         std::vector <std::string> lines;
 

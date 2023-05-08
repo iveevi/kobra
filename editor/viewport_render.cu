@@ -70,7 +70,7 @@ static cuda::_material convert_material(const Material &material, TextureLoader 
 
 // Prerender process for raytracing
 void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
-                                        const daemons::MaterialDaemon *md)
+                                        const MaterialDaemon *md)
 {
         if (!common_rtx.clk_rise)
                 return;
@@ -215,7 +215,7 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
 // TODO: pass transform daemon for the raytracing backend
 void EditorViewport::render_gbuffer(const RenderInfo &render_info,
                                     const std::vector <Entity> &entities,
-                                    const daemons::MaterialDaemon *md)
+                                    const MaterialDaemon *md)
 {
         if (render_state.backend == RenderState::eRasterized) {
                 // The given entities are assumed to have all the necessary
@@ -517,7 +517,7 @@ __global__ void test(PathTracerParameters parameters)
 void EditorViewport::render_path_traced
                         (const RenderInfo &render_info,
                         const std::vector <Entity> &entities,
-                        const daemons::MaterialDaemon *md)
+                        const MaterialDaemon *md)
 {
         // Make sure the prerender step runs regardless of backend
         prerender_raytrace(entities, md);
@@ -617,7 +617,7 @@ void EditorViewport::render_path_traced
 // void EditorViewport::render_amadeus_path_traced
 //                         (const RenderInfo &render_info,
 //                         const std::vector <Entity> &entities,
-//                         daemons::Transform &transform_daemon)
+//                         Transform &transform_daemon)
 // {
 //         // Run the path tracer, then extract image and blit to viewport
 //         amadeus_path_tracer.armada->set_depth(amadeus_path_tracer.depth);
@@ -679,7 +679,7 @@ void EditorViewport::render_path_traced
 
 void EditorViewport::render_albedo(const RenderInfo &render_info,
                 const std::vector <Entity> &entities,
-                const daemons::MaterialDaemon *md)
+                const MaterialDaemon *md)
 {
         // The given entities are assumed to have all the necessary
         // components (Transform and Renderable)
@@ -1014,8 +1014,8 @@ void EditorViewport::render_highlight(const RenderInfo &render_info, const std::
 
 void EditorViewport::render(const RenderInfo &render_info,
                 const std::vector <Entity> &entities,
-                daemons::Transform &transform_daemon,
-                const daemons::MaterialDaemon *md)
+                TransformDaemon &transform_daemon,
+                const MaterialDaemon *md)
 {
         // TODO: pass camera as an entity, and then check if its moved using the
                                 // daemon...
