@@ -2,6 +2,7 @@
 #include "include/cuda/cast.cuh"
 #include "include/cuda/error.cuh"
 #include "include/cuda/interop.cuh"
+#include "include/daemons/material.hpp"
 #include "push_constants.hpp"
 
 static cuda::_material convert_material(const Material &material, TextureLoader &texture_loader, const vk::raii::Device &device)
@@ -68,7 +69,8 @@ static cuda::_material convert_material(const Material &material, TextureLoader 
 }
 
 // Prerender process for raytracing
-void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities)
+void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
+                                        const daemons::MaterialDaemon *md)
 {
         if (!common_rtx.clk_rise)
                 return;
@@ -109,7 +111,8 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities)
 
                                 // If this is an area light, also add
                                 // information...
-                                const Material &material = Material::all[meshes[i].material_index];
+                                // const Material &material = Material::all[meshes[i].material_index];
+                                const Material &material = md->materials[meshes[i].material_index];
                                 if (glm::length(material.emission) > 1e-3f) {
                                         // TODO: do we really need another
                                         // buffer for this?
@@ -183,7 +186,8 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities)
 
                 // Load all materials
                 common_rtx.materials.clear();
-                for (const auto &material : Material::all) {
+                // for (const auto &material : Material::all) {
+                for (const auto &material : md->materials) {
                         common_rtx.materials.push_back(
                                 convert_material(material, *texture_loader, *device)
                         );
@@ -209,7 +213,9 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities)
 }
 
 // TODO: pass transform daemon for the raytracing backend
-void EditorViewport::render_gbuffer(const RenderInfo &render_info, const std::vector <Entity> &entities)
+void EditorViewport::render_gbuffer(const RenderInfo &render_info,
+                                    const std::vector <Entity> &entities,
+                                    const daemons::MaterialDaemon *md)
 {
         if (render_state.backend == RenderState::eRasterized) {
                 // The given entities are assumed to have all the necessary
@@ -239,7 +245,8 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info, const std::ve
                                         );
 
                                         // Bind inforation to descriptor set
-                                        Material material = Material::all[meshes[i].material_index];
+                                        // Material material = Material::all[meshes[i].material_index];
+                                        Material material = md->materials[meshes[i].material_index];
                 
                                         std::string albedo = "blank";
                                         if (material.has_albedo())
@@ -307,7 +314,8 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info, const std::ve
                                 int material_index = meshes[i].material_index;
                                 push_constants.material_index = material_index;
 
-                                Material material = Material::all[material_index];
+                                // Material material = Material::all[material_index];
+                                Material material = md->materials[material_index];
                                 
                                 int texture_status = 0;
                                 texture_status |= (material.has_albedo());
@@ -322,16 +330,16 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info, const std::ve
                                 );
 
                                 // Draw
-                                render_info.cmd.bindVertexBuffers(0, { *renderable.get_vertex_buffer(i).buffer }, { 0 });
-                                render_info.cmd.bindIndexBuffer(*renderable.get_index_buffer(i).buffer, 0, vk::IndexType::eUint32);
-                                render_info.cmd.drawIndexed(renderable.get_index_count(i), 1, 0, 0, 0);
+                                render_info.cmd.bindVertexBuffers(0, { *renderable.vertex_buffer[i].buffer }, { 0 });
+                                render_info.cmd.bindIndexBuffer(*renderable.index_buffer[i].buffer, 0, vk::IndexType::eUint32);
+                                render_info.cmd.drawIndexed(renderable.index_count[i], 1, 0, 0, 0);
                         }
                 }
 
                 render_info.cmd.endRenderPass();
         } else if (render_state.backend == RenderState::eRaytraced) {
                 // Prerender
-                prerender_raytrace(entities);
+                prerender_raytrace(entities, md);
 
                 // Configure launch parameters
                 auto uvw = uvw_frame(render_info.camera, render_info.camera_transform);
@@ -508,10 +516,11 @@ __global__ void test(PathTracerParameters parameters)
 
 void EditorViewport::render_path_traced
                         (const RenderInfo &render_info,
-                        const std::vector <Entity> &entities)
+                        const std::vector <Entity> &entities,
+                        const daemons::MaterialDaemon *md)
 {
         // Make sure the prerender step runs regardless of backend
-        prerender_raytrace(entities);
+        prerender_raytrace(entities, md);
 
         // Configure launch parameters
         path_tracer.launch_params.time = common_rtx.timer.elapsed_start();
@@ -668,7 +677,9 @@ void EditorViewport::render_path_traced
 //         amadeus_path_tracer.framer.render(render_info.cmd);
 // }
 
-void EditorViewport::render_albedo(const RenderInfo &render_info, const std::vector <Entity> &entities)
+void EditorViewport::render_albedo(const RenderInfo &render_info,
+                const std::vector <Entity> &entities,
+                const daemons::MaterialDaemon *md)
 {
         // The given entities are assumed to have all the necessary
         // components (Transform and Renderable)
@@ -697,7 +708,8 @@ void EditorViewport::render_albedo(const RenderInfo &render_info, const std::vec
                                 );
 
                                 // Bind inforation to descriptor set
-                                Material material = Material::all[meshes[i].material_index];
+                                // Material material = Material::all[meshes[i].material_index];
+                                Material material = md->materials[meshes[i].material_index];
         
                                 std::string albedo_src = "blank";
                                 if (material.has_albedo())
@@ -756,7 +768,8 @@ void EditorViewport::render_albedo(const RenderInfo &render_info, const std::vec
                         push_constants.model = transform.matrix();
 
                         int material_index = meshes[i].material_index;
-                        Material material = Material::all[material_index];
+                        // Material material = Material::all[material_index];
+                        Material material = md->materials[material_index];
 
                         push_constants.albedo = glm::vec4 { material.diffuse, 1.0f };
                         push_constants.has_albedo = material.has_albedo();
@@ -768,9 +781,9 @@ void EditorViewport::render_albedo(const RenderInfo &render_info, const std::vec
                         );
 
                         // Draw
-                        render_info.cmd.bindVertexBuffers(0, { *renderable.get_vertex_buffer(i).buffer }, { 0 });
-                        render_info.cmd.bindIndexBuffer(*renderable.get_index_buffer(i).buffer, 0, vk::IndexType::eUint32);
-                        render_info.cmd.drawIndexed(renderable.get_index_count(i), 1, 0, 0, 0);
+                        render_info.cmd.bindVertexBuffers(0, { *renderable.vertex_buffer[i].buffer }, { 0 });
+                        render_info.cmd.bindIndexBuffer(*renderable.index_buffer[i].buffer, 0, vk::IndexType::eUint32);
+                        render_info.cmd.drawIndexed(renderable.index_count[i], 1, 0, 0, 0);
                 }
         }
 
@@ -999,7 +1012,10 @@ void EditorViewport::render_highlight(const RenderInfo &render_info, const std::
         render_info.cmd.endRenderPass();
 }
 
-void EditorViewport::render(const RenderInfo &render_info, const std::vector <Entity> &entities, daemons::Transform &transform_daemon)
+void EditorViewport::render(const RenderInfo &render_info,
+                const std::vector <Entity> &entities,
+                daemons::Transform &transform_daemon,
+                const daemons::MaterialDaemon *md)
 {
         // TODO: pass camera as an entity, and then check if its moved using the
                                 // daemon...
@@ -1010,28 +1026,28 @@ void EditorViewport::render(const RenderInfo &render_info, const std::vector <En
         // at least once to keep up to date with the latest changes
         switch (render_state.mode) {
         case RenderState::eTriangulation:
-                render_gbuffer(render_info, entities);
+                render_gbuffer(render_info, entities, md);
                 render_triangulation(render_info);
                 break;
 
         case RenderState::eNormals:
-                render_gbuffer(render_info, entities);
+                render_gbuffer(render_info, entities, md);
                 render_normals(render_info);
                 break;
         
         case RenderState::eTextureCoordinates:
-                render_gbuffer(render_info, entities);
+                render_gbuffer(render_info, entities, md);
                 render_uv(render_info);
                 break;
 
         case RenderState::eAlbedo:
-                render_gbuffer(render_info, entities);
-                render_albedo(render_info, entities);
+                render_gbuffer(render_info, entities, md);
+                render_albedo(render_info, entities, md);
                 break;
         
         case RenderState::ePathTraced:
-                render_gbuffer(render_info, entities);
-                render_path_traced(render_info, entities);
+                render_gbuffer(render_info, entities, md);
+                render_path_traced(render_info, entities, md);
                 break;
 
         default:

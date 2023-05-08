@@ -8,6 +8,7 @@
 // Engien headers
 #include "include/cuda/error.cuh"
 #include "include/cuda/interop.cuh"
+#include "include/daemons/mesh.hpp"
 
 // Environment map
 void load_environment_map(EnvironmentMap *em, kobra::TextureLoader *loader, const std::filesystem::path &path)
@@ -103,8 +104,8 @@ void load_environment_map(EnvironmentMap *em, kobra::TextureLoader *loader, cons
 // Constructor
 EditorViewport::EditorViewport
                         (const Context &context,
-                        const std::shared_ptr <amadeus::System> &_system,
-                        const std::shared_ptr <layers::MeshMemory> &_mesh_memory)
+                        const std::shared_ptr <amadeus::Accelerator> &_system,
+                        const std::shared_ptr <daemons::MeshDaemon> &_mesh_memory)
                 : system(_system),
                 mesh_memory(_mesh_memory),
                 phdev(context.phdev),

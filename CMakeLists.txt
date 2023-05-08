@@ -109,6 +109,7 @@ set(Glslang_SOURCES
 
 file(GLOB Kobra_GENERIC_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/source/*.cpp)
 file(GLOB Kobra_LAYERS_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/source/layers/*.cpp)
+file(GLOB Kobra_DAEMONS_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/source/daemons/*.cpp)
 file(GLOB Kobra_IO_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/source/io/*.cpp)
 file(GLOB Kobra_ENGINE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/source/engine/*.cpp)
 
@@ -118,12 +119,13 @@ list(REMOVE_ITEM Kobra_LAYERS_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/source/layers/
 set(Kobra_SOURCES
 	${Kobra_GENERIC_SOURCES}
 	${Kobra_LAYERS_SOURCES}
+        ${Kobra_DAEMONS_SOURCES}
 	${Kobra_IO_SOURCES}
 	${Kobra_ENGINE_SOURCES}
 	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/core.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/source/layers/denoiser.cu
-	${CMAKE_CURRENT_SOURCE_DIR}/source/layers/mesh_memory_cuda.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/source/amadeus/armada.cu
+	${CMAKE_CURRENT_SOURCE_DIR}/source/daemons/mesh.cu
 )
 
 # Create object library for the shared source

@@ -1,5 +1,4 @@
-#ifndef KOBRA_MATERIAL_H_
-#define KOBRA_MATERIAL_H_
+#pragma once
 
 // Standard headers
 #include <cstdio>
@@ -63,53 +62,14 @@ struct Material {
 	// Construct the default material
 	// NOTE: different from the uninitialized material
 	static Material default_material() {
+                // TODO: mathod in the material daemon instead...
 		Material mat;
-		mat.name = "default"; // TODO: create a new file... and then get rid of the name
+		mat.name = "default";
 		mat.diffuse = glm::vec3 {1};
 		mat.specular = glm::vec3 {0.5f};
 		mat.roughness = 0.2f;
 		return mat;
 	}
-
-	// Global material list
-	// TODO: one list per scene
-	static std::vector <Material> all;
-	
-	// Management daemon
-	static struct Daemon {
-		using Addresses = std::set <uint32_t>;
-		using Pinger = std::function <void (void *, const Addresses &)>;
-
-		struct PingData {
-			void *user;
-			Pinger pinger;
-			Addresses indices;
-		};
-
-		std::vector <PingData> m_pingers;
-
-		void ping_at(void *user, const Pinger &pinger) {
-			m_pingers.push_back({user, pinger, {}});
-		}
-
-		void update(uint32_t index) {
-			for (auto &pinger : m_pingers)
-				pinger.indices.insert(index);
-		}
-
-		// Call at the end of each frame
-		void ping_all() {
-			for (auto &pinger : m_pingers) {
-				if (pinger.indices.empty())
-					continue;
-
-				pinger.pinger(pinger.user, pinger.indices);
-				pinger.indices.clear();
-			}
-		}
-	} daemon;
 };
 
 }
-
-#endif

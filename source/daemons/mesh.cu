@@ -1,12 +1,12 @@
-#include "../../include/cuda/alloc.cuh"
-#include "../../include/layers/mesh_memory.hpp"
+#include "include/cuda/alloc.cuh"
+#include "include/daemons/mesh.hpp"
 
 namespace kobra {
 
-namespace layers {
+namespace daemons {
 
 // Fill out cachelet data for a single submesh
-void MeshMemory::fill_cachelet(Cachelet &cachelet, const Submesh &submesh)
+void MeshDaemon::fill_cachelet(Cachelet &cachelet, const Submesh &submesh)
 {
 	std::vector <glm::uvec3> triangles(submesh.triangles());
 
@@ -24,7 +24,7 @@ void MeshMemory::fill_cachelet(Cachelet &cachelet, const Submesh &submesh)
 }
 
 // Generate cache information for a renderable for CUDA
-void MeshMemory::cache_cuda(const Entity &entity)
+void MeshDaemon::cache_cuda(const Entity &entity)
 {
 	// Check if we need to cache
 	// TODO: check if the renderable has changed

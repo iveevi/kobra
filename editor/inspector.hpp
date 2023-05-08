@@ -4,13 +4,13 @@
 #include <imgui.h>
 
 // Engine headers
-#include "include/ecs.hpp"
+#include "include/system.hpp"
 
 struct Inspector {
-        kobra::ECS *ecs = nullptr;
+        kobra::System *system= nullptr;
         int32_t selected = -1;
 };
 
-Inspector *make_inspector(kobra::ECS *);
+Inspector *make_inspector(kobra::System *);
 void select(Inspector *, int32_t);
 void render(Inspector *);

@@ -23,8 +23,8 @@ struct EditorViewport {
         TextureLoader *texture_loader = nullptr;
 
         // Raytracing structures
-        std::shared_ptr <amadeus::System> system = nullptr;
-        std::shared_ptr <layers::MeshMemory> mesh_memory = nullptr;
+        std::shared_ptr <amadeus::Accelerator> system = nullptr;
+        std::shared_ptr <daemons::MeshDaemon> mesh_memory = nullptr;
 
         // Buffers
         struct FramebufferImages {
@@ -203,8 +203,8 @@ struct EditorViewport {
 
         EditorViewport() = delete;
         EditorViewport(const Context &,
-                const std::shared_ptr <amadeus::System> &,
-                const std::shared_ptr <layers::MeshMemory> &);
+                const std::shared_ptr <amadeus::Accelerator> &,
+                const std::shared_ptr <daemons::MeshDaemon> &);
 
         // Configuration methods
         void configure_present();
@@ -224,20 +224,24 @@ struct EditorViewport {
         void resize(const vk::Extent2D &);
 
         // Rendering methods
-        void render_gbuffer(const RenderInfo &, const std::vector <Entity> &);
+        void render_gbuffer(const RenderInfo &, const std::vector <Entity> &,
+                        const daemons::MaterialDaemon *);
         // void render_amadeus_path_traced(const RenderInfo &, const std::vector <Entity> &, daemons::Transform &);
-        void render_path_traced(const RenderInfo &, const std::vector <Entity> &);
-        void render_albedo(const RenderInfo &, const std::vector <Entity> &);
+        void render_path_traced(const RenderInfo &, const std::vector <Entity> &,
+                        const daemons::MaterialDaemon *);
+        void render_albedo(const RenderInfo &, const std::vector <Entity> &,
+                        const daemons::MaterialDaemon *);
         void render_normals(const RenderInfo &);
         void render_uv(const RenderInfo &);
         void render_triangulation(const RenderInfo &);
         void render_bounding_box(const RenderInfo &, const std::vector <Entity> &);
         void render_highlight(const RenderInfo &, const std::vector <Entity> &);
 
-        void render(const RenderInfo &, const std::vector <Entity> &, daemons::Transform &);
+        void render(const RenderInfo &, const std::vector <Entity> &,
+                    daemons::Transform &, const daemons::MaterialDaemon *);
 
         // Other methods
-        void prerender_raytrace(const std::vector <Entity> &);
+        void prerender_raytrace(const std::vector <Entity> &, const daemons::MaterialDaemon *);
 
         // Properties
         ImageData &viewport() {

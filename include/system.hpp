@@ -1,5 +1,4 @@
-#ifndef KOBRA_ECS_H_
-#define KOBRA_ECS_H_
+#pragma once
 
 // Standard headers
 #include <memory>
@@ -18,6 +17,7 @@
 #include "mesh.hpp"
 #include "renderable.hpp"
 #include "transform.hpp"
+#include "daemons/material.hpp"
 
 namespace kobra {
 
@@ -54,17 +54,17 @@ KOBRA_COMPONENT_STRING(Transform)
 template <class T>
 using Archetype = std::vector <T>;
 
-class ECS {
-	Archetype <CameraPtr>		cameras;
-	Archetype <LightPtr>		lights;
-	Archetype <MeshPtr>		meshes;
-	Archetype <RenderablePtr>	rasterizers;
-	Archetype <Transform>		transforms;
+struct System {
+	Archetype <CameraPtr> cameras;
+	Archetype <LightPtr> lights;
+	Archetype <MeshPtr> meshes;
+	Archetype <RenderablePtr> rasterizers;
+	Archetype <Transform> transforms;
 
-	Archetype <Entity>		entities;
+        daemons::MaterialDaemon *material_daemon;
 
-	std::unordered_map <std::string, int>
-					name_map;
+	std::unordered_map <std::string, int> lookup;
+	Archetype <Entity> entities;
 
 	// Private helpers
 	void _expand_all();
@@ -84,35 +84,38 @@ class ECS {
 	struct _ref {
 		using Return = void;
 
-		static T &ref(ECS *, int) {
+		static T &ref(System *, int) {
 			throw std::runtime_error(
 				"_ref::ref() not implemented for type: "
 				+ component_string <T> ()
 			);
 		}
 
-		static T &get(ECS *, int) {
+		static T &get(System *, int) {
 			throw std::runtime_error(
 				"_ref::get() not implemented for type: "
 				+ component_string <T> ()
 			);
 		}
 
-		static const T &get(const ECS *, int) {
+		static const T &get(const System *, int) {
 			throw std::runtime_error(
 				"const _ref::get() not implemented for type: "
 				+ component_string <T> ()
 			);
 		}
 
-		static bool exists(const ECS *, int) {
+		static bool exists(const System *, int) {
 			throw std::runtime_error(
 				"_ref::exists() not implemented for type: "
 				+ component_string <T> ()
 			);
 		}
 	};
-public:
+
+        // Constructor
+        System(daemons::MaterialDaemon *md) : material_daemon(md) {}
+
 	// The get functions will need to be specialized
 	template <class T>
 	T &get(int i) {
@@ -173,7 +176,7 @@ public:
 		_ref <T> ::ref(this, i) = _constructor <T> ::make(args ...);
 	}
 
-	// Size of ECS
+	// Size of System
 	int size() const {
 		return entities.size();
 	}
@@ -189,17 +192,26 @@ public:
 
 	// Get entity by name
 	Entity &get_entity(const std::string &name) {
-		if (name_map.find(name) == name_map.end())
+		if (lookup.find(name) == lookup.end())
 			KOBRA_LOG_FUNC(Log::WARN) << "Entity " << name << " does not exist.\n";
 
-		return entities[name_map.at(name)];
+		return entities[lookup.at(name)];
 	}
 
 	const Entity &get_entity(const std::string &name) const {
-		if (name_map.find(name) == name_map.end())
+		if (lookup.find(name) == lookup.end())
 			KOBRA_LOG_FUNC(Log::WARN) << "Entity " << name << " does not exist.\n";
-		return entities[name_map.at(name)];
+		return entities[lookup.at(name)];
 	}
+
+        // Retrieve materials
+        Material &get_material(int32_t index) {
+                return material_daemon->materials[index];
+        }
+
+        const Material &get_material(int32_t index) const {
+                return material_daemon->materials[index];
+        }
 
 	// Create a new entity
 	Entity &make_entity(const std::string &name = "Entity");
@@ -240,7 +252,7 @@ public:
 // TODO: macros?
 #define KOBRA_MAKE_SHARED(T, Ret)				\
 	template <>						\
-	struct ECS::_constructor <T> {				\
+	struct System::_constructor <T> {				\
 		template <class ... Args>			\
 		static Ret make(Args ... args) {		\
 			return std::make_shared <T> (args...);	\
@@ -256,21 +268,21 @@ KOBRA_MAKE_SHARED(Renderable, RenderablePtr);
 // TODO: another header
 #define KOBRA_REF(T, Array)					\
 	template <>						\
-	struct ECS::_ref <T> {					\
+	struct System::_ref <T> {					\
 		using Return = T;				\
 								\
-		static T &ref(ECS *ecs, int i) {		\
+		static T &ref(System *ecs, int i) {		\
 			return ecs->Array[i];			\
 		}						\
 								\
-		static T &get(ECS *ecs, int i) {		\
+		static T &get(System *ecs, int i) {		\
 			return ecs->Array[i];			\
 		}						\
 								\
-		static const T &get(const ECS *ecs, int i) {	\
+		static const T &get(const System *ecs, int i) {	\
 			return ecs->Array[i];			\
 		}						\
-		static bool exists(const ECS *ecs, int i) {	\
+		static bool exists(const System *ecs, int i) {	\
 			return ecs->Array.size() > i;		\
 		}						\
 	}
@@ -281,21 +293,21 @@ KOBRA_REF(Transform, transforms);
 // if it is large, then move it...
 #define KOBRA_RET_SHARED(T, Ret, Array)				\
 	template <>						\
-	struct ECS::_ref <T> {					\
+	struct System::_ref <T> {					\
 		using Return = Ret;				\
 								\
-		static Ret &ref(ECS *ecs, int i) {		\
+		static Ret &ref(System *ecs, int i) {		\
 			return ecs->Array[i];			\
 		}						\
 								\
-		static T &get(ECS *ecs, int i) {		\
+		static T &get(System *ecs, int i) {		\
 			return *ecs->Array[i];			\
 		}						\
 								\
-		static const T &get(const ECS *ecs, int i) {	\
+		static const T &get(const System *ecs, int i) {	\
 			return *ecs->Array[i];			\
 		}						\
-		static bool exists(const ECS *ecs, int i) {	\
+		static bool exists(const System *ecs, int i) {	\
 			return (ecs->Array.size() > i)		\
 				&& (ecs->Array[i] != nullptr);	\
 		}						\
@@ -308,15 +320,15 @@ KOBRA_RET_SHARED(Renderable, RenderablePtr, rasterizers);
 
 // Entity class, acts like a pointer to a component
 class Entity {
-	ECS		*ecs = nullptr;
+	System		*ecs = nullptr;
 
-	// Assert valid ECS
+	// Assert valid System
 	void _assert() const {
 		KOBRA_ASSERT(
 			ecs != nullptr,
 			"Entity \"" + name + "\" (id="
 				+ std::to_string(id)
-				+ ") has no ECS"
+				+ ") has no System"
 		);
 
 		KOBRA_ASSERT(
@@ -327,7 +339,7 @@ class Entity {
 		);
 	}
 
-	Entity(std::string name_, uint32_t id_, ECS *ecs_)
+	Entity(std::string name_, uint32_t id_, System *ecs_)
 		: name(name_), id(id_), ecs(ecs_) {}
 public:
 	int32_t		id = -1;
@@ -371,13 +383,13 @@ public:
 		ecs->add <T> (id, args ...);
 	}
 
-	// Friend the ECS class
-	friend class ECS;
+	// Friend the System class
+	friend class System;
 	friend class Scene;
 };
 
 template <class T>
-void ECS::info() const
+void System::info() const
 {
 	std::cout << "Archetype: " << component_string <T> () << std::endl;
 	for (size_t i = 0; i < size(); i++) {
@@ -392,7 +404,7 @@ void ECS::info() const
 
 // Specializations of info
 template <>
-inline void ECS::info <Transform> () const
+inline void System::info <Transform> () const
 {
 	std::cout << "Archetype: " << component_string <Transform> () << std::endl;
 	for (size_t i = 0; i < transforms.size(); i++) {
@@ -402,5 +414,3 @@ inline void ECS::info <Transform> () const
 }
 
 }
-
-#endif

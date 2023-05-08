@@ -13,21 +13,20 @@
 #include <optix_stubs.h>
 
 // Engine headers
-#include "../backend.hpp"
-#include "../core/async.hpp"
-#include "../core/kd.cuh"
-#include "../daemons/transform.hpp"
-#include "../layers/mesh_memory.hpp"
-#include "../optix/parameters.cuh"
-#include "../optix/sbt.cuh"
-#include "../timer.hpp"
-#include "../vertex.hpp"
-#include "system.cuh"
+#include "include/backend.hpp"
+#include "include/core/async.hpp"
+#include "include/core/kd.cuh"
+#include "include/daemons/mesh.hpp"
+#include "include/daemons/transform.hpp"
+#include "include/optix/parameters.cuh"
+#include "include/optix/sbt.cuh"
+#include "include/timer.hpp"
+#include "include/vertex.hpp"
+#include "accelerator.cuh"
 
 namespace kobra {
 
 // Forward declarations
-class ECS;
 class Camera;
 class Transform;
 class Renderable;
@@ -142,8 +141,8 @@ public:
 // Armada RTX for real-time, physically-based raytracing methods
 class ArmadaRTX {
 	// Raytracing backend
-	std::shared_ptr <System> m_system;
-	std::shared_ptr <layers::MeshMemory> m_mesh_memory;
+	std::shared_ptr <Accelerator> m_system;
+	std::shared_ptr <daemons::MeshDaemon> m_mesh_memory;
 
 	// Critical Vulkan structures
 	vk::raii::Device *m_device = nullptr;
@@ -182,7 +181,7 @@ class ArmadaRTX {
 		std::vector <cuda::_material> materials;
 		std::vector <std::set <_instance_ref>> material_submeshes;
 
-		std::vector <layers::MeshMemory::Cachelet> cachelets;
+		std::vector <daemons::MeshDaemon::Cachelet> cachelets;
 
                 std::vector <const Entity *> entities;
 		std::vector <int> submesh_indices;
@@ -219,29 +218,22 @@ class ArmadaRTX {
 	// Private methods
 	void update_triangle_light_buffers(
 		const daemons::Transform *,
+		const daemons::MaterialDaemon *,
 		const std::set <_instance_ref> &
 	);
 
-	// void update_quad_light_buffers(
-	// 	const std::vector <const Light *> &,
-	// 	const std::vector <const Transform *> &
-	// );
-
-	void update_sbt_data();
-	// void update_sbt_data(const ECS &);
-		// const std::vector <layers::MeshMemory::Cachelet> &,
-		// const std::vector <const Submesh *> &,
-		// const std::vector <const Transform *> &
-
-	void update_materials(const std::set <uint32_t> &);
+	void update_sbt_data(const daemons::MaterialDaemon *);
+	void update_materials(const daemons::MaterialDaemon *, const std::set <uint32_t> &);
 
 	struct preprocess_update {
 		std::optional <OptixTraversableHandle> handle;
 		std::vector <HitRecord> *hit_records;
 	};
 
-	preprocess_update preprocess_scene(const std::vector <Entity> &,
+	preprocess_update preprocess_scene(
+                const std::vector <Entity> &,
                 const daemons::Transform &,
+                const daemons::MaterialDaemon *,
                 const Camera &, const Transform &);
 public:
 	// Default constructor
@@ -250,8 +242,8 @@ public:
 	// Constructor
 	ArmadaRTX(
 		const Context &,
-		const std::shared_ptr <System> &,
-		const std::shared_ptr <layers::MeshMemory> &,
+		const std::shared_ptr <Accelerator> &,
+		const std::shared_ptr <daemons::MeshDaemon> &,
 		const vk::Extent2D &
 	);
 
@@ -264,7 +256,7 @@ public:
 		return m_extent;
 	}
 
-	const std::shared_ptr <System> &system() const {
+	const std::shared_ptr <Accelerator> &system() const {
 		return m_system;
 	}
 
@@ -335,7 +327,8 @@ public:
 	// Methods
 	void set_envmap(const std::string &);
 
-	void render(const std::vector <Entity> &,
+	void render(const System *,
+                const std::vector <Entity> &,
                 const daemons::Transform &,
 		const Camera &,
 		const Transform &,

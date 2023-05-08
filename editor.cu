@@ -103,8 +103,8 @@ struct Editor : public kobra::BaseApp {
 
 	// Renderers
 	struct {
-		std::shared_ptr <kobra::amadeus::System> system;
-		std::shared_ptr <kobra::layers::MeshMemory> mesh_memory;
+		std::shared_ptr <kobra::amadeus::Accelerator> system;
+		std::shared_ptr <kobra::daemons::MeshDaemon> mesh_memory;
 
 		kobra::layers::Denoiser denoiser;
 		kobra::layers::Framer framer;
@@ -391,7 +391,10 @@ public:
 		ImGui::Text("Material data:");
 		ImGui::Separator();
 
-		kobra::Material *material = &kobra::Material::all[material_index];
+		// kobra::Material *material = &kobra::Material::all[material_index];
+                System *system = m_editor->m_scene.system.get();
+                daemons::MaterialDaemon *md = system->material_daemon;
+                kobra::Material *material = &md->materials[material_index];
 
 		glm::vec3 diffuse = material->diffuse;
 		glm::vec3 specular = material->specular;
@@ -480,7 +483,7 @@ public:
 
 		// Notify the daemon that the material has been updated
 		if (updated_material) {
-			kobra::Material::daemon.update(material_index);
+			// kobra::Material::daemon.update(material_index);
 			std::lock_guard <std::mutex> lock_guard
 				(m_editor->m_renderers.movement_mutex);
 			m_editor->m_renderers.movement.push(0);
@@ -669,14 +672,15 @@ void import_asset(Editor *editor)
 	nfdresult_t result = NFD_OpenDialog(&path, nullptr, 0, nullptr);
 
 	if (result == NFD_OKAY) {
-                // Extract name of the entity from the file name
-                // TODO: check for duplicates
-                std::filesystem::path asset_path = path;
-                kobra::Mesh mesh = *kobra::Mesh::load(asset_path.string());
-                auto ecs = editor->m_scene.ecs;
-                auto entity = ecs->make_entity(asset_path.stem());
-                entity.add <kobra::Mesh> (mesh);
-                entity.add <kobra::Renderable> (editor->get_context(), &entity.get <kobra::Mesh> ());
+                KOBRA_LOG_FUNC(Log::WARN) << "Needs to be implemented" << std::endl;
+                // // Extract name of the entity from the file name
+                // // TODO: check for duplicates
+                // std::filesystem::path asset_path = path;
+                // kobra::Mesh mesh = *kobra::Mesh::load(asset_path.string());
+                // auto system = editor->m_scene.system;
+                // auto entity = system->make_entity(asset_path.stem());
+                // entity.add <kobra::Mesh> (mesh);
+                // entity.add <kobra::Renderable> (editor->get_context(), &entity.get <kobra::Mesh> ());
 	} else if (result == NFD_CANCEL) {
 		std::cout << "User cancelled" << std::endl;
 	} else {
@@ -1063,9 +1067,9 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	
 	// m_scene.load(get_context(), project.scene);
 	m_scene = m_project.load_scene(get_context());
-	assert(m_scene.ecs);
+	assert(m_scene.system);
 
-        transform_daemon = std::make_shared <kobra::daemons::Transform> (m_scene.ecs.get());
+        transform_daemon = std::make_shared <kobra::daemons::Transform> (m_scene.system.get());
 
 	// IO callbacks
 	io.mouse_events.subscribe(mouse_callback, this);
@@ -1078,8 +1082,8 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	// creates a framebuffer...)
 
 	// Load all the renderers
-	m_renderers.system = std::make_shared <kobra::amadeus::System> (transform_daemon.get());
-	m_renderers.mesh_memory = std::make_shared <kobra::layers::MeshMemory> (get_context());
+	m_renderers.system = std::make_shared <kobra::amadeus::Accelerator> (transform_daemon.get());
+	m_renderers.mesh_memory = std::make_shared <kobra::daemons::MeshDaemon> (get_context());
 	m_viewport.sampler = kobra::make_continuous_sampler(device);
 
 	// Attach UI layers
@@ -1098,7 +1102,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
         m_ui->attach(m_ui_attachments.viewport);
 	m_ui->attach(scene_graph);
 
-        m_inspector = make_inspector(m_scene.ecs.get());
+        m_inspector = make_inspector(m_scene.system.get());
         
         // TODO: UI attachemtn that shows frametime as little chunks per frame
 
@@ -1175,7 +1179,7 @@ void handle_camera_input(Editor *editor)
         if (moved) {
                 std::lock_guard <std::mutex> lock(editor->m_renderers.movement_mutex);
                 // TODO: signal to transform daeon instead? but the
-                // viewport camera is not an ECS entity
+                // viewport camera is not an system entity
                 editor->m_renderers.movement.push(0);
         }
 }
@@ -1193,22 +1197,22 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 	std::vector <const kobra::Light *> lights;
 	std::vector <const kobra::Transform *> light_transforms;
 
-	auto renderables_transforms = m_scene.ecs->tuples <kobra::Renderable, kobra::Transform> ();
-	auto lights_transforms = m_scene.ecs->tuples <kobra::Light, kobra::Transform> ();
+	auto renderables_transforms = m_scene.system->tuples <kobra::Renderable, kobra::Transform> ();
+	auto lights_transforms = m_scene.system->tuples <kobra::Light, kobra::Transform> ();
 
-	auto ecs = m_scene.ecs;
-	for (int i = 0; i < ecs->size(); i++) {
-		if (ecs->exists <kobra::Renderable> (i)) {
-			const auto *renderable = &ecs->get <kobra::Renderable> (i);
-			const auto *transform = &ecs->get <kobra::Transform> (i);
+	auto system = m_scene.system;
+	for (int i = 0; i < system->size(); i++) {
+		if (system->exists <kobra::Renderable> (i)) {
+			const auto *renderable = &system->get <kobra::Renderable> (i);
+			const auto *transform = &system->get <kobra::Transform> (i);
 
 			renderables.push_back(renderable);
 			renderable_transforms.push_back(transform);
 		}
 
-		if (ecs->exists <kobra::Light> (i)) {
-			const auto *light = &ecs->get <kobra::Light> (i);
-			const auto *transform = &ecs->get <kobra::Transform> (i);
+		if (system->exists <kobra::Light> (i)) {
+			const auto *light = &system->get <kobra::Light> (i);
+			const auto *transform = &system->get <kobra::Transform> (i);
 
 			lights.push_back(light);
 			light_transforms.push_back(transform);
@@ -1233,8 +1237,10 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
                 // render_info.framebuffer = &m_viewport.framebuffer;
                 render_info.highlighted_entities = m_highlighted_entities;
 
-                std::vector <Entity> renderable_entities = m_scene.ecs->tuple_entities <Renderable> ();
-                m_editor_renderer->render(render_info, renderable_entities, *transform_daemon);
+                // TODO: pass the system itself...
+                std::vector <Entity> renderable_entities = m_scene.system->tuple_entities <Renderable> ();
+                const daemons::MaterialDaemon *md = system->material_daemon;
+                m_editor_renderer->render(render_info, renderable_entities, *transform_daemon, md);
 
                 /* m_editor_renderer->render_gbuffer(render_info, renderable_entities);
                 m_editor_renderer->render_present(render_info); */
@@ -1338,7 +1344,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
                 // Material preview
                 // TODO: only if there is an active material
                 // and input has been received on the corresponding window
-                render_material_preview(*cmd, material_preview);
+                render_material_preview(*cmd, material_preview, m_scene.system->material_daemon);
 
 		/* Render the UI last
 		m_ui->render(cmd,
@@ -1378,7 +1384,7 @@ void handle_viewport_input(Editor *editor, const InputRequest &request)
                 if (within(request.position, input_context.viewport) && !ImGuizmo::IsOver()) {
                         glm::vec2 fixed = normalize(request.position, input_context.viewport);
 
-                        std::vector <Entity> renderable_entities = editor->m_scene.ecs->tuple_entities <Renderable> ();
+                        std::vector <Entity> renderable_entities = editor->m_scene.system->tuple_entities <Renderable> ();
                         auto indices = editor->m_editor_renderer->selection_query(renderable_entities, fixed);
 
                         // Update the material editor
@@ -1388,8 +1394,8 @@ void handle_viewport_input(Editor *editor, const InputRequest &request)
                                 editor->m_highlighted_entities.clear();
                         } else {
                                 auto selection = indices[0];
-                                kobra::Renderable &renderable = editor->m_scene.ecs->get <kobra::Renderable> (selection.first);
-                                editor->m_ui_attachments.viewport->set_transform(editor->m_scene.ecs->get_entity(selection.first));
+                                kobra::Renderable &renderable = editor->m_scene.system->get <kobra::Renderable> (selection.first);
+                                editor->m_ui_attachments.viewport->set_transform(editor->m_scene.system->get_entity(selection.first));
                                 uint32_t material_index = renderable.material_indices[selection.second];
                                 editor->m_material_editor->material_index = material_index;
                                 editor->m_highlighted_entities = {(int) material_index};
@@ -1505,7 +1511,7 @@ void Editor::after_present()
 
 	// Ping all systems using materials
         // TODO: formalize material daemon
-	kobra::Material::daemon.ping_all();
+	// kobra::Material::daemon.ping_all();
 
         // Daemon update cycle
         transform_daemon->update();

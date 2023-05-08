@@ -11,6 +11,7 @@
 
 // Engine headers
 #include "scene.hpp"
+#include "include/daemons/material.hpp"
 
 namespace kobra {
 
@@ -22,6 +23,8 @@ struct Project {
 	std::string default_save_path = "";
 	std::vector <Scene> scenes = {};
 	std::vector <std::string> scenes_files = {};
+
+        daemons::MaterialDaemon *material_daemon = nullptr;
 
 	// Default constructor
 	Project() = default;
@@ -84,6 +87,9 @@ struct Project {
 
 		// Resize (but all are null)
 		scenes.resize(scenes_files.size());
+
+                // Allocate material daemon
+                material_daemon = daemons::make_material_daemon();
 	}
 
 	// Load scene
@@ -95,8 +101,9 @@ struct Project {
         // Default project
         static Project basic(const Context &context, const std::filesystem::path &dir) {
                 Project project;
+                project.material_daemon = daemons::make_material_daemon();
 
-                Scene basic = Scene::basic(context);
+                Scene basic = Scene::basic(context, project.material_daemon);
                 project.scenes.push_back(basic);
                 project.scenes_files.push_back(dir / "example.kobra");
                 project.default_save_path = dir;

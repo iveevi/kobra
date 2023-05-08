@@ -1,22 +1,22 @@
-#include "../include/ecs.hpp"
+#include "include/system.hpp"
 
 namespace kobra {
 
 // Creating a new entity
-Entity &ECS::make_entity(const std::string &name) {
+Entity &System::make_entity(const std::string &name) {
 	_expand_all();
-        // TODO: when allowing removel of ECS objects, create a more complex
+        // TODO: when allowing removel of System objects, create a more complex
         // id...
 	int32_t id = transforms.size() - 1;
 
 	Entity e(name, id, this);
 	entities.push_back(e);
 
-	name_map[name] = id;
-        printf("ECS refs:\n");
+	lookup[name] = id;
+        printf("System refs:\n");
         for (int i = 0; i < transforms.size(); i++) {
                 std::string name = "";
-                for (auto pr : name_map) {
+                for (auto pr : lookup) {
                         if (pr.second == i)
                                 name = pr.first;
                 }
@@ -26,7 +26,7 @@ Entity &ECS::make_entity(const std::string &name) {
 }
 
 // Private helpers
-void ECS::_expand_all()
+void System::_expand_all()
 {
 	cameras.push_back(nullptr);
 	lights.push_back(nullptr);

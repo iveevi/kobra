@@ -23,12 +23,12 @@ public:
 	// Data
 	VertexList vertices;
         std::vector <uint32_t> indices;
-	uint32_t material_index = 0;
+	int32_t material_index = 0;
 
 	// Constructors
 	// TODO: remove this constructor...
 	Submesh(const VertexList &vs, const std::vector <uint32_t> &is,
-			uint32_t mat_index = 0,
+			int32_t mat_index = -1,
 			bool calculate_tangents = true)
 			: vertices(vs), indices(is), material_index(mat_index) {
 		/* Process the vertex data
@@ -88,11 +88,7 @@ public:
 
 // A mesh is a collection of submeshes
 // TODO: refactor to Model
-class Mesh {
-	// Source file
-        // TODO: rmove this field, it is not being used...
-	std::string _source = "";
-public:
+struct Mesh {
 	// Data
 	std::vector <Submesh> submeshes;
 
@@ -122,11 +118,6 @@ public:
 		for (const auto &submesh : submeshes)
 			total += submesh.triangles();
 		return total;
-	}
-
-	// Get the source file
-	const std::string &source() const {
-		return _source;
 	}
 
 	// Indexing
@@ -169,7 +160,7 @@ public:
 
 	static Mesh sphere(const glm::vec3 &, float, int = 16, int = 16);
 
-	static std::optional <Mesh> load(const std::string &);
+	static std::optional <std::tuple <Mesh, std::vector <Material>>> load(const std::string &);
 
 	// Caching
 	static void cache_save(const Mesh &, const std::string &);

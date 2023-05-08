@@ -1,9 +1,9 @@
 #include "inspector.hpp"
 
-Inspector *make_inspector(kobra::ECS *ecs)
+Inspector *make_inspector(kobra::System *system)
 {
         Inspector *inspector = new Inspector;
-        inspector->ecs = ecs;
+        inspector->system = system;
         return inspector;
 }
 
@@ -22,7 +22,7 @@ void render(Inspector *inspector)
         }
 
         // Load the entity
-        kobra::Entity &entity = inspector->ecs->get_entity(inspector->selected);
+        kobra::Entity &entity = inspector->system->get_entity(inspector->selected);
 
         ImGui::Begin("Inspector");
 

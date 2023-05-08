@@ -1,3 +1,7 @@
+// Engine headers
+#include "include/daemons/material.hpp"
+
+// Editor headers
 #include "scene_graph.hpp"
 
 using namespace kobra;
@@ -9,13 +13,16 @@ void SceneGraph::set_scene(const Scene *scene)
 
 void SceneGraph::render()
 {
+        System *system = m_scene->system.get();
+        daemons::MaterialDaemon *md = system->material_daemon;
+
         ImGui::Begin("Scene Graph");
         
         if (m_scene != nullptr) {
-                auto &ecs = *m_scene->ecs;
+                auto &system = *m_scene->system;
 
                 // Button transparent background
-                for (auto &entity : ecs) {
+                for (auto &entity : system) {
                         ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 0.5f));
 
                         uint32_t width = ImGui::GetContentRegionAvail().x;
@@ -38,18 +45,22 @@ void SceneGraph::render()
                                 if (ImGui::MenuItem("Box")) {
                                         Mesh box = Mesh::box();
                                         // TODO: method to request new material from a daemon...
-                                        box.submeshes[0].material_index = Material::all.size();
-                                        Material::all.push_back(Material::default_material());
-                                        auto &entity = m_scene->ecs->make_entity("Box");
+                                        // box.submeshes[0].material_index = Material::all.size();
+                                        // Material::all.push_back(Material::default_material());
+                                        int32_t index = daemons::load(md, Material::default_material());
+                                        box.submeshes[0].material_index = index;
+                                        auto &entity = system->make_entity("Box");
                                         entity.add <Mesh> (box);
                                         entity.add <Renderable> (g_application.context, &entity.get <Mesh> ());
                                 }
 
                                 if (ImGui::MenuItem("Plane")) {
                                         Mesh plane = Mesh::plane();
-                                        plane.submeshes[0].material_index = Material::all.size();
-                                        Material::all.push_back(Material::default_material());
-                                        auto &entity = m_scene->ecs->make_entity("Plane");
+                                        // plane.submeshes[0].material_index = Material::all.size();
+                                        // Material::all.push_back(Material::default_material());
+                                        int32_t index = daemons::load(md, Material::default_material());
+                                        plane.submeshes[0].material_index = index;
+                                        auto &entity = system->make_entity("Plane");
                                         entity.add <Mesh> (plane);
                                         entity.add <Renderable> (g_application.context, &entity.get <Mesh> ());
                                 }

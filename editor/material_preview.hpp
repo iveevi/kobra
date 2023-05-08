@@ -9,6 +9,7 @@
 #include "include/material.hpp"
 #include "include/shader_program.hpp"
 #include "include/transform.hpp"
+#include "include/daemons/material.hpp"
 
 struct PushConstants {
         // Camera location
@@ -302,13 +303,14 @@ void destroy_material_preview(MaterialPreview *mp)
 }
 
 // TODO: pass the actual material
-void render_material_preview(const vk::CommandBuffer &cmd, MaterialPreview *mp)
+void render_material_preview(const vk::CommandBuffer &cmd, MaterialPreview *mp, const kobra::daemons::MaterialDaemon *md)
 {
         PushConstants push_constants;
         push_constants.origin = mp->origin;
 
         if (mp->index >= 0) {
-                const kobra::Material &material = kobra::Material::all[mp->index];
+                // const kobra::Material &material = kobra::Material::all[mp->index];
+                const kobra::Material &material = md->materials[mp->index];
                 push_constants.diffuse = material.diffuse;
                 push_constants.specular = material.specular;
                 push_constants.roughness = material.roughness;

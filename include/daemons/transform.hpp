@@ -1,7 +1,7 @@
 #pragma once
 
 // Engine headers
-#include "../ecs.hpp"
+#include "include/system.hpp"
 
 namespace kobra {
 
@@ -16,12 +16,12 @@ struct Transform {
                 eDynamic // Assumed to be always moving
         };
 
-        // ECS reference, along with flag array
-        ECS *ecs;
+        // System reference, along with flag array
+        System *system;
         std::vector <uint8_t> status;
         std::vector <kobra::Transform> transforms;
 
-        Transform(ECS *ref) : ecs(ref) {}
+        Transform(System *ref) : system(ref) {}
 
         size_t size() const {
                 return status.size();
@@ -29,7 +29,7 @@ struct Transform {
 
         // TODO: skip update function and just signal to update...
         void update() {
-                int entities = ecs->size();
+                int entities = system->size();
                 // TODO: store by address, to avoid
                 // issues when entities are removed...
 
@@ -37,7 +37,7 @@ struct Transform {
                 for (int i = 0; i < entities; i++) {
                         if (i < transforms.size()) {
                                 // Already initialized
-                                const kobra::Transform &t = ecs->get <kobra::Transform> (i);
+                                const kobra::Transform &t = system->get <kobra::Transform> (i);
                                 kobra::Transform &old = transforms[i];
 
                                 glm::vec3 dtr = t.position - old.position;
@@ -52,7 +52,7 @@ struct Transform {
                                 old = t;
                         } else {
                                 // Initialize with copy
-                                transforms.push_back(ecs->get <kobra::Transform> (i));
+                                transforms.push_back(system->get <kobra::Transform> (i));
                                 status.push_back(eSame);
                         }
                 }

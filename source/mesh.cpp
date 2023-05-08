@@ -348,7 +348,6 @@ Mesh Mesh::box(const glm::vec3 &center, const glm::vec3 &dim)
 	// TODO: should set source of the mesh to box, then dimensions
 	auto out = Submesh {vertices, indices};
 	Mesh m = std::vector <Submesh> {out};
-	m._source = "box";
 	return m;
 }
 
@@ -370,7 +369,6 @@ Mesh Mesh::plane(const glm::vec3 &center, float width, float height)
 
 	auto out = Submesh {vertices, indices};
 	Mesh m = std::vector <Submesh> {out};
-	m._source = "plane";
 	return m;
 }
 
@@ -772,7 +770,7 @@ Submesh Submesh::cone(int resolution)
 
 namespace assimp {
 
-static Submesh process_mesh(aiMesh *mesh, const aiScene *scene, const std::string &dir)
+static std::tuple <Submesh, Material> process_mesh(aiMesh *mesh, const aiScene *scene, const std::string &dir)
 {
 	KOBRA_PROFILE_FUNCTION();
 
@@ -827,8 +825,9 @@ static Submesh process_mesh(aiMesh *mesh, const aiScene *scene, const std::strin
 
 	// Material
 	Material mat;
-
 	aiMaterial *material = scene->mMaterials[mesh->mMaterialIndex];
+
+        mat.name = material->GetName().C_Str();
 
 	// Get diffuse
 	aiString path;
@@ -861,19 +860,24 @@ static Submesh process_mesh(aiMesh *mesh, const aiScene *scene, const std::strin
 	mat.roughness = 1 - shininess/1000.0f;
 
 	// Push the material to the material list
-	uint32_t mat_index = Material::all.size();
-	Material::all.push_back(mat);
+	// uint32_t mat_index = Material::all.size();
+	// Material::all.push_back(mat);
 
-	return Submesh {vertices, indices, mat_index};
+	return { Submesh { vertices, indices, -1 }, mat };
 }
 
-static Mesh process_node(aiNode *node, const aiScene *scene, const std::string &dir)
+static std::tuple <Mesh, std::vector <Material>> process_node(aiNode *node, const aiScene *scene, const std::string &dir)
 {
 	// Process all the node's meshes (if any)
 	std::vector <Submesh> submeshes;
+        std::vector <Material> materials;
+
 	for (size_t i = 0; i < node->mNumMeshes; i++) {
 		aiMesh *mesh = scene->mMeshes[node->mMeshes[i]];
-		submeshes.push_back(process_mesh(mesh, scene, dir));
+
+                auto [submesh, material] = process_mesh(mesh, scene, dir);
+		submeshes.push_back(submesh);
+                materials.push_back(material);
 	}
 
 	// Recusively process all the node's children
@@ -881,16 +885,18 @@ static Mesh process_node(aiNode *node, const aiScene *scene, const std::string &
 	// std::vector <Mesh> children;
 
 	for (size_t i = 0; i < node->mNumChildren; i++) {
-		Mesh m = process_node(node->mChildren[i], scene, dir);
+		auto [m, mats] = process_node(node->mChildren[i], scene, dir);
 
 		for (size_t j = 0; j < m.submeshes.size(); j++)
 			submeshes.push_back(m.submeshes[j]);
+
+                materials.insert(materials.end(), mats.begin(), mats.end());
 	}
 
-	return Mesh {submeshes};
+	return { Mesh { submeshes }, materials };
 }
 
-std::optional <Mesh> load_mesh(const std::string &path)
+std::optional <std::tuple <Mesh, std::vector <Material>>> load_mesh(const std::string &path)
 {
 	KOBRA_PROFILE_FUNCTION();
 
@@ -909,20 +915,19 @@ std::optional <Mesh> load_mesh(const std::string &path)
 			|| !scene->mRootNode) {
 		KOBRA_LOG_FUNC(Log::ERROR) << "Assimp error: "
 			<< importer.GetErrorString() << std::endl;
-		return {};
+		return std::nullopt;
 	}
 
 	// Process the scene (root node)
-	return process_node(scene->mRootNode,
-		scene, common::get_directory(path)
-	);
+	return process_node(scene->mRootNode, scene, common::get_directory(path));
 }
 
 }
 
 namespace tinyobjloader {
 
-std::optional <Mesh> load_mesh(const std::string &path)
+// TODO: alias for std::optional <std::tuple <Mesh, std::vector <Material>>>
+std::optional <std::tuple <Mesh, std::vector <Material>>> load_mesh(const std::string &path)
 {
 	KOBRA_PROFILE_TASK(Loading mesh);
 
@@ -957,6 +962,7 @@ std::optional <Mesh> load_mesh(const std::string &path)
 
 	// Load submeshes
 	std::vector <Submesh> submeshes;
+        std::vector <Material> mats;
 
 	{
 		KOBRA_PROFILE_TASK(Loading mesh: Loading submeshes);
@@ -1137,12 +1143,13 @@ std::optional <Mesh> load_mesh(const std::string &path)
 						}
 
 						// Push the material
-						uint32_t mat_index = Material::all.size();
-						Material::all.push_back(mat);
+						// uint32_t mat_index = Material::all.size();
+						// Material::all.push_back(mat);
+                                                mats.push_back(mat);
 
 						// Add submesh
 						submeshes_mutex.lock();
-						submeshes.push_back(Submesh {vertices, indices, mat_index});
+						submeshes.push_back(Submesh { vertices, indices, -1 });
 						submeshes_mutex.unlock();
 
 						// Clear the vertices and indices
@@ -1162,17 +1169,17 @@ std::optional <Mesh> load_mesh(const std::string &path)
 
 	}
 
-	return Mesh {submeshes};
+	return {{ Mesh { submeshes }, mats }};
 }
 
 }
 
 // Load mesh from file
-std::optional <Mesh> Mesh::load(const std::string &path)
+std::optional <std::tuple <Mesh, std::vector <Material>>> Mesh::load(const std::string &path)
 {
 	// Special cases
-	if (path == "box")
-		return box({0, 0, 0}, {0.5, 0.5, 0.5});
+	// if (path == "box")
+	// 	return box({0, 0, 0}, {0.5, 0.5, 0.5});
 
 	// Check if the file exists
 	std::ifstream file(path);
@@ -1194,7 +1201,7 @@ std::optional <Mesh> Mesh::load(const std::string &path)
 	std::cout << "Loading mesh: " << path << " - " << ext << std::endl;
 
 	// TODO: sphere primitives...
-	std::optional <Mesh> opt;
+	std::optional <std::tuple <Mesh, std::vector <Material>>> opt;
 	if (ext == "obj") // TODO: fix this for smooth normals (option...)
 		opt = tinyobjloader::load_mesh(path);
 	else
@@ -1205,17 +1212,17 @@ std::optional <Mesh> Mesh::load(const std::string &path)
 		return {};
 	}
 
-	Mesh m = opt.value();
-	m._source = path;
+	// Mesh m = std::get <0> (opt.value());
+	// m._source = path; // TODO: deprecate this field
 
-	KOBRA_LOG_FUNC(Log::INFO) << "Loaded mesh with " << m.submeshes.size()
-		<< " submeshes (#verts = " << m.vertices() << ", #triangles = "
-		<< m.triangles() << "), from " << path << std::endl;
+	// KOBRA_LOG_FUNC(Log::INFO) << "Loaded mesh with " << m.submeshes.size()
+	// 	<< " submeshes (#verts = " << m.vertices() << ", #triangles = "
+	// 	<< m.triangles() << "), from " << path << std::endl;
 
 	// Cache the mesh
 	// Mesh::cache_save(m, filename);
 
-	return m;
+	return opt;
 }
 
 /* Cache mesh data to file

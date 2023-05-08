@@ -1,10 +1,8 @@
 // Engine headers
-#include "../../include/ecs.hpp"
-#include "../../include/layers/forward_renderer.hpp"
-#include "../../include/renderable.hpp"
-#include "../../include/shader_program.hpp"
-#include "../../source/shaders/bindings.h"
-#include <vulkan/vulkan_enums.hpp>
+#include "include/layers/forward_renderer.hpp"
+#include "include/renderable.hpp"
+#include "include/shader_program.hpp"
+#include "source/shaders/bindings.h"
 
 namespace kobra {
 
@@ -137,7 +135,8 @@ ForwardRenderer::RenderableDset ForwardRenderer::make_renderable_dset
 
 // Configure/update the descriptor set wrt a Renderable component
 void ForwardRenderer::configure_renderable_dset
-		(const PipelinePackage &pipeline_package,
+		(const System *system,
+                const PipelinePackage &pipeline_package,
 		const ForwardRenderer::RenderableDset &dset,
 		const Renderable *rasterizer)
 {
@@ -149,7 +148,8 @@ void ForwardRenderer::configure_renderable_dset
 	for (size_t i = 0; i < dset.size(); ++i) {
 		auto &d = dset[i];
 		uint32_t material_index = rasterizer->material_indices[i];
-		const Material &m = Material::all[material_index];
+		// const Material &m = Material::all[material_index];
+                const Material &m = system->get_material(material_index);
 
 		// Bind the textures
 		std::string albedo = "blank";
@@ -179,7 +179,6 @@ void ForwardRenderer::configure_renderable_dset
 // Render a given scene wrt a given camera
 void ForwardRenderer::render
 		(const Parameters &parameters,
-		// const ECS &ecs,
 		const Camera &camera,
 		const Transform &camera_transform,
 		const vk::raii::CommandBuffer &cmd,
@@ -241,7 +240,7 @@ void ForwardRenderer::render
 			);
 
 			// Configure the dset
-			configure_renderable_dset(pipeline_package, dsets[renderable], renderable);
+			configure_renderable_dset(parameters.system, pipeline_package, dsets[renderable], renderable);
 		}
 	}
 
@@ -275,8 +274,8 @@ void ForwardRenderer::render
 			);
 
 			// Bind buffers?>
-			cmd.bindVertexBuffers(0, *renderable->get_vertex_buffer(j).buffer, {0});
-			cmd.bindIndexBuffer(*renderable->get_index_buffer(j).buffer,
+			cmd.bindVertexBuffers(0, *renderable->vertex_buffer[j].buffer, {0});
+			cmd.bindIndexBuffer(*renderable->index_buffer[j].buffer,
 				0, vk::IndexType::eUint32
 			);
 
@@ -286,7 +285,7 @@ void ForwardRenderer::render
 			);
 
 			// Draw
-			cmd.drawIndexed(renderable->get_index_count(j), 1, 0, 0, 0);
+			cmd.drawIndexed(renderable->index_count[j], 1, 0, 0, 0);
 		}
 	}
 

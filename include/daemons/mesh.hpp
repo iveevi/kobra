@@ -1,21 +1,19 @@
-#ifndef KOBRA_LAYRES_MESH_MEMORY_H_
-#define KOBRA_LAYRES_MESH_MEMORY_H_
+#pragma once
 
 // Standard headers
 #include <map>
 
 // Engine headers
-#include "../backend.hpp"
-#include "../renderable.hpp"
-#include "../ecs.hpp"
+#include "include/backend.hpp"
+#include "include/renderable.hpp"
+#include "include/system.hpp"
 
 namespace kobra {
 
-namespace layers {
+namespace daemons {
 
 // Contains memory relating to a renderable, about its mesh and submeshes
-class MeshMemory {
-public:
+struct MeshDaemon {
 	// Information for a single submesh
 	struct Cachelet {
 		// TODO: move all the buffer datas here
@@ -31,8 +29,8 @@ public:
 	struct Cache {
 		std::vector <Cachelet> m_cachelets;
 	};
-private:
-	// Vulkan structures
+
+        // Vulkan structures
 	vk::raii::PhysicalDevice *m_phdev = nullptr;
 	vk::raii::Device *m_device = nullptr;
 	
@@ -41,12 +39,12 @@ private:
 
 	// Set of all cache items
 	std::map <int, Cache> m_cache;
-public:
-	// Default constructor
-	MeshMemory() = default;
+	
+        // Default constructor
+	MeshDaemon() = default;
 
 	// Constructor
-	MeshMemory(const Context &context)
+	MeshDaemon(const Context &context)
 			: m_phdev(context.phdev), m_device(context.device) {}
 
 	// Cache a renderable
@@ -66,5 +64,3 @@ public:
 }
 
 }
-
-#endif

@@ -7,17 +7,17 @@
 #include <imgui.h>
 
 // Engine headers
-#include "../../include/camera.hpp"
-#include "../../include/cuda/alloc.cuh"
-#include "../../include/cuda/cast.cuh"
-#include "../../include/cuda/color.cuh"
-#include "../../include/cuda/interop.cuh"
-#include "../../include/ecs.hpp"
-#include "../../include/amadeus/armada.cuh"
-#include "../../include/optix/core.cuh"
-#include "../../include/transform.hpp"
-#include "../../shaders/raster/bindings.h"
-#include "../../include/profiler.hpp"
+#include "include/amadeus/armada.cuh"
+#include "include/camera.hpp"
+#include "include/cuda/alloc.cuh"
+#include "include/cuda/cast.cuh"
+#include "include/cuda/color.cuh"
+#include "include/cuda/interop.cuh"
+#include "include/daemons/mesh.hpp"
+#include "include/optix/core.cuh"
+#include "include/profiler.hpp"
+#include "include/transform.hpp"
+#include "shaders/raster/bindings.h"
 
 namespace kobra {
 
@@ -26,8 +26,8 @@ namespace amadeus {
 // Create the layer
 // TODO: all custom extent...
 ArmadaRTX::ArmadaRTX(const Context &context,
-		const std::shared_ptr <amadeus::System> &system,
-		const std::shared_ptr <layers::MeshMemory> &mesh_memory,
+		const std::shared_ptr <amadeus::Accelerator> &system,
+		const std::shared_ptr <daemons::MeshDaemon> &mesh_memory,
 		const vk::Extent2D &extent)
 		: m_system(system), m_mesh_memory(mesh_memory),
 		m_device(context.device), m_phdev(context.phdev),
@@ -73,12 +73,13 @@ ArmadaRTX::ArmadaRTX(const Context &context,
 	params.buffers.position = cuda::alloc <glm::vec4> (size);
 
 	// Add self to the material system ping list
-	Material::daemon.ping_at(this,
-	[](void *user, const std::set <uint32_t> &materials) {
-			ArmadaRTX *armada = (ArmadaRTX *) user;
-			armada->update_materials(materials);
-		}
-	);
+        // TODO: use the new material daemon for this...
+	// Material::daemon.ping_at(this,
+	// [](void *user, const std::set <uint32_t> &materials) {
+	// 		ArmadaRTX *armada = (ArmadaRTX *) user;
+	// 		armada->update_materials(materials);
+	// 	}
+	// );
 }
 
 // Set the environment map
@@ -96,6 +97,7 @@ void ArmadaRTX::set_envmap(const std::string &path)
 
 void ArmadaRTX::update_triangle_light_buffers
 		(const daemons::Transform *transform_daemon,
+                const daemons::MaterialDaemon *md,
 		const std::set <_instance_ref> &emissive_submeshes_to_update)
 {
 	// TODO: share this setup with the renderables (another layer for
@@ -119,7 +121,8 @@ void ArmadaRTX::update_triangle_light_buffers
 			const Submesh *submesh = pr.submesh;
 			const Transform *transform = pr.transform;
 
-			const Material &material = Material::all[submesh->material_index];
+			// const Material &material = Material::all[submesh->material_index];
+                        const Material &material = md->materials[submesh->material_index];
 
 			m_host.emissive_submesh_offsets[submesh] = m_host.tri_lights.size();
 			for (int i = 0; i < submesh->triangles(); i++) {
@@ -162,7 +165,8 @@ void ArmadaRTX::update_triangle_light_buffers
 			const Submesh *submesh = pr.submesh;
 			const Transform *transform = pr.transform;
 
-			const Material &material = Material::all[submesh->material_index];
+			// const Material &material = Material::all[submesh->material_index];
+                        const Material &material = md->materials[submesh->material_index];
 
 			size_t offset = m_host.emissive_submesh_offsets[submesh];
 			for (int i = 0; i < submesh->triangles(); i++) {
@@ -207,51 +211,8 @@ void ArmadaRTX::update_triangle_light_buffers
 	}
 }
 
-/* Update the light buffers if needed
-// TODO: handle extra lights here
-void ArmadaRTX::update_quad_light_buffers
-		(const std::vector <const Light *> &lights,
-		const std::vector <const Transform *> &light_transforms)
-{
-	// TODO: lighting system equivalent of System
-	if (m_host.quad_lights.size() != lights.size()) {
-		if (m_launch_info.lights.quad_lights)
-			cuda::free(m_launch_info.lights.quad_lights);
-
-		m_host.quad_lights.resize(lights.size());
-
-		auto &quad_lights = m_host.quad_lights;
-		for (int i = 0; i < lights.size(); i++) {
-			const Light *light = lights[i];
-			const Transform *transform = light_transforms[i];
-
-			glm::vec3 a {-0.5f, 0, -0.5f};
-			glm::vec3 b {0.5f, 0, -0.5f};
-			glm::vec3 c {-0.5f, 0, 0.5f};
-
-			a = transform->apply(a);
-			b = transform->apply(b);
-			c = transform->apply(c);
-
-			quad_lights[i].a = cuda::to_f3(a);
-			quad_lights[i].ab = cuda::to_f3(b - a);
-			quad_lights[i].ac = cuda::to_f3(c - a);
-			quad_lights[i].intensity = cuda::to_f3(light->power * light->color);
-		}
-
-		m_launch_info.lights.quad_lights = cuda::make_buffer(quad_lights);
-		m_launch_info.lights.quad_count = quad_lights.size();
-
-		KOBRA_LOG_FUNC(Log::INFO) << "Uploaded " << quad_lights.size()
-			<< " quad lights to the GPU\n";
-	}
-} */
-
 // Update the SBT data
-void ArmadaRTX::update_sbt_data()
-		// (const std::vector <layers::MeshMemory::Cachelet> &cachelets,
-		// const std::vector <const Submesh *> &submeshes,
-		// const std::vector <const Transform *> &submesh_transforms)
+void ArmadaRTX::update_sbt_data(const daemons::MaterialDaemon *md)
 {
 	int submesh_count = m_host.entities.size();
 
@@ -263,7 +224,8 @@ void ArmadaRTX::update_sbt_data()
 		auto *submesh = &renderable.mesh->submeshes[m_host.submesh_indices[i]];
 
 		// const Submesh *submesh = submeshes[i];
-		const Material &mat = Material::all[submesh->material_index];
+		// const Material &mat = Material::all[submesh->material_index];
+                const Material &mat = md->materials[submesh->material_index];
 
 		HitRecord hit_record {};
 
@@ -287,7 +249,7 @@ void ArmadaRTX::update_sbt_data()
 	}
 }
 
-void ArmadaRTX::update_materials(const std::set <uint32_t> &material_indices)
+void ArmadaRTX::update_materials(const daemons::MaterialDaemon *md, const std::set <uint32_t> &material_indices)
 {
 	// If host buffer is empty, assume the armada is not initialized
 	if (m_host.materials.size() == 0)
@@ -295,8 +257,9 @@ void ArmadaRTX::update_materials(const std::set <uint32_t> &material_indices)
 
 	std::set <_instance_ref> emissive_submeshes_to_update;
 	for (uint32_t mat_index : material_indices) {
-		const Material &material = Material::all[mat_index];
-		cuda::_material &mat = m_host.materials[mat_index];
+		// const Material &material = Material::all[mat_index];
+                const Material &material = md->materials[mat_index];
+                cuda::_material &mat = m_host.materials[mat_index];
 
 		bool was_emissive = (length(mat.emission) > 0.0f)
 				|| mat.textures.has_emission;
@@ -354,11 +317,11 @@ void ArmadaRTX::update_materials(const std::set <uint32_t> &material_indices)
 
 	// Also update the emissive submeshes if needed
 	// TODO: use the reutrn from tihs instead to check for sbt udpate...
-	update_triangle_light_buffers(nullptr, emissive_submeshes_to_update);
+	update_triangle_light_buffers(nullptr, md, emissive_submeshes_to_update);
 
 	// Update the SBT if needed (e.g. when a new emissive submesh is added)
 	if (sbt_needs_update) {
-		update_sbt_data();
+		update_sbt_data(md);
 			// m_host.submeshes,
 			// m_host.submesh_transforms
 
@@ -436,8 +399,9 @@ cuda::_material convert_material
 // Preprocess scene data
 // TODO: get rid of this method..
 ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
-		(const std::vector <Entity> &entities,
+                (const std::vector <Entity> &entities,
                 const daemons::Transform &transform_daemon,
+		const daemons::MaterialDaemon *md,
 		const Camera &camera,
 		const Transform &transform)
 {
@@ -513,7 +477,8 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 
 		// Reserve material-submesh reference structure
 		m_host.material_submeshes.clear();
-		m_host.material_submeshes.resize(Material::all.size());
+		// m_host.material_submeshes.resize(Material::all.size());
+                m_host.material_submeshes.resize(md->materials.size());
 
 		for (auto &entity : entities) {
                         int id = entity.id;
@@ -556,7 +521,8 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 			// const Submesh *submesh = m_host.submeshes[i];
 			// const Transform *transform = m_host.submesh_transforms[i];
 
-			const Material &material = Material::all[submesh->material_index];
+			// const Material &material = Material::all[submesh->material_index];
+                        const Material &material = md->materials[submesh->material_index];
 			if (glm::length(material.emission) > 0
 					|| material.has_emission()) {
 				_instance_ref ref {transform, submesh, entity.id};
@@ -566,9 +532,9 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 		}
 
 		// Update the data
-		update_triangle_light_buffers(&transform_daemon, {});
+		update_triangle_light_buffers(&transform_daemon, md, {});
 		// update_quad_light_buffers(lights, light_transforms);
-		update_sbt_data();
+		update_sbt_data(md);
 
 		// hit_records = &m_host.hit_records;
 		m_host.last_updated = clock();
@@ -595,7 +561,8 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 		std::cout << "Generating material buffer" << std::endl;
 
 		m_host.materials.clear();
-		for (const Material &material : Material::all) {
+		// for (const Material &material : Material::all) {
+                for (const Material &material : md->materials) {
                         cuda::_material mat = convert_material
                                 (material, *m_texture_loader, *m_device);
 			m_host.materials.push_back(mat);
@@ -614,7 +581,7 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 		}
 
 		if (emissive_to_update.size() > 0) {
-			update_triangle_light_buffers(&transform_daemon, emissive_to_update);
+			update_triangle_light_buffers(&transform_daemon, md, emissive_to_update);
 			printf("Updated %d triangle lights\n", emissive_to_update.size());
 			for (auto ref : emissive_to_update) {
 				printf("Updated triangle light %d\n", ref.id);
@@ -650,8 +617,10 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
                 std::set <const Entity *> current_entities
                         (m_host.entities.begin(), m_host.entities.end());
                 
-                if (m_host.material_submeshes.size() < Material::all.size())
-                        m_host.material_submeshes.resize(Material::all.size());
+                // if (m_host.material_submeshes.size() < Material::all.size())
+                //         m_host.material_submeshes.resize(Material::all.size());
+                if (m_host.material_submeshes.size() < md->materials.size())
+                        m_host.material_submeshes.resize(md->materials.size());
 
                 // Add the new submeshes to host cache
 		for (auto &entity : entities) {
@@ -697,7 +666,8 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 			// const Submesh *submesh = m_host.submeshes[i];
 			// const Transform *transform = m_host.submesh_transforms[i];
 
-			const Material &material = Material::all[submesh->material_index];
+			// const Material &material = Material::all[submesh->material_index];
+                        const Material &material = md->materials[submesh->material_index];
 			if (glm::length(material.emission) > 0
 					|| material.has_emission()) {
 				_instance_ref ref {transform, submesh, entity.id};
@@ -718,7 +688,7 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
                 m_launch_info.materials = cuda::make_buffer(m_host.materials);
 
                 // TODO: pass a range to update, instead of rebuilding...
-		update_sbt_data();
+		update_sbt_data(md);
 
                 printf("SBT state:\n");
                 for (auto record : m_host.hit_records) {
@@ -760,7 +730,8 @@ ArmadaRTX::preprocess_update ArmadaRTX::preprocess_scene
 }
 
 // Path tracing computation
-void ArmadaRTX::render(const std::vector <Entity> &entities,
+void ArmadaRTX::render(const System *system,
+                const std::vector <Entity> &entities,
                 const daemons::Transform &transform_daemon,
 		const Camera &camera,
 		const Transform &transform,
@@ -781,7 +752,9 @@ void ArmadaRTX::render(const std::vector <Entity> &entities,
 		m_attachments[m_previous_attachment]->load();
 	}
 
-	auto out = preprocess_scene(entities, transform_daemon, camera, transform);
+	auto out = preprocess_scene(entities, transform_daemon,
+                             system->material_daemon,
+                             camera, transform);
 	
 	// Skip if nothing to render
 	if (m_host.entities.empty()) {

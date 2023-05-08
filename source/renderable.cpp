@@ -29,13 +29,6 @@ Renderable::Renderable(const Context &context, Mesh *mesh_)
 				| vk::MemoryPropertyFlagBits::eHostCoherent
 		);
 
-		// ubo.emplace_back(*dev.phdev, *dev.device,
-		// 	sizeof(UBO),
-		// 	vk::BufferUsageFlagBits::eUniformBuffer,
-		// 	vk::MemoryPropertyFlagBits::eHostVisible
-		// 		| vk::MemoryPropertyFlagBits::eHostCoherent
-		// );
-
 		// Upload data to buffers
 		vertex_buffer[i].upload((*mesh)[i].vertices);
 		index_buffer[i].upload((*mesh)[i].indices);
@@ -45,26 +38,10 @@ Renderable::Renderable(const Context &context, Mesh *mesh_)
 		kobra::Material mat;
 
 		int index = mesh->submeshes[i].material_index;
-		if (index >= Material::all.size())
-			KOBRA_LOG_FILE(Log::ERROR) << "Material index out of range\n";
-		else
-			mat = Material::all[index];
-		//
-		// UBO ubo_data {
-		// 	.diffuse = mat.diffuse,
-		// 	.specular = mat.specular,
-		// 	.emission = mat.emission,
-		// 	.ambient = mat.ambient,
-		//
-		// 	.shininess = mat.shininess,
-		// 	.roughness = mat.roughness,
-		//
-		// 	.type = static_cast <int> (mat.type),
-		// 	.has_albedo = (float) mat.has_albedo(),
-		// 	.has_normal = (float) mat.has_normal()
-		// };
-		//
-		// ubo[i].upload(&ubo_data, sizeof(UBO));
+		// if (index >= Material::all.size())
+		// 	KOBRA_LOG_FILE(Log::ERROR) << "Material index out of range\n";
+		// else
+		// 	mat = Material::all[index];
 
 		// Other data
 		index_count.push_back((*mesh)[i].indices.size());

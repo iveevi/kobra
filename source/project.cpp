@@ -111,13 +111,28 @@ void Project::save(const std::string &dir)
         // TODO: save in the same location as creation (in the assets
         // directory...)
 
-        int index = 0;
-        for (auto &mat : Material::all) {
-                mat.name = "material-" + std::to_string(index++);
-        }
+        // int index = 0;
+        // for (auto &mat : Material::all) {
+        //         mat.name = "material-" + std::to_string(index++);
+        // }
 
         // For now, store in the cache directory
-        taskflow.for_each(Material::all.begin(), Material::all.end(),
+        // taskflow.for_each(Material::all.begin(), Material::all.end(),
+        //         [&](const Material &mat) {
+        //                 // TODO: ID each submesh in the cache...
+        //                 std::filesystem::path filename = assets_path/(mat.name + ".mat");
+        //                 std::ofstream file(filename, std::ios::binary);
+        //
+        //                 // Write the submesh to the file
+        //                 std::string data = transcribe_material(mat);
+        //                 file.write(data.data(), data.size());
+        //
+        //                 file.close();
+        //         }
+        // );
+       
+        const auto &materials = material_daemon->materials;
+        taskflow.for_each(materials.begin(), materials.end(),
                 [&](const Material &mat) {
                         // TODO: ID each submesh in the cache...
                         std::filesystem::path filename = assets_path/(mat.name + ".mat");
@@ -139,13 +154,13 @@ void Project::save(const std::string &dir)
                 std::ofstream file(filename);
 
                 // Write all used materials, in order
-                file << "@materials\n"
-                        << ".list " << Material::all.size() << "\n";
-                for (int i = 0; i < Material::all.size(); i++)
-                        file << "\tmaterial-" << std::to_string(i) << ".mat\n";
+                // file << "@materials\n"
+                //         << ".list " << Material::all.size() << "\n";
+                // for (int i = 0; i < Material::all.size(); i++)
+                //         file << "\tmaterial-" << std::to_string(i) << ".mat\n";
 
                 // Write the scene description
-                for (auto &entity : *scene.ecs) {
+                for (auto &entity : *scene.system) {
                         file << "\n@entity " << entity.name << "\n";
 
                         const Transform &transform = entity.get <Transform> ();
@@ -160,7 +175,8 @@ void Project::save(const std::string &dir)
                                 for (auto &submesh : submeshes) {
                                         size_t id = submesh_id_map[&submesh];
                                         // TODO: find the path instead...
-                                        std::string material = Material::all[submesh.material_index].name;
+                                        // std::string material = Material::all[submesh.material_index].name;
+                                        std::string material = materials[submesh.material_index].name;
                                         file << "\tsubmesh-" << id << ".submesh, " << material << "\n";
                                 }
 
@@ -290,7 +306,7 @@ static Submesh load_mesh(std::ifstream &file)
         return Submesh { vertices, indices, 0};
 }
 
-static void s_load_scene(const std::filesystem::path &path, const Context &context, Scene &scene, std::ifstream &file)
+static void s_load_scene(const std::filesystem::path &path, const Context &context, Scene &scene, daemons::MaterialDaemon *material_daemon, std::ifstream &file)
 {
         std::vector <std::string> lines;
 
@@ -490,14 +506,14 @@ static void s_load_scene(const std::filesystem::path &path, const Context &conte
         //         }
         // }
 
-        // Initilize the ECS
-        scene.ecs = std::make_shared <ECS> ();
+        // Initilize the system
+        scene.system = std::make_shared <System> (material_daemon);
 
         // Add the entities
         for (Element &element : elements) {
                 // Create the entity
                 std::string name = std::get <std::string> (element.fields["name"]);
-                Entity entity = scene.ecs->make_entity(name);
+                Entity entity = scene.system->make_entity(name);
 
                 // Add the components
                 for (auto &field : element.fields) {
@@ -517,15 +533,16 @@ static void s_load_scene(const std::filesystem::path &path, const Context &conte
                                         std::string &material_path = material_paths[i];
 
                                         std::filesystem::path material_path_full = path / "assets" / material_path;
-                                        if (!std::filesystem::exists(material_path_full)) {
-                                                KOBRA_LOG_FILE(Log::WARN) << "Material file does not exist: " << material_path_full << std::endl;
-                                                continue;
-                                        }
-
-                                        std::ifstream material_file(material_path_full);
-                                        Material material = load_material(material_file);
-                                        int32_t index = Material::all.size();
-                                        Material::all.push_back(material);
+                                        // if (!std::filesystem::exists(material_path_full)) {
+                                        //         KOBRA_LOG_FILE(Log::WARN) << "Material file does not exist: " << material_path_full << std::endl;
+                                        //         continue;
+                                        // }
+                                        //
+                                        // std::ifstream material_file(material_path_full);
+                                        // Material material = load_material(material_file);
+                                        // int32_t index = Material::all.size();
+                                        // Material::all.push_back(material);
+                                        int32_t index = load(material_daemon, material_path_full);
 
                                         printf("Mesh: %s, material: %s\n", mesh.c_str(), material_path_full.c_str());
 
@@ -541,6 +558,8 @@ static void s_load_scene(const std::filesystem::path &path, const Context &conte
                                         Submesh mesh_object = load_mesh(mesh_file);
                                         mesh_object.material_index = index;
                                         mesh_list.push_back(mesh_object);                                        
+
+                                        // Material::all = material_daemon->materials;
                                 }
 
                                 if (mesh_list.empty()) {
@@ -585,8 +604,12 @@ Scene &Project::load_scene(const Context &context, int index)
         if (index >= scenes.size())
                 throw std::runtime_error("No scenes loaded");
 
+        // Make sure there is a valid material daemon
+        if (!material_daemon)
+                throw std::runtime_error("No material daemon, is a project loaded?");
+
         // Skip if the scene is already loaded
-        if (scenes[index].ecs)
+        if (scenes[index].system)
                 return scenes[index];
 
         // Check if the scene exists
@@ -603,7 +626,7 @@ Scene &Project::load_scene(const Context &context, int index)
 
         // scenes[index].load(context, path.string());
         std::ifstream file(path);
-        s_load_scene(directory, context, scenes[index], file);
+        s_load_scene(directory, context, scenes[index], material_daemon, file);
         scenes[index].name = path.stem();
 
         return scenes[index];

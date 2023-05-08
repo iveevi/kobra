@@ -1,5 +1,4 @@
-#ifndef KOBRA_AMADEUS_BACKEND_H_
-#define KOBRA_AMADEUS_BACKEND_H_
+#pragma once
 
 // Standard headers
 #include <map>
@@ -9,20 +8,21 @@
 #include <optix.h>
 
 // Engine headers
-#include "../cuda/alloc.cuh"
-#include "../cuda/cast.cuh"
-#include "../ecs.hpp"
-#include "../optix/core.cuh"
-#include "../renderable.hpp"
-#include "../daemons/transform.hpp"
+#include "include/cuda/alloc.cuh"
+#include "include/cuda/cast.cuh"
+#include "include/daemons/transform.hpp"
+#include "include/system.hpp"
+#include "include/optix/core.cuh"
+#include "include/renderable.hpp"
 
 namespace kobra {
 
 namespace amadeus {
 
 // Backend management for raytacing
-class System {
-        // Reference to ECS transform daemon
+class Accelerator {
+        // Reference to System transform daemon
+        // TODO: embed in the System itself
         kobra::daemons::Transform *transform_daemon = nullptr;
 
         // Critical OptiX objects
@@ -132,7 +132,7 @@ class System {
         }
 public:
         // Default constructor
-        System(kobra::daemons::Transform *td)
+        Accelerator(kobra::daemons::Transform *td)
                 : transform_daemon(td), m_context(optix::make_context()) {}
 
 	// Propreties
@@ -280,5 +280,3 @@ public:
 }
 
 }
-
-#endif

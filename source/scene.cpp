@@ -186,7 +186,7 @@ void load_mesh(Entity &e, std::ifstream &fin)
 			return;
 		}
 
-		e.add <Mesh> (*mptr);
+		e.add <Mesh> (std::get <0> (*mptr));
 	} else {
 		// Raw mesh
 		std::vector <Submesh> submeshes;
@@ -367,8 +367,8 @@ void Scene::load(const Context &context, const std::string &path)
 	read_fmt(fin, "environment_map: %s\n", buf);
 	p_environment_map = buf;
 
-	// Initialize the ECS
-	ecs = std::make_shared <ECS> ();
+	// Initialize the System
+	system = std::make_shared <System> (nullptr);
 
 	// Load entities
 	std::string header = get_header(fin);
@@ -379,7 +379,7 @@ void Scene::load(const Context &context, const std::string &path)
 		}
 
 		read_fmt(fin, "name: %1023[^\n]\n", buf);
-		Entity &e = ecs->make_entity(buf);
+		Entity &e = system->make_entity(buf);
 
 		header = load_components(e, fin, context);
 	}

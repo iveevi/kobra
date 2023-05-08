@@ -1,5 +1,4 @@
-#ifndef KOBRA_LAYERS_FORWARD_RENDERER_H_
-#define KOBRA_LAYERS_FORWARD_RENDERER_H_
+#pragma once
 
 // Standard headers
 #include <map>
@@ -7,14 +6,14 @@
 #include <vector>
 
 // Engine headers
-#include "../backend.hpp"
-#include "../vertex.hpp"
-#include "../lights.hpp"
+#include "include/backend.hpp"
+#include "include/lights.hpp"
+#include "include/system.hpp"
+#include "include/vertex.hpp"
 
 namespace kobra {
 
 // Forward declarations
-class ECS;
 class Camera;
 class Transform;
 class Renderable;
@@ -64,6 +63,7 @@ public:
 
 	// Parameters for rendering
 	struct Parameters {
+                System *system = nullptr;
 		std::vector <std::tuple <const Renderable *, const Transform *>> renderables;
 		std::vector <std::tuple <const Light *, const Transform *>> lights;
 		std::string pipeline_package = BUILTIN_PIPELINE_PACKAGE;
@@ -107,6 +107,7 @@ private:
 	RenderableDset make_renderable_dset(PipelinePackage &, uint32_t);
 
 	void configure_renderable_dset(
+                const System *,
 		const PipelinePackage &,
 		const ForwardRenderer::RenderableDset &,
 		const Renderable *
@@ -118,5 +119,3 @@ private:
 }
 
 }
-
-#endif
