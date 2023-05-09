@@ -832,9 +832,9 @@ static std::tuple <Submesh, Material> process_mesh(aiMesh *mesh, const aiScene *
 	// Get diffuse
 	aiString path;
 	if (material->GetTexture(aiTextureType_DIFFUSE, 0, &path) == AI_SUCCESS) {
-		mat.albedo_texture = path.C_Str();
-		mat.albedo_texture = common::resolve_path(path.C_Str(), {dir});
-		// assert(!mat.albedo_texture.empty());
+		mat.diffuse_texture = path.C_Str();
+		mat.diffuse_texture = common::resolve_path(path.C_Str(), {dir});
+		// assert(!mat.diffuse_texture.empty());
 	} else {
 		aiColor3D diffuse;
 		material->Get(AI_MATKEY_COLOR_DIFFUSE, diffuse);
@@ -856,7 +856,7 @@ static std::tuple <Submesh, Material> process_mesh(aiMesh *mesh, const aiScene *
 	// Get shininess
 	float shininess;
 	material->Get(AI_MATKEY_SHININESS, shininess);
-	mat.shininess = shininess;
+	// mat.shininess = shininess;
 	mat.roughness = 1 - shininess/1000.0f;
 
 	// Push the material to the material list
@@ -1081,7 +1081,7 @@ std::optional <std::tuple <Mesh, std::vector <Material>>> load_mesh(const std::s
 							tinyobj::material_t m = materials[mesh.material_ids[f]];
 							mat.diffuse = {m.diffuse[0], m.diffuse[1], m.diffuse[2]};
 							mat.specular = {m.specular[0], m.specular[1], m.specular[2]};
-							mat.ambient = {m.ambient[0], m.ambient[1], m.ambient[2]};
+							// mat.ambient = {m.ambient[0], m.ambient[1], m.ambient[2]};
 							mat.emission = {m.emission[0], m.emission[1], m.emission[2]};
 
 							// Check emission
@@ -1091,9 +1091,9 @@ std::optional <std::tuple <Mesh, std::vector <Material>>> load_mesh(const std::s
 							}
 
 							// Surface properties
-							mat.shininess = m.shininess;
+							// mat.shininess = m.shniness;
 							// mat.roughness = sqrt(2.0f / (mat.shininess + 2.0f));
-							mat.roughness = glm::clamp(1.0f - mat.shininess/1000.0f, 1e-3f, 0.999f);
+							mat.roughness = glm::clamp(1.0f - m.shininess/1000.0f, 1e-3f, 0.999f);
 							mat.refraction = m.ior;
 
 							// TODO: handle types of rays/materials
@@ -1109,8 +1109,8 @@ std::optional <std::tuple <Mesh, std::vector <Material>>> load_mesh(const std::s
 
 							// Albedo texture
 							if (!m.diffuse_texname.empty()) {
-								mat.albedo_texture = m.diffuse_texname;
-								mat.albedo_texture = common::resolve_path(
+								mat.diffuse_texture = m.diffuse_texname;
+								mat.diffuse_texture = common::resolve_path(
 									m.diffuse_texname, {reader_config.mtl_search_path}
 								);
 							}
@@ -1249,7 +1249,7 @@ void Mesh::cache_save(const Mesh &mesh, const std::string &path)
 
 		offset += sizeof(glm::vec3) * 4;
 		offset += sizeof(float) * 3;
-		offset += sizeof(int) + submesh.material.albedo_texture.size();
+		offset += sizeof(int) + submesh.material.diffuse_texture.size();
 		offset += sizeof(int) + submesh.material.normal_texture.size();
 		offset += sizeof(int) + submesh.material.specular_texture.size();
 		offset += sizeof(int) + submesh.material.emission_texture.size();
@@ -1285,9 +1285,9 @@ void Mesh::cache_save(const Mesh &mesh, const std::string &path)
 		file.write((char *) &s.material.refraction, sizeof(float));
 
 		// TODO: organize so that errors are not as prone
-		int tex_albedo_length = s.material.albedo_texture.length();
+		int tex_albedo_length = s.material.diffuse_texture.length();
 		file.write((char *) &tex_albedo_length, sizeof(int));
-		file.write(s.material.albedo_texture.c_str(), tex_albedo_length);
+		file.write(s.material.diffuse_texture.c_str(), tex_albedo_length);
 
 		int tex_normal_length = s.material.normal_texture.length();
 		file.write((char *) &tex_normal_length, sizeof(int));
@@ -1402,7 +1402,7 @@ std::optional <Mesh> Mesh::cache_load(const std::string &path)
 
 			int tex_albedo_length = *(int *) &data[offset];
 			offset += sizeof(int);
-			material.albedo_texture = std::string(&data[offset], tex_albedo_length);
+			material.diffuse_texture = std::string(&data[offset], tex_albedo_length);
 			offset += tex_albedo_length;
 
 			int tex_normal_length = *(int *) &data[offset];

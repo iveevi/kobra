@@ -268,8 +268,8 @@ void ArmadaRTX::update_materials(const MaterialDaemon *md, const std::set <uint3
 		mat.diffuse = cuda::to_f3(material.diffuse);
 		mat.specular = cuda::to_f3(material.specular);
 		mat.emission = cuda::to_f3(material.emission);
-		mat.ambient = cuda::to_f3(material.ambient);
-		mat.shininess = material.shininess;
+		// mat.ambient = cuda::to_f3(material.ambient);
+		// mat.shininess = material.shininess;
 		mat.roughness = material.roughness;
 		mat.refraction = material.refraction;
 		mat.type = material.type;
@@ -341,8 +341,8 @@ cuda::_material convert_material
         mat.diffuse = cuda::to_f3(material.diffuse);
         mat.specular = cuda::to_f3(material.specular);
         mat.emission = cuda::to_f3(material.emission);
-        mat.ambient = cuda::to_f3(material.ambient);
-        mat.shininess = material.shininess;
+        // mat.ambient = cuda::to_f3(material.ambient);
+        // mat.shininess = material.shininess;
         mat.roughness = material.roughness;
         mat.refraction = material.refraction;
         mat.type = material.type;
@@ -350,7 +350,7 @@ cuda::_material convert_material
         // Textures
         if (material.has_albedo()) {
                 const ImageData &diffuse = texture_loader
-                        .load_texture(material.albedo_texture);
+                        .load_texture(material.diffuse_texture);
 
                 mat.textures.diffuse
                         = cuda::import_vulkan_texture(device, diffuse);

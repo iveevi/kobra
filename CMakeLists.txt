@@ -14,8 +14,6 @@ set(COLOR_FLAGS -fdiagnostics-color=always)
 
 # Add flags
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-# set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler \"${COLOR_FLAGS}\"")
-# set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcudafe \"--diag_suppress=20012 --diag_suppress=20013 --diag_suppress=20014\"")
 
 # Disabling warnings
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
@@ -136,36 +134,7 @@ add_library(Kobra_COMMON OBJECT
 	${Glslang_SOURCES}
 )
 
-# Set executable sources -- Kobra
-# add_executable(kobra main.cu $<TARGET_OBJECTS:Kobra_COMMON>)
-
-#target_link_libraries(kobra
-#	${Vulkan_LIBRARIES}
-#	glfw
-#	glslang
-#	SPIRV
-#	assimp
-#	nvidia-ml
-#	${OpenCV_LIBS}
-#	${ImageMagick_LIBRARIES}
-#)
-
-# TODO: create a shared library of library facilities
-
-# Set executable sources -- Stress
-add_executable(stress experimental/stress.cu $<TARGET_OBJECTS:Kobra_COMMON>)
-
-target_link_libraries(stress
-	${Vulkan_LIBRARIES}
-	glfw
-	glslang
-	SPIRV
-	assimp
-	nvidia-ml
-	${OpenCV_LIBS}
-)
-
-# Set executable sources -- Stress
+# Set executable sources -- Editor
 add_executable(editor
         editor.cu
         editor/editor_viewport.cu
@@ -179,6 +148,25 @@ add_executable(editor
 )
 
 target_link_libraries(editor
+	${Vulkan_LIBRARIES}
+	glfw
+	glslang
+	SPIRV
+	assimp
+	nvidia-ml
+	nvrtc
+	${OpenCV_LIBS}
+	${ImageMagick_LIBRARIES}
+	nfd
+)
+
+# Set executable sources -- experimental
+add_executable(experimental
+        experimental/experimental.cu
+        $<TARGET_OBJECTS:Kobra_COMMON>
+)
+
+target_link_libraries(experimental
 	${Vulkan_LIBRARIES}
 	glfw
 	glslang

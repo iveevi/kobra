@@ -26,67 +26,67 @@ enum Shading : int {
 };
 
 // PBR material types
-#if defined(__cplusplus) && !defined(KOBRA_OPTIX_SHADER)
-
-// Standard headers
-#include <optional>
-#include <sstream>
-#include <string>
-
-// Is a type of
-inline bool is_type(Shading type, Shading test)
-{
-	return (type & test) == test;
-}
-
-// Convert to string
-inline std::string shading_str(Shading s)
-{
-	std::string str;
-	if (s & eReflection)
-		str += "Reflection ";
-	if (s & eTransmission)
-		str += "Transmission ";
-	if (s & eDiffuse)
-		str += "Diffuse ";
-	if (s & eGlossy)
-		str += "Glossy ";
-	if (s & eSpecular)
-		str += "Specular ";
-	if (s & eEmissive)
-		str += "Emissive ";
-
-	return str;
-}
-
-// Convert string to shading
-inline std::optional <Shading> shading_from_str(const std::string &str)
-{
-	// String could contain multiple shadings
-	std::istringstream iss(str);
-
-	// Parse string
-	std::string token;
-
-	int shading = eNone;
-	while (iss >> token) {
-		if (token == "Reflection")
-			shading |= eReflection;
-		else if (token == "Transmission")
-			shading |= eTransmission;
-		else if (token == "Diffuse")
-			shading |= eDiffuse;
-		else if (token == "Glossy")
-			shading |= eGlossy;
-		else if (token == "Specular")
-			shading |= eSpecular;
-		else if (token == "Emissive")
-			shading |= eEmissive;
-		else
-			return std::nullopt;
-	}
-
-	return static_cast <Shading> (shading);
-}
-
-#endif
+// #if defined(__cplusplus) && !defined(KOBRA_OPTIX_SHADER)
+//
+// // Standard headers
+// #include <optional>
+// #include <sstream>
+// #include <string>
+//
+// // Is a type of
+// inline bool is_type(Shading type, Shading test)
+// {
+// 	return (type & test) == test;
+// }
+//
+// // Convert to string
+// inline std::string shading_str(Shading s)
+// {
+// 	std::string str;
+// 	if (s & eReflection)
+// 		str += "Reflection ";
+// 	if (s & eTransmission)
+// 		str += "Transmission ";
+// 	if (s & eDiffuse)
+// 		str += "Diffuse ";
+// 	if (s & eGlossy)
+// 		str += "Glossy ";
+// 	if (s & eSpecular)
+// 		str += "Specular ";
+// 	if (s & eEmissive)
+// 		str += "Emissive ";
+//
+// 	return str;
+// }
+//
+// // Convert string to shading
+// inline std::optional <Shading> shading_from_str(const std::string &str)
+// {
+// 	// String could contain multiple shadings
+// 	std::istringstream iss(str);
+//
+// 	// Parse string
+// 	std::string token;
+//
+// 	int shading = eNone;
+// 	while (iss >> token) {
+// 		if (token == "Reflection")
+// 			shading |= eReflection;
+// 		else if (token == "Transmission")
+// 			shading |= eTransmission;
+// 		else if (token == "Diffuse")
+// 			shading |= eDiffuse;
+// 		else if (token == "Glossy")
+// 			shading |= eGlossy;
+// 		else if (token == "Specular")
+// 			shading |= eSpecular;
+// 		else if (token == "Emissive")
+// 			shading |= eEmissive;
+// 		else
+// 			return std::nullopt;
+// 	}
+//
+// 	return static_cast <Shading> (shading);
+// }
+//
+// #endif

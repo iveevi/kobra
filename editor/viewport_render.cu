@@ -13,8 +13,8 @@ static cuda::_material convert_material(const Material &material, TextureLoader 
         mat.diffuse = cuda::to_f3(material.diffuse);
         mat.specular = cuda::to_f3(material.specular);
         mat.emission = cuda::to_f3(material.emission);
-        mat.ambient = cuda::to_f3(material.ambient);
-        mat.shininess = material.shininess;
+        // mat.ambient = cuda::to_f3(material.ambient);
+        // mat.shininess = material.shininess;
         mat.roughness = material.roughness;
         mat.refraction = material.refraction;
         mat.type = material.type;
@@ -22,7 +22,7 @@ static cuda::_material convert_material(const Material &material, TextureLoader 
         // Textures
         if (material.has_albedo()) {
                 const ImageData &diffuse = texture_loader
-                        .load_texture(material.albedo_texture);
+                        .load_texture(material.diffuse_texture);
 
                 mat.textures.diffuse
                         = cuda::import_vulkan_texture(device, diffuse);
@@ -250,7 +250,7 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info,
                 
                                         std::string albedo = "blank";
                                         if (material.has_albedo())
-                                                albedo = material.albedo_texture;
+                                                albedo = material.diffuse_texture;
 
                                         std::string normal = "blank";
                                         if (material.has_normal())
@@ -713,7 +713,7 @@ void EditorViewport::render_albedo(const RenderInfo &render_info,
         
                                 std::string albedo_src = "blank";
                                 if (material.has_albedo())
-                                        albedo_src = material.albedo_texture;
+                                        albedo_src = material.diffuse_texture;
 
                                 texture_loader->bind(albedo.dsets[new_index], albedo_src, 0);
                         }

@@ -462,7 +462,7 @@ public:
 		if (material->has_albedo()) {
 			ImGui::Text("Diffuse Texture:");
 
-			std::string diffuse_path = material->albedo_texture;
+			std::string diffuse_path = material->diffuse_texture;
 			if (is_not_loaded)
 				m_diffuse_set = imgui_allocate_image(diffuse_path);
 
@@ -1047,7 +1047,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	// Configure ImGui
 	ImGui::CreateContext();
 	ImPlot::CreateContext();
-	ImGui_ImplGlfw_InitForVulkan(window.m_handle, true);
+	ImGui_ImplGlfw_InitForVulkan(window->handle, true);
         set_imgui_theme();
 
 	// Docking
@@ -1057,7 +1057,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 
 	auto font = std::make_pair(KOBRA_FONTS_DIR "/Frutiger/Frutiger.ttf", 18);
 	m_ui = std::make_shared <kobra::layers::UserInterface> (
-		get_context(), window,
+		get_context(), *window,
 		graphics_queue, font,
 		vk::AttachmentLoadOp::eClear
 	);
@@ -1120,7 +1120,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	GLFWimage icon;
 	stbi_set_flip_vertically_on_load(false);
 	icon.pixels = stbi_load(icon_path.c_str(), &icon.width, &icon.height, nullptr, 4);
-	glfwSetWindowIcon(window.m_handle, 1, &icon);
+	glfwSetWindowIcon(window->handle, 1, &icon);
 	stbi_image_free(icon.pixels);
 	stbi_set_flip_vertically_on_load(true);
 
@@ -1346,20 +1346,14 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
                 // and input has been received on the corresponding window
                 render_material_preview(*cmd, material_preview, m_scene.system->material_daemon);
 
-		/* Render the UI last
-		m_ui->render(cmd,
-			framebuffer, window.m_extent,
-			kobra::RenderArea::full(), {true}
-		); */
-
                 RenderContext rc {
                         .cmd = cmd,
                         .framebuffer = framebuffer,
-                        .extent = window.m_extent,
+                        .extent = window->extent,
                         .render_area = kobra::RenderArea::full(),
                 };
 
-                layers::start_user_interface(m_ui.get(), rc);
+                layers::start_user_interface(m_ui.get(), rc, true);
 
                 for (auto &attachment : m_ui->attachments)
                         attachment->render();
@@ -1402,7 +1396,7 @@ void handle_viewport_input(Editor *editor, const InputRequest &request)
                         }
                 }
         } else if (request.type == InputRequest::eRelease) {
-		glfwSetInputMode(editor->window.m_handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+		glfwSetInputMode(editor->window->handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
                 viewport.dragging = false;
         } else if (request.type == InputRequest::eDrag) {
                 bool started_within = within(request.start, input_context.viewport);
@@ -1410,7 +1404,7 @@ void handle_viewport_input(Editor *editor, const InputRequest &request)
 
                 if (started_within && (currently_within || viewport.dragging)) {
                         if (!viewport.dragging)
-                                glfwSetInputMode(editor->window.m_handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+                                glfwSetInputMode(editor->window->handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
                         viewport.yaw -= viewport.sensitivity * request.delta.x;
                         viewport.pitch -= viewport.sensitivity * request.delta.y;
@@ -1438,7 +1432,7 @@ void handle_material_preview_input(Editor *editor, const InputRequest &request)
 
         // Clicking on entities
         if (request.type == InputRequest::eRelease) {
-		glfwSetInputMode(editor->window.m_handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+		glfwSetInputMode(editor->window->handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
                 mp.dragging = false;
         } else if (request.type == InputRequest::eDrag) {
                 bool started_within = within(request.start, input_context.material_preview);
@@ -1446,7 +1440,7 @@ void handle_material_preview_input(Editor *editor, const InputRequest &request)
 
                 if (started_within && (currently_within || mp.dragging)) {
                         if (!mp.dragging)
-                                glfwSetInputMode(editor->window.m_handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+                                glfwSetInputMode(editor->window->handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
                         static float theta = 0.0f;
                         static float phi = 0.0f;

@@ -55,9 +55,9 @@ static Material load_material(std::ifstream &file)
         std::getline(file, specular_line);
         std::sscanf(specular_line.c_str(), "specular: %f,%f,%f", &material.specular.x, &material.specular.y, &material.specular.z);
 
-        std::string ambient_line;
-        std::getline(file, ambient_line);
-        std::sscanf(ambient_line.c_str(), "ambient: %f,%f,%f", &material.ambient.x, &material.ambient.y, &material.ambient.z);
+        // std::string ambient_line;
+        // std::getline(file, ambient_line);
+        // std::sscanf(ambient_line.c_str(), "ambient: %f,%f,%f", &material.ambient.x, &material.ambient.y, &material.ambient.z);
 
         std::string emission_line;
         std::getline(file, emission_line);
@@ -88,7 +88,7 @@ static Material load_material(std::ifstream &file)
         std::sscanf(roughness_texture_line.c_str(), "roughness_texture: %s", buf_roughness);
 
         material.name = buf_name;
-        material.albedo_texture = buf_albedo;
+        material.diffuse_texture = buf_albedo;
         material.normal_texture = buf_normal;
         material.roughness_texture = buf_roughness;
         material.type = (Shading) type;

@@ -154,7 +154,7 @@ void ForwardRenderer::configure_renderable_dset
 		// Bind the textures
 		std::string albedo = "blank";
 		if (m.has_albedo())
-			albedo = m.albedo_texture;
+			albedo = m.diffuse_texture;
 
 		std::string normal = "blank";
 		if (m.has_normal())

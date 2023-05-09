@@ -180,55 +180,20 @@ struct RenderArea {
 // Object factories //
 //////////////////////
 
-// Get (or create) the singleton context
-const vk::raii::Context &get_vulkan_context();
-
-// Get (or generate) the required extensions
-const std::vector <const char *> &get_required_extensions();
-
-// Initialize GLFW statically
-void _initialize_glfw();
-
 // Get (or create) the singleton instance
 const vk::raii::Instance &get_vulkan_instance();
 
 // Window typebackend
 struct Window {
-	GLFWwindow	*m_handle;
-	std::string	m_title;
-	vk::Extent2D	m_extent;
-
-	Window() = default;
-
-	Window(const std::string &title, const vk::Extent2D &extent)
-			: m_title(title), m_extent(extent) {
-		_initialize_glfw();
-		m_handle = glfwCreateWindow(
-			m_extent.width, m_extent.height,
-			title.c_str(),
-			nullptr, nullptr
-		);
-
-		glfwGetFramebufferSize(m_handle,
-			(int *) &m_extent.width,
-			(int *) &m_extent.height
-		);
-
-		std::cout << "Framebuffer size: "
-			<< m_extent.width << "x" << m_extent.height << std::endl;
-	}
-
-	~Window() {
-		glfwDestroyWindow(m_handle);
-	}
-
-	// Set cursor mode
-	void set_cursor_mode(int mode) {
-		glfwSetInputMode(m_handle, GLFW_CURSOR, mode);
-	}
+	GLFWwindow	*handle = nullptr;
+	std::string	title;
+	vk::Extent2D	extent;
 };
 
-// Create a surface given a window
+// Creating windows and surfaces
+Window *make_window(const vk::Extent2D &, const std::string &);
+void destroy_window(Window *);
+
 vk::raii::SurfaceKHR make_surface(const Window &);
 
 // Get all available physical devices

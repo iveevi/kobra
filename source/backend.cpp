@@ -160,7 +160,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_logger
 }
 
 // Initialize GLFW statically
-void _initialize_glfw()
+void __initialize_glfw()
 {
 	static bool initialized = false;
 
@@ -193,7 +193,7 @@ const vk::raii::Instance &get_vulkan_instance()
 		return instance;
 
 	// Make sure GLFW is initialized
-	_initialize_glfw();
+	__initialize_glfw();
 
 #ifdef KOBRA_VALIDATION_LAYERS
 
@@ -256,14 +256,47 @@ const vk::raii::Instance &get_vulkan_instance()
 	return instance;
 }
 
-// Create a surface given a window
+// Creating windows and surfaces
+Window *make_window(const vk::Extent2D &extent, const std::string &title)
+{
+        // Make sure GLFW is initialized
+        __initialize_glfw();
+
+        // Create the window
+        GLFWwindow *handle = glfwCreateWindow(
+                extent.width,
+                extent.height,
+                title.c_str(),
+                nullptr,
+                nullptr
+        );
+
+        // Check the actual size of the window
+        glfwGetFramebufferSize(handle, (int *) &extent.width, (int *) &extent.height);
+
+        KOBRA_ASSERT(handle != nullptr, "Failed to create window");
+
+        return new Window { handle, title, extent };
+}
+
+void destroy_window(Window *window)
+{
+        if (window == nullptr)
+                return;
+
+        if (window->handle != nullptr)
+                glfwDestroyWindow(window->handle);
+
+        delete window;
+}
+
 vk::raii::SurfaceKHR make_surface(const Window &window)
 {
 	// Create the surface
 	VkSurfaceKHR surface;
 	VkResult result = glfwCreateWindowSurface(
 		*get_vulkan_instance(),
-		window.m_handle,
+		window.handle,
 		nullptr,
 		&surface
 	);

@@ -110,7 +110,7 @@ Startup::Startup(const vk::raii::PhysicalDevice &phdev,
                 }
 {
 	ImGui::CreateContext();
-	ImGui_ImplGlfw_InitForVulkan(window.m_handle, true);
+	ImGui_ImplGlfw_InitForVulkan(window->handle, true);
 
         // Create dedicated Vulkan resources for ImGUI
         std::vector <vk::DescriptorPoolSize> pool_sizes {
@@ -243,7 +243,7 @@ void Startup::record(const vk::raii::CommandBuffer &cmd, const vk::raii::Framebu
         cmd.begin({});
 
         // Apply the render area
-        kobra::RenderArea::full().apply(cmd, window.m_extent);
+        kobra::RenderArea::full().apply(cmd, window->extent);
 
         // Start render pass
         std::array <vk::ClearValue, 2> clear_values {
@@ -265,7 +265,7 @@ void Startup::record(const vk::raii::CommandBuffer &cmd, const vk::raii::Framebu
                         *fb,
                         vk::Rect2D {
                                 vk::Offset2D {0, 0},
-                                window.m_extent
+                                window->extent
                         },
                         static_cast <uint32_t> (clear_values.size()),
                         clear_values.data()

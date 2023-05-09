@@ -23,7 +23,7 @@ struct App {
 	vk::raii::SurfaceKHR		surface = nullptr;
 
 	Swapchain 			swapchain = nullptr;
-	Window				window;
+	Window				*window;
 
 	// IO info
 	IO				io;
