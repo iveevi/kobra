@@ -2,6 +2,10 @@
 
 // Editor headers
 #include "common.hpp"
+#include "optix/sparse_gi.cuh"
+
+// Forward declarations
+struct EditorViewport;
 
 // Environment map state
 struct EnvironmentMap {
@@ -12,6 +16,37 @@ struct EnvironmentMap {
 };
 
 void load_environment_map(EnvironmentMap *, kobra::TextureLoader *, const std::filesystem::path &);
+
+// Sparse raytracing global illumination
+struct SparseGI {
+        OptixPipeline pipeline = 0;
+        OptixModule module = 0;
+
+        OptixProgramGroup ray_generation = 0;
+        OptixProgramGroup closest_hit = 0;
+        OptixProgramGroup miss = 0;
+
+        // SBT related resources
+        OptixShaderBindingTable sbt = {};
+
+        // Lighting information
+        std::vector <AreaLight> lights;
+
+        // Launch parameters
+        SparseGIParameters launch_params;
+        CUdeviceptr dev_launch_params;
+        int32_t depth = 2;
+};
+
+void initialize(SparseGI *,
+        const Context &,
+        const OptixDeviceContext &);
+
+void render(EditorViewport *,
+        SparseGI *,
+        const RenderInfo &,
+        const std::vector<Entity> &,
+        const MaterialDaemon *);
 
 // Editor rendering
 struct EditorViewport {
@@ -78,6 +113,15 @@ struct EditorViewport {
                 std::vector <cuda::_material> materials;
                 CUdeviceptr dev_materials = 0;
 
+                // TODO: store lights as well...
+                
+                // Storage and blitting
+                layers::Framer framer;
+                std::vector <uint8_t> traced;
+
+                float4 *dev_color = nullptr;
+                CUdeviceptr dev_traced;
+
                 Timer timer;
                 bool clk_rise = true;
         } common_rtx;
@@ -96,9 +140,6 @@ struct EditorViewport {
 
                 // SBT related resources
                 OptixShaderBindingTable sbt = {};
-
-                // std::map <MeshIndex, int> record_refs;
-                // std::vector <optix::Record <Hit>> linearized_records;
 
                 // Launch parameters
                 GBufferParameters launch_params;
@@ -124,15 +165,10 @@ struct EditorViewport {
                 // Launch parameters
                 PathTracerParameters launch_params;
                 CUdeviceptr dev_launch_params;
-               
-                // Storage and blitting
-                layers::Framer framer;
-
-                CUdeviceptr dev_traced;
-                std::vector <uint8_t> traced;
-                
                 int32_t depth;
         } path_tracer;
+
+        SparseGI sparse_gi;
 
         // Path tracer (Amadeus)
         // struct AmadeusPathTracer {
@@ -263,3 +299,4 @@ struct EditorViewport {
 
 // Functions
 void show_menu(const std::shared_ptr <EditorViewport> &, const MenuOptions &);
+void blit_raytraced(EditorViewport *, const RenderInfo &);

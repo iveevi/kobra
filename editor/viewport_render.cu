@@ -157,6 +157,7 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
                 OptixTraversableHandle handle = system->build_tlas(1, common_rtx.record_refs);
                 gbuffer_rtx.launch_params.handle = handle;
                 path_tracer.launch_params.handle = handle;
+                sparse_gi.launch_params.handle = handle;
         }
 
         if (rebuild_sbt) {
@@ -172,6 +173,17 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
                 gbuffer_rtx.sbt.hitgroupRecordBase = cuda::make_buffer_ptr(common_rtx.records);
                 gbuffer_rtx.sbt.hitgroupRecordStrideInBytes = sizeof(optix::Record <Hit>);
                 gbuffer_rtx.sbt.hitgroupRecordCount = common_rtx.records.size();
+
+                // Sparse GI hit SBT
+                for (auto &record : common_rtx.records)
+                        optix::pack_header(sparse_gi.closest_hit, record);
+
+                if (sparse_gi.sbt.hitgroupRecordBase)
+                        cuda::free(sparse_gi.sbt.hitgroupRecordBase);
+
+                sparse_gi.sbt.hitgroupRecordBase = cuda::make_buffer_ptr(common_rtx.records);
+                sparse_gi.sbt.hitgroupRecordStrideInBytes = sizeof(optix::Record <Hit>);
+                sparse_gi.sbt.hitgroupRecordCount = common_rtx.records.size();
 
                 // Path tracer hit SBT
                 for (auto &record : common_rtx.records)
@@ -195,6 +207,18 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
 
                 common_rtx.dev_materials = cuda::make_buffer_ptr(common_rtx.materials);
 
+                // Update lights for the sparse GI algorithm
+                sparse_gi.launch_params.area.lights = 0;
+                sparse_gi.launch_params.area.count = path_tracer.lights.size();
+                if (sparse_gi.launch_params.area.count > 0)
+                        sparse_gi.launch_params.area.lights = cuda::make_buffer(path_tracer.lights);
+
+                uint triangles = 0;
+                for (const auto &light : path_tracer.lights)
+                        triangles += light.triangles;
+
+                sparse_gi.launch_params.area.triangle_count = triangles;
+                
                 // Update lights for the path tracer
                 path_tracer.launch_params.area.lights = 0;
                 path_tracer.launch_params.area.count = path_tracer.lights.size();
@@ -202,9 +226,9 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
                         path_tracer.launch_params.area.lights = cuda::make_buffer(path_tracer.lights);
                
                 // TODO: do we really need this?
-                uint triangles = 0;
-                for (const auto &light : path_tracer.lights)
-                        triangles += light.triangles;
+                // uint triangles = 0;
+                // for (const auto &light : path_tracer.lights)
+                //         triangles += light.triangles;
                 path_tracer.launch_params.area.triangle_count = triangles;
         }
 
@@ -246,6 +270,8 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info,
 
                                         // Bind inforation to descriptor set
                                         // Material material = Material::all[meshes[i].material_index];
+                                        assert(meshes[i].material_index >= 0);
+                                        assert(meshes[i].material_index < md->materials.size());
                                         Material material = md->materials[meshes[i].material_index];
                 
                                         std::string albedo = "blank";
@@ -362,9 +388,6 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info,
                 GBufferParameters *dev_params = (GBufferParameters *) gbuffer_rtx.dev_launch_params;
                 CUDA_CHECK(cudaMemcpy(dev_params, &gbuffer_rtx.launch_params, sizeof(GBufferParameters), cudaMemcpyHostToDevice));
                 
-                // Launch G-buffer raytracing pipeline
-                // printf("Pipeline: %p\n", gbuffer_rtx.pipeline);
-                
                 OPTIX_CHECK(
                         optixLaunch(
                                 gbuffer_rtx.pipeline, 0,
@@ -379,8 +402,6 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info,
 
                 std::string output = optix_io_read(&gbuffer_rtx.launch_params.io);
                 optix_io_clear(&gbuffer_rtx.launch_params.io);
-
-                // std::cout << "G-buffer, read: " << output << "\n";
         }
 
         // Transition layout for position and normal map
@@ -418,111 +439,16 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info,
         sobel.output.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
 }
 
-__global__ void test(PathTracerParameters parameters)
-{
-	// Get the launch index
-	const uint3 idx = threadIdx + blockDim * blockIdx;
-
-        // printf("Tracing ray at %d, %d\n", idx.x, idx.y);
-
-        float4 raw_position;
-        surf2Dread(&raw_position, parameters.position_surface, idx.x * sizeof(float4),
-                parameters.resolution.y - (idx.y + 1));
-        
-        float4 raw_normal;
-        surf2Dread(&raw_normal, parameters.normal_surface, idx.x * sizeof(float4),
-                parameters.resolution.y - (idx.y + 1));
-
-        float4 raw_uv;
-        surf2Dread(&raw_uv, parameters.uv_surface, idx.x * sizeof(float4),
-                parameters.resolution.y - (idx.y + 1));
-
-        int32_t raw_index;
-        surf2Dread(&raw_index, parameters.index_surface, idx.x * sizeof(int32_t),
-                parameters.resolution.y - (idx.y + 1));
-
-        int32_t triangle_id = raw_index >> 16;
-        int32_t material_id = raw_index & 0xFFFF;
-        
-        int index = idx.x + idx.y * parameters.resolution.x;
-        if (raw_index == -1)
-                return;
-
-        cuda::_material material = parameters.materials[material_id];
-
-        float3 position = { raw_position.x, raw_position.y, raw_position.z };
-        float3 normal = { raw_normal.x, raw_normal.y, raw_normal.z };
-        float2 uv = { raw_uv.x, raw_uv.y };
-
-        float3 color = material.diffuse;
-        if (material.textures.has_diffuse)
-                color = make_float3(tex2D <float4> (material.textures.diffuse, uv.x, uv.y));
-
-        // Randomly select a light to sample from
-        float3 seed = make_float3(idx.x, idx.y, parameters.time);
-        uint light_index = cuda::rand_uniform(parameters.area.count, seed);
-
-        AreaLight light = parameters.area.lights[light_index];
-        uint triangle_index = cuda::rand_uniform(light.triangles, seed);
-
-        float3 bary = cuda::pcg3f(seed);
-
-        float u = bary.x;
-        float v = bary.y;
-        if (u + v > 1.0f) {
-                u = 1.0f - u;
-                v = 1.0f - v;
-        }
-
-        uint3 triangle = light.indices[triangle_index];
-
-        const glm::vec3 &v0 = light.vertices[triangle.x].position;
-        const glm::vec3 &v1 = light.vertices[triangle.y].position;
-        const glm::vec3 &v2 = light.vertices[triangle.z].position;
-
-        glm::vec3 gpoint = (v0 + v1 + v2)/3.0f;
-        gpoint = light.model * glm::vec4(gpoint, 1.0f);
-
-        float3 point = { gpoint.x, gpoint.y, gpoint.z };
-
-        // Ray from point to light
-        float3 direction = normalize(parameters.origin - position);
-        float3 origin = position + normal * 1e-3f;
-
-        if (isnan(direction.x) || isnan(direction.y) || isnan(direction.z)) {
-                printf("NaN direction %f, %f, %f\n", direction.x, direction.y, direction.z);
-                return;
-        }
-
-        if (isinf(direction.x) || isinf(direction.y) || isinf(direction.z)) {
-                printf("Inf direction %f, %f, %f\n", direction.x, direction.y, direction.z);
-                return;
-        }
-
-        if (isnan(origin.x) || isnan(origin.y) || isnan(origin.z)) {
-                printf("NaN origin %f, %f, %f\n", origin.x, origin.y, origin.z);
-                printf("\tPosition %f, %f, %f\n", position.x, position.y, position.z);
-                printf("\tNormal %f, %f, %f\n", normal.x, normal.y, normal.z);
-                return;
-        }
-
-        if (isinf(origin.x) || isinf(origin.y) || isinf(origin.z)) {
-                printf("Inf origin %f, %f, %f\n", origin.x, origin.y, origin.z);
-                printf("\tPosition %f, %f, %f\n", position.x, position.y, position.z);
-                printf("\tNormal %f, %f, %f\n", normal.x, normal.y, normal.z);
-                return;
-        }
-}
-
 void EditorViewport::render_path_traced
                         (const RenderInfo &render_info,
                         const std::vector <Entity> &entities,
                         const MaterialDaemon *md)
 {
         // Make sure the prerender step runs regardless of backend
-        prerender_raytrace(entities, md);
+        // prerender_raytrace(entities, md);
 
         // Configure launch parameters
+        path_tracer.launch_params.color = common_rtx.dev_color;
         path_tracer.launch_params.time = common_rtx.timer.elapsed_start();
         path_tracer.launch_params.depth = path_tracer.depth;
 
@@ -557,125 +483,7 @@ void EditorViewport::render_path_traced
                         extent.width, extent.height, 1
                 )
         );
-
-        std::string output = optix_io_read(&path_tracer.launch_params.io);
-        optix_io_clear(&path_tracer.launch_params.io);
-
-        test <<<1, 1>>> (path_tracer.launch_params);
-        CUDA_SYNC_CHECK();
-
-        // std::cout << "\n==> Read <==\n" << output << "\n";
-        
-        // Blitting
-        float4 *buffer = (float4 *) path_tracer.launch_params.color;
-
-        kobra::cuda::hdr_to_ldr(
-                buffer,
-                (uint32_t *) path_tracer.dev_traced,
-                extent.width, extent.height,
-                kobra::cuda::eTonemappingACES
-        );
-
-        kobra::cuda::copy(
-                path_tracer.traced, path_tracer.dev_traced,
-                extent.width * extent.height * sizeof(uint32_t)
-        );
-
-        path_tracer.framer.pre_render(
-                render_info.cmd,
-                kobra::RawImage {
-                        .data = path_tracer.traced,
-                        .width = extent.width,
-                        .height = extent.height,
-                        .channels = 4
-                }
-        );
-        
-        // Start render pass and blit
-        // TODO: function to start render pass for presentation
-        render_info.render_area.apply(render_info.cmd, render_info.extent);
-
-        std::vector <vk::ClearValue> clear_values {
-                vk::ClearColorValue { std::array <float, 4> { 0.0f, 0.0f, 0.0f, 1.0f } },
-                vk::ClearDepthStencilValue { 1.0f, 0 }
-        };
-
-        render_info.cmd.beginRenderPass(
-                vk::RenderPassBeginInfo {
-                        *present_render_pass,
-                        *viewport_fb,
-                        vk::Rect2D { vk::Offset2D {}, extent },
-                        clear_values
-                },
-                vk::SubpassContents::eInline
-        );
-
-        // TODO: import CUDA to Vulkan and render straight to the image
-        path_tracer.framer.render(render_info.cmd);
 }
-
-// void EditorViewport::render_amadeus_path_traced
-//                         (const RenderInfo &render_info,
-//                         const std::vector <Entity> &entities,
-//                         Transform &transform_daemon)
-// {
-//         // Run the path tracer, then extract image and blit to viewport
-//         amadeus_path_tracer.armada->set_depth(amadeus_path_tracer.depth);
-//         amadeus_path_tracer.armada->render(
-//                 entities,
-//                 transform_daemon,
-//                 render_info.camera,
-//                 render_info.camera_transform,
-//                 false
-//         );
-// 			
-//         float4 *buffer = (float4 *) amadeus_path_tracer.armada->color_buffer();
-//
-//         vk::Extent2D rtx_extent = amadeus_path_tracer.armada->extent();
-//         kobra::cuda::hdr_to_ldr(
-//                 buffer,
-//                 (uint32_t *) amadeus_path_tracer.dev_traced,
-//                 rtx_extent.width, rtx_extent.height,
-//                 kobra::cuda::eTonemappingACES
-//         );
-//
-//         kobra::cuda::copy(
-//                 amadeus_path_tracer.traced, amadeus_path_tracer.dev_traced,
-//                 amadeus_path_tracer.armada->size() * sizeof(uint32_t)
-//         );
-//
-//         amadeus_path_tracer.framer.pre_render(
-//                 render_info.cmd,
-//                 kobra::RawImage {
-//                         .data = amadeus_path_tracer.traced,
-//                         .width = rtx_extent.width,
-//                         .height = rtx_extent.height,
-//                         .channels = 4
-//                 }
-//         );
-//
-//         // Start render pass and blit
-//         // TODO: function to start render pass for presentation
-//         render_info.render_area.apply(render_info.cmd, render_info.extent);
-//
-//         std::vector <vk::ClearValue> clear_values {
-//                 vk::ClearColorValue { std::array <float, 4> { 0.0f, 0.0f, 0.0f, 1.0f } },
-//                 vk::ClearDepthStencilValue { 1.0f, 0 }
-//         };
-//
-//         render_info.cmd.beginRenderPass(
-//                 vk::RenderPassBeginInfo {
-//                         *present_render_pass,
-//                         *viewport_fb,
-//                         vk::Rect2D { vk::Offset2D {}, render_info.extent },
-//                         clear_values
-//                 },
-//                 vk::SubpassContents::eInline
-//         );
-//
-//         // TODO: import CUDA to Vulkan and render straight to the image
-//         amadeus_path_tracer.framer.render(render_info.cmd);
-// }
 
 void EditorViewport::render_albedo(const RenderInfo &render_info,
                 const std::vector <Entity> &entities,
@@ -1024,6 +832,7 @@ void EditorViewport::render(const RenderInfo &render_info,
 
         // TODO: if a click is detected, then we need to run the G-buffer pass
         // at least once to keep up to date with the latest changes
+        // NOTE: this is done anyways...
         switch (render_state.mode) {
         case RenderState::eTriangulation:
                 render_gbuffer(render_info, entities, md);
@@ -1045,11 +854,19 @@ void EditorViewport::render(const RenderInfo &render_info,
                 render_albedo(render_info, entities, md);
                 break;
         
+        case RenderState::eSparseGlobalIllumination:
+                prerender_raytrace(entities, md);
+                render_gbuffer(render_info, entities, md);
+                ::render(this, &sparse_gi, render_info, entities, md);
+                blit_raytraced(this, render_info);
+                break;
+        
         case RenderState::ePathTraced:
+                prerender_raytrace(entities, md);
                 render_gbuffer(render_info, entities, md);
                 render_path_traced(render_info, entities, md);
+                blit_raytraced(this, render_info);
                 break;
-
         default:
                 printf("ERROR: EditorViewport::render called in invalid mode\n");
         }
@@ -1136,6 +953,9 @@ static void show_mode_menu(RenderState *render_state)
 
                 if (ImGui::MenuItem("Albedo"))
                         render_state->mode = RenderState::eAlbedo;
+                
+                if (ImGui::MenuItem("Sparse Global Illumination"))
+                        render_state->mode = RenderState::eSparseGlobalIllumination;
 
                 if (ImGui::MenuItem("Path Traced (G-buffer)"))
                         render_state->mode = RenderState::ePathTraced;
@@ -1148,6 +968,7 @@ static void show_mode_menu(RenderState *render_state)
 
 struct _submenu_args {
         EditorViewport::PathTracer *path_tracer;
+        SparseGI *sparse_gi;
 };
 
 static void show_mode_submenu(RenderState *render_state, const _submenu_args &args)
@@ -1157,6 +978,7 @@ static void show_mode_submenu(RenderState *render_state, const _submenu_args &ar
                 { RenderState::eNormals, "Normals" },
                 { RenderState::eTextureCoordinates, "Texture Coordinates" },
                 { RenderState::eAlbedo, "Albedo" },
+                { RenderState::eSparseGlobalIllumination, "Sparse Global Illumination" },
                 { RenderState::ePathTraced, "Path Traced (G-buffer)" },
         };
 		
@@ -1168,6 +990,9 @@ static void show_mode_submenu(RenderState *render_state, const _submenu_args &ar
         if (ImGui::BeginMenu(mode_string.c_str())) {
                 if (render_state->mode == RenderState::ePathTraced)
                         if (ImGui::SliderInt("Depth", &args.path_tracer->depth, 1, 10));
+                
+                if (render_state->mode == RenderState::eSparseGlobalIllumination)
+                        if (ImGui::SliderInt("Depth", &args.sparse_gi->depth, 1, 10));
 
                 ImGui::EndMenu();
         }
@@ -1193,7 +1018,7 @@ void show_menu(const std::shared_ptr <EditorViewport> &ev, const MenuOptions &op
 {
         if (ImGui::BeginMenuBar()) {
                 show_mode_menu(&ev->render_state);
-                show_mode_submenu(&ev->render_state, { &ev->path_tracer });
+                show_mode_submenu(&ev->render_state, { &ev->path_tracer, &ev->sparse_gi });
 
                 // Camera settings
                 if (ImGui::BeginMenu("Camera")) {
@@ -1208,4 +1033,98 @@ void show_menu(const std::shared_ptr <EditorViewport> &ev, const MenuOptions &op
                 // TODO: overlay # of samples...
                 ImGui::EndMenuBar();
         }
+}
+        
+void blit_raytraced(EditorViewport *ev, const RenderInfo &render_info)
+{
+        // Blitting
+        float4 *buffer = ev->common_rtx.dev_color;
+
+        kobra::cuda::hdr_to_ldr(
+                buffer,
+                (uint32_t *) ev->common_rtx.dev_traced,
+                ev->extent.width, ev->extent.height,
+                kobra::cuda::eTonemappingACES
+        );
+
+        kobra::cuda::copy(
+                ev->common_rtx.traced, ev->common_rtx.dev_traced,
+                ev->extent.width * ev->extent.height * sizeof(uint32_t)
+        );
+
+        ev->common_rtx.framer.pre_render(
+                render_info.cmd,
+                kobra::RawImage {
+                        .data = ev->common_rtx.traced,
+                        .width = ev->extent.width,
+                        .height = ev->extent.height,
+                        .channels = 4
+                }
+        );
+        
+        // Start render pass and blit
+        // TODO: function to start render pass for presentation
+        render_info.render_area.apply(render_info.cmd, render_info.extent);
+
+        std::vector <vk::ClearValue> clear_values {
+                vk::ClearColorValue { std::array <float, 4> { 0.0f, 0.0f, 0.0f, 1.0f } },
+                vk::ClearDepthStencilValue { 1.0f, 0 }
+        };
+
+        render_info.cmd.beginRenderPass(
+                vk::RenderPassBeginInfo {
+                        *ev->present_render_pass,
+                        *ev->viewport_fb,
+                        vk::Rect2D { vk::Offset2D {}, ev->extent },
+                        clear_values
+                },
+                vk::SubpassContents::eInline
+        );
+
+        // TODO: import CUDA to Vulkan and render straight to the image
+        ev->common_rtx.framer.render(render_info.cmd);
+}
+
+// Rendering Sparse GI
+void render(EditorViewport *ev, SparseGI *sparse_gi,
+                const RenderInfo &render_info,
+                const std::vector <Entity> &entities,
+                const MaterialDaemon *md)
+{
+        // Configure launch parameters
+        sparse_gi->launch_params.color = ev->common_rtx.dev_color;
+        sparse_gi->launch_params.time = ev->common_rtx.timer.elapsed_start();
+        sparse_gi->launch_params.depth = sparse_gi->depth;
+
+        auto uvw = uvw_frame(render_info.camera, render_info.camera_transform);
+
+        sparse_gi->launch_params.U = cuda::to_f3(uvw.u);
+        sparse_gi->launch_params.V = cuda::to_f3(uvw.v);
+        sparse_gi->launch_params.W = cuda::to_f3(uvw.w);
+        
+        sparse_gi->launch_params.origin = cuda::to_f3(render_info.camera_transform.position);
+        sparse_gi->launch_params.resolution = { ev->extent.width, ev->extent.height };
+        
+        sparse_gi->launch_params.position_surface = ev->framebuffer_images.cu_position_surface;
+        sparse_gi->launch_params.normal_surface = ev->framebuffer_images.cu_normal_surface;
+        sparse_gi->launch_params.uv_surface = ev->framebuffer_images.cu_uv_surface;
+        sparse_gi->launch_params.index_surface = ev->framebuffer_images.cu_material_index_surface;
+
+        sparse_gi->launch_params.materials = (cuda::_material *) ev->common_rtx.dev_materials;
+
+        sparse_gi->launch_params.sky.texture = ev->environment_map.texture;
+        sparse_gi->launch_params.sky.enabled = ev->environment_map.valid;
+        
+        SparseGIParameters *dev_params = (SparseGIParameters *) sparse_gi->dev_launch_params;
+        CUDA_CHECK(cudaMemcpy(dev_params, &sparse_gi->launch_params, sizeof(SparseGIParameters), cudaMemcpyHostToDevice));
+        
+        OPTIX_CHECK(
+                optixLaunch(
+                        sparse_gi->pipeline, 0,
+                        sparse_gi->dev_launch_params,
+                        sizeof(SparseGIParameters),
+                        &sparse_gi->sbt,
+                        ev->extent.width, ev->extent.height, 1
+                )
+        );
 }

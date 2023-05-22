@@ -5,11 +5,12 @@
 #include "include/optix/core.cuh"
 
 // Editor headers
-#include "path_tracer.cuh"
+#include "sparse_gi.cuh"
+#include "../gbuffer_rtx_shader.cuh"
 
 extern "C" {
 
-__constant__ PathTracerParameters parameters;
+__constant__ SparseGIParameters parameters;
 
 }
 
@@ -143,9 +144,6 @@ void convert_material(const cuda::_material &src, cuda::Material &dst, float2 uv
 __device__
 float3 radiance(const SurfaceHit &sh, float3 &seed, int depth)
 {
-        // TODO: options: russian roulette, max depth, etc.
-        // also BRDF sampling, light sampling (direct) or MIS (one sample or
-        // deterministic)
         LightInfo light_info;
 
         float light_pdf = sample_light(light_info, seed);
@@ -247,54 +245,58 @@ extern "C" __global__ void __raygen__()
         float3 color = make_float3(0.0f);
         float3 beta = make_float3(1.0f);
 
+        // TODO: simoultaenous viewports...
+
+        // TODO: two strategies: 3/4 pixels will be direct lighting only
+        // 1/4 will have a secondary bounce that has direct lighting...
+        // if primary or secondary hit is light, skip entirely...
         for (int depth = 0; depth < parameters.depth; depth++) {
                 // Offset the position
                 float sign = (sh.mat.type == eTransmission) ? -1.0f : 1.0f;
                 sh.x += sign * sh.n * 1e-3f;
 
-                color += beta * radiance(sh, seed, depth);
+                color += beta * sh.mat.emission; // radiance(sh, seed, depth);
                 
                 float3 wi;
                 float pdf;
                 Shading out;
 
                 float3 brdf = eval(sh, wi, pdf, out, seed);
-                if (pdf > 0.0 && depth < parameters.depth - 1) {
-                        Packet packet;
-                        packet.miss = false;
-                        packet.entering = false;
-
-                        uint i0;
-                        uint i1;
-
-                        pack_pointer(&packet, i0, i1);
-
-                        optixTrace(
-                                parameters.handle,
-                                sh.x, wi,
-                                0.0f, 1e16f, 0.0f,
-                                OptixVisibilityMask(0xFF),
-                                OPTIX_RAY_FLAG_DISABLE_ANYHIT,
-                                0, 1, 0, i0, i1
-                        );
-
-                        if (packet.miss) {
-                                color += beta * make_float3(sky_at(wi));
-                                break;
-                        } else {
-                                cuda::_material m = parameters.materials[packet.id];
-                                
-                                sh.x = packet.x;
-                                sh.wo = -wi;
-                                sh.n = packet.n;
-                                sh.entering = packet.entering;
-
-                                convert_material(m, sh.mat, packet.uv);
-
-                                beta *= brdf * abs(dot(sh.n, wi)) / pdf;
-                        }
-                } else {
+                if (pdf <= 0.0 || depth >= parameters.depth - 1)
                         break;
+
+                Packet packet;
+                packet.miss = false;
+                packet.entering = false;
+
+                uint i0;
+                uint i1;
+
+                pack_pointer(&packet, i0, i1);
+
+                optixTrace(
+                        parameters.handle,
+                        sh.x, wi,
+                        0.0f, 1e16f, 0.0f,
+                        OptixVisibilityMask(0xFF),
+                        OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+                        0, 1, 0, i0, i1
+                );
+
+                if (packet.miss) {
+                        color += beta * make_float3(sky_at(wi));
+                        break;
+                } else {
+                        cuda::_material m = parameters.materials[packet.id];
+                        
+                        sh.x = packet.x;
+                        sh.wo = -wi;
+                        sh.n = packet.n;
+                        sh.entering = packet.entering;
+
+                        convert_material(m, sh.mat, packet.uv);
+
+                        beta *= brdf * abs(dot(sh.n, wi)) / pdf;
                 }
         }
 

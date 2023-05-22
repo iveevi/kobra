@@ -8,12 +8,6 @@
 #include "include/cuda/error.cuh"
 #include "push_constants.hpp"
 
-namespace extra {
-
-#include "source/amadeus/naive_path_tracer.cu"
-
-}
-
 // Editor renderer shaders
 extern const char *gbuffer_vert_shader;
 extern const char *gbuffer_frag_shader;
@@ -1125,5 +1119,168 @@ void EditorViewport::configure_path_tracer(const Context &ctx)
        
         // TODO: render from raw float4 data...
         KOBRA_ASSERT(ctx.device != nullptr, "Editor (-1): null device");
-        path_tracer.framer = kobra::layers::Framer(ctx, present_render_pass);
+}
+
+void initialize(SparseGI *sparse_gi, const Context &ctx, const OptixDeviceContext &context)
+{
+        static constexpr const char OPTIX_PTX_FILE[] = "bin/ptx/sparse_gi.ptx";
+
+        std::string contents = common::read_file(OPTIX_PTX_FILE);
+	
+        char log[2048];
+	size_t sizeof_log = sizeof(log);
+
+        OPTIX_CHECK(
+                optixModuleCreate(
+                        context,
+                        &module_compile_options,
+                        &pipeline_compile_options,
+                        contents.c_str(),
+                        contents.size(),
+                        log, &sizeof_log,
+                        &sparse_gi->module
+                )
+        );
+
+        printf("Loaded module %p: %s\n", sparse_gi->module, log);
+
+        OptixProgramGroupOptions program_options = {};
+
+        {
+                OptixProgramGroupDesc desc = {};
+                desc.kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
+                desc.raygen.module = sparse_gi->module;
+                desc.raygen.entryFunctionName = "__raygen__";
+
+                OPTIX_CHECK(
+                        optixProgramGroupCreate(
+                                context,
+                                &desc, 1,
+                                &program_options,
+                                log, &sizeof_log,
+                                &sparse_gi->ray_generation
+                        )
+                );
+
+                printf("Loaded raygen %p: %s\n", sparse_gi->ray_generation, log);
+        }
+
+        {
+                OptixProgramGroupDesc desc = {};
+                desc.kind = OPTIX_PROGRAM_GROUP_KIND_MISS;
+                desc.miss.module = sparse_gi->module;
+                desc.miss.entryFunctionName = "__miss__";
+
+                OPTIX_CHECK(
+                        optixProgramGroupCreate(
+                                context,
+                                &desc, 1,
+                                &program_options,
+                                log, &sizeof_log,
+                                &sparse_gi->miss
+                        )
+                );
+
+                printf("Loaded miss %p: %s\n", sparse_gi->miss, log);
+        }
+
+        {
+                OptixProgramGroupDesc desc = {};
+                desc.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
+                desc.hitgroup.moduleCH = sparse_gi->module;
+                desc.hitgroup.entryFunctionNameCH = "__closesthit__";
+
+                OPTIX_CHECK(
+                        optixProgramGroupCreate(
+                                context,
+                                &desc, 1,
+                                &program_options,
+                                log, &sizeof_log,
+                                &sparse_gi->closest_hit
+                        )
+                );
+
+                printf("Loaded closest hit %p: %s\n", sparse_gi->closest_hit, log);
+        }
+
+        // Create pipeline
+        OptixProgramGroup program_groups[] = {
+                sparse_gi->ray_generation,
+                sparse_gi->closest_hit,
+                sparse_gi->miss,
+        };
+
+        OPTIX_CHECK(
+                optixPipelineCreate(context,
+                        &pipeline_compile_options,
+                        &pipeline_link_options,
+                        program_groups, 3,
+                        log, &sizeof_log,
+                        &sparse_gi->pipeline)
+        );
+
+        printf("Loaded pipeline %p: %s\n", sparse_gi->pipeline, log);
+
+        // Configure stacks
+        OptixStackSizes stack_sizes = {};
+        OPTIX_CHECK(optixUtilAccumulateStackSizes(sparse_gi->closest_hit, &stack_sizes, sparse_gi->pipeline));
+        OPTIX_CHECK(optixUtilAccumulateStackSizes(sparse_gi->miss, &stack_sizes, sparse_gi->pipeline));
+        OPTIX_CHECK(optixUtilAccumulateStackSizes(sparse_gi->ray_generation, &stack_sizes, sparse_gi->pipeline));
+
+        uint32_t max_trace_depth = 1;
+        uint32_t max_cc_depth = 0;
+        uint32_t max_dc_depth = 0;
+        uint32_t direct_callable_stack_size_from_traversal = 0;
+        uint32_t direct_callable_stack_size_from_state = 0;
+        uint32_t continuation_stack_size = 0;
+
+        OPTIX_CHECK(
+                optixUtilComputeStackSizes(&stack_sizes,
+                        max_trace_depth, max_cc_depth, max_dc_depth,
+                        &direct_callable_stack_size_from_traversal,
+                        &direct_callable_stack_size_from_state,
+                        &continuation_stack_size)
+        );
+
+        OPTIX_CHECK(
+                optixPipelineSetStackSize(sparse_gi->pipeline,
+                        direct_callable_stack_size_from_traversal,
+                        direct_callable_stack_size_from_state,
+                        continuation_stack_size, 2)
+        );
+
+        // Create shader binding table
+        sparse_gi->sbt = {};
+
+        // Ray generation
+        CUdeviceptr dev_raygen_record;
+
+        optix::Record <void> raygen_record;
+        OPTIX_CHECK(optixSbtRecordPackHeader(sparse_gi->ray_generation, &raygen_record));
+
+        CUDA_CHECK(cudaMalloc((void **) &dev_raygen_record, sizeof(optix::Record <void>)));
+        CUDA_CHECK(cudaMemcpy((void *) dev_raygen_record, &raygen_record, sizeof(optix::Record <void>), cudaMemcpyHostToDevice));
+
+        sparse_gi->sbt.raygenRecord = dev_raygen_record;
+
+        // Miss
+        CUdeviceptr dev_miss_record;
+
+        optix::Record <void> miss_record;
+        OPTIX_CHECK(optixSbtRecordPackHeader(sparse_gi->miss, &miss_record));
+
+        CUDA_CHECK(cudaMalloc((void **) &dev_miss_record, sizeof(optix::Record <void>)));
+        CUDA_CHECK(cudaMemcpy((void *) dev_miss_record, &miss_record, sizeof(optix::Record <void>), cudaMemcpyHostToDevice));
+
+        sparse_gi->sbt.missRecordBase = dev_miss_record;
+        sparse_gi->sbt.missRecordStrideInBytes = sizeof(optix::Record <void>);
+        sparse_gi->sbt.missRecordCount = 1;
+
+        sparse_gi->sbt.hitgroupRecordBase = 0;
+        sparse_gi->sbt.hitgroupRecordStrideInBytes = 0;
+        sparse_gi->sbt.hitgroupRecordCount = 0;
+
+        // Allocate parameters up front
+        sparse_gi->launch_params = {};
+        sparse_gi->dev_launch_params = cuda::alloc(sizeof(SparseGIParameters));
 }

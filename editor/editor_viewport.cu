@@ -116,9 +116,12 @@ EditorViewport::EditorViewport
 {
         common_rtx.timer.start();
 
-        path_tracer.dev_traced = 0;
         path_tracer.launch_params.color = 0;
         path_tracer.depth = 2;
+       
+        // TODO: move to default constructor
+        sparse_gi.launch_params.color = 0;
+        sparse_gi.depth = 2;
 
         // amadeus_path_tracer.depth = 2;
 
@@ -136,8 +139,12 @@ EditorViewport::EditorViewport
         configure_highlight_pipeline();
 
         configure_gbuffer_rtx();
+        initialize(&sparse_gi, context, system->context());
         // configure_amadeus_path_tracer(context);
         configure_path_tracer(context);
+      
+        // Common raytracing data
+        common_rtx.framer = kobra::layers::Framer(context, present_render_pass);
 
         render_state.initialized = true;
 }
@@ -291,19 +298,17 @@ void EditorViewport::resize(const vk::Extent2D &new_extent)
                 framebuffer_images.cu_material_index_surface,
                 channel_desc_i32);
 
-        // Allocate resources for the G-buffer based path tracer
-        if (path_tracer.launch_params.color != 0)
-                CUDA_CHECK(cudaFree(path_tracer.launch_params.color));
+        // Allocate resources for raytracing pipelines
+        if (common_rtx.dev_color != 0)
+                CUDA_CHECK(cudaFree(common_rtx.dev_color));
 
-        CUDA_CHECK(cudaMalloc(&path_tracer.launch_params.color,
-                new_extent.width * new_extent.height * sizeof(float4)));
+        CUDA_CHECK(cudaMalloc(&common_rtx.dev_color, new_extent.width * new_extent.height * sizeof(float4)));
         
-        if (path_tracer.dev_traced != 0)
-                CUDA_CHECK(cudaFree((void *) path_tracer.dev_traced));
+        if (common_rtx.dev_traced != 0)
+                CUDA_CHECK(cudaFree((void *) common_rtx.dev_traced));
 
-        CUDA_CHECK(cudaMalloc((void **) &path_tracer.dev_traced, new_extent.width * new_extent.height * sizeof(uint32_t)));
-
-        path_tracer.traced.resize(new_extent.width * new_extent.height * sizeof(uint32_t));
+        CUDA_CHECK(cudaMalloc((void **) &common_rtx.dev_traced, new_extent.width * new_extent.height * sizeof(uint32_t)));
+        common_rtx.traced.resize(new_extent.width * new_extent.height * sizeof(uint32_t));
 
         // Allocate Sobel filter output image
         sobel.output = ImageData {

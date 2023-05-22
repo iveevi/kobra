@@ -183,18 +183,18 @@ int main()
 
 	vk::raii::PhysicalDevice phdev = kobra::pick_physical_device(predicate);
 
-  //       Startup *startup  = new Startup {
-		// phdev, {
-		// 	VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-		// 	VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
-		// 	VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
-		// },
-  //       };
-		//
-  //       startup->run();
-  //       delete startup;
+        Startup *startup  = new Startup {
+		phdev, {
+			VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+			VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
+			VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
+		},
+        };
 
-        g_application.project = "scene";
+        startup->run();
+        delete startup;
+
+        // g_application.project = "scene";
         if (g_application.project.empty())
                 return 0;
 

@@ -154,12 +154,6 @@ void Project::save(const std::string &dir)
                 std::filesystem::path filename = path / (scene.name + ".kobra");
                 std::ofstream file(filename);
 
-                // Write all used materials, in order
-                // file << "@materials\n"
-                //         << ".list " << Material::all.size() << "\n";
-                // for (int i = 0; i < Material::all.size(); i++)
-                //         file << "\tmaterial-" << std::to_string(i) << ".mat\n";
-
                 // Write the scene description
                 for (auto &entity : *scene.system) {
                         file << "\n@entity " << entity.name << "\n";
@@ -178,7 +172,7 @@ void Project::save(const std::string &dir)
                                         // TODO: find the path instead...
                                         // std::string material = Material::all[submesh.material_index].name;
                                         std::string material = materials[submesh.material_index].name;
-                                        file << "\tsubmesh-" << id << ".submesh, " << material << "\n";
+                                        file << "\tsubmesh-" << id << ".submesh, " << material << ".mat\n";
                                 }
 
                                 // TODO: material indices...

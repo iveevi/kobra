@@ -100,8 +100,10 @@ int32_t load(MaterialDaemon *daemon, const std::filesystem::path &path)
 {
         // TODO: lookup for paths as well?
         std::ifstream file(path);
-        if (!file.is_open())
+        if (!file.is_open()) {
+                KOBRA_LOG_FUNC(Log::ERROR) << "Failed to open material file: " << path << std::endl;
                 return -1;
+        }
 
         Material material = load_material(file);
         if (daemon->lookup.find(material.name) != daemon->lookup.end())

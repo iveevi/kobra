@@ -161,12 +161,31 @@ target_link_libraries(editor
 )
 
 # Set executable sources -- experimental
-add_executable(experimental
-        experimental/experimental.cu
+add_executable(api
+        experimental/api/main.cpp
         $<TARGET_OBJECTS:Kobra_COMMON>
 )
 
-target_link_libraries(experimental
+target_link_libraries(api
+	${Vulkan_LIBRARIES}
+	glfw
+	glslang
+	SPIRV
+	assimp
+	nvidia-ml
+	nvrtc
+	${OpenCV_LIBS}
+	${ImageMagick_LIBRARIES}
+	nfd
+)
+
+# Set executable sources -- experimental
+add_executable(snerf
+        experimental/snerf/snerf.cu
+        $<TARGET_OBJECTS:Kobra_COMMON>
+)
+
+target_link_libraries(snerf
 	${Vulkan_LIBRARIES}
 	glfw
 	glslang
@@ -192,6 +211,7 @@ file(GLOB_RECURSE OPTIX_SHADERS
 	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/amadeus_repg.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/editor/gbuffer_rtx_shader.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/editor/path_tracer.cu
+	${CMAKE_CURRENT_SOURCE_DIR}/editor/optix/sparse_gi.cu
 )
 
 add_library(optix_shaders
@@ -212,6 +232,7 @@ add_custom_target(
 		${CMAKE_BINARY_DIR}/bin/ptx
 	COMMAND ${CMAKE_COMMAND} -E copy
 		${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/optix_shaders.dir/editor/*.ptx
+		${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/optix_shaders.dir/editor/optix/*.ptx
 		${CMAKE_BINARY_DIR}/bin/ptx
 	DEPENDS optix_shaders
 )
