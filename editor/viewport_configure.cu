@@ -1143,6 +1143,7 @@ void initialize(SparseGI *sparse_gi, const Context &ctx, const OptixDeviceContex
         );
 
         printf("Loaded module %p: %s\n", sparse_gi->module, log);
+        printf("Context is %p\n", context);
 
         OptixProgramGroupOptions program_options = {};
 

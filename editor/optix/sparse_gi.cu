@@ -36,6 +36,9 @@ struct LightInfo {
         bool sky;
 };
 
+// TODO: reservoir buffer and etc
+// spatial resampling is done after rendering
+
 __device__
 float3 ray_at(uint3 idx)
 {
@@ -142,7 +145,7 @@ void convert_material(const cuda::_material &src, cuda::Material &dst, float2 uv
 }
 
 __device__
-float3 radiance(const SurfaceHit &sh, float3 &seed, int depth)
+float3 Ld(const SurfaceHit &sh, float3 &seed)
 {
         LightInfo light_info;
 
@@ -159,6 +162,7 @@ float3 radiance(const SurfaceHit &sh, float3 &seed, int depth)
         Packet packet;
         packet.miss = false;
 
+        // TODO: skip if 0 pdf in BRFD sampling...
         pack_pointer(&packet, i0, i1);
 
         optixTrace(
@@ -178,6 +182,7 @@ float3 radiance(const SurfaceHit &sh, float3 &seed, int depth)
                 float R = length(light_info.position - origin);
 	
                 float3 brdf = cuda::brdf(sh, wi, sh.mat.type);
+                float pdf = cuda::pdf(sh, wi, sh.mat.type);
 
                 float ldotn = light_info.sky ? 1.0f : abs(dot(light_info.normal, wi));
                 float ndotwi = abs(dot(sh.n, wi));
@@ -216,8 +221,10 @@ extern "C" __global__ void __raygen__()
         int index = idx.x + idx.y * parameters.resolution.x;
         if (raw_index == -1) {
                 float3 ray = ray_at(idx);
-                // parameters.color[index] = make_float4(0.5f, 0.5f, 0.5f, 1.0f);
                 parameters.color[index] = sky_at(ray);
+                // Indicate that there is no valid position here
+                parameters.color[index].w = -1.0f;
+                parameters.previous_position[index] = make_float4(0.0f);
                 return;
         }
 
@@ -241,67 +248,87 @@ extern "C" __global__ void __raygen__()
         sh.entering = (raw_normal.w > 0.0f);
         
         convert_material(m, sh.mat, uv);
+        float sign = (sh.mat.type == eTransmission) ? -1.0f : 1.0f;
+        sh.x += sign * sh.n * 1e-3f;
 
-        float3 color = make_float3(0.0f);
-        float3 beta = make_float3(1.0f);
+        // float3 color = make_float3(0.0f);
+        // float3 beta = make_float3(1.0f);
 
         // TODO: simoultaenous viewports...
 
         // TODO: two strategies: 3/4 pixels will be direct lighting only
         // 1/4 will have a secondary bounce that has direct lighting...
         // if primary or secondary hit is light, skip entirely...
-        for (int depth = 0; depth < parameters.depth; depth++) {
-                // Offset the position
-                float sign = (sh.mat.type == eTransmission) ? -1.0f : 1.0f;
-                sh.x += sign * sh.n * 1e-3f;
 
-                color += beta * sh.mat.emission; // radiance(sh, seed, depth);
-                
-                float3 wi;
-                float pdf;
-                Shading out;
+        // TODO: skip direct lighting for highly specular surfaces
+        float3 direct { 0, 0, 0 };
+        if (sh.mat.roughness > 0.1)
+                direct = Ld(sh, seed);
 
-                float3 brdf = eval(sh, wi, pdf, out, seed);
-                if (pdf <= 0.0 || depth >= parameters.depth - 1)
-                        break;
-
-                Packet packet;
-                packet.miss = false;
-                packet.entering = false;
-
-                uint i0;
-                uint i1;
-
-                pack_pointer(&packet, i0, i1);
-
-                optixTrace(
-                        parameters.handle,
-                        sh.x, wi,
-                        0.0f, 1e16f, 0.0f,
-                        OptixVisibilityMask(0xFF),
-                        OPTIX_RAY_FLAG_DISABLE_ANYHIT,
-                        0, 1, 0, i0, i1
-                );
-
-                if (packet.miss) {
-                        color += beta * make_float3(sky_at(wi));
-                        break;
-                } else {
-                        cuda::_material m = parameters.materials[packet.id];
-                        
-                        sh.x = packet.x;
-                        sh.wo = -wi;
-                        sh.n = packet.n;
-                        sh.entering = packet.entering;
-
-                        convert_material(m, sh.mat, packet.uv);
-
-                        beta *= brdf * abs(dot(sh.n, wi)) / pdf;
-                }
-        }
+        float3 color = direct;
 
         // Store color
-        parameters.color[index] = make_float4(color);
+        float4 pcolor { 0, 0, 0, 0 };
+        uint samples = 0; // parameters.color[index].w;
+        
+        if (parameters.dirty) {
+                glm::vec4 p { sh.x.x, sh.x.y, sh.x.z, 1.0f };
+                p = parameters.previous_projection * parameters.previous_view * p;
+
+                float u = p.x/p.w;
+                float v = p.y/p.w;
+
+                bool in_u_bounds = (u >= -1.0f && u <= 1.0f);
+                bool in_v_bounds = (v >= -1.0f && v <= 1.0f);
+
+                int pindex = -1;
+                if (in_u_bounds && in_v_bounds) {
+                        u = (u + 1.0f) * 0.5f;
+                        v = (v + 1.0f) * 0.5f;
+
+                        // int ix = u * parameters.resolution.x + 0.5;
+                        // int iy = v * parameters.resolution.y + 0.5;
+                        
+                        int ix = u * parameters.resolution.x;
+                        int iy = v * parameters.resolution.y;
+
+                        pindex = iy * parameters.resolution.x + ix;
+                        pcolor = parameters.color[pindex];
+                        samples = pcolor.w < 0 ? 0 : pcolor.w;
+                }
+
+                // TODO: check validity of temporal accumulation
+                // in order to prevent smearing
+                if (pindex >= 0) {
+                        float3 pos = make_float3(parameters.previous_position[pindex]);
+
+                        // TODO:use some heuristic; not every difference needs
+                        // to be discarded
+                        if (length(pos - sh.x) > 0.1f)
+                                samples = 0;
+                }
+        } else {
+                pcolor = parameters.color[index];
+                samples = pcolor.w < 0 ? 0 : pcolor.w;
+        }
+        
+        // Explicitly reset samples if necessary
+        if (parameters.reset)
+                samples = 0;
+
+
+        // TODO: use camera dirty?
+        // float4 pcolor = parameters.color[index];
+
+        float4 ccolor = make_float4(color);
+        float4 ncolor = (pcolor * samples + ccolor) / (samples + 1.0f);
+        parameters.color[index] = ncolor;
+        // TODO: fourth channel is the number of samples...
+        parameters.color[index].w = samples + 1.0f;
+        parameters.previous_position[index] = make_float4(sh.x, 1.0f);
+
+        // TODO: for diffuse surfaces, need to modify the direct lighting a
+        // little bit to account for the change in view direction
 
         // TODO: if shadow ray fails (e.g. hits a surface), cache that
         // information and use it to accumulate radiance (or skip new ray

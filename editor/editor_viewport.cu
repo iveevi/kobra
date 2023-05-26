@@ -102,10 +102,9 @@ void load_environment_map(EnvironmentMap *em, kobra::TextureLoader *loader, cons
 }
 
 // Constructor
-EditorViewport::EditorViewport
-                        (const Context &context,
-                        const std::shared_ptr <amadeus::Accelerator> &_system,
-                        const std::shared_ptr <MeshDaemon> &_mesh_memory)
+EditorViewport::EditorViewport(const Context &context,
+                const std::shared_ptr <amadeus::Accelerator> &_system,
+                const std::shared_ptr <MeshDaemon> &_mesh_memory)
                 : system(_system),
                 mesh_memory(_mesh_memory),
                 phdev(context.phdev),
@@ -121,6 +120,7 @@ EditorViewport::EditorViewport
        
         // TODO: move to default constructor
         sparse_gi.launch_params.color = 0;
+        sparse_gi.launch_params.previous_position = nullptr;
         sparse_gi.depth = 2;
 
         // amadeus_path_tracer.depth = 2;
@@ -298,6 +298,8 @@ void EditorViewport::resize(const vk::Extent2D &new_extent)
                 framebuffer_images.cu_material_index_surface,
                 channel_desc_i32);
 
+        // TODO: cuda free the surfaces...
+
         // Allocate resources for raytracing pipelines
         if (common_rtx.dev_color != 0)
                 CUDA_CHECK(cudaFree(common_rtx.dev_color));
@@ -309,6 +311,11 @@ void EditorViewport::resize(const vk::Extent2D &new_extent)
 
         CUDA_CHECK(cudaMalloc((void **) &common_rtx.dev_traced, new_extent.width * new_extent.height * sizeof(uint32_t)));
         common_rtx.traced.resize(new_extent.width * new_extent.height * sizeof(uint32_t));
+
+        if (sparse_gi.launch_params.previous_position != 0)
+                CUDA_CHECK(cudaFree((void *) sparse_gi.launch_params.previous_position));
+
+        CUDA_CHECK(cudaMalloc((void **) &sparse_gi.launch_params.previous_position, new_extent.width * new_extent.height * sizeof(float4)));
 
         // Allocate Sobel filter output image
         sobel.output = ImageData {

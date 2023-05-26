@@ -16,7 +16,13 @@ struct SparseGIParameters {
 
         // Global parameters
         float time;
-        uint depth;
+        bool reset;
+        bool dirty;
+
+        // Previous camera matrices
+        glm::mat4 previous_view;
+        glm::mat4 previous_projection;
+        float4 *previous_position;
 
         // Camera parameters
         float3 U;

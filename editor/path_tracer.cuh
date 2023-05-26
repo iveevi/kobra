@@ -28,6 +28,7 @@ struct PathTracerParameters {
         // Global parameters
         float time;
         uint depth;
+        uint samples;
 
         // Camera parameters
         float3 U;

@@ -141,6 +141,13 @@ void convert_material(const cuda::_material &src, cuda::Material &dst, float2 uv
 }
 
 __device__
+float power_heuristic(float pdf1, float pdf2)
+{
+        float f = pdf1 * pdf1;
+        return f / (f + pdf2 * pdf2);
+}
+
+__device__
 float3 radiance(const SurfaceHit &sh, float3 &seed, int depth)
 {
         // TODO: options: russian roulette, max depth, etc.
@@ -180,12 +187,14 @@ float3 radiance(const SurfaceHit &sh, float3 &seed, int depth)
                 float R = length(light_info.position - origin);
 	
                 float3 brdf = cuda::brdf(sh, wi, sh.mat.type);
+                float pdf = cuda::pdf(sh, wi, sh.mat.type);
 
                 float ldotn = light_info.sky ? 1.0f : abs(dot(light_info.normal, wi));
                 float ndotwi = abs(dot(sh.n, wi));
                 float falloff = light_info.sky ? 1.0f : (R * R);
 
-                out_radiance = brdf * light_info.emission * ldotn * ndotwi/(light_pdf * falloff);
+                float weight = power_heuristic(light_pdf, pdf);
+                out_radiance = weight * brdf * light_info.emission * ldotn * ndotwi/(light_pdf * falloff);
         }
 
         return out_radiance;
@@ -291,6 +300,7 @@ extern "C" __global__ void __raygen__()
 
                                 convert_material(m, sh.mat, packet.uv);
 
+                                // TODO: light sampling pdf?
                                 beta *= brdf * abs(dot(sh.n, wi)) / pdf;
                         }
                 } else {
@@ -299,7 +309,11 @@ extern "C" __global__ void __raygen__()
         }
 
         // Store color
-        parameters.color[index] = make_float4(color);
+        uint samples = parameters.samples;
+        float4 pcolor = parameters.color[index];
+        float4 ccolor = make_float4(color);
+        float4 ncolor = (pcolor * samples + ccolor) / (samples + 1.0f);
+        parameters.color[index] = ncolor;
 
         // TODO: if shadow ray fails (e.g. hits a surface), cache that
         // information and use it to accumulate radiance (or skip new ray

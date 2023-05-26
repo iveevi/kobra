@@ -1079,6 +1079,7 @@ std::optional <std::tuple <Mesh, std::vector <Material>>> load_mesh(const std::s
 						// TODO: method
 						if (mesh.material_ids[f] < materials.size()) {
 							tinyobj::material_t m = materials[mesh.material_ids[f]];
+                                                        mat.name = m.name;
 							mat.diffuse = {m.diffuse[0], m.diffuse[1], m.diffuse[2]};
 							mat.specular = {m.specular[0], m.specular[1], m.specular[2]};
 							// mat.ambient = {m.ambient[0], m.ambient[1], m.ambient[2]};

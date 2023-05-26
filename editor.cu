@@ -118,8 +118,10 @@ struct Editor : public kobra::BaseApp {
 	// Viewport
 	struct {
 		// Scene viewing camera
+                // TODO: vector of such structs (multiple viewports)
 		Camera camera { 45.0f, 1.0f };
 		Transform camera_transform;
+                bool camera_transform_dirty = false;
 
 		ImVec2 min = {1/0.0f, 1/0.0f};
 		ImVec2 max = {-1.0f, -1.0f};
@@ -561,89 +563,6 @@ public:
 // 		std::cout << "Error: " << NFD_GetError() << std::endl;
 // 	}
 // }
-//
-// // RTX Renderer UI attachment
-// // TODO: put all these attachments in separate headers
-// class RTXRenderer : public kobra::ui::ImGuiAttachment {
-// 	Editor *m_editor = nullptr;
-// 	int m_path_depth = 0;
-// 	bool m_enable_envmap = true;
-// public:
-// 	RTXRenderer() = delete;
-// 	RTXRenderer(Editor *editor)
-// 			: m_editor {editor},
-// 			m_path_depth {2},
-// 			m_enable_envmap {true} {
-// 		m_editor->m_renderers.armada_rtx->set_depth(m_path_depth);
-// 		m_editor->m_renderers.armada_rtx->set_envmap_enabled(m_enable_envmap);
-// 	}
-//
-// 	void render() override {
-// 		ImGui::Begin("RTX Renderer");
-//
-// 		// Setting the path depth
-// 		if (ImGui::SliderInt("Path Depth", &m_path_depth, 0, 10)) {
-// 			m_editor->m_renderers.armada_rtx->set_depth(m_path_depth);
-// 			std::lock_guard <std::mutex> lock_guard
-// 				(m_editor->m_renderers.movement_mutex);
-// 			m_editor->m_renderers.movement.push(0);
-// 		}
-//
-// 		// TODO: roussian roulette, different integrators, and loading
-// 		// RTX attachments
-//
-// 		// Drop down to choose the RTX attachment
-// 		auto attachments = m_editor->m_renderers.armada_rtx->attachments();
-// 		auto current = m_editor->m_renderers.armada_rtx->active_attachment();
-// 		if (ImGui::BeginCombo("RTX Attachment", current.c_str())) {
-// 			for (auto &attachment : attachments) {
-// 				bool is_selected = (current == attachment);
-// 				if (ImGui::Selectable(attachment.c_str(), is_selected)) {
-// 					m_editor->m_renderers.armada_rtx->activate(attachment);
-// 					std::lock_guard <std::mutex> lock_guard
-// 						(m_editor->m_renderers.movement_mutex);
-// 					m_editor->m_renderers.movement.push(0);
-// 				}
-//
-// 				if (is_selected)
-// 					ImGui::SetItemDefaultFocus();
-// 			}
-//
-// 			ImGui::EndCombo();
-// 		}
-//
-// 		// Checkboxes for enabling/disabling denoising
-// 		ImGui::Checkbox("Denoise", &m_editor->m_renderers.denoise);
-//
-// 		bool russian_roulette = false;
-// 		auto opt = m_editor->m_renderers.armada_rtx->get_option("russian_roulette");
-// 		if (std::holds_alternative <bool> (opt))
-// 			russian_roulette = std::get <bool> (opt);
-//
-// 		if (ImGui::Checkbox("Russian Roulette", &russian_roulette)) {
-// 			m_editor->m_renderers.armada_rtx->set_option("russian_roulette", russian_roulette);
-// 			std::lock_guard <std::mutex> lock_guard
-// 				(m_editor->m_renderers.movement_mutex);
-// 			m_editor->m_renderers.movement.push(0);
-// 		}
-//
-// 		// Environment map
-// 		if (ImGui::Checkbox("Environment Map", &m_enable_envmap)) {
-// 			m_editor->m_renderers.armada_rtx->set_envmap_enabled(m_enable_envmap);
-// 			std::lock_guard <std::mutex> lock_guard
-// 				(m_editor->m_renderers.movement_mutex);
-// 			m_editor->m_renderers.movement.push(0);
-// 		}
-//
-// 		ImGui::Spacing();
-// 		if (ImGui::Button("Load RTX Plugin")) {
-// 			// TODO: do this async...
-// 			load_attachment(m_editor);
-// 		}
-//
-// 		ImGui::End();
-// 	}
-// };
 
 void request_capture(Editor *editor)
 {
@@ -674,13 +593,25 @@ void import_asset(Editor *editor)
 	if (result == NFD_OKAY) {
                 KOBRA_LOG_FUNC(Log::WARN) << "Needs to be implemented" << std::endl;
                 // // Extract name of the entity from the file name
-                // // TODO: check for duplicates
-                // std::filesystem::path asset_path = path;
-                // kobra::Mesh mesh = *kobra::Mesh::load(asset_path.string());
-                // auto system = editor->m_scene.system;
-                // auto entity = system->make_entity(asset_path.stem());
-                // entity.add <kobra::Mesh> (mesh);
-                // entity.add <kobra::Renderable> (editor->get_context(), &entity.get <kobra::Mesh> ());
+                // TODO: check for duplicates
+                std::filesystem::path asset_path = path;
+                auto [mesh, materials] = *kobra::Mesh::load(asset_path.string());
+
+                auto system = editor->m_scene.system;
+                auto entity = system->make_entity(asset_path.stem());
+                entity.add <kobra::Mesh> (mesh);
+                entity.add <kobra::Renderable> (editor->get_context(), &entity.get <kobra::Mesh> ());
+
+                kobra::Mesh &mesh_ref = entity.get <kobra::Mesh> ();
+                for (int i = 0; i < materials.size(); i++) {
+                        auto &mat = materials[i];
+                        if (mat.name.empty())
+                                mat.name = entity.name + "_material_" + std::to_string(i);
+
+                        std::cout << "Adding material: " << mat.name << std::endl;
+                        int32_t index = load(system->material_daemon, mat);
+                        mesh_ref.submeshes[i].material_index = index;
+                }
 	} else if (result == NFD_CANCEL) {
 		std::cout << "User cancelled" << std::endl;
 	} else {
@@ -1180,6 +1111,7 @@ void handle_camera_input(Editor *editor)
                 std::lock_guard <std::mutex> lock(editor->m_renderers.movement_mutex);
                 // TODO: signal to transform daeon instead? but the
                 // viewport camera is not an system entity
+                editor->m_viewport.camera_transform_dirty = true;
                 editor->m_renderers.movement.push(0);
         }
 }
@@ -1232,6 +1164,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
                 RenderInfo render_info { cmd };
                 render_info.camera = m_viewport.camera;
                 render_info.camera_transform = m_viewport.camera_transform;
+                render_info.camera_transform_dirty = m_viewport.camera_transform_dirty;
                 // render_info.cmd = &cmd;
                 render_info.extent = m_editor_renderer->extent;
                 // render_info.framebuffer = &m_viewport.framebuffer;
@@ -1242,22 +1175,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
                 const MaterialDaemon *md = system->material_daemon;
                 m_editor_renderer->render(render_info, renderable_entities, *transform_daemon, md);
 
-                /* m_editor_renderer->render_gbuffer(render_info, renderable_entities);
-                m_editor_renderer->render_present(render_info); */
-
-		// m_irradiance_computer.sample(cmd);
-		/* if (m_irradiance_computer.sample(cmd)
-				&& !m_irradiance_computer.cached
-				&& !m_saved_irradiance) {
-			m_irradiance_computer.save_irradiance_maps(
-				get_context(),
-				"irradiance_maps"
-			);
-
-			m_saved_irradiance = true;
-		} */
-
-		// Handle requests
+                // Handle requests
 		std::optional <InputRequest> selection_request;
 		while (!input_context.requests.empty()) {
 			InputRequest request = input_context.requests.front();
@@ -1420,6 +1338,7 @@ void handle_viewport_input(Editor *editor, const InputRequest &request)
 
                         std::lock_guard <std::mutex> lock(editor->m_renderers.movement_mutex);
                         editor->m_renderers.movement.push(0);
+                        editor->m_viewport.camera_transform_dirty = true;
                         viewport.dragging = true;
                 }
 	}
@@ -1487,6 +1406,9 @@ void handle_application_communications(Editor *editor)
 
 void Editor::after_present()
 {
+        // Reset dirty flags here
+        m_viewport.camera_transform_dirty = false;
+
         // TODO: handle all requests
 	if (!input_context.requests.empty()) {
 		// TODO: ideally should only be one type of request per after_present

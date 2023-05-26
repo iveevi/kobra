@@ -56,8 +56,10 @@ using namespace kobra;
 // Render packet information
 struct RenderInfo {
         Camera camera;
-        RenderArea render_area = RenderArea::full();
         Transform camera_transform;
+        bool camera_transform_dirty = true;
+
+        RenderArea render_area = RenderArea::full();
         std::set <int> highlighted_entities;
         vk::Extent2D extent;
         const vk::raii::CommandBuffer &cmd = nullptr;
@@ -91,6 +93,7 @@ struct RenderState {
 
         bool bounding_boxes = false;
         bool initialized = false;
+        bool sparse_gi_reset = false;
 };
 
 // Modules within the editor rendering pipeline

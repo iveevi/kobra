@@ -260,7 +260,9 @@ struct EditorViewport {
         void resize(const vk::Extent2D &);
 
         // Rendering methods
-        void render_gbuffer(const RenderInfo &, const std::vector <Entity> &,
+        void render_gbuffer(const RenderInfo &,
+                        const std::vector <Entity> &,
+                        const TransformDaemon *,
                         const MaterialDaemon *);
         // void render_amadeus_path_traced(const RenderInfo &, const std::vector <Entity> &, Transform &);
         void render_path_traced(const RenderInfo &, const std::vector <Entity> &,
@@ -277,7 +279,9 @@ struct EditorViewport {
                     TransformDaemon &, const MaterialDaemon *);
 
         // Other methods
-        void prerender_raytrace(const std::vector <Entity> &, const MaterialDaemon *);
+        void prerender_raytrace(const std::vector <Entity> &,
+                        const TransformDaemon *,
+                        const MaterialDaemon *);
 
         // Properties
         ImageData &viewport() {

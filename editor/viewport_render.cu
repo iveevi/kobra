@@ -70,7 +70,8 @@ static cuda::_material convert_material(const Material &material, TextureLoader 
 
 // Prerender process for raytracing
 void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
-                                        const MaterialDaemon *md)
+                const TransformDaemon *td,
+                const MaterialDaemon *md)
 {
         if (!common_rtx.clk_rise)
                 return;
@@ -83,6 +84,9 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
                 int id = entity.id;
                 const auto &renderable = entity.get <Renderable> ();
                 const auto &transform = entity.get <Transform> ();
+
+                if (td->changed(id))
+                        rebuild_tlas |= true;
 
                 // Generate cache data
                 mesh_memory->cache_cuda(entity);
@@ -120,17 +124,11 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
                                                 << meshes[i].triangles() << ": "
                                                 << meshes[i].vertices.size() << ", "
                                                 << meshes[i].indices.size() << std::endl;
+                                        
                                         for (int j = 0; j < meshes[i].triangles(); j++) {
                                                 int i0 = meshes[i].indices[3 * j];
                                                 int i1 = meshes[i].indices[3 * j + 1];
                                                 int i2 = meshes[i].indices[3 * j + 2];
-
-                                                std::cout << "Triangle " << j << ": " << i0 << ", " << i1 << ", " << i2 << std::endl;
-                                        }
-
-                                        for (int j = 0; j < meshes[i].vertices.size(); j++) {
-                                                std::cout << "Vertex " << j << ": "
-                                                        << glm::to_string(meshes[i].vertices[j].position) << std::endl;
                                         }
 
                                         AreaLight light;
@@ -239,6 +237,7 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
 // TODO: pass transform daemon for the raytracing backend
 void EditorViewport::render_gbuffer(const RenderInfo &render_info,
                                     const std::vector <Entity> &entities,
+                                    const TransformDaemon *td,
                                     const MaterialDaemon *md)
 {
         if (render_state.backend == RenderState::eRasterized) {
@@ -365,7 +364,7 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info,
                 render_info.cmd.endRenderPass();
         } else if (render_state.backend == RenderState::eRaytraced) {
                 // Prerender
-                prerender_raytrace(entities, md);
+                prerender_raytrace(entities, td, md);
 
                 // Configure launch parameters
                 auto uvw = uvw_frame(render_info.camera, render_info.camera_transform);
@@ -451,6 +450,9 @@ void EditorViewport::render_path_traced
         path_tracer.launch_params.color = common_rtx.dev_color;
         path_tracer.launch_params.time = common_rtx.timer.elapsed_start();
         path_tracer.launch_params.depth = path_tracer.depth;
+        path_tracer.launch_params.samples += 1;
+        if (render_info.camera_transform_dirty)
+                path_tracer.launch_params.samples = 0;
 
         auto uvw = uvw_frame(render_info.camera, render_info.camera_transform);
 
@@ -822,7 +824,7 @@ void EditorViewport::render_highlight(const RenderInfo &render_info, const std::
 
 void EditorViewport::render(const RenderInfo &render_info,
                 const std::vector <Entity> &entities,
-                TransformDaemon &transform_daemon,
+                TransformDaemon &td,
                 const MaterialDaemon *md)
 {
         // TODO: pass camera as an entity, and then check if its moved using the
@@ -835,35 +837,35 @@ void EditorViewport::render(const RenderInfo &render_info,
         // NOTE: this is done anyways...
         switch (render_state.mode) {
         case RenderState::eTriangulation:
-                render_gbuffer(render_info, entities, md);
+                render_gbuffer(render_info, entities, &td, md);
                 render_triangulation(render_info);
                 break;
 
         case RenderState::eNormals:
-                render_gbuffer(render_info, entities, md);
+                render_gbuffer(render_info, entities, &td, md);
                 render_normals(render_info);
                 break;
         
         case RenderState::eTextureCoordinates:
-                render_gbuffer(render_info, entities, md);
+                render_gbuffer(render_info, entities, &td, md);
                 render_uv(render_info);
                 break;
 
         case RenderState::eAlbedo:
-                render_gbuffer(render_info, entities, md);
+                render_gbuffer(render_info, entities, &td, md);
                 render_albedo(render_info, entities, md);
                 break;
         
         case RenderState::eSparseGlobalIllumination:
-                prerender_raytrace(entities, md);
-                render_gbuffer(render_info, entities, md);
+                prerender_raytrace(entities, &td, md);
+                render_gbuffer(render_info, entities, &td, md);
                 ::render(this, &sparse_gi, render_info, entities, md);
                 blit_raytraced(this, render_info);
                 break;
         
         case RenderState::ePathTraced:
-                prerender_raytrace(entities, md);
-                render_gbuffer(render_info, entities, md);
+                prerender_raytrace(entities, &td, md);
+                render_gbuffer(render_info, entities, &td, md);
                 render_path_traced(render_info, entities, md);
                 blit_raytraced(this, render_info);
                 break;
@@ -954,8 +956,10 @@ static void show_mode_menu(RenderState *render_state)
                 if (ImGui::MenuItem("Albedo"))
                         render_state->mode = RenderState::eAlbedo;
                 
-                if (ImGui::MenuItem("Sparse Global Illumination"))
+                if (ImGui::MenuItem("Sparse Global Illumination")) {
                         render_state->mode = RenderState::eSparseGlobalIllumination;
+                        render_state->sparse_gi_reset = true;
+                }
 
                 if (ImGui::MenuItem("Path Traced (G-buffer)"))
                         render_state->mode = RenderState::ePathTraced;
@@ -1091,12 +1095,22 @@ void render(EditorViewport *ev, SparseGI *sparse_gi,
                 const std::vector <Entity> &entities,
                 const MaterialDaemon *md)
 {
+        const Camera &camera = render_info.camera;
+        const Transform &camera_transform = render_info.camera_transform;
+
         // Configure launch parameters
         sparse_gi->launch_params.color = ev->common_rtx.dev_color;
         sparse_gi->launch_params.time = ev->common_rtx.timer.elapsed_start();
-        sparse_gi->launch_params.depth = sparse_gi->depth;
+        sparse_gi->launch_params.dirty = render_info.camera_transform_dirty;
+        sparse_gi->launch_params.reset = ev->render_state.sparse_gi_reset;
 
-        auto uvw = uvw_frame(render_info.camera, render_info.camera_transform);
+        ev->render_state.sparse_gi_reset = false;
+        if (ev->render_state.sparse_gi_reset) {
+                sparse_gi->launch_params.previous_view = camera.view_matrix(camera_transform);
+                sparse_gi->launch_params.previous_projection = camera.perspective_matrix();
+        }
+
+        auto uvw = uvw_frame(camera, camera_transform);
 
         sparse_gi->launch_params.U = cuda::to_f3(uvw.u);
         sparse_gi->launch_params.V = cuda::to_f3(uvw.v);
@@ -1127,4 +1141,8 @@ void render(EditorViewport *ev, SparseGI *sparse_gi,
                         ev->extent.width, ev->extent.height, 1
                 )
         );
+        
+        // Update previous view and projection matrices
+        sparse_gi->launch_params.previous_view = camera.view_matrix(camera_transform);
+        sparse_gi->launch_params.previous_projection = camera.perspective_matrix();
 }
