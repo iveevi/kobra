@@ -290,6 +290,9 @@ Context BaseApp::get_context()
 
 void BaseApp::recreate_swapchain()
 {
+	// Wait for the device to be idle
+	device.waitIdle();
+
 	// Update the current extent
 	int width = 0;
 	int height = 0;
@@ -303,8 +306,7 @@ void BaseApp::recreate_swapchain()
 	window->extent.width = width;
 	window->extent.height = height;
 
-	// Wait for the device to be idle
-	device.waitIdle();
+        std::cout << "[!] RESIZE TO " << width << "x" << height << std::endl;
 
 	// Recreate the swapchain
 	auto queue_family = find_queue_families(phdev, surface);
@@ -314,32 +316,32 @@ void BaseApp::recreate_swapchain()
 	};
 
 	// Transition all images to the correct layout
-	submit_now(device, graphics_queue, command_pool,
-		[&](const vk::raii::CommandBuffer &cmd) {
-			std::vector <vk::ImageMemoryBarrier> barriers;
-			for (const vk::Image &image : swapchain.images) {
-				barriers.emplace_back(vk::ImageMemoryBarrier {
-					{},
-					vk::AccessFlagBits::eColorAttachmentWrite,
-					vk::ImageLayout::eUndefined,
-					vk::ImageLayout::ePresentSrcKHR,
-					VK_QUEUE_FAMILY_IGNORED,
-					VK_QUEUE_FAMILY_IGNORED,
-					image,
-					vk::ImageSubresourceRange {
-						vk::ImageAspectFlagBits::eColor,
-						0, 1, 0, 1
-					}
-				});
-			}
-
-			cmd.pipelineBarrier(
-				vk::PipelineStageFlagBits::eTopOfPipe,
-				vk::PipelineStageFlagBits::eColorAttachmentOutput,
-				{}, {}, {}, barriers
-			);
-		}
-	);
+	// submit_now(device, graphics_queue, command_pool,
+	// 	[&](const vk::raii::CommandBuffer &cmd) {
+	// 		std::vector <vk::ImageMemoryBarrier> barriers;
+	// 		for (const vk::Image &image : swapchain.images) {
+	// 			barriers.emplace_back(vk::ImageMemoryBarrier {
+	// 				{},
+	// 				vk::AccessFlagBits::eColorAttachmentWrite,
+	// 				vk::ImageLayout::eUndefined,
+	// 				vk::ImageLayout::ePresentSrcKHR,
+	// 				VK_QUEUE_FAMILY_IGNORED,
+	// 				VK_QUEUE_FAMILY_IGNORED,
+	// 				image,
+	// 				vk::ImageSubresourceRange {
+	// 					vk::ImageAspectFlagBits::eColor,
+	// 					0, 1, 0, 1
+	// 				}
+	// 			});
+	// 		}
+	//
+	// 		cmd.pipelineBarrier(
+	// 			vk::PipelineStageFlagBits::eTopOfPipe,
+	// 			vk::PipelineStageFlagBits::eColorAttachmentOutput,
+	// 			{}, {}, {}, barriers
+	// 		);
+	// 	}
+	// );
 
 	// Recreate the frame and depth buffers
 	depth_buffer = std::move(DepthBuffer {
@@ -347,6 +349,17 @@ void BaseApp::recreate_swapchain()
 		vk::Format::eD32Sfloat,
 		window->extent
 	});
+
+        int new_width = 0;
+        int new_height = 0;
+        glfwGetFramebufferSize(window->handle, &new_width, &new_height);
+        std::cout << "FB RESIZE TO " << new_width << "x" << new_height << std::endl;
+
+        // If mismatch, recreate the swapchain again
+        if (new_width != width || new_height != height) {
+                KOBRA_LOG_FUNC(Log::WARN) << "Mismatched framebuffer size, recreating swapchain again\n";
+                recreate_swapchain();
+        }
 
 	// TODO: remove the framebuffers from here...
 	// TODO: remove the base app abstraction, and

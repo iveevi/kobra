@@ -17,6 +17,34 @@ struct EnvironmentMap {
 
 void load_environment_map(EnvironmentMap *, kobra::TextureLoader *, const std::filesystem::path &);
 
+// Common raytracing resources
+using MeshIndex = std::pair <int, int>; // Entity, mesh index
+        
+struct CommonRaytracing {
+        std::vector <optix::Record <Hit>> records;
+        std::map <MeshIndex, int> record_refs;
+
+        std::vector <cuda::_material> materials;
+        CUdeviceptr dev_materials = 0;
+
+        // TODO: store lights as well...
+        
+        // Storage and blitting
+        layers::Framer framer;
+        std::vector <uint8_t> traced;
+
+        float4 *dev_color = nullptr;
+        CUdeviceptr dev_traced;
+
+        Timer timer;
+        bool clk_rise = true;
+
+        // Material update queue
+        std::queue <int32_t> material_update_queue;
+};
+
+void update_materials(CommonRaytracing *, const MaterialDaemon *, TextureLoader *, const Device *);
+
 // Sparse raytracing global illumination
 struct SparseGI {
         OptixPipeline pipeline = 0;
@@ -106,25 +134,7 @@ struct EditorViewport {
         } gbuffer;
 
         // Common raytracing resources
-        struct {
-                std::vector <optix::Record <Hit>> records;
-                std::map <MeshIndex, int> record_refs;
-
-                std::vector <cuda::_material> materials;
-                CUdeviceptr dev_materials = 0;
-
-                // TODO: store lights as well...
-                
-                // Storage and blitting
-                layers::Framer framer;
-                std::vector <uint8_t> traced;
-
-                float4 *dev_color = nullptr;
-                CUdeviceptr dev_traced;
-
-                Timer timer;
-                bool clk_rise = true;
-        } common_rtx;
+        CommonRaytracing common_rtx;
 
         // G-buffer with raytracing
         struct GBuffer_Raytraced {
@@ -240,7 +250,8 @@ struct EditorViewport {
         EditorViewport() = delete;
         EditorViewport(const Context &,
                 const std::shared_ptr <amadeus::Accelerator> &,
-                const std::shared_ptr <MeshDaemon> &);
+                const std::shared_ptr <MeshDaemon> &,
+                MaterialDaemon *);
 
         // Configuration methods
         void configure_present();

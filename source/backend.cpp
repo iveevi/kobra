@@ -613,6 +613,109 @@ vk::PresentModeKHR pick_present_mode(const vk::raii::PhysicalDevice &phdev,
 	throw std::runtime_error("[Vulkan] No supported present mode found");
 }
 
+// Swapchain allocation
+// Constructing a swapchain
+Swapchain::Swapchain(const vk::raii::PhysicalDevice &phdev,
+                const vk::raii::Device &device,
+                const vk::raii::SurfaceKHR &surface,
+                const vk::Extent2D &extent,
+                const QueueFamilyIndices &indices,
+                const vk::raii::SwapchainKHR *old_swapchain)
+{
+        // Pick a surface format
+        auto surface_format = pick_surface_format(phdev, surface);
+        format = surface_format.format;
+
+        // Surface capabilities and extent
+        vk::SurfaceCapabilitiesKHR capabilities =
+                        phdev.getSurfaceCapabilitiesKHR(*surface);
+
+        // Set the surface extent
+        vk::Extent2D swapchain_extent = extent;
+        if (capabilities.currentExtent.width == std::numeric_limits <uint32_t>::max()) {
+                swapchain_extent.width = std::clamp(
+                        swapchain_extent.width,
+                        capabilities.minImageExtent.width,
+                        capabilities.maxImageExtent.width
+                );
+
+                swapchain_extent.height = std::clamp(
+                        swapchain_extent.height,
+                        capabilities.minImageExtent.height,
+                        capabilities.maxImageExtent.height
+                );
+        } else {
+                swapchain_extent = capabilities.currentExtent;
+        }
+
+        // Transform, etc
+        vk::SurfaceTransformFlagBitsKHR transform =
+                (capabilities.supportedTransforms &
+                vk::SurfaceTransformFlagBitsKHR::eIdentity) ?
+                vk::SurfaceTransformFlagBitsKHR::eIdentity :
+                capabilities.currentTransform;
+
+        // Composite alpha
+        vk::CompositeAlphaFlagBitsKHR composite_alpha =
+                (capabilities.supportedCompositeAlpha &
+                vk::CompositeAlphaFlagBitsKHR::eOpaque) ?
+                vk::CompositeAlphaFlagBitsKHR::eOpaque :
+                vk::CompositeAlphaFlagBitsKHR::ePreMultiplied;
+
+        // Present mode
+        vk::PresentModeKHR present_mode = pick_present_mode(phdev, surface);
+
+        // Creation info
+        vk::SwapchainCreateInfoKHR create_info {
+                {},
+                *surface,
+                capabilities.minImageCount,
+                format,
+                surface_format.colorSpace,
+                swapchain_extent,
+                1,
+                vk::ImageUsageFlagBits::eColorAttachment
+                        | vk::ImageUsageFlagBits::eTransferSrc,
+                vk::SharingMode::eExclusive,
+                {},
+                transform,
+                composite_alpha,
+                present_mode,
+                true,
+                (old_swapchain ? **old_swapchain : nullptr)
+        };
+
+        // In case graphics and present queues are different
+        if (indices.graphics != indices.present) {
+                create_info.imageSharingMode = vk::SharingMode::eConcurrent;
+                create_info.queueFamilyIndexCount = 2;
+                create_info.pQueueFamilyIndices = &indices.graphics;
+        }
+
+        // Create the swapchain
+        swapchain = vk::raii::SwapchainKHR(device, create_info);
+
+        // Get the swapchain images
+        images = swapchain.getImages();
+
+        // Create image views
+        vk::ImageViewCreateInfo create_view_info {
+                {}, {},
+                vk::ImageViewType::e2D,
+                format,
+                {},
+                vk::ImageSubresourceRange(
+                        vk::ImageAspectFlagBits::eColor,
+                        0, 1, 0, 1
+                )
+        };
+
+        for (size_t i = 0; i < images.size(); i++) {
+                create_view_info.image = images[i];
+                image_views.emplace_back(device, create_view_info);
+        }
+}
+
 // Transition an image layout
 void transition_image_layout(const vk::raii::CommandBuffer &cmd,
 		const vk::Image &image,
@@ -869,77 +972,40 @@ ImageData make_image(const vk::raii::CommandBuffer &cmd,
 	return img;
 }
 
-/* Create ImageData object from a file
-// TODO: delegate to the above function
-ImageData make_image(const vk::raii::CommandBuffer &cmd,
-		const vk::raii::PhysicalDevice &phdev,
-		const vk::raii::Device &device,
-		BufferData &buffer,
-		const std::string &filename,
-		vk::ImageTiling tiling,
-		vk::ImageUsageFlags usage,
-		vk::MemoryPropertyFlags memory_properties,
-		vk::ImageAspectFlags aspect_mask,
-		bool external)
+// Allocating framebuffers
+std::vector <vk::raii::Framebuffer>
+make_framebuffers(const vk::raii::Device &device,
+		const vk::raii::RenderPass &render_pass,
+		const std::vector <vk::raii::ImageView> &image_views,
+		const vk::raii::ImageView *depth_image_view, // TODO: optional
+		const vk::Extent2D &extent)
 {
-	// Check if the file exists
-	KOBRA_ASSERT(common::file_exists(filename), "File not found: " + filename);
+	// Create attachments
+	vk::ImageView attachments[2] {};
+	attachments[1] = (depth_image_view == nullptr) ?
+			vk::ImageView {} : **depth_image_view;
 
-	// Load the image
-	int width;
-	int height;
-	int channels;
-
-	byte *data = load_texture(filename, width, height, channels);
-
-	RawImage image = load_texture(filename);
-
-	// Create the image
-	vk::Extent2D extent {
-		static_cast <uint32_t> (image.width),
-		static_cast <uint32_t> (image.height)
+	// Create framebuffers
+	vk::FramebufferCreateInfo framebuffer_info {
+		{}, *render_pass,
+		(depth_image_view == nullptr) ? 1u : 2u,
+		attachments,
+		extent.width, extent.height, 1
 	};
 
-	// Get appropriate format
-	ImageData img = ImageData(
-		phdev, device,
-		vk::Format::eR8G8B8A8Unorm, // TODO: what about other formats?
-					    // generate list and compare for
-					    // best match?
-		extent,
-		tiling,
-		usage,
-		// vk::ImageLayout::eUndefined,
-		memory_properties,
-		aspect_mask, external
-	);
+	std::vector <vk::raii::Framebuffer> framebuffers;
 
-	// Copy the image data into a staging buffer
-	vk::DeviceSize size = image.width * image.height * vk::blockSize(img.format);
+	framebuffers.reserve(image_views.size());
 
-	buffer = BufferData(
-		phdev, device,
-		size,
-		vk::BufferUsageFlagBits::eTransferSrc,
-		vk::MemoryPropertyFlagBits::eHostVisible
-			| vk::MemoryPropertyFlagBits::eHostCoherent
-	);
+        int index = 0;
+	for (const auto &image_view : image_views) {
+                std::cout << "Creating framebuffer, index = " << index++ << std::endl;
+		attachments[0] = *image_view;
+		framebuffers.emplace_back(device, framebuffer_info);
+	}
 
-	// Copy the data
-	buffer.upload(image.data);
-
-	img.transition_layout(cmd, vk::ImageLayout::eTransferDstOptimal);
-
-	// Copy the buffer to the image
-	copy_data_to_image(cmd,
-		buffer.buffer, img.image,
-		img.format, image.width, image.height
-	);
-
-	img.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
-
-	return img;
-} */
+	return framebuffers;
+}
 
 // Buffer addresses
 vk::DeviceAddress buffer_addr(const vk::raii::Device &device, const BufferData &bd)

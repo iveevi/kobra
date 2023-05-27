@@ -197,19 +197,19 @@ int main()
         delete startup;
 
         // g_application.project = "scene";
-        if (g_application.project.empty())
-                return 0;
-
-	Editor *editor = new Editor{
-		phdev, {
-			VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-			VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
-			VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
-		},
-	};
-
-	editor->run();
-        delete editor;
+ //        if (g_application.project.empty())
+ //                return 0;
+	//
+	// Editor *editor = new Editor{
+	// 	phdev, {
+	// 		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+	// 		VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
+	// 		VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
+	// 	},
+	// };
+	//
+	// editor->run();
+ //        delete editor;
 }
 
 // Info UI Attachment
@@ -663,7 +663,7 @@ public:
 			if (ImGui::BeginMenu("File")) {
 				if (ImGui::MenuItem("Save")) {
 					std::cout << "Saving (TODO: open file dialog)" << std::endl;
-					m_editor->m_project.save("./scene");
+					m_editor->m_project.save();
 				}
 				ImGui::EndMenu();
 			}
@@ -1038,8 +1038,10 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
         // TODO: UI attachemtn that shows frametime as little chunks per frame
 
         // EditorViewport
-        m_editor_renderer = std::make_shared <EditorViewport>
-                (get_context(), m_renderers.system, m_renderers.mesh_memory);
+        m_editor_renderer = std::make_shared <EditorViewport> (get_context(),
+                m_renderers.system,
+                m_renderers.mesh_memory,
+                m_scene.system->material_daemon);
 
         load_environment_map(&m_editor_renderer->environment_map,
                              &m_texture_loader, environment_map_path);

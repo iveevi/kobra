@@ -68,6 +68,26 @@ static cuda::_material convert_material(const Material &material, TextureLoader 
         return mat;
 }
 
+// TODO: store texture loader and device...
+void update_materials(CommonRaytracing *crtx, const MaterialDaemon *md, TextureLoader *texture_loader, const vk::raii::Device &device)
+{
+        // TODO: only update if necessary
+        std::cout << "Updating materials" << std::endl;
+        // if ()
+        // TODO: only update the materials that have changed
+        crtx->materials.clear();
+        for (const auto &material : md->materials) {
+                crtx->materials.push_back(
+                        convert_material(material, *texture_loader, device)
+                );
+        }
+
+        if (crtx->dev_materials)
+                cuda::free(crtx->dev_materials);
+
+        crtx->dev_materials = cuda::make_buffer_ptr(crtx->materials);
+}
+
 // Prerender process for raytracing
 void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
                 const TransformDaemon *td,
@@ -195,15 +215,15 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
                 path_tracer.sbt.hitgroupRecordCount = common_rtx.records.size();
 
                 // Load all materials
-                common_rtx.materials.clear();
-                // for (const auto &material : Material::all) {
-                for (const auto &material : md->materials) {
-                        common_rtx.materials.push_back(
-                                convert_material(material, *texture_loader, *device)
-                        );
-                }
-
-                common_rtx.dev_materials = cuda::make_buffer_ptr(common_rtx.materials);
+                // common_rtx.materials.clear();
+                // // for (const auto &material : Material::all) {
+                // for (const auto &material : md->materials) {
+                //         common_rtx.materials.push_back(
+                //                 convert_material(material, *texture_loader, *device)
+                //         );
+                // }
+                //
+                // common_rtx.dev_materials = cuda::make_buffer_ptr(common_rtx.materials);
 
                 // Update lights for the sparse GI algorithm
                 sparse_gi.launch_params.area.lights = 0;
@@ -229,6 +249,9 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
                 //         triangles += light.triangles;
                 path_tracer.launch_params.area.triangle_count = triangles;
         }
+
+        // Update the material buffer
+        update_materials(&common_rtx, md, texture_loader, *device);
 
         // Turn off signal
         common_rtx.clk_rise = false;

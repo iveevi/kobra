@@ -286,6 +286,7 @@ void Startup::record(const vk::raii::CommandBuffer &cmd, const vk::raii::Framebu
         // TODO: create a static layout...
         auto &io = ImGui::GetIO();
 
+        // Scrollable list of projects
         ImGui::Begin("Project Viewer");
         
         bool open_error = false;
@@ -301,6 +302,8 @@ void Startup::record(const vk::raii::CommandBuffer &cmd, const vk::raii::Framebu
 
                 ImGui::Text("No projects found");
         } else {
+                ImGui::Columns(5, nullptr, false);
+
                 int size = projects.size();
                 for (size_t i = 0; i < size; i++) {
                         ImVec4 color = verified[i] ?
@@ -315,12 +318,7 @@ void Startup::record(const vk::raii::CommandBuffer &cmd, const vk::raii::Framebu
                         // ImGui::Image(default_thumbnail_set, ImVec2(100, 100));
 
                         // Thumbnail as a button
-                        if (ImGui::ImageButton(
-                                thumbnail_sets[i],
-                                ImVec2(250, 250),
-                                ImVec2(0, 0),
-                                ImVec2(1, 1)
-                        )) {
+                        if (ImGui::ImageButton(thumbnail_sets[i], ImVec2(128, 128))) {
                                 if (verified[i]) {
                                         std::cout << "Project " << project_name << " selected" << std::endl;
                                         g_application.project = projects[i];
@@ -418,8 +416,8 @@ void Startup::record(const vk::raii::CommandBuffer &cmd, const vk::raii::Framebu
                                 dir /= project_name;
 
                                 // Make sure the directory is created
-                                std::cout << "Create project at " << project_path << std::endl;
-                                kobra::Project::basic(get_context(), project_path).save(dir);
+                                std::cout << "Create project at " << dir << std::endl;
+                                kobra::Project::basic(get_context(), dir).save();
 
                                 append_to_config(dir);
 

@@ -56,11 +56,11 @@ static std::string transcribe_material(const Material &material) {
 }
 
 // Save project
-void Project::save(const std::string &dir)
+void Project::save()
 {
         // TODO: detect parts that have changed...
-        printf("Saving to %s\n", dir.c_str());
-        std::filesystem::path path = dir;
+        printf("Saving to %s\n", directory.c_str());
+        std::filesystem::path path = directory;
 
         // Create the necessary directories
         std::filesystem::create_directory(path);			// Root directory

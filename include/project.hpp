@@ -17,10 +17,10 @@ namespace kobra {
 
 // Project description; for a complete game, rendering application, etc.
 struct Project {
+        // TODO: projet name? or is that directory name?
 	std::string directory = "";
 
 	int default_scene_index = 0;
-	std::string default_save_path = "";
 	std::vector <Scene> scenes = {};
 	std::vector <std::string> scenes_files = {};
 
@@ -96,7 +96,7 @@ struct Project {
 	Scene &load_scene(const Context &, int = -1);
 
 	// Save project
-	void save(const std::string &);
+	void save();
 
         // Default project
         static Project basic(const Context &context, const std::filesystem::path &dir) {
@@ -104,9 +104,10 @@ struct Project {
                 project.material_daemon = make_material_daemon();
 
                 Scene basic = Scene::basic(context, project.material_daemon);
+
                 project.scenes.push_back(basic);
-                project.scenes_files.push_back(dir / "example.kobra");
-                project.default_save_path = dir;
+                project.scenes_files.push_back(dir / "Example.kobra");
+                project.directory = dir;
                 project.default_scene_index = 0;
 
                 return project;

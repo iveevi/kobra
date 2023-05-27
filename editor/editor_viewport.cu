@@ -104,7 +104,8 @@ void load_environment_map(EnvironmentMap *em, kobra::TextureLoader *loader, cons
 // Constructor
 EditorViewport::EditorViewport(const Context &context,
                 const std::shared_ptr <amadeus::Accelerator> &_system,
-                const std::shared_ptr <MeshDaemon> &_mesh_memory)
+                const std::shared_ptr <MeshDaemon> &_mesh_memory,
+                MaterialDaemon *md)
                 : system(_system),
                 mesh_memory(_mesh_memory),
                 phdev(context.phdev),
@@ -147,6 +148,9 @@ EditorViewport::EditorViewport(const Context &context,
         common_rtx.framer = kobra::layers::Framer(context, present_render_pass);
 
         render_state.initialized = true;
+
+        // Daemon interactions
+        subscribe(md, &common_rtx.material_update_queue);
 }
 
 static void import_vulkan_texture

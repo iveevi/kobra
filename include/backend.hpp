@@ -348,107 +348,12 @@ struct Swapchain {
 	std::vector <vk::Image>			images;
 	std::vector <vk::raii::ImageView>	image_views;
 
-	// Constructing a swapchain
-	Swapchain(const vk::raii::PhysicalDevice &phdev,
-			const vk::raii::Device &device,
-			const vk::raii::SurfaceKHR &surface,
-			const vk::Extent2D &extent,
-			const QueueFamilyIndices &indices,
-			const vk::raii::SwapchainKHR *old_swapchain = nullptr) {
-		// Pick a surface format
-		auto surface_format = pick_surface_format(phdev, surface);
-		format = surface_format.format;
-
-		// Surface capabilities and extent
-		vk::SurfaceCapabilitiesKHR capabilities =
-				phdev.getSurfaceCapabilitiesKHR(*surface);
-
-		// Set the surface extent
-		vk::Extent2D swapchain_extent = extent;
-		if (capabilities.currentExtent.width == std::numeric_limits <uint32_t>::max()) {
-			swapchain_extent.width = std::clamp(
-				swapchain_extent.width,
-				capabilities.minImageExtent.width,
-				capabilities.maxImageExtent.width
-			);
-
-			swapchain_extent.height = std::clamp(
-				swapchain_extent.height,
-				capabilities.minImageExtent.height,
-				capabilities.maxImageExtent.height
-			);
-		} else {
-			swapchain_extent = capabilities.currentExtent;
-		}
-
-		// Transform, etc
-		vk::SurfaceTransformFlagBitsKHR transform =
-			(capabilities.supportedTransforms &
-			vk::SurfaceTransformFlagBitsKHR::eIdentity) ?
-			vk::SurfaceTransformFlagBitsKHR::eIdentity :
-			capabilities.currentTransform;
-
-		// Composite alpha
-		vk::CompositeAlphaFlagBitsKHR composite_alpha =
-			(capabilities.supportedCompositeAlpha &
-			vk::CompositeAlphaFlagBitsKHR::eOpaque) ?
-			vk::CompositeAlphaFlagBitsKHR::eOpaque :
-			vk::CompositeAlphaFlagBitsKHR::ePreMultiplied;
-
-		// Present mode
-		vk::PresentModeKHR present_mode = pick_present_mode(phdev, surface);
-
-		// Creation info
-		vk::SwapchainCreateInfoKHR create_info {
-			{},
-			*surface,
-			capabilities.minImageCount,
-			format,
-			surface_format.colorSpace,
-			swapchain_extent,
-			1,
-			vk::ImageUsageFlagBits::eColorAttachment
-				| vk::ImageUsageFlagBits::eTransferSrc,
-			vk::SharingMode::eExclusive,
-			{},
-			transform,
-			composite_alpha,
-			present_mode,
-			true,
-			(old_swapchain ? **old_swapchain : nullptr)
-		};
-
-		// In case graphics and present queues are different
-		if (indices.graphics != indices.present) {
-			create_info.imageSharingMode = vk::SharingMode::eConcurrent;
-			create_info.queueFamilyIndexCount = 2;
-			create_info.pQueueFamilyIndices = &indices.graphics;
-		}
-
-		// Create the swapchain
-		swapchain = vk::raii::SwapchainKHR(device, create_info);
-
-		// Get the swapchain images
-		images = swapchain.getImages();
-
-		// Create image views
-		vk::ImageViewCreateInfo create_view_info {
-			{}, {},
-			vk::ImageViewType::e2D,
-			format,
-			{},
-			vk::ImageSubresourceRange(
-				vk::ImageAspectFlagBits::eColor,
-				0, 1, 0, 1
-			)
-		};
-
-		for (size_t i = 0; i < images.size(); i++) {
-			create_view_info.image = images[i];
-			image_views.emplace_back(device, create_view_info);
-		}
-	}
-
+        Swapchain(const vk::raii::PhysicalDevice &,
+                const vk::raii::Device &,
+                const vk::raii::SurfaceKHR &,
+                const vk::Extent2D &,
+                const QueueFamilyIndices &,
+                const vk::raii::SwapchainKHR * = nullptr);
 	// Null constructor
 	Swapchain(std::nullptr_t) {}
 };
@@ -1023,36 +928,12 @@ inline vk::raii::RenderPass make_render_pass(const vk::raii::Device &device,
 }
 
 // Create framebuffers
-inline std::vector <vk::raii::Framebuffer> make_framebuffers
-		(const vk::raii::Device &device,
-		const vk::raii::RenderPass &render_pass,
-		const std::vector <vk::raii::ImageView> &image_views,
-		const vk::raii::ImageView *depth_image_view,
-		const vk::Extent2D &extent)
-{
-	// Create attachments
-	vk::ImageView attachments[2] {};
-	attachments[1] = (depth_image_view == nullptr) ?
-			vk::ImageView {} : **depth_image_view;
-
-	// Create framebuffers
-	vk::FramebufferCreateInfo framebuffer_info {
-		{}, *render_pass,
-		(depth_image_view == nullptr) ? 1u : 2u,
-		attachments,
-		extent.width, extent.height, 1
-	};
-
-	std::vector <vk::raii::Framebuffer> framebuffers;
-
-	framebuffers.reserve(image_views.size());
-	for (const auto &image_view : image_views) {
-		attachments[0] = *image_view;
-		framebuffers.emplace_back(device, framebuffer_info);
-	}
-
-	return framebuffers;
-}
+std::vector <vk::raii::Framebuffer>
+make_framebuffers(const vk::raii::Device &,
+		const vk::raii::RenderPass &,
+		const std::vector <vk::raii::ImageView> &,
+		const vk::raii::ImageView *,
+		const vk::Extent2D &);
 
 // Create a shader module
 inline vk::raii::ShaderModule make_shader_module(const vk::raii::Device &device,
