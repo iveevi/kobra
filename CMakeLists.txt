@@ -219,8 +219,8 @@ add_library(optix_shaders
 )
 
 set_target_properties(optix_shaders PROPERTIES
-	CUDA_PTX_COMPILATION ON
-	COMPILE_FLAGS "-lineinfo"
+        # CUDA_OPTIX_IR_COMPILATION ON
+	COMPILE_FLAGS "-optix-ir -lineinfo"
 )
 
 # Fake target to copy shader outputs to bin folder
@@ -233,18 +233,13 @@ add_custom_target(
 	COMMAND ${CMAKE_COMMAND} -E copy
 		${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/optix_shaders.dir/editor/*.ptx
 		${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/optix_shaders.dir/editor/optix/*.ptx
+		${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/optix_shaders.dir/editor/*.o
+		${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/optix_shaders.dir/editor/optix/*.o
 		${CMAKE_BINARY_DIR}/bin/ptx
 	DEPENDS optix_shaders
 )
 
-# Add binaries copy as a dependency of the executable
-add_custom_target(
-    copy_resources
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_BINARY_DIR}/bin ${CMAKE_CURRENT_SOURCE_DIR}/bin
-    DEPENDS glsl_shaders optix_shaders_copy
-)
-
-add_dependencies(editor copy_resources)
+add_dependencies(editor optix_shaders_copy)
 
 # Compile plugins as well
 include(cmake/armada_rtx_plugins.cmake)

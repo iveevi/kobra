@@ -18,6 +18,7 @@ struct SparseGIParameters {
         float time;
         bool reset;
         bool dirty;
+        int samples;
 
         // Previous camera matrices
         glm::mat4 previous_view;

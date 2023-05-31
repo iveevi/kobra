@@ -23,7 +23,7 @@ struct SurfaceHit {
 #define PI 3.14159265358979323846f
 
 // Smith shadow-masking function (single)
-KCUDA_INLINE KCUDA_HOST_DEVICE
+__forceinline__ __device__
 float G1(float3 n, float3 v, Material mat)
 {
 	if (dot(v, n) <= 0.0f)
@@ -32,21 +32,21 @@ float G1(float3 n, float3 v, Material mat)
 	float alpha = mat.roughness;
 	float theta = acosf(clamp(dot(n, v), 0.0f, 0.999f));
 
-	float tan_theta = tanf(theta);
+	float tan_theta = __tanf(theta);
 
 	float denom = 1 + sqrtf(1 + alpha * alpha * tan_theta * tan_theta);
 	return 2.0f/denom;
 }
 
 // Smith shadow-masking function (double)
-KCUDA_INLINE KCUDA_HOST_DEVICE
+__forceinline__ __device__
 float G(float3 n, float3 wi, float3 wo, Material mat)
 {
 	return G1(n, wo, mat) * G1(n, wi, mat);
 }
 
 // Shlicks approximation to the Fresnel reflectance
-KCUDA_INLINE KCUDA_HOST_DEVICE
+__forceinline__ __device__
 float3 shlick_F(float3 wi, float3 h, Material mat)
 {
 	float k = powf(1 - dot(wi, h), 5);
@@ -55,19 +55,19 @@ float3 shlick_F(float3 wi, float3 h, Material mat)
 
 // Microfacet distribution functions
 struct Microfacets {
-	KCUDA_INLINE KCUDA_HOST_DEVICE
+	__forceinline__ __device__
 	static float GGX(float3 n, float3 h, const Material &mat) {
 		float alpha = mat.roughness;
 		float theta = acosf(clamp(dot(n, h), 0.0f, 1.0f));
 
 		return (alpha * alpha)
-			/ (PI * powf(cosf(theta), 4)
-			* powf(alpha * alpha + tanf(theta) * tanf(theta), 2.0f));
+			/ (PI * powf(__cosf(theta), 4)
+			* powf(alpha * alpha + __tanf(theta) * __tanf(theta), 2.0f));
 	}
 };
 
 // True fresnel reflectance
-KCUDA_INLINE KCUDA_HOST_DEVICE
+__forceinline__ __device__
 float fr_dielectric(float cosThetaI, float etaI, float etaT)
 {
 	cosThetaI = clamp(cosThetaI, -1.0f, 1.0f);
@@ -98,7 +98,7 @@ float fr_dielectric(float cosThetaI, float etaI, float etaT)
 	return (Rparl * Rparl + Rperp * Rperp)/2;
 }
 
-KCUDA_INLINE KCUDA_HOST_DEVICE
+__forceinline__ __device__
 float3 refract(const float3 &wi, const float3 &n, float eta)
 {
 	float cosThetaI = dot(n, wi);
@@ -122,7 +122,7 @@ float3 refract(const float3 &wi, const float3 &n, float eta)
 // Perfect specular reflection
 struct SpecularReflection {
 	// Evaluate the BRDF
-	KCUDA_INLINE KCUDA_HOST_DEVICE
+	__forceinline__ __device__
 	static float3 brdf(const Material &mat, float3 n, float3 wi,
 			float3 wo, bool entering,
 			Shading out, bool isrec = false)
@@ -131,7 +131,7 @@ struct SpecularReflection {
 	}
 
 	// Evaluate the PDF
-	KCUDA_INLINE KCUDA_HOST_DEVICE
+	__forceinline__ __device__
 	static float pdf(const Material &mat, float3 n, float3 wi,
 			float3 wo, bool entering, Shading out)
 	{
@@ -139,7 +139,7 @@ struct SpecularReflection {
 	}
 
 	// Sample the BRDF
-	KCUDA_INLINE KCUDA_HOST_DEVICE
+	__forceinline__ __device__
 	static float3 sample(const Material &mat, float3 n, float3 wo,
 			bool entering, float3 &seed, Shading &out)
 	{
@@ -154,7 +154,7 @@ struct SpecularTransmission {
 	// TODO: tr and tf
 
 	// Evaluate the BRDF
-	KCUDA_HOST_DEVICE KCUDA_INLINE
+	__device__ __forceinline__
 	static float3 brdf(const Material &mat, float3 n, float3 wi,
 			float3 wo, bool entering, Shading out, bool isrec = false)
 	{
@@ -162,7 +162,7 @@ struct SpecularTransmission {
 	}
 
 	// Evaluate the PDF
-	KCUDA_HOST_DEVICE __forceinline__
+	__device__ __forceinline__
 	static float pdf(const Material &mat, float3 n, float3 wi,
 			float3 wo, bool entering, Shading out)
 	{
@@ -170,7 +170,7 @@ struct SpecularTransmission {
 	}
 
 	// Sample the BRDF
-	KCUDA_HOST_DEVICE __forceinline__
+	__device__ __forceinline__
 	static float3 sample(const Material &mat, float3 n, float3 wo,
 			bool entering, float3 &seed, Shading &out)
 	{
@@ -188,7 +188,7 @@ struct SpecularTransmission {
 // Fresnel modulated BRDF
 struct FresnelSpecular {
 	// Evaluate the BRDF
-	KCUDA_HOST_DEVICE __forceinline__
+	__device__ __forceinline__
 	static float3 brdf(const Material &mat, float3 n, float3 wi,
 			float3 wo, bool entering, Shading out, bool isrec = false)
 	{
@@ -196,7 +196,7 @@ struct FresnelSpecular {
 	}
 
 	// Evaluate the PDF
-	KCUDA_HOST_DEVICE __forceinline__
+	__device__ __forceinline__
 	static float pdf(const Material &mat, float3 n, float3 wi,
 			float3 wo, bool entering, Shading out)
 	{
@@ -204,7 +204,7 @@ struct FresnelSpecular {
 	}
 
 	// Sample the BRDF
-	KCUDA_HOST_DEVICE __forceinline__
+	__device__ __forceinline__
 	static float3 sample(const Material &mat, float3 n, float3 wo,
 			bool entering, float3 &seed, Shading &out)
 	{
@@ -229,7 +229,7 @@ struct FresnelSpecular {
 // Cook-Torrance GGX BRDF
 struct GGX {
 	// Evaluate the BRDF
-	KCUDA_INLINE KCUDA_HOST_DEVICE
+	__forceinline__ __device__
 	static float3 brdf(const Material &mat, float3 n, float3 wi,
 			float3 wo, bool entering, Shading out, bool isrec = false)
 	{
@@ -248,7 +248,7 @@ struct GGX {
 	}
 
 	// Evaluate the PDF
-	KCUDA_INLINE KCUDA_HOST_DEVICE
+	__forceinline__ __device__
 	static float pdf(const Material &mat, float3 n, float3 wi,
 			float3 wo, bool entering, Shading out)
 	{
@@ -277,7 +277,7 @@ struct GGX {
 	}
 
 	// Sample the BRDF
-	KCUDA_INLINE KCUDA_HOST_DEVICE
+	__forceinline__ __device__
 	static float3 sample(const Material &mat, float3 n, float3 wo,
 			bool entering, float3 &seed, Shading &out)
 	{
@@ -300,9 +300,9 @@ struct GGX {
 			float phi = 2.0f * PI * eta.z;
 
 			float3 h = float3 {
-				sinf(theta) * cosf(phi),
-				sinf(theta) * sinf(phi),
-				cosf(theta)
+				__sinf(theta) * __cosf(phi),
+				__sinf(theta) * __sinf(phi),
+				__cosf(theta)
 			};
 
 			h = rotate(h, n);
@@ -318,9 +318,9 @@ struct GGX {
 		float phi = 2.0f * PI * eta.z;
 
 		float3 s = float3 {
-			sinf(theta) * cosf(phi),
-			sinf(theta) * sinf(phi),
-			cosf(theta)
+			__sinf(theta) * __cosf(phi),
+			__sinf(theta) * __sinf(phi),
+			__cosf(theta)
 		};
 
 		out = Shading::eDiffuse;
@@ -329,7 +329,7 @@ struct GGX {
 };
 
 // Evaluate BRDF of material
-KCUDA_INLINE KCUDA_HOST_DEVICE
+__forceinline__ __device__
 float3 brdf(const SurfaceHit &sh, float3 wi, Shading out)
 {
 	// TODO: diffuse should be in conjunction with the material
@@ -343,7 +343,7 @@ float3 brdf(const SurfaceHit &sh, float3 wi, Shading out)
 }
 
 // Evaluate PDF of BRDF
-KCUDA_INLINE KCUDA_HOST_DEVICE
+__forceinline__ __device__
 float pdf(const SurfaceHit &sh, float3 wi, Shading out)
 {
 	if (out & Shading::eTransmission)
@@ -353,7 +353,7 @@ float pdf(const SurfaceHit &sh, float3 wi, Shading out)
 }
 
 // Sample BRDF
-KCUDA_INLINE KCUDA_HOST_DEVICE
+__forceinline__ __device__
 float3 sample(const SurfaceHit &sh, Shading &out, Seed seed)
 {
 	if (sh.mat.type & Shading::eTransmission)
@@ -364,7 +364,7 @@ float3 sample(const SurfaceHit &sh, Shading &out, Seed seed)
 
 // Evaluate BRDF: sample, brdf, pdf
 template <class BxDF>
-KCUDA_HOST_DEVICE __forceinline__
+__device__ __forceinline__
 float3 eval(const SurfaceHit &sh, float3 &wi, float &in_pdf, Shading &out, Seed seed)
 {
 	// TODO: pack ags into struct
@@ -381,7 +381,7 @@ float3 eval(const SurfaceHit &sh, float3 &wi, float &in_pdf, Shading &out, Seed 
 }
 
 template <>
-KCUDA_HOST_DEVICE __forceinline__
+__device__ __forceinline__
 float3 eval <SpecularTransmission>
 (const SurfaceHit &sh, float3 &wi, float &in_pdf, Shading &out, Seed seed)
 {
@@ -404,7 +404,7 @@ float3 eval <SpecularTransmission>
 }
 
 template <>
-KCUDA_HOST_DEVICE __forceinline__
+__device__ __forceinline__
 float3 eval <SpecularReflection>
 (const SurfaceHit &sh, float3 &wi, float &in_pdf, Shading &out, Seed seed)
 {
@@ -423,7 +423,7 @@ float3 eval <SpecularReflection>
 }
 
 template <>
-KCUDA_HOST_DEVICE __forceinline__
+__forceinline__ __device__ 
 float3 eval <FresnelSpecular>
 (const SurfaceHit &sh, float3 &wi, float &in_pdf, Shading &out, Seed seed)
 {
@@ -452,7 +452,7 @@ float3 eval <FresnelSpecular>
 }
 
 // TODO: union in material for different shading models
-KCUDA_HOST_DEVICE __forceinline__
+__forceinline__ __device__ 
 float3 eval(const SurfaceHit &sh, float3 &wi, float &in_pdf, Shading &out, Seed seed)
 {
 	if (sh.mat.type & Shading::eTransmission)

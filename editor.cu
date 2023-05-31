@@ -197,19 +197,19 @@ int main()
         delete startup;
 
         // g_application.project = "scene";
- //        if (g_application.project.empty())
- //                return 0;
-	//
-	// Editor *editor = new Editor{
-	// 	phdev, {
-	// 		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-	// 		VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
-	// 		VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
-	// 	},
-	// };
-	//
-	// editor->run();
- //        delete editor;
+        if (g_application.project.empty())
+                return 0;
+
+	Editor *editor = new Editor{
+		phdev, {
+			VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+			VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
+			VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
+		},
+	};
+
+	editor->run();
+        delete editor;
 }
 
 // Info UI Attachment

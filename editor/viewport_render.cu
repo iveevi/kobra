@@ -1126,11 +1126,13 @@ void render(EditorViewport *ev, SparseGI *sparse_gi,
         sparse_gi->launch_params.time = ev->common_rtx.timer.elapsed_start();
         sparse_gi->launch_params.dirty = render_info.camera_transform_dirty;
         sparse_gi->launch_params.reset = ev->render_state.sparse_gi_reset;
+        sparse_gi->launch_params.samples++;
 
         ev->render_state.sparse_gi_reset = false;
         if (ev->render_state.sparse_gi_reset) {
                 sparse_gi->launch_params.previous_view = camera.view_matrix(camera_transform);
                 sparse_gi->launch_params.previous_projection = camera.perspective_matrix();
+                sparse_gi->launch_params.samples = 0;
         }
 
         auto uvw = uvw_frame(camera, camera_transform);

@@ -54,11 +54,11 @@ float4 sky_at(float3 direction)
         if (!parameters.sky.enabled)
                 return make_float4(0.0f);
 
-        float theta = acos(direction.y);
-        float phi = atan2(direction.z, direction.x);
+        float theta = acosf(direction.y);
+        float phi = atan2f(direction.z, direction.x);
 
-        float u = phi / (2.0f * M_PI);
-        float v = theta / M_PI;
+        float u = phi/(2.0f * PI);
+        float v = theta/PI;
 
         return tex2D <float4> (parameters.sky.texture, u, 1 - v);
 }
@@ -261,9 +261,55 @@ extern "C" __global__ void __raygen__()
         // if primary or secondary hit is light, skip entirely...
 
         // TODO: skip direct lighting for highly specular surfaces
+
+        // Get 2x2 coordinate
+        uint2 coord = make_uint2(idx.x & ~1, idx.y & ~1);
+        uint index2 = coord.x + coord.y * parameters.resolution.x/2;
+        // uint offset = (index2 + parameters.sample) % 4;
+
         float3 direct { 0, 0, 0 };
-        if (sh.mat.roughness > 0.1)
+        if (sh.mat.roughness > 0.1f)
                 direct = Ld(sh, seed);
+                
+        float3 wi;
+        float pdf;
+        Shading out;
+
+        float3 brdf = eval(sh, wi, pdf, out, seed);
+        if (pdf > 0.0) {
+                Packet packet;
+                packet.miss = false;
+                packet.entering = false;
+
+                uint i0;
+                uint i1;
+
+                pack_pointer(&packet, i0, i1);
+
+                optixTrace(
+                        parameters.handle,
+                        sh.x, wi,
+                        0.0f, 1e16f, 0.0f,
+                        OptixVisibilityMask(0xFF),
+                        OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+                        0, 1, 0, i0, i1
+                );
+
+                if (packet.miss) {
+                        direct += brdf * make_float3(sky_at(wi)) / pdf;
+                } else {
+                        cuda::_material m = parameters.materials[packet.id];
+                        
+                        sh.x = packet.x;
+                        sh.wo = -wi;
+                        sh.n = packet.n;
+                        sh.entering = packet.entering;
+
+                        convert_material(m, sh.mat, packet.uv);
+
+                        direct += brdf * sh.mat.emission * abs(dot(sh.n, wi)) / pdf;
+                }
+        }
 
         float3 color = direct;
 
@@ -304,8 +350,14 @@ extern "C" __global__ void __raygen__()
 
                         // TODO:use some heuristic; not every difference needs
                         // to be discarded
-                        if (length(pos - sh.x) > 0.1f)
+                        if (length(pos - sh.x) > 0.1f) {
                                 samples = 0;
+                                // color += make_float3(0.0f, 0.5f, 0.5f);
+                        } else {
+                                // color += make_float3(0.5f, 0.5f, 0.0f);
+                        }
+                } else {
+                        // color += make_float3(0.5f, 0.5f, 0.0f);
                 }
         } else {
                 pcolor = parameters.color[index];

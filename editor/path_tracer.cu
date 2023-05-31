@@ -53,8 +53,8 @@ float4 sky_at(float3 direction)
         float theta = acos(direction.y);
         float phi = atan2(direction.z, direction.x);
 
-        float u = phi / (2.0f * M_PI);
-        float v = theta / M_PI;
+        float u = phi/(2.0f * PI);
+        float v = theta/PI;
 
         return tex2D <float4> (parameters.sky.texture, u, 1 - v);
 }

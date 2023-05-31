@@ -943,7 +943,7 @@ void EditorViewport::configure_path_tracer(const Context &ctx)
 { 
         KOBRA_ASSERT(ctx.device != nullptr, "Editor (1): null device");
 
-        static constexpr const char OPTIX_PTX_FILE[] = "bin/ptx/path_tracer.ptx";
+        static constexpr const char OPTIX_PTX_FILE[] = "bin/ptx/path_tracer.o";
 
 
         // Create a context
@@ -1123,7 +1123,7 @@ void EditorViewport::configure_path_tracer(const Context &ctx)
 
 void initialize(SparseGI *sparse_gi, const Context &ctx, const OptixDeviceContext &context)
 {
-        static constexpr const char OPTIX_PTX_FILE[] = "bin/ptx/sparse_gi.ptx";
+        static constexpr const char OPTIX_PTX_FILE[] = "bin/ptx/sparse_gi.o";
 
         std::string contents = common::read_file(OPTIX_PTX_FILE);
 	
@@ -1283,5 +1283,6 @@ void initialize(SparseGI *sparse_gi, const Context &ctx, const OptixDeviceContex
 
         // Allocate parameters up front
         sparse_gi->launch_params = {};
+        sparse_gi->launch_params.samples = 0;
         sparse_gi->dev_launch_params = cuda::alloc(sizeof(SparseGIParameters));
 }
