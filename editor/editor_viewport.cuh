@@ -2,7 +2,7 @@
 
 // Editor headers
 #include "common.hpp"
-#include "optix/sparse_gi.cuh"
+#include "optix/sparse_gi_shader.cuh"
 
 // Forward declarations
 struct EditorViewport;
@@ -41,6 +41,7 @@ struct CommonRaytracing {
 
         // Material update queue
         std::queue <int32_t> material_update_queue;
+        bool material_reset = false;
 };
 
 void update_materials(CommonRaytracing *, const MaterialDaemon *, TextureLoader *, const Device *);
@@ -64,17 +65,17 @@ struct SparseGI {
         SparseGIParameters launch_params;
         CUdeviceptr dev_launch_params;
         int32_t depth = 2;
+        
+        bool manual_reset = false;
+
+        // Resize triggers
+        std::queue <vk::Extent2D> resize_queue;
+
+        void render(EditorViewport *, const RenderInfo &, const std::vector <Entity> &, const MaterialDaemon *);
 };
 
-void initialize(SparseGI *,
-        const Context &,
-        const OptixDeviceContext &);
-
-void render(EditorViewport *,
-        SparseGI *,
-        const RenderInfo &,
-        const std::vector<Entity> &,
-        const MaterialDaemon *);
+void initialize(SparseGI *, const Context &, const OptixDeviceContext &);
+void render(EditorViewport *, SparseGI *, const RenderInfo &, const std::vector <Entity> &, const MaterialDaemon *);
 
 // Editor rendering
 struct EditorViewport {

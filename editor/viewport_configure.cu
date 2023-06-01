@@ -6,6 +6,7 @@
 // Engine headers
 #include "editor_viewport.cuh"
 #include "include/cuda/error.cuh"
+#include "include/optix/core.cuh"
 #include "push_constants.hpp"
 
 // Editor renderer shaders
@@ -916,29 +917,6 @@ void EditorViewport::configure_gbuffer_rtx()
         gbuffer_rtx.launch_params.io = optix_io_create();
 }
 
-// void EditorViewport::configure_amadeus_path_tracer(const Context &context)
-// {
-//         // TODO: adaptive resolution...
-//         amadeus_path_tracer.armada = std::make_shared <amadeus::ArmadaRTX> (
-//                 context, system, mesh_memory, vk::Extent2D { 1000, 1000 }
-//         );
-//
-//         amadeus_path_tracer.armada->attach(
-//                 "Path Tracer",
-//                 std::make_shared <amadeus::PathTracer> ()
-//                 // std::shared_ptr <amadeus::AttachmentRTX> (extra::load_attachment().ptr)
-//         );
-//
-//         // Framer and related resources
-// 	amadeus_path_tracer.framer = kobra::layers::Framer(context, present_render_pass);
-//
-// 	// Allocate necessary buffers
-// 	size_t size = amadeus_path_tracer.armada->size();
-//
-// 	amadeus_path_tracer.dev_traced = kobra::cuda::alloc(size * sizeof(uint32_t));
-// 	amadeus_path_tracer.traced.resize(size);
-// }
-
 void EditorViewport::configure_path_tracer(const Context &ctx)
 { 
         KOBRA_ASSERT(ctx.device != nullptr, "Editor (1): null device");
@@ -954,130 +932,38 @@ void EditorViewport::configure_path_tracer(const Context &ctx)
         char log[2048];
 	size_t sizeof_log = sizeof(log);
 
-        OPTIX_CHECK(
-                optixModuleCreate(
-                        context,
-                        &module_compile_options,
-                        &pipeline_compile_options,
-                        contents.c_str(),
-                        contents.size(),
-                        log, &sizeof_log,
-                        &path_tracer.module
-                )
+        OptixModule module = optix::load_optix_module(context, OPTIX_PTX_FILE, pipeline_compile_options, module_compile_options);
+        path_tracer.module = module;
+        
+        // Load programs
+        OptixProgramGroupOptions program_options = {};
+        
+        // Descriptions of all the programs
+        std::vector <OptixProgramGroupDesc> program_descs = {
+                OPTIX_DESC_RAYGEN(module, "__raygen__"),
+                OPTIX_DESC_HIT(module, "__closesthit__"),
+                OPTIX_DESC_MISS(module, "__miss__"),
+        };
+
+        // Corresponding program groups
+        std::vector <OptixProgramGroup *> program_groups = {
+                &path_tracer.ray_generation,
+                &path_tracer.closest_hit,
+                &path_tracer.miss,
+        };
+
+        optix::load_program_groups(
+                context,
+                program_descs,
+                program_options,
+                program_groups
         );
 
-        KOBRA_ASSERT(ctx.device != nullptr, "Editor (1.1): null device");
-        printf("Loaded module %p: %s\n", path_tracer.module, log);
-
-        OptixProgramGroupOptions program_options = {};
-
-        {
-                OptixProgramGroupDesc desc = {};
-                desc.kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
-                desc.raygen.module = path_tracer.module;
-                desc.raygen.entryFunctionName = "__raygen__";
-
-                OPTIX_CHECK(
-                        optixProgramGroupCreate(
-                                context,
-                                &desc, 1,
-                                &program_options,
-                                log, &sizeof_log,
-                                &path_tracer.ray_generation
-                        )
-                );
-
-                printf("Loaded raygen %p: %s\n", path_tracer.ray_generation, log);
-                KOBRA_ASSERT(ctx.device != nullptr, "Editor (1.12): null device");
-        }
-
-        {
-                OptixProgramGroupDesc desc = {};
-                desc.kind = OPTIX_PROGRAM_GROUP_KIND_MISS;
-                desc.miss.module = path_tracer.module;
-                desc.miss.entryFunctionName = "__miss__";
-
-                OPTIX_CHECK(
-                        optixProgramGroupCreate(
-                                context,
-                                &desc, 1,
-                                &program_options,
-                                log, &sizeof_log,
-                                &path_tracer.miss
-                        )
-                );
-
-                printf("Loaded miss %p: %s\n", path_tracer.miss, log);
-                KOBRA_ASSERT(ctx.device != nullptr, "Editor (1.2): null device");
-        }
-
-        {
-                OptixProgramGroupDesc desc = {};
-                desc.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
-                desc.hitgroup.moduleCH = path_tracer.module;
-                desc.hitgroup.entryFunctionNameCH = "__closesthit__";
-
-                OPTIX_CHECK(
-                        optixProgramGroupCreate(
-                                context,
-                                &desc, 1,
-                                &program_options,
-                                log, &sizeof_log,
-                                &path_tracer.closest_hit
-                        )
-                );
-
-                printf("Loaded closest hit %p: %s\n", path_tracer.closest_hit, log);
-                KOBRA_ASSERT(ctx.device != nullptr, "Editor (1.3): null device");
-        }
-
-        // Create pipeline
-        OptixProgramGroup program_groups[] = {
+        path_tracer.pipeline = optix::link_optix_pipeline(context, {
                 path_tracer.ray_generation,
                 path_tracer.closest_hit,
                 path_tracer.miss,
-        };
-
-        OPTIX_CHECK(
-                optixPipelineCreate(context,
-                        &pipeline_compile_options,
-                        &pipeline_link_options,
-                        program_groups, 3,
-                        log, &sizeof_log,
-                        &path_tracer.pipeline)
-        );
-
-        printf("Loaded pipeline %p: %s\n", path_tracer.pipeline, log);
-        KOBRA_ASSERT(ctx.device != nullptr, "Editor (2): null device");
-
-        // Configure stacks
-        OptixStackSizes stack_sizes = {};
-        OPTIX_CHECK(optixUtilAccumulateStackSizes(path_tracer.closest_hit, &stack_sizes, path_tracer.pipeline));
-        OPTIX_CHECK(optixUtilAccumulateStackSizes(path_tracer.miss, &stack_sizes, path_tracer.pipeline));
-        OPTIX_CHECK(optixUtilAccumulateStackSizes(path_tracer.ray_generation, &stack_sizes, path_tracer.pipeline));
-
-        uint32_t max_trace_depth = 1;
-        uint32_t max_cc_depth = 0;
-        uint32_t max_dc_depth = 0;
-        uint32_t direct_callable_stack_size_from_traversal = 0;
-        uint32_t direct_callable_stack_size_from_state = 0;
-        uint32_t continuation_stack_size = 0;
-
-        OPTIX_CHECK(
-                optixUtilComputeStackSizes(&stack_sizes,
-                        max_trace_depth, max_cc_depth, max_dc_depth,
-                        &direct_callable_stack_size_from_traversal,
-                        &direct_callable_stack_size_from_state,
-                        &continuation_stack_size)
-        );
-
-        OPTIX_CHECK(
-                optixPipelineSetStackSize(path_tracer.pipeline,
-                        direct_callable_stack_size_from_traversal,
-                        direct_callable_stack_size_from_state,
-                        continuation_stack_size, 2)
-        );
-        KOBRA_ASSERT(ctx.device != nullptr, "Editor (3): null device");
+        }, pipeline_compile_options, pipeline_link_options);
 
         // Create shader binding table
         path_tracer.sbt = {};
@@ -1115,140 +1001,46 @@ void EditorViewport::configure_path_tracer(const Context &ctx)
 
         // path_tracer.launch_params = {};
         path_tracer.launch_params.io = optix_io_create();
-	
-       
-        // TODO: render from raw float4 data...
-        KOBRA_ASSERT(ctx.device != nullptr, "Editor (-1): null device");
 }
 
 void initialize(SparseGI *sparse_gi, const Context &ctx, const OptixDeviceContext &context)
 {
-        static constexpr const char OPTIX_PTX_FILE[] = "bin/ptx/sparse_gi.o";
+        static constexpr const char OPTIX_PTX_FILE[] = "bin/ptx/sparse_gi_shader.o";
 
         std::string contents = common::read_file(OPTIX_PTX_FILE);
 	
-        char log[2048];
-	size_t sizeof_log = sizeof(log);
+        OptixModule module = optix::load_optix_module(context, OPTIX_PTX_FILE, pipeline_compile_options, module_compile_options);
+        sparse_gi->module = module;
 
-        OPTIX_CHECK(
-                optixModuleCreate(
-                        context,
-                        &module_compile_options,
-                        &pipeline_compile_options,
-                        contents.c_str(),
-                        contents.size(),
-                        log, &sizeof_log,
-                        &sparse_gi->module
-                )
-        );
-
-        printf("Loaded module %p: %s\n", sparse_gi->module, log);
-        printf("Context is %p\n", context);
-
+        // Load programs
         OptixProgramGroupOptions program_options = {};
 
-        {
-                OptixProgramGroupDesc desc = {};
-                desc.kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
-                desc.raygen.module = sparse_gi->module;
-                desc.raygen.entryFunctionName = "__raygen__";
+        // Descriptions of all the programs
+        std::vector <OptixProgramGroupDesc> program_descs = {
+                OPTIX_DESC_RAYGEN(module, "__raygen__"),
+                OPTIX_DESC_HIT(module, "__closesthit__"),
+                OPTIX_DESC_MISS(module, "__miss__"),
+        };
 
-                OPTIX_CHECK(
-                        optixProgramGroupCreate(
-                                context,
-                                &desc, 1,
-                                &program_options,
-                                log, &sizeof_log,
-                                &sparse_gi->ray_generation
-                        )
-                );
+        // Corresponding program groups
+        std::vector <OptixProgramGroup *> program_groups = {
+                &sparse_gi->ray_generation,
+                &sparse_gi->closest_hit,
+                &sparse_gi->miss,
+        };
 
-                printf("Loaded raygen %p: %s\n", sparse_gi->ray_generation, log);
-        }
+        optix::load_program_groups(
+                context,
+                program_descs,
+                program_options,
+                program_groups
+        );
 
-        {
-                OptixProgramGroupDesc desc = {};
-                desc.kind = OPTIX_PROGRAM_GROUP_KIND_MISS;
-                desc.miss.module = sparse_gi->module;
-                desc.miss.entryFunctionName = "__miss__";
-
-                OPTIX_CHECK(
-                        optixProgramGroupCreate(
-                                context,
-                                &desc, 1,
-                                &program_options,
-                                log, &sizeof_log,
-                                &sparse_gi->miss
-                        )
-                );
-
-                printf("Loaded miss %p: %s\n", sparse_gi->miss, log);
-        }
-
-        {
-                OptixProgramGroupDesc desc = {};
-                desc.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
-                desc.hitgroup.moduleCH = sparse_gi->module;
-                desc.hitgroup.entryFunctionNameCH = "__closesthit__";
-
-                OPTIX_CHECK(
-                        optixProgramGroupCreate(
-                                context,
-                                &desc, 1,
-                                &program_options,
-                                log, &sizeof_log,
-                                &sparse_gi->closest_hit
-                        )
-                );
-
-                printf("Loaded closest hit %p: %s\n", sparse_gi->closest_hit, log);
-        }
-
-        // Create pipeline
-        OptixProgramGroup program_groups[] = {
+        sparse_gi->pipeline = optix::link_optix_pipeline(context, {
                 sparse_gi->ray_generation,
                 sparse_gi->closest_hit,
                 sparse_gi->miss,
-        };
-
-        OPTIX_CHECK(
-                optixPipelineCreate(context,
-                        &pipeline_compile_options,
-                        &pipeline_link_options,
-                        program_groups, 3,
-                        log, &sizeof_log,
-                        &sparse_gi->pipeline)
-        );
-
-        printf("Loaded pipeline %p: %s\n", sparse_gi->pipeline, log);
-
-        // Configure stacks
-        OptixStackSizes stack_sizes = {};
-        OPTIX_CHECK(optixUtilAccumulateStackSizes(sparse_gi->closest_hit, &stack_sizes, sparse_gi->pipeline));
-        OPTIX_CHECK(optixUtilAccumulateStackSizes(sparse_gi->miss, &stack_sizes, sparse_gi->pipeline));
-        OPTIX_CHECK(optixUtilAccumulateStackSizes(sparse_gi->ray_generation, &stack_sizes, sparse_gi->pipeline));
-
-        uint32_t max_trace_depth = 1;
-        uint32_t max_cc_depth = 0;
-        uint32_t max_dc_depth = 0;
-        uint32_t direct_callable_stack_size_from_traversal = 0;
-        uint32_t direct_callable_stack_size_from_state = 0;
-        uint32_t continuation_stack_size = 0;
-
-        OPTIX_CHECK(
-                optixUtilComputeStackSizes(&stack_sizes,
-                        max_trace_depth, max_cc_depth, max_dc_depth,
-                        &direct_callable_stack_size_from_traversal,
-                        &direct_callable_stack_size_from_state,
-                        &continuation_stack_size)
-        );
-
-        OPTIX_CHECK(
-                optixPipelineSetStackSize(sparse_gi->pipeline,
-                        direct_callable_stack_size_from_traversal,
-                        direct_callable_stack_size_from_state,
-                        continuation_stack_size, 2)
-        );
+        }, pipeline_compile_options, pipeline_link_options);
 
         // Create shader binding table
         sparse_gi->sbt = {};
@@ -1280,9 +1072,15 @@ void initialize(SparseGI *sparse_gi, const Context &ctx, const OptixDeviceContex
         sparse_gi->sbt.hitgroupRecordBase = 0;
         sparse_gi->sbt.hitgroupRecordStrideInBytes = 0;
         sparse_gi->sbt.hitgroupRecordCount = 0;
-
-        // Allocate parameters up front
+        
+        // Setup parameters
         sparse_gi->launch_params = {};
         sparse_gi->launch_params.samples = 0;
+        sparse_gi->launch_params.indirect.N = 3;
+        sparse_gi->launch_params.options.direct = true;
+        sparse_gi->launch_params.options.indirect = true;
+        sparse_gi->launch_params.io = optix_io_create();
+
+        // Allocate parameters up front
         sparse_gi->dev_launch_params = cuda::alloc(sizeof(SparseGIParameters));
 }

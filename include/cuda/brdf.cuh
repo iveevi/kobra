@@ -244,7 +244,7 @@ struct GGX {
 		float3 num = f * g * d;
 		float denom = 4 * dot(wi, n) * dot(wo, n);
 
-		return num / denom;
+		return num / (denom + 1e-6f);
 	}
 
 	// Evaluate the PDF

@@ -99,11 +99,7 @@ set(ImExtra_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/ImGuizmo/ImGuizmo.cpp
 )
 
-set(Glslang_SOURCES
-	# ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/glslang/SPIRV/GlslangToSpv.cpp
-	# ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/glslang/SPIRV/SpvBuilder.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/glslang/StandAlone/ResourceLimits.cpp
-)
+set(Glslang_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/glslang/StandAlone/ResourceLimits.cpp)
 
 file(GLOB Kobra_GENERIC_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/source/*.cpp)
 file(GLOB Kobra_LAYERS_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/source/layers/*.cpp)
@@ -141,6 +137,7 @@ add_executable(editor
         editor/inspector.cpp
         editor/scene_graph.cpp
         editor/shaders.cpp
+        editor/sparse_gi.cu
         editor/startup.cpp
         editor/viewport_configure.cu
         editor/viewport_render.cu
@@ -206,12 +203,12 @@ file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/bin/ptx)
 
 file(GLOB_RECURSE OPTIX_SHADERS
-	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/amadeus_path_tracer.cu
-	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/amadeus_restir.cu
-	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/amadeus_repg.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/editor/gbuffer_rtx_shader.cu
+	${CMAKE_CURRENT_SOURCE_DIR}/editor/optix/sparse_gi_shader.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/editor/path_tracer.cu
-	${CMAKE_CURRENT_SOURCE_DIR}/editor/optix/sparse_gi.cu
+	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/amadeus_path_tracer.cu
+	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/amadeus_repg.cu
+	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/amadeus_restir.cu
 )
 
 add_library(optix_shaders

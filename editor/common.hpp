@@ -64,6 +64,8 @@ struct RenderInfo {
         vk::Extent2D extent;
         const vk::raii::CommandBuffer &cmd = nullptr;
 
+        // TODO: attach entities and transform daemon, etc..
+
         RenderInfo(const vk::raii::CommandBuffer &_cmd) : cmd(_cmd) {}
 };
 
@@ -84,12 +86,12 @@ struct RenderState {
                 eSparseGlobalIllumination,
                 ePathTraced,
                 // ePathTraced_Amadeus
-        } mode = eTriangulation;
+        } mode = ePathTraced;
 
         enum {
                 eRasterized,
                 eRaytraced
-        } backend = eRasterized;
+        } backend = eRaytraced;
 
         bool bounding_boxes = false;
         bool initialized = false;

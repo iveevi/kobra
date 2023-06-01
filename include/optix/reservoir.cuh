@@ -1,5 +1,4 @@
-#ifndef KOBRA_OPTIX_RESERVOIR_H_
-#define KOBRA_OPTIX_RESERVOIR_H_
+#pragma once
 
 // Engine headers
 #include "../cuda/math.cuh"
@@ -24,8 +23,7 @@ struct WeightedReservoir {
 // Updating a reservoir
 template <class T>
 __device__ __forceinline__
-bool reservoir_update
-		(WeightedReservoir <T> *reservoir,
+bool reservoir_update(WeightedReservoir <T> *reservoir,
 		const T &sample, float weight,
 		cuda::Seed seed)
 {
@@ -45,5 +43,3 @@ bool reservoir_update
 }
 
 }
-
-#endif

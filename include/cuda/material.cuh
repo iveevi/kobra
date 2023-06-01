@@ -9,6 +9,7 @@ namespace kobra {
 
 namespace cuda {
 
+// TODO: remove this...
 struct Material {
 	float3		diffuse;
 	float3		specular;

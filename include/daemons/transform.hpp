@@ -58,11 +58,15 @@ struct TransformDaemon {
 
         uint8_t operator[](int index) const {
                 // Returns the modification status
+                if (index >= status.size())
+                        return eChanged;
                 return status[index];
         }
 
         uint8_t changed(int index) const {
                 // Returns the modification status
+                if (index >= status.size())
+                        return eChanged;
                 return status[index];
         }
 };

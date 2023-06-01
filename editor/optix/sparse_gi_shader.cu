@@ -5,7 +5,7 @@
 #include "include/optix/core.cuh"
 
 // Editor headers
-#include "sparse_gi.cuh"
+#include "sparse_gi_shader.cuh"
 #include "../gbuffer_rtx_shader.cuh"
 
 extern "C" {
@@ -182,11 +182,10 @@ float3 Ld(const SurfaceHit &sh, float3 &seed)
                 float R = length(light_info.position - origin);
 	
                 float3 brdf = cuda::brdf(sh, wi, sh.mat.type);
-                float pdf = cuda::pdf(sh, wi, sh.mat.type);
 
                 float ldotn = light_info.sky ? 1.0f : abs(dot(light_info.normal, wi));
                 float ndotwi = abs(dot(sh.n, wi));
-                float falloff = light_info.sky ? 1.0f : (R * R);
+                float falloff = light_info.sky ? 1.0f : (R * R) + 1e-3f;
 
                 out_radiance = brdf * light_info.emission * ldotn * ndotwi/(light_pdf * falloff);
         }
@@ -198,32 +197,34 @@ extern "C" __global__ void __raygen__()
 {
 	// Get the launch index
 	const uint3 idx = optixGetLaunchIndex();
-       
-        float4 raw_position;
-        surf2Dread(&raw_position, parameters.position_surface,
-                idx.x * sizeof(float4), parameters.resolution.y - (idx.y + 1));
-        
-        float4 raw_normal;
-        surf2Dread(&raw_normal, parameters.normal_surface,
-                idx.x * sizeof(float4), parameters.resolution.y - (idx.y + 1));
+      
+        int xoffset = idx.x * sizeof(float4);
+        int yoffset = (parameters.resolution.y - (idx.y + 1));
 
+        float4 raw_position;
+        float4 raw_normal;
         float4 raw_uv;
-        surf2Dread(&raw_uv, parameters.uv_surface,
-                idx.x * sizeof(float4), parameters.resolution.y - (idx.y + 1));
+
+        // TODO: surfaces.position, etc.
+        surf2Dread(&raw_position, parameters.position_surface, xoffset, yoffset);
+        surf2Dread(&raw_normal, parameters.normal_surface, xoffset, yoffset);
+        surf2Dread(&raw_uv, parameters.uv_surface, xoffset, yoffset);
+
+        xoffset = idx.x * sizeof(int32_t);
+        yoffset = (parameters.resolution.y - (idx.y + 1));
 
         int32_t raw_index;
-        surf2Dread(&raw_index, parameters.index_surface,
-                idx.x * sizeof(int32_t), parameters.resolution.y - (idx.y + 1));
+        surf2Dread(&raw_index, parameters.index_surface, xoffset, yoffset);
 
         int32_t triangle_id = raw_index >> 16;
         int32_t material_id = raw_index & 0xFFFF;
         
         int index = idx.x + idx.y * parameters.resolution.x;
         if (raw_index == -1) {
-                float3 ray = ray_at(idx);
-                parameters.color[index] = sky_at(ray);
-                // Indicate that there is no valid position here
-                parameters.color[index].w = -1.0f;
+                // float3 ray = ray_at(idx);
+                // parameters.color[index] = sky_at(ray);
+                // // Indicate that there is no valid position here
+                // parameters.color[index].w = -1.0f;
                 parameters.previous_position[index] = make_float4(0.0f);
                 return;
         }
@@ -251,32 +252,32 @@ extern "C" __global__ void __raygen__()
         float sign = (sh.mat.type == eTransmission) ? -1.0f : 1.0f;
         sh.x += sign * sh.n * 1e-3f;
 
-        // float3 color = make_float3(0.0f);
-        // float3 beta = make_float3(1.0f);
-
         // TODO: simoultaenous viewports...
-
-        // TODO: two strategies: 3/4 pixels will be direct lighting only
-        // 1/4 will have a secondary bounce that has direct lighting...
-        // if primary or secondary hit is light, skip entirely...
-
         // TODO: skip direct lighting for highly specular surfaces
 
-        // Get 2x2 coordinate
-        uint2 coord = make_uint2(idx.x & ~1, idx.y & ~1);
-        uint index2 = coord.x + coord.y * parameters.resolution.x/2;
-        // uint offset = (index2 + parameters.sample) % 4;
+        int N = parameters.indirect.N;
+        int N2 = N * N;
+        uint2 coord = make_uint2(idx.x/N, idx.y/N);
+        uint2 local = make_uint2(idx.x % N, idx.y % N);
+        uint local_index = local.x + local.y * N;
+        uint neg_samples = N2 + (-parameters.samples) % N2;
+        uint offset = (coord.y % 2 == 0) ? parameters.samples : neg_samples;
+        offset = (local_index + offset) % N2;
+
+        // TODO: 2/N2 samples will have secondary bounces, one of which will
+        // have third bounces purely for indirect cache
 
         float3 direct { 0, 0, 0 };
         if (sh.mat.roughness > 0.1f)
                 direct = Ld(sh, seed);
-                
+               
+        float3 indirect { 0, 0, 0 };
         float3 wi;
         float pdf;
         Shading out;
 
         float3 brdf = eval(sh, wi, pdf, out, seed);
-        if (pdf > 0.0) {
+        if (offset == 0 && pdf > 0.0) {
                 Packet packet;
                 packet.miss = false;
                 packet.entering = false;
@@ -296,10 +297,14 @@ extern "C" __global__ void __raygen__()
                 );
 
                 if (packet.miss) {
-                        direct += brdf * make_float3(sky_at(wi)) / pdf;
+                        indirect = float(N2) * make_float3(sky_at(wi));
+                        // indirect = float(N2) * brdf * make_float3(sky_at(wi)) / pdf;
                 } else {
+                        // TODO: if specular then skip direct lighting and do
+                        // another bounce sample
                         cuda::_material m = parameters.materials[packet.id];
-                        
+
+                        SurfaceHit sh; 
                         sh.x = packet.x;
                         sh.wo = -wi;
                         sh.n = packet.n;
@@ -307,17 +312,20 @@ extern "C" __global__ void __raygen__()
 
                         convert_material(m, sh.mat, packet.uv);
 
-                        direct += brdf * sh.mat.emission * abs(dot(sh.n, wi)) / pdf;
+                        // indirect = float(N2) * brdf * sh.mat.emission * abs(dot(sh.n, wi)) / pdf;
+                        indirect = float(N2) * sh.mat.emission * abs(dot(sh.n, wi));
+
+                        // TODO: cache irradiance
                 }
         }
 
-        float3 color = direct;
+        // Temporal anti-aliasing of irradiance
+        int samples = 0;
+        int prev_index = index;
+        float3 color { 0, 0, 0 };
 
-        // Store color
-        float4 pcolor { 0, 0, 0, 0 };
-        uint samples = 0; // parameters.color[index].w;
-        
         if (parameters.dirty) {
+                // TODO: method to return the number of samples
                 glm::vec4 p { sh.x.x, sh.x.y, sh.x.z, 1.0f };
                 p = parameters.previous_projection * parameters.previous_view * p;
 
@@ -327,57 +335,68 @@ extern "C" __global__ void __raygen__()
                 bool in_u_bounds = (u >= -1.0f && u <= 1.0f);
                 bool in_v_bounds = (v >= -1.0f && v <= 1.0f);
 
-                int pindex = -1;
                 if (in_u_bounds && in_v_bounds) {
                         u = (u + 1.0f) * 0.5f;
                         v = (v + 1.0f) * 0.5f;
 
-                        // int ix = u * parameters.resolution.x + 0.5;
-                        // int iy = v * parameters.resolution.y + 0.5;
-                        
                         int ix = u * parameters.resolution.x;
                         int iy = v * parameters.resolution.y;
 
-                        pindex = iy * parameters.resolution.x + ix;
-                        pcolor = parameters.color[pindex];
-                        samples = pcolor.w < 0 ? 0 : pcolor.w;
+                        prev_index = iy * parameters.resolution.x + ix;
+                        float4 prev_color = parameters.indirect.screen_irradiance[prev_index];
+                        samples = prev_color.w >= 0 ? prev_color.w : 0;
                 }
 
                 // TODO: check validity of temporal accumulation
                 // in order to prevent smearing
-                if (pindex >= 0) {
-                        float3 pos = make_float3(parameters.previous_position[pindex]);
+                if (prev_index >= 0) {
+                        float4 prev = parameters.previous_position[prev_index];
+                        float3 ppos = { prev.x, prev.y, prev.z };
+                        int pmat = *reinterpret_cast <int *> (&prev.w);
 
-                        // TODO:use some heuristic; not every difference needs
+                        // TODO: use some heuristic; not every difference needs
                         // to be discarded
-                        if (length(pos - sh.x) > 0.1f) {
+                        if (pmat != material_id) {// || length(sh.n - ppos) > 0.1f) {
+                                prev_index = index;
                                 samples = 0;
-                                // color += make_float3(0.0f, 0.5f, 0.5f);
+                                // color += make_float3(0, 0.5, 0.5);
                         } else {
-                                // color += make_float3(0.5f, 0.5f, 0.0f);
+                                // color += make_float3(0.5, 0.5, 0);
                         }
-                } else {
-                        // color += make_float3(0.5f, 0.5f, 0.0f);
                 }
         } else {
-                pcolor = parameters.color[index];
-                samples = pcolor.w < 0 ? 0 : pcolor.w;
+                float4 prev_color = parameters.indirect.screen_irradiance[index];
+                samples = prev_color.w >= 0 ? prev_color.w : 0;
         }
         
+        // Anti-alias irradiance
+        float3 prev_irradiance = make_float3(parameters.indirect.screen_irradiance[prev_index]);
+        if (prev_index != index) {
+                // Account for differing viewing direction
+                float3 cpos = parameters.origin;
+                float3 ppos = parameters.previous_origin;
+
+                float3 cdir = normalize(sh.x - cpos);
+                float3 pdir = normalize(sh.x - ppos);
+
+                prev_irradiance *= abs(dot(cdir, sh.n))/abs(dot(pdir, sh.n));
+        }
+
         // Explicitly reset samples if necessary
         if (parameters.reset)
                 samples = 0;
 
+        float3 new_irradiance = (prev_irradiance * samples + indirect) / (samples + 1.0f);
+        parameters.indirect.screen_irradiance[index] = make_float4(new_irradiance, samples + 1.0f);
 
-        // TODO: use camera dirty?
-        // float4 pcolor = parameters.color[index];
+        // Average indirect directions
+        float3 prev_direction = parameters.indirect.irradiance_directions[prev_index];
+        float3 new_direction = (prev_direction * samples + wi) / (samples + 1.0f);
+        parameters.indirect.irradiance_directions[index] = new_direction;
 
-        float4 ccolor = make_float4(color);
-        float4 ncolor = (pcolor * samples + ccolor) / (samples + 1.0f);
-        parameters.color[index] = ncolor;
-        // TODO: fourth channel is the number of samples...
-        parameters.color[index].w = samples + 1.0f;
-        parameters.previous_position[index] = make_float4(sh.x, 1.0f);
+        // Save to previous state
+        parameters.previous_position[index] = make_float4(sh.n, *reinterpret_cast <float *> (&material_id));
+        parameters.direct_lighting[index].data.Le = direct;
 
         // TODO: for diffuse surfaces, need to modify the direct lighting a
         // little bit to account for the change in view direction

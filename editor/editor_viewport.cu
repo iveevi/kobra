@@ -1,104 +1,21 @@
-
 // Vulkan headers
 #include <vulkan/vulkan_format_traits.hpp>
+#include <vulkan/vulkan_structs.hpp>
 
-// Editor headers
-#include "editor_viewport.cuh"
-
-// Engien headers
+// Engine headers
 #include "include/cuda/error.cuh"
 #include "include/cuda/interop.cuh"
 #include "include/daemons/mesh.hpp"
 
+// Editor headers
+#include "editor_viewport.cuh"
+
 // Environment map
 void load_environment_map(EnvironmentMap *em, kobra::TextureLoader *loader, const std::filesystem::path &path)
 {
- //        kobra::RawImage img = kobra::load_texture(path);
-	// 
- //        // TODO: submit now instead...
- //        // Queue to submit commands to
- //        vk::raii::Queue queue { *context.device, 0, 0 };
-	//
- //        // Temporary command buffer
- //        auto cmd = make_command_buffer(*context.device, *context.command_pool);
-	//
- //        // Create the image
- //        vk::Extent2D extent {
- //                static_cast <uint32_t> (img.width),
- //                static_cast <uint32_t> (img.height)
- //        };
-	//
- //        // Select format
- //        vk::Format format = vk::Format::eR8G8B8A8Unorm;
- //        if (img.type == RawImage::RGBA_32_F)
- //                format = vk::Format::eR32G32B32A32Sfloat;
-	//
- //        em->image = ImageData(
- //                *context.phdev, *context.device,
- //                format, extent,
- //                vk::ImageTiling::eOptimal,
- //                vk::ImageUsageFlagBits::eSampled
- //                        | vk::ImageUsageFlagBits::eTransferDst
- //                        | vk::ImageUsageFlagBits::eTransferSrc,
- //                vk::MemoryPropertyFlagBits::eDeviceLocal,
- //                vk::ImageAspectFlagBits::eColor,
- //                true
- //        );
-	//
- //        // Copy the image data into a staging buffer
- //        vk::DeviceSize size = img.width * img.height * vk::blockSize(em->image.format);
-	//
- //        BufferData buffer {
- //                *context.phdev, *context.device, size,
- //                vk::BufferUsageFlagBits::eTransferSrc,
- //                vk::MemoryPropertyFlagBits::eHostVisible
- //                        | vk::MemoryPropertyFlagBits::eHostCoherent
- //        };
-	//
- //        // Copy the data
- //        buffer.upload(img.data);
-	//
- //        {
- //                cmd.begin({});
- //                em->image.transition_layout(cmd, vk::ImageLayout::eTransferDstOptimal);
-	//
- //                // Copy the buffer to the image
- //                copy_data_to_image(cmd,
- //                        buffer.buffer, em->image.image,
- //                        em->image.format, img.width, img.height
- //                );
-	//
- //                // TODO: transition_image_layout should go to the detail namespace...
- //                em->image.transition_layout(cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
- //                cmd.end();
- //        }
-	//
- //        // Submit the command buffer
- //        queue.submit(
- //                vk::SubmitInfo {
- //                        0, nullptr, nullptr,
- //                        1, &*cmd
- //                },
- //                nullptr
- //        );
-	//
- //        // Wait
- //        queue.waitIdle();
-	//
- //        // Import into CUDA
- //        // TODO: check if 8u or 32f
- //        if (img.type == RawImage::RGBA_32_F)
- //                em->texture = kobra::cuda::import_vulkan_texture_32f(*context.device, em->image);
- //        else
- //                em->texture = kobra::cuda::import_vulkan_texture_8u(*context.device, em->image);
-
         const ImageData &img = loader->load_texture(path);
         em->texture = kobra::cuda::import_vulkan_texture(*loader->m_device.device, img);
-
-        // Mark as valid
         em->valid = true;
-
-        std::cout << "Environment map loaded for editor viewport" << std::endl;
 }
 
 // Constructor
@@ -120,7 +37,7 @@ EditorViewport::EditorViewport(const Context &context,
         path_tracer.depth = 2;
        
         // TODO: move to default constructor
-        sparse_gi.launch_params.color = 0;
+        // sparse_gi.launch_params.color = 0;
         sparse_gi.launch_params.previous_position = nullptr;
         sparse_gi.depth = 2;
 
@@ -316,10 +233,8 @@ void EditorViewport::resize(const vk::Extent2D &new_extent)
         CUDA_CHECK(cudaMalloc((void **) &common_rtx.dev_traced, new_extent.width * new_extent.height * sizeof(uint32_t)));
         common_rtx.traced.resize(new_extent.width * new_extent.height * sizeof(uint32_t));
 
-        if (sparse_gi.launch_params.previous_position != 0)
-                CUDA_CHECK(cudaFree((void *) sparse_gi.launch_params.previous_position));
-
-        CUDA_CHECK(cudaMalloc((void **) &sparse_gi.launch_params.previous_position, new_extent.width * new_extent.height * sizeof(float4)));
+        // Send resize event to the sparse GI pipeline
+        sparse_gi.resize_queue.push(new_extent);
 
         // Allocate Sobel filter output image
         sobel.output = ImageData {

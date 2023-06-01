@@ -148,7 +148,7 @@ float power_heuristic(float pdf1, float pdf2)
 }
 
 __device__
-float3 radiance(const SurfaceHit &sh, float3 &seed, int depth)
+float3 radiance(const SurfaceHit &sh, float3 &seed)
 {
         // TODO: options: russian roulette, max depth, etc.
         // also BRDF sampling, light sampling (direct) or MIS (one sample or
@@ -191,9 +191,10 @@ float3 radiance(const SurfaceHit &sh, float3 &seed, int depth)
 
                 float ldotn = light_info.sky ? 1.0f : abs(dot(light_info.normal, wi));
                 float ndotwi = abs(dot(sh.n, wi));
-                float falloff = light_info.sky ? 1.0f : (R * R);
+                float falloff = light_info.sky ? 1.0f : (R * R) + 1e-3f;
 
                 float weight = power_heuristic(light_pdf, pdf);
+
                 out_radiance = weight * brdf * light_info.emission * ldotn * ndotwi/(light_pdf * falloff);
         }
 
@@ -261,7 +262,7 @@ extern "C" __global__ void __raygen__()
                 float sign = (sh.mat.type == eTransmission) ? -1.0f : 1.0f;
                 sh.x += sign * sh.n * 1e-3f;
 
-                color += beta * radiance(sh, seed, depth);
+                color += beta * radiance(sh, seed);
                 
                 float3 wi;
                 float pdf;

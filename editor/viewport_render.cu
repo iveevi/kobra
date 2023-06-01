@@ -72,7 +72,11 @@ static cuda::_material convert_material(const Material &material, TextureLoader 
 void update_materials(CommonRaytracing *crtx, const MaterialDaemon *md, TextureLoader *texture_loader, const vk::raii::Device &device)
 {
         // TODO: only update if necessary
+        if (crtx->dev_materials && crtx->material_update_queue.empty())
+                return;
+
         std::cout << "Updating materials" << std::endl;
+
         // if ()
         // TODO: only update the materials that have changed
         crtx->materials.clear();
@@ -86,6 +90,8 @@ void update_materials(CommonRaytracing *crtx, const MaterialDaemon *md, TextureL
                 cuda::free(crtx->dev_materials);
 
         crtx->dev_materials = cuda::make_buffer_ptr(crtx->materials);
+        crtx->material_reset = true;
+        crtx->material_update_queue = {};
 }
 
 // Prerender process for raytracing
@@ -854,6 +860,7 @@ void EditorViewport::render(const RenderInfo &render_info,
                                 // daemon...
         // Set state
         common_rtx.clk_rise = true;
+        common_rtx.material_reset = false;
 
         // TODO: if a click is detected, then we need to run the G-buffer pass
         // at least once to keep up to date with the latest changes
@@ -882,7 +889,8 @@ void EditorViewport::render(const RenderInfo &render_info,
         case RenderState::eSparseGlobalIllumination:
                 prerender_raytrace(entities, &td, md);
                 render_gbuffer(render_info, entities, &td, md);
-                ::render(this, &sparse_gi, render_info, entities, md);
+                // ::render(this, &sparse_gi, render_info, entities, md);
+                sparse_gi.render(this, render_info, entities, md);
                 blit_raytraced(this, render_info);
                 break;
         
@@ -1018,8 +1026,20 @@ static void show_mode_submenu(RenderState *render_state, const _submenu_args &ar
                 if (render_state->mode == RenderState::ePathTraced)
                         if (ImGui::SliderInt("Depth", &args.path_tracer->depth, 1, 10));
                 
-                if (render_state->mode == RenderState::eSparseGlobalIllumination)
-                        if (ImGui::SliderInt("Depth", &args.sparse_gi->depth, 1, 10));
+                if (render_state->mode == RenderState::eSparseGlobalIllumination) {
+                        auto *sparse_gi = args.sparse_gi;
+                        if (ImGui::SliderInt("Depth", &sparse_gi->depth, 1, 10));
+
+                        if (ImGui::Checkbox("Direct Lighting", &sparse_gi->launch_params.options.direct)) {
+                                std::cout << "Direct lighting: " << sparse_gi->launch_params.options.direct << std::endl;
+                                sparse_gi->manual_reset = true;
+                        }
+
+                        if (ImGui::Checkbox("Indirect Lighting", &sparse_gi->launch_params.options.indirect)) {
+                                std::cout << "Indirect lighting: " << sparse_gi->launch_params.options.indirect << std::endl;
+                                sparse_gi->manual_reset = true;
+                        }
+                }
 
                 ImGui::EndMenu();
         }
@@ -1062,6 +1082,7 @@ void show_menu(const std::shared_ptr <EditorViewport> &ev, const MenuOptions &op
         }
 }
         
+// TODO: common rtx method
 void blit_raytraced(EditorViewport *ev, const RenderInfo &render_info)
 {
         // Blitting
@@ -1110,64 +1131,4 @@ void blit_raytraced(EditorViewport *ev, const RenderInfo &render_info)
 
         // TODO: import CUDA to Vulkan and render straight to the image
         ev->common_rtx.framer.render(render_info.cmd);
-}
-
-// Rendering Sparse GI
-void render(EditorViewport *ev, SparseGI *sparse_gi,
-                const RenderInfo &render_info,
-                const std::vector <Entity> &entities,
-                const MaterialDaemon *md)
-{
-        const Camera &camera = render_info.camera;
-        const Transform &camera_transform = render_info.camera_transform;
-
-        // Configure launch parameters
-        sparse_gi->launch_params.color = ev->common_rtx.dev_color;
-        sparse_gi->launch_params.time = ev->common_rtx.timer.elapsed_start();
-        sparse_gi->launch_params.dirty = render_info.camera_transform_dirty;
-        sparse_gi->launch_params.reset = ev->render_state.sparse_gi_reset;
-        sparse_gi->launch_params.samples++;
-
-        ev->render_state.sparse_gi_reset = false;
-        if (ev->render_state.sparse_gi_reset) {
-                sparse_gi->launch_params.previous_view = camera.view_matrix(camera_transform);
-                sparse_gi->launch_params.previous_projection = camera.perspective_matrix();
-                sparse_gi->launch_params.samples = 0;
-        }
-
-        auto uvw = uvw_frame(camera, camera_transform);
-
-        sparse_gi->launch_params.U = cuda::to_f3(uvw.u);
-        sparse_gi->launch_params.V = cuda::to_f3(uvw.v);
-        sparse_gi->launch_params.W = cuda::to_f3(uvw.w);
-        
-        sparse_gi->launch_params.origin = cuda::to_f3(render_info.camera_transform.position);
-        sparse_gi->launch_params.resolution = { ev->extent.width, ev->extent.height };
-        
-        sparse_gi->launch_params.position_surface = ev->framebuffer_images.cu_position_surface;
-        sparse_gi->launch_params.normal_surface = ev->framebuffer_images.cu_normal_surface;
-        sparse_gi->launch_params.uv_surface = ev->framebuffer_images.cu_uv_surface;
-        sparse_gi->launch_params.index_surface = ev->framebuffer_images.cu_material_index_surface;
-
-        sparse_gi->launch_params.materials = (cuda::_material *) ev->common_rtx.dev_materials;
-
-        sparse_gi->launch_params.sky.texture = ev->environment_map.texture;
-        sparse_gi->launch_params.sky.enabled = ev->environment_map.valid;
-        
-        SparseGIParameters *dev_params = (SparseGIParameters *) sparse_gi->dev_launch_params;
-        CUDA_CHECK(cudaMemcpy(dev_params, &sparse_gi->launch_params, sizeof(SparseGIParameters), cudaMemcpyHostToDevice));
-        
-        OPTIX_CHECK(
-                optixLaunch(
-                        sparse_gi->pipeline, 0,
-                        sparse_gi->dev_launch_params,
-                        sizeof(SparseGIParameters),
-                        &sparse_gi->sbt,
-                        ev->extent.width, ev->extent.height, 1
-                )
-        );
-        
-        // Update previous view and projection matrices
-        sparse_gi->launch_params.previous_view = camera.view_matrix(camera_transform);
-        sparse_gi->launch_params.previous_projection = camera.perspective_matrix();
 }

@@ -28,8 +28,9 @@ void make_ray(uint3 idx, float3 &direction, float3 &seed)
 	// int xoff = rand_uniform(parameters.resolution.x, seed);
 	// int yoff = rand_uniform(parameters.resolution.y, seed);
 
-        float xoff = rand_uniform(seed) - 0.5f;
-        float yoff = rand_uniform(seed) - 0.5f;
+        // float xoff = rand_uniform(seed) - 0.5f;
+        // float yoff = rand_uniform(seed) - 0.5f;
+        float xoff = 0.0f, yoff = 0.0f;
 
 	// Compute ray origin and direction
         float2 d = 2.0f * make_float2(

@@ -193,10 +193,10 @@ int main()
 		},
         };
 
-        startup->run();
+        // startup->run();
         delete startup;
 
-        // g_application.project = "scene";
+        g_application.project = "scene";
         if (g_application.project.empty())
                 return 0;
 
@@ -327,11 +327,12 @@ class MaterialEditor : public kobra::ui::ImGuiAttachment {
 		);
 	}
 public:
+        MaterialDaemon *md = nullptr;
 	int material_index = -1;
 
 	MaterialEditor() = delete;
-	MaterialEditor(Editor *editor, kobra::TextureLoader *texture_loader)
-			: m_editor {editor}, m_texture_loader {texture_loader} {
+	MaterialEditor(Editor *editor, kobra::TextureLoader *texture_loader, MaterialDaemon *md_)
+			: m_editor { editor }, m_texture_loader { texture_loader }, md { md_ } {
                 // Allocate the material preview descriptor set
                 vk::SamplerCreateInfo sampler_info {
                         {}, vk::Filter::eLinear, vk::Filter::eLinear,
@@ -489,6 +490,9 @@ public:
 			std::lock_guard <std::mutex> lock_guard
 				(m_editor->m_renderers.movement_mutex);
 			m_editor->m_renderers.movement.push(0);
+
+                        std::cout << "Updating material " << material_index << std::endl;
+                        signal_update(md, material_index);
 		}
 
 		ImGui::End();
@@ -1018,7 +1022,8 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	m_viewport.sampler = kobra::make_continuous_sampler(device);
 
 	// Attach UI layers
-	m_material_editor = std::make_shared <MaterialEditor> (this, &m_texture_loader);
+	m_material_editor = std::make_shared <MaterialEditor>
+                (this, &m_texture_loader, m_scene.system->material_daemon);
 
 	auto scene_graph = std::make_shared <SceneGraph> ();
 	scene_graph->set_scene(&m_scene);
@@ -1433,6 +1438,7 @@ void Editor::after_present()
 
         // Daemon update cycle
         transform_daemon->update();
+        update(m_scene.system->material_daemon);
 }
 
 void mouse_callback(void *us, const kobra::io::MouseEvent &event)

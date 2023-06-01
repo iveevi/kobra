@@ -19,7 +19,6 @@ inline OptixIO optix_io_create(int size = 1 << 10)
  
         int *index = (int *) cuda::alloc(sizeof(int));
         int start_index = 0;
-        // cuda::copy(index, &start_index, sizeof(int));
         cudaMemcpy(index, &start_index, sizeof(int), cudaMemcpyHostToDevice);
 
         OptixIO io;
@@ -55,8 +54,10 @@ void optix_io_write_char(OptixIO *io, char c)
         io->buffer[index] = c;
 
         // If overflow, loop back to the beginning
-        if (index == io->size - 1)
-                atomicExch(io->index, 0);
+        if (index == io->size - 1) {
+                while (atomicCAS(io->index, io->size, 0) != io->size);
+                // atomicExch(io->index, 0);
+        }
 }
 
 __forceinline__ __device__
