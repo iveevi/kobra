@@ -38,31 +38,6 @@ struct LightInfo {
 
 // TODO: reservoir buffer and etc
 // spatial resampling is done after rendering
-
-__device__
-float3 ray_at(uint3 idx)
-{
-        idx.y = parameters.resolution.y - (idx.y + 1);
-        float u = 2.0f * float(idx.x) / float(parameters.resolution.x) - 1.0f;
-        float v = 2.0f * float(idx.y) / float(parameters.resolution.y) - 1.0f;
-	return normalize(u * parameters.U - v * parameters.V + parameters.W);
-}
-
-__device__
-float4 sky_at(float3 direction)
-{
-        if (!parameters.sky.enabled)
-                return make_float4(0.0f);
-
-        float theta = acosf(direction.y);
-        float phi = atan2f(direction.z, direction.x);
-
-        float u = phi/(2.0f * PI);
-        float v = theta/PI;
-
-        return tex2D <float4> (parameters.sky.texture, u, 1 - v);
-}
-
 __device__
 float sample_light(LightInfo &light_info, float3 &seed)
 {
@@ -120,7 +95,7 @@ float sample_light(LightInfo &light_info, float3 &seed)
 
                 light_info.sky = true;
                 light_info.position = 1000 * dir;
-                light_info.emission = make_float3(sky_at(dir));
+                light_info.emission = make_float3(sky_at(parameters.sky, dir));
                 light_info.area = 4 * PI;
         }
 
@@ -128,20 +103,12 @@ float sample_light(LightInfo &light_info, float3 &seed)
         return 1.0f / (light_info.area * total);
 }
 
-__device__
-void convert_material(const cuda::_material &src, cuda::Material &dst, float2 uv)
+__forceinline__ __device__
+float3 cleanse(float3 in)
 {
-        dst.diffuse = src.diffuse;
-        dst.specular = src.specular;
-        dst.emission = src.emission;
-        dst.roughness = src.roughness;
-        dst.refraction = src.refraction;
-        dst.type = src.type;
-
-        if (src.textures.has_diffuse) {
-                float4 diffuse = tex2D <float4> (src.textures.diffuse, uv.x, uv.y);
-                dst.diffuse = make_float3(diffuse);
-        }
+        if (isnan(in.x) || isnan(in.y) || isnan(in.z))
+                return make_float3(0.0f);
+        return in;
 }
 
 __device__
@@ -181,7 +148,7 @@ float3 Ld(const SurfaceHit &sh, float3 &seed)
                 float3 wi = normalize(light_info.position - origin);
                 float R = length(light_info.position - origin);
 	
-                float3 brdf = cuda::brdf(sh, wi, sh.mat.type);
+                float3 brdf = cleanse(cuda::brdf(sh, wi, sh.mat.type));
 
                 float ldotn = light_info.sky ? 1.0f : abs(dot(light_info.normal, wi));
                 float ndotwi = abs(dot(sh.n, wi));
@@ -197,9 +164,10 @@ extern "C" __global__ void __raygen__()
 {
 	// Get the launch index
 	const uint3 idx = optixGetLaunchIndex();
+        const uint2 resolution = parameters.camera.resolution;
       
         int xoffset = idx.x * sizeof(float4);
-        int yoffset = (parameters.resolution.y - (idx.y + 1));
+        int yoffset = (resolution.y - (idx.y + 1));
 
         float4 raw_position;
         float4 raw_normal;
@@ -211,7 +179,7 @@ extern "C" __global__ void __raygen__()
         surf2Dread(&raw_uv, parameters.uv_surface, xoffset, yoffset);
 
         xoffset = idx.x * sizeof(int32_t);
-        yoffset = (parameters.resolution.y - (idx.y + 1));
+        yoffset = (resolution.y - (idx.y + 1));
 
         int32_t raw_index;
         surf2Dread(&raw_index, parameters.index_surface, xoffset, yoffset);
@@ -219,7 +187,7 @@ extern "C" __global__ void __raygen__()
         int32_t triangle_id = raw_index >> 16;
         int32_t material_id = raw_index & 0xFFFF;
         
-        int index = idx.x + idx.y * parameters.resolution.x;
+        int index = idx.x + idx.y * resolution.x;
         if (raw_index == -1) {
                 // float3 ray = ray_at(idx);
                 // parameters.color[index] = sky_at(ray);
@@ -234,7 +202,7 @@ extern "C" __global__ void __raygen__()
         float2 uv = { raw_uv.x, raw_uv.y };
 
         // Correct the normal
-        float3 ray = position - parameters.origin;
+        float3 ray = position - parameters.camera.origin;
         if (dot(ray, normal) > 0.0f)
                 normal = -normal;
 
@@ -244,7 +212,7 @@ extern "C" __global__ void __raygen__()
         
         SurfaceHit sh;
         sh.x = position;
-        sh.wo = normalize(parameters.origin - position);
+        sh.wo = normalize(parameters.camera.origin - position);
         sh.n = normalize(normal);
         sh.entering = (raw_normal.w > 0.0f);
         
@@ -297,7 +265,7 @@ extern "C" __global__ void __raygen__()
                 );
 
                 if (packet.miss) {
-                        indirect = float(N2) * make_float3(sky_at(wi));
+                        indirect = float(N2) * make_float3(sky_at(parameters.sky, wi));
                         // indirect = float(N2) * brdf * make_float3(sky_at(wi)) / pdf;
                 } else {
                         // TODO: if specular then skip direct lighting and do
@@ -339,10 +307,10 @@ extern "C" __global__ void __raygen__()
                         u = (u + 1.0f) * 0.5f;
                         v = (v + 1.0f) * 0.5f;
 
-                        int ix = u * parameters.resolution.x;
-                        int iy = v * parameters.resolution.y;
+                        int ix = u * resolution.x;
+                        int iy = v * resolution.y;
 
-                        prev_index = iy * parameters.resolution.x + ix;
+                        prev_index = iy * resolution.x + ix;
                         float4 prev_color = parameters.indirect.screen_irradiance[prev_index];
                         samples = prev_color.w >= 0 ? prev_color.w : 0;
                 }
@@ -373,7 +341,7 @@ extern "C" __global__ void __raygen__()
         float3 prev_irradiance = make_float3(parameters.indirect.screen_irradiance[prev_index]);
         if (prev_index != index) {
                 // Account for differing viewing direction
-                float3 cpos = parameters.origin;
+                float3 cpos = parameters.camera.origin;
                 float3 ppos = parameters.previous_origin;
 
                 float3 cdir = normalize(sh.x - cpos);
