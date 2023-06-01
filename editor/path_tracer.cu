@@ -140,6 +140,14 @@ void convert_material(const cuda::_material &src, cuda::Material &dst, float2 uv
         }
 }
 
+__forceinline__ __device__
+float3 cleanse(float3 in)
+{
+        if (isnan(in.x) || isnan(in.y) || isnan(in.z))
+                return make_float3(0.0f);
+        return in;
+}
+
 __device__
 float power_heuristic(float pdf1, float pdf2)
 {
@@ -186,7 +194,7 @@ float3 radiance(const SurfaceHit &sh, float3 &seed)
                 float3 wi = normalize(light_info.position - origin);
                 float R = length(light_info.position - origin);
 	
-                float3 brdf = cuda::brdf(sh, wi, sh.mat.type);
+                float3 brdf = cleanse(cuda::brdf(sh, wi, sh.mat.type));
                 float pdf = cuda::pdf(sh, wi, sh.mat.type);
 
                 float ldotn = light_info.sky ? 1.0f : abs(dot(light_info.normal, wi));
@@ -206,21 +214,22 @@ extern "C" __global__ void __raygen__()
 	// Get the launch index
 	const uint3 idx = optixGetLaunchIndex();
        
-        float4 raw_position;
-        surf2Dread(&raw_position, parameters.position_surface,
-                idx.x * sizeof(float4), parameters.resolution.y - (idx.y + 1));
-        
-        float4 raw_normal;
-        surf2Dread(&raw_normal, parameters.normal_surface,
-                idx.x * sizeof(float4), parameters.resolution.y - (idx.y + 1));
+        int xoffset = idx.x * sizeof(float4);
+        int yoffset = (parameters.resolution.y - (idx.y + 1));
 
+        float4 raw_position;
+        float4 raw_normal;
         float4 raw_uv;
-        surf2Dread(&raw_uv, parameters.uv_surface,
-                idx.x * sizeof(float4), parameters.resolution.y - (idx.y + 1));
+
+        surf2Dread(&raw_position, parameters.position_surface, xoffset, yoffset);
+        surf2Dread(&raw_normal, parameters.normal_surface, xoffset, yoffset);
+        surf2Dread(&raw_uv, parameters.uv_surface, xoffset, yoffset);
+
+        xoffset = idx.x * sizeof(int32_t);
+        yoffset = (parameters.resolution.y - (idx.y + 1));
 
         int32_t raw_index;
-        surf2Dread(&raw_index, parameters.index_surface,
-                idx.x * sizeof(int32_t), parameters.resolution.y - (idx.y + 1));
+        surf2Dread(&raw_index, parameters.index_surface, xoffset, yoffset);
 
         int32_t triangle_id = raw_index >> 16;
         int32_t material_id = raw_index & 0xFFFF;

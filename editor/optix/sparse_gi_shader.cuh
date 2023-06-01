@@ -11,6 +11,8 @@
 #include "include/cuda/material.cuh"
 #include "include/cuda/random.cuh"
 
+#define SPARSITY_SITRDE 4
+
 // Local headers
 #include "../path_tracer.cuh"
 
@@ -172,7 +174,9 @@ struct SparseGIParameters {
         struct {
                 float4 *screen_irradiance; // (R, G, B, # samples)
                 float4 *final_irradiance;
-                float3 *irradiance_directions;
+
+                float4 *irradiance_directions;
+                float *direction_samples;
 
                 // Screen space irradiance probes
                 // (R, G, B, depth) arranged in Bw x Bh grid

@@ -358,9 +358,33 @@ extern "C" __global__ void __raygen__()
         parameters.indirect.screen_irradiance[index] = make_float4(new_irradiance, samples + 1.0f);
 
         // Average indirect directions
-        float3 prev_direction = parameters.indirect.irradiance_directions[prev_index];
-        float3 new_direction = (prev_direction * samples + wi) / (samples + 1.0f);
-        parameters.indirect.irradiance_directions[index] = new_direction;
+        int dir_samples = parameters.indirect.direction_samples[index];
+        if (parameters.reset)
+                dir_samples = 0;
+
+        // Check normal consistency
+        float4 prev_direction_bundle = parameters.indirect.irradiance_directions[prev_index];
+        float3 prev_direction = make_float3(prev_direction_bundle);
+        float prev_pdf_sum = dir_samples * prev_direction_bundle.w;
+
+        float3 new_direction;
+        float new_pdf;
+
+        if (parameters.dirty) {
+                float pdf_old = cuda::pdf(sh, prev_direction, sh.mat.type);
+                float pdf_sum = pdf_old + pdf;
+                new_direction = pdf_sum > 0 ? (pdf_old * prev_direction + pdf * wi)/pdf_sum : wi;
+                new_direction = normalize(new_direction);
+                new_pdf = pdf_sum > 0 ? pdf_sum / (dir_samples + 1.0f) : 0;
+        } else {
+                float pdf_sum = prev_pdf_sum + pdf;
+                new_direction = pdf_sum > 0 ? (prev_pdf_sum * prev_direction + pdf * wi)/pdf_sum : wi;
+                new_direction = normalize(new_direction);
+                new_pdf = pdf_sum / (dir_samples + 1.0f);
+        }
+
+        parameters.indirect.irradiance_directions[index] = make_float4(new_direction, new_pdf);
+        parameters.indirect.direction_samples[index] = dir_samples + 1;
 
         // Save to previous state
         parameters.previous_position[index] = make_float4(sh.n, *reinterpret_cast <float *> (&material_id));

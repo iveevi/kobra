@@ -1076,7 +1076,7 @@ void initialize(SparseGI *sparse_gi, const Context &ctx, const OptixDeviceContex
         // Setup parameters
         sparse_gi->launch_params = {};
         sparse_gi->launch_params.samples = 0;
-        sparse_gi->launch_params.indirect.N = 3;
+        sparse_gi->launch_params.indirect.N = SPARSITY_SITRDE;
         sparse_gi->launch_params.options.direct = true;
         sparse_gi->launch_params.options.indirect = true;
         sparse_gi->launch_params.io = optix_io_create();

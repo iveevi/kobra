@@ -97,7 +97,7 @@ void gauss_filter(float4 *irradiance, float4 *out, vk::Extent2D extent)
 struct FinalGatherInfo {
         cuda::_material *materials;
         float time;
-        float3 *averaged_directions;
+        float4 *directions;
         // float3 camera;
         CameraAxis camera;
         float4 *color;
@@ -185,11 +185,12 @@ void final_gather(FinalGatherInfo info)
 
         // Get brdf value
         // TODO: get weighted average of directions (based on pdfs)
-        float3 wi = info.averaged_directions[index];
+        float3 wi = make_float3(info.directions[index]);
         float3 brdf = cuda::brdf(sh, wi, eDiffuse);
         float pdf = cuda::pdf(sh, wi, eDiffuse);
 
         float3 indirect = pdf > 0.0 ? brdf * make_float3(info.indirect_irradiance[index])/pdf : make_float3(0.0f);
+        // float3 indirect = make_float3(info.indirect_irradiance[index]);
         float3 direct = info.direct_lighting[index].data.Le;
         float3 color = info.direct * direct + info.indirect * indirect;
         info.color[index] = make_float4(color, 1.0f);
@@ -216,10 +217,13 @@ void SparseGI::render(EditorViewport *ev,
 
                 if (launch_params.indirect.irradiance_directions != 0)
                         CUDA_CHECK(cudaFree((void *) launch_params.indirect.irradiance_directions));
+                
+                if (launch_params.indirect.direction_samples != 0)
+                        CUDA_CHECK(cudaFree((void *) launch_params.indirect.direction_samples));
 
                 if (launch_params.indirect.final_irradiance != 0)
                         CUDA_CHECK(cudaFree((void *) launch_params.indirect.final_irradiance));
-
+                
                 if (launch_params.direct_lighting != 0)
                         CUDA_CHECK(cudaFree((void *) launch_params.direct_lighting));
 
@@ -227,7 +231,8 @@ void SparseGI::render(EditorViewport *ev,
                 CUDA_CHECK(cudaMalloc((void **) &launch_params.previous_position, size * sizeof(float4)));
                 CUDA_CHECK(cudaMalloc((void **) &launch_params.indirect.screen_irradiance, size * sizeof(float4)));
                 CUDA_CHECK(cudaMalloc((void **) &launch_params.indirect.final_irradiance, size * sizeof(float4)));
-                CUDA_CHECK(cudaMalloc((void **) &launch_params.indirect.irradiance_directions, size * sizeof(float3)));
+                CUDA_CHECK(cudaMalloc((void **) &launch_params.indirect.irradiance_directions, size * sizeof(float4)));
+                CUDA_CHECK(cudaMalloc((void **) &launch_params.indirect.direction_samples, size * sizeof(float)));
                 CUDA_CHECK(cudaMalloc((void **) &launch_params.direct_lighting, size * sizeof(Reservoir <DirectLightingSample>)));
         }
 
@@ -290,30 +295,16 @@ void SparseGI::render(EditorViewport *ev,
         CUDA_SYNC_CHECK();
 
         // Final gather
-        if (launch_params.samples > 0) {
-                uint blocks = (ev->extent.width * ev->extent.height + 255) / 256;
-                box_filter <<< blocks, 256 >>> (
-                        launch_params.indirect.screen_irradiance,
-                        launch_params.indirect.final_irradiance,
-                        ev->extent, launch_params.normal_surface, 1
-                );
+        uint blocks = (ev->extent.width * ev->extent.height + 255) / 256;
+        gauss_filter <<< blocks, 256 >>> (
+                launch_params.indirect.screen_irradiance,
+                launch_params.indirect.final_irradiance,
+                ev->extent // , launch_params.normal_surface
+        );
                 
-                // box_filter <<< blocks, 256 >>> (
-                //         launch_params.indirect.screen_irradiance,
-                //         launch_params.indirect.final_irradiance,
-                //         ev->extent, launch_params.normal_surface, 1
-                // );
-        } else {
-                CUDA_CHECK(cudaMemcpy(
-                        launch_params.indirect.final_irradiance,
-                        launch_params.indirect.screen_irradiance,
-                        ev->extent.width * ev->extent.height * sizeof(float4),
-                        cudaMemcpyDeviceToDevice
-                ));
-        }
 
         FinalGatherInfo info;
-        info.averaged_directions = launch_params.indirect.irradiance_directions;
+        info.directions = launch_params.indirect.irradiance_directions;
         info.camera = launch_params.camera;
         info.color = ev->common_rtx.dev_color;
         info.direct_lighting = launch_params.direct_lighting;
@@ -330,7 +321,7 @@ void SparseGI::render(EditorViewport *ev,
         info.direct = launch_params.options.direct;
         info.indirect = launch_params.options.indirect;
 
-        uint blocks = (ev->extent.width * ev->extent.height + 255) / 256;
+        blocks = (ev->extent.width * ev->extent.height + 255) / 256;
         final_gather <<< blocks, 256 >>> (info);
         CUDA_SYNC_CHECK();
         
