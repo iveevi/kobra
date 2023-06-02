@@ -361,7 +361,7 @@ extern "C" __global__ void __closesthit__()
         float2 uv2 = { v2.tex_coords.x, v2.tex_coords.y };
         float2 uv = bw * uv0 + bu * uv1 + bv * uv2;
 
-        packet->uv = { uv.x, uv.y };
+        packet->uv = { uv.x, 1 - uv.y };
 
         glm::vec3 glm_pos = bw * v0.position + bu * v1.position + bv * v2.position;
         glm_pos = hit->model * glm::vec4(glm_pos, 1.0f);

@@ -34,7 +34,7 @@ struct CommonRaytracing {
         std::vector <uint8_t> traced;
 
         float4 *dev_color = nullptr;
-        CUdeviceptr dev_traced;
+        CUdeviceptr dev_traced = 0;
 
         Timer timer;
         bool clk_rise = true;
@@ -70,6 +70,13 @@ struct SparseGI {
 
         // Resize triggers
         std::queue <vk::Extent2D> resize_queue;
+
+        // Runtime options
+        bool direct = true;
+        bool indirect = true;
+        bool irradiance = false;
+        bool mean_direction = false;
+        bool filter = true;
 
         void render(EditorViewport *, const RenderInfo &, const std::vector <Entity> &, const MaterialDaemon *);
 };

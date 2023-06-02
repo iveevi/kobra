@@ -750,134 +750,42 @@ static constexpr OptixPipelineLinkOptions pipeline_link_options = {
 // Configuring G-buffer raytracing pipeline
 void EditorViewport::configure_gbuffer_rtx()
 {
-        static constexpr const char OPTIX_PTX_FILE[] = "bin/ptx/gbuffer_rtx_shader.ptx";
+        static constexpr const char OPTIX_PTX_FILE[] = "bin/ptx/gbuffer_rtx_shader.o";
 
         // Create a context
         OptixDeviceContext context = system->context();
+        OptixModule module = optix::load_optix_module(context, OPTIX_PTX_FILE, pipeline_compile_options, module_compile_options);
+        path_tracer.module = module;
+        
+        // Load programs
+        OptixProgramGroupOptions program_options = {};
+        
+        // Descriptions of all the programs
+        std::vector <OptixProgramGroupDesc> program_descs = {
+                OPTIX_DESC_RAYGEN(module, "__raygen__"),
+                OPTIX_DESC_HIT(module, "__closesthit__"),
+                OPTIX_DESC_MISS(module, "__miss__"),
+        };
 
-        std::string contents = common::read_file(OPTIX_PTX_FILE);
-	
-        char log[2048];
-	size_t sizeof_log = sizeof(log);
-
-        OPTIX_CHECK(
-                optixModuleCreate(
-                        context,
-                        &module_compile_options,
-                        &pipeline_compile_options,
-                        contents.c_str(),
-                        contents.size(),
-                        log, &sizeof_log,
-                        &gbuffer_rtx.module
-                )
+        // Corresponding program groups
+        std::vector <OptixProgramGroup *> program_groups = {
+                &gbuffer_rtx.ray_generation,
+                &gbuffer_rtx.closest_hit,
+                &gbuffer_rtx.miss,
+        };
+        
+        optix::load_program_groups(
+                context,
+                program_descs,
+                program_options,
+                program_groups
         );
 
-        printf("Loaded module %p: %s\n", gbuffer_rtx.module, log);
-
-        OptixProgramGroupOptions program_options = {};
-
-        {
-                OptixProgramGroupDesc desc = {};
-                desc.kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
-                desc.raygen.module = gbuffer_rtx.module;
-                desc.raygen.entryFunctionName = "__raygen__";
-
-                OPTIX_CHECK(
-                        optixProgramGroupCreate(
-                                context,
-                                &desc, 1,
-                                &program_options,
-                                log, &sizeof_log,
-                                &gbuffer_rtx.ray_generation
-                        )
-                );
-
-                printf("Loaded raygen %p: %s\n", gbuffer_rtx.ray_generation, log);
-        }
-
-        {
-                OptixProgramGroupDesc desc = {};
-                desc.kind = OPTIX_PROGRAM_GROUP_KIND_MISS;
-                desc.miss.module = gbuffer_rtx.module;
-                desc.miss.entryFunctionName = "__miss__";
-
-                OPTIX_CHECK(
-                        optixProgramGroupCreate(
-                                context,
-                                &desc, 1,
-                                &program_options,
-                                log, &sizeof_log,
-                                &gbuffer_rtx.miss
-                        )
-                );
-
-                printf("Loaded miss %p: %s\n", gbuffer_rtx.miss, log);
-        }
-
-        {
-                OptixProgramGroupDesc desc = {};
-                desc.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
-                desc.hitgroup.moduleCH = gbuffer_rtx.module;
-                desc.hitgroup.entryFunctionNameCH = "__closesthit__";
-
-                OPTIX_CHECK(
-                        optixProgramGroupCreate(
-                                context,
-                                &desc, 1,
-                                &program_options,
-                                log, &sizeof_log,
-                                &gbuffer_rtx.closest_hit
-                        )
-                );
-
-                printf("Loaded closest hit %p: %s\n", gbuffer_rtx.closest_hit, log);
-        }
-
-        // Create pipeline
-        OptixProgramGroup program_groups[] = {
+        gbuffer_rtx.pipeline = optix::link_optix_pipeline(context, {
                 gbuffer_rtx.ray_generation,
                 gbuffer_rtx.closest_hit,
                 gbuffer_rtx.miss,
-        };
-
-        OPTIX_CHECK(
-                optixPipelineCreate(context,
-                        &pipeline_compile_options,
-                        &pipeline_link_options,
-                        program_groups, 3,
-                        log, &sizeof_log,
-                        &gbuffer_rtx.pipeline)
-        );
-
-        printf("Loaded pipeline %p: %s\n", gbuffer_rtx.pipeline, log);
-
-        // Configure stacks
-        OptixStackSizes stack_sizes = {};
-        OPTIX_CHECK(optixUtilAccumulateStackSizes(gbuffer_rtx.closest_hit, &stack_sizes, gbuffer_rtx.pipeline));
-        OPTIX_CHECK(optixUtilAccumulateStackSizes(gbuffer_rtx.miss, &stack_sizes, gbuffer_rtx.pipeline));
-        OPTIX_CHECK(optixUtilAccumulateStackSizes(gbuffer_rtx.ray_generation, &stack_sizes, gbuffer_rtx.pipeline));
-
-        uint32_t max_trace_depth = 1;
-        uint32_t max_cc_depth = 0;
-        uint32_t max_dc_depth = 0;
-        uint32_t direct_callable_stack_size_from_traversal = 0;
-        uint32_t direct_callable_stack_size_from_state = 0;
-        uint32_t continuation_stack_size = 0;
-
-        OPTIX_CHECK(
-                optixUtilComputeStackSizes(&stack_sizes,
-                        max_trace_depth, max_cc_depth, max_dc_depth,
-                        &direct_callable_stack_size_from_traversal,
-                        &direct_callable_stack_size_from_state,
-                        &continuation_stack_size)
-        );
-
-        OPTIX_CHECK(
-                optixPipelineSetStackSize(gbuffer_rtx.pipeline,
-                        direct_callable_stack_size_from_traversal,
-                        direct_callable_stack_size_from_state,
-                        continuation_stack_size, 2)
-        );
+        }, pipeline_compile_options, pipeline_link_options);
 
         // Create shader binding table
         gbuffer_rtx.sbt = {};
@@ -926,12 +834,6 @@ void EditorViewport::configure_path_tracer(const Context &ctx)
 
         // Create a context
         OptixDeviceContext context = system->context();
-
-        std::string contents = common::read_file(OPTIX_PTX_FILE);
-	
-        char log[2048];
-	size_t sizeof_log = sizeof(log);
-
         OptixModule module = optix::load_optix_module(context, OPTIX_PTX_FILE, pipeline_compile_options, module_compile_options);
         path_tracer.module = module;
         
@@ -1076,9 +978,8 @@ void initialize(SparseGI *sparse_gi, const Context &ctx, const OptixDeviceContex
         // Setup parameters
         sparse_gi->launch_params = {};
         sparse_gi->launch_params.samples = 0;
-        sparse_gi->launch_params.indirect.N = SPARSITY_SITRDE;
-        sparse_gi->launch_params.options.direct = true;
-        sparse_gi->launch_params.options.indirect = true;
+        sparse_gi->launch_params.counter = 0;
+        sparse_gi->launch_params.indirect.N = SPARSITY_STRIDE;
         sparse_gi->launch_params.io = optix_io_create();
 
         // Allocate parameters up front

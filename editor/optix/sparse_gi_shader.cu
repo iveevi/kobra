@@ -225,12 +225,13 @@ extern "C" __global__ void __raygen__()
 
         int N = parameters.indirect.N;
         int N2 = N * N;
+        uint2 blocks = make_uint2(resolution.x / N, resolution.y / N);
         uint2 coord = make_uint2(idx.x/N, idx.y/N);
+        uint block_index = coord.x + coord.y * blocks.x;
+        uint offset = parameters.indirect.block_offsets[block_index];
         uint2 local = make_uint2(idx.x % N, idx.y % N);
         uint local_index = local.x + local.y * N;
-        uint neg_samples = N2 + (-parameters.samples) % N2;
-        uint offset = (coord.y % 2 == 0) ? parameters.samples : neg_samples;
-        offset = (local_index + offset) % N2;
+        offset = (local_index + offset + parameters.counter) % (N2/2);
 
         // TODO: 2/N2 samples will have secondary bounces, one of which will
         // have third bounces purely for indirect cache
@@ -265,7 +266,7 @@ extern "C" __global__ void __raygen__()
                 );
 
                 if (packet.miss) {
-                        indirect = float(N2) * make_float3(sky_at(parameters.sky, wi));
+                        indirect = float(N2/2) * make_float3(sky_at(parameters.sky, wi));
                         // indirect = float(N2) * brdf * make_float3(sky_at(wi)) / pdf;
                 } else {
                         // TODO: if specular then skip direct lighting and do
@@ -281,7 +282,7 @@ extern "C" __global__ void __raygen__()
                         convert_material(m, sh.mat, packet.uv);
 
                         // indirect = float(N2) * brdf * sh.mat.emission * abs(dot(sh.n, wi)) / pdf;
-                        indirect = float(N2) * sh.mat.emission * abs(dot(sh.n, wi));
+                        indirect = float(N2/2) * sh.mat.emission * abs(dot(sh.n, wi));
 
                         // TODO: cache irradiance
                 }
@@ -354,8 +355,8 @@ extern "C" __global__ void __raygen__()
         if (parameters.reset)
                 samples = 0;
 
-        float3 new_irradiance = (prev_irradiance * samples + indirect) / (samples + 1.0f);
-        parameters.indirect.screen_irradiance[index] = make_float4(new_irradiance, samples + 1.0f);
+        float3 new_irradiance = (prev_irradiance * samples + indirect)/(samples + 1.0f);
+        parameters.indirect.screen_irradiance[index] = make_float4(cleanse(new_irradiance), samples + 1.0f);
 
         // Average indirect directions
         int dir_samples = parameters.indirect.direction_samples[index];
@@ -429,7 +430,7 @@ extern "C" __global__ void __closesthit__()
         float2 uv2 = { v2.tex_coords.x, v2.tex_coords.y };
         float2 uv = bw * uv0 + bu * uv1 + bv * uv2;
 
-        packet->uv = { uv.x, uv.y };
+        packet->uv = { uv.x, 1 - uv.y };
 
         glm::vec3 glm_pos = bw * v0.position + bu * v1.position + bv * v2.position;
         glm_pos = hit->model * glm::vec4(glm_pos, 1.0f);

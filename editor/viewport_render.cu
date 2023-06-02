@@ -69,13 +69,18 @@ static cuda::_material convert_material(const Material &material, TextureLoader 
 }
 
 // TODO: store texture loader and device...
+// TODO: common rtx method and header
 void update_materials(CommonRaytracing *crtx, const MaterialDaemon *md, TextureLoader *texture_loader, const vk::raii::Device &device)
 {
         // TODO: only update if necessary
-        if (crtx->dev_materials && crtx->material_update_queue.empty())
+        bool valid_materials = (crtx->dev_materials != 0);
+        bool no_updates = crtx->material_update_queue.empty();
+        bool size_match = (crtx->materials.size() == md->materials.size());
+        if (valid_materials && no_updates && size_match)
                 return;
 
-        std::cout << "Updating materials" << std::endl;
+        // TODO: logf for formatted
+        printf("Updating materials (%d, %d, %d)\n", valid_materials, no_updates, size_match);
 
         // if ()
         // TODO: only update the materials that have changed
@@ -95,6 +100,7 @@ void update_materials(CommonRaytracing *crtx, const MaterialDaemon *md, TextureL
 }
 
 // Prerender process for raytracing
+// TODO: common rtx method...
 void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
                 const TransformDaemon *td,
                 const MaterialDaemon *md)
@@ -128,20 +134,17 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
                                 common_rtx.records.emplace_back();
 
                                 optix::Record <Hit> record;
-                                // optix::pack_header(gbuffer_rtx.closest_hit, record);
 
                                 auto cachelet = mesh_memory->get(entity.id, i);
-
                                 record.data.vertices = cachelet.m_cuda_vertices;
                                 record.data.triangles = (uint3 *) cachelet.m_cuda_triangles;
                                 record.data.model = transform.matrix();
                                 record.data.index = meshes[i].material_index;
+                                assert(record.data.index < md->materials.size());
+                                assert(record.data.index >= 0);
 
                                 common_rtx.records[new_index] = record;
 
-                                // If this is an area light, also add
-                                // information...
-                                // const Material &material = Material::all[meshes[i].material_index];
                                 const Material &material = md->materials[meshes[i].material_index];
                                 if (glm::length(material.emission) > 1e-3f) {
                                         // TODO: do we really need another
@@ -219,17 +222,6 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
                 path_tracer.sbt.hitgroupRecordBase = cuda::make_buffer_ptr(common_rtx.records);
                 path_tracer.sbt.hitgroupRecordStrideInBytes = sizeof(optix::Record <Hit>);
                 path_tracer.sbt.hitgroupRecordCount = common_rtx.records.size();
-
-                // Load all materials
-                // common_rtx.materials.clear();
-                // // for (const auto &material : Material::all) {
-                // for (const auto &material : md->materials) {
-                //         common_rtx.materials.push_back(
-                //                 convert_material(material, *texture_loader, *device)
-                //         );
-                // }
-                //
-                // common_rtx.dev_materials = cuda::make_buffer_ptr(common_rtx.materials);
 
                 // Update lights for the sparse GI algorithm
                 sparse_gi.launch_params.area.lights = 0;
@@ -514,6 +506,8 @@ void EditorViewport::render_path_traced
                         extent.width, extent.height, 1
                 )
         );
+
+        CUDA_SYNC_CHECK();
 }
 
 void EditorViewport::render_albedo(const RenderInfo &render_info,
@@ -1016,7 +1010,7 @@ static void show_mode_submenu(RenderState *render_state, const _submenu_args &ar
                 { RenderState::eSparseGlobalIllumination, "Sparse Global Illumination" },
                 { RenderState::ePathTraced, "Path Traced (G-buffer)" },
         };
-		
+
         // Mode-specific settings
         std::string mode_string = "?";
         if (modes.count(render_state->mode))
@@ -1030,13 +1024,28 @@ static void show_mode_submenu(RenderState *render_state, const _submenu_args &ar
                         auto *sparse_gi = args.sparse_gi;
                         if (ImGui::SliderInt("Depth", &sparse_gi->depth, 1, 10));
 
-                        if (ImGui::Checkbox("Direct Lighting", &sparse_gi->launch_params.options.direct)) {
-                                std::cout << "Direct lighting: " << sparse_gi->launch_params.options.direct << std::endl;
+                        if (ImGui::Checkbox("Direct Lighting", &sparse_gi->direct)) {
+                                std::cout << "Direct lighting: " << sparse_gi->direct << std::endl;
                                 sparse_gi->manual_reset = true;
                         }
 
-                        if (ImGui::Checkbox("Indirect Lighting", &sparse_gi->launch_params.options.indirect)) {
-                                std::cout << "Indirect lighting: " << sparse_gi->launch_params.options.indirect << std::endl;
+                        if (ImGui::Checkbox("Indirect Lighting", &sparse_gi->indirect)) {
+                                std::cout << "Indirect lighting: " << sparse_gi->indirect << std::endl;
+                                sparse_gi->manual_reset = true;
+                        }
+
+                        if (ImGui::Checkbox("Irradiance", &sparse_gi->irradiance)) {
+                                std::cout << "Irradiance: " << sparse_gi->irradiance << std::endl;
+                                sparse_gi->manual_reset = true;
+                        }
+
+                        if (ImGui::Checkbox("Mean Direction", &sparse_gi->mean_direction)) {
+                                std::cout << "Mean direction: " << sparse_gi->mean_direction << std::endl;
+                                sparse_gi->manual_reset = true;
+                        }
+
+                        if (ImGui::Checkbox("Filter Irradiance", &sparse_gi->filter)) {
+                                std::cout << "Filter irradiance: " << sparse_gi->filter << std::endl;
                                 sparse_gi->manual_reset = true;
                         }
                 }

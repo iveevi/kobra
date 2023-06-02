@@ -135,10 +135,12 @@ add_executable(editor
         editor.cu
         editor/editor_viewport.cu
         editor/inspector.cpp
+        editor/material_preview.cpp
         editor/scene_graph.cpp
         editor/shaders.cpp
         editor/sparse_gi.cu
         editor/startup.cpp
+        editor/ui/material_editor.cpp
         editor/viewport_configure.cu
         editor/viewport_render.cu
         $<TARGET_OBJECTS:Kobra_COMMON>

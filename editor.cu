@@ -4,14 +4,12 @@
 #include "editor/material_preview.hpp"
 #include "editor/scene_graph.hpp"
 #include "editor/startup.hpp"
+#include "editor/ui/material_editor.hpp"
 
 // Forward declarations
 struct ProgressBar;
 struct Console;
-struct MaterialEditor;
-// struct RTXRenderer;
 struct Viewport;
-// struct SceneGraph;
 struct EntityProperties;
 
 // TODO: add updated (emissive) materials as lights...
@@ -21,62 +19,7 @@ struct EntityProperties;
 // TODO: viewport attachment
 
 Application g_application;
-
-struct WindowBounds {
-        glm::vec2 min;
-        glm::vec2 max;
-};
-
-inline bool within(const glm::vec2 &x, const WindowBounds &wb)
-{
-        return x.x >= wb.min.x && x.x <= wb.max.x
-                && x.y >= wb.min.y && x.y <= wb.max.y;
-}
-
-inline glm::vec2 normalize(const glm::vec2 &x, const WindowBounds &wb)
-{
-        return glm::vec2 {
-                (x.x - wb.min.x) / (wb.max.x - wb.min.x),
-                (x.y - wb.min.y) / (wb.max.y - wb.min.y),
-        };
-}
-
-struct InputRequest {
-        glm::vec2 position;
-        glm::vec2 delta;
-        glm::vec2 start;
-        
-        enum {
-                eNone,
-                ePress,
-                eRelease,
-                eDrag
-        } type;
-};
-
-struct InputContext {
-        // Viewport window
-        struct : WindowBounds {
-                float sensitivity = 0.001f;
-                float yaw = 0.0f;
-                float pitch = 0.0f;
-                bool dragging = false;
-        } viewport;
-
-        // Material preview window
-        struct : WindowBounds {
-                float sensitivity = 0.05f;
-                bool dragging = false;
-        } material_preview;
-
-        // Input requests
-        std::queue <InputRequest> requests;
-
-        // Dragging states
-        bool dragging = false;
-        bool alt_dragging = false;
-        glm::vec2 drag_start;
-} input_context;
+InputContext input_context;
 
 // TODO: only keep the state here...
 struct Editor : public kobra::BaseApp {
@@ -193,10 +136,10 @@ int main()
 		},
         };
 
-        // startup->run();
+        startup->run();
         delete startup;
 
-        g_application.project = "scene";
+        // g_application.project = "scene";
         if (g_application.project.empty())
                 return 0;
 
@@ -299,274 +242,6 @@ struct Console : public kobra::ui::ImGuiAttachment {
 		ImGui::End();
 	}
 };
-
-// Material editor UI attachment
-class MaterialEditor : public kobra::ui::ImGuiAttachment {
-	int m_prev_material_index = -1;
-
-        vk::Sampler sampler;
-        vk::DescriptorSet dset_material_preview;
-
-	vk::DescriptorSet m_diffuse_set;
-	vk::DescriptorSet m_normal_set;
-
-	glm::vec3 emission_base = glm::vec3(0.0f);
-	float emission_strength = 0.0f;
-
-	Editor *m_editor = nullptr;
-	kobra::TextureLoader *m_texture_loader = nullptr;
-
-	vk::DescriptorSet imgui_allocate_image(const std::string &path) {
-		const kobra::ImageData &image = m_texture_loader->load_texture(path);
-		const vk::raii::Sampler &sampler = m_texture_loader->load_sampler(path);
-
-		return ImGui_ImplVulkan_AddTexture(
-			static_cast <VkSampler> (*sampler),
-			static_cast <VkImageView> (*image.view),
-			static_cast <VkImageLayout> (image.layout)
-		);
-	}
-public:
-        MaterialDaemon *md = nullptr;
-	int material_index = -1;
-
-	MaterialEditor() = delete;
-	MaterialEditor(Editor *editor, kobra::TextureLoader *texture_loader, MaterialDaemon *md_)
-			: m_editor { editor }, m_texture_loader { texture_loader }, md { md_ } {
-                // Allocate the material preview descriptor set
-                vk::SamplerCreateInfo sampler_info {
-                        {}, vk::Filter::eLinear, vk::Filter::eLinear,
-                        vk::SamplerMipmapMode::eLinear,
-                        vk::SamplerAddressMode::eRepeat,
-                        vk::SamplerAddressMode::eRepeat,
-                        vk::SamplerAddressMode::eRepeat,
-                        0.0f, VK_FALSE, 16.0f, VK_FALSE,
-                        vk::CompareOp::eNever, 0.0f, 0.0f,
-                        vk::BorderColor::eFloatOpaqueWhite, VK_FALSE
-                };
-
-                sampler = (*m_editor->device).createSampler(sampler_info);
-
-                MaterialPreview *mp = m_editor->material_preview;
-                dset_material_preview = ImGui_ImplVulkan_AddTexture(
-                        static_cast <VkSampler> (sampler),
-                        static_cast <VkImageView> (mp->display.view),
-                        static_cast <VkImageLayout> (vk::ImageLayout::eGeneral)
-                );
-        }
-
-        ~MaterialEditor() {
-                (*m_editor->device).destroySampler(sampler);
-                // ImGui_ImplVulkan_RemoveTexture(static_cast <VkDescriptorSet> (dset_material_preview));
-        }
-
-	void render() override {
-		ImGui::Begin("Material Editor");
-		if (material_index < 0) {
-                        input_context.material_preview.min = glm::vec2 { -1.0f, -1.0f };
-                        input_context.material_preview.max = glm::vec2 { -1.0f, -1.0f };
-			ImGui::End();
-			return;
-		}
-
-                // TODO: need to make this a bit more dynamic
-                // and leave space for the material data...
-
-                // Transfer material properties to the material preview renderer
-                MaterialPreview *mp = m_editor->material_preview;
-                mp->index = material_index;
-
-                ImGui::Image(dset_material_preview, ImVec2(256, 256));
-
-                ImVec2 pmin = ImGui::GetItemRectMin();
-                ImVec2 pmax = ImGui::GetItemRectMax();
-
-                ImGui::GetForegroundDrawList()->AddRect(pmin, pmax, IM_COL32(255, 255, 0, 255));
-
-                input_context.material_preview.min = glm::vec2 { pmin.x, pmin.y };
-                input_context.material_preview.max = glm::vec2 { pmax.x, pmax.y };
-
-		// Check if it is a new material
-		bool is_not_loaded = m_prev_material_index != material_index;
-		m_prev_material_index = material_index;
-
-		// For starters, print material data
-		ImGui::Text("Material data:");
-		ImGui::Separator();
-
-		// kobra::Material *material = &kobra::Material::all[material_index];
-                System *system = m_editor->m_scene.system.get();
-                MaterialDaemon *md = system->material_daemon;
-                kobra::Material *material = &md->materials[material_index];
-
-		glm::vec3 diffuse = material->diffuse;
-		glm::vec3 specular = material->specular;
-		// glm::vec3 ambient = material->ambient; TODO: remove this
-		// property...
-		float roughness = material->roughness;
-
-		// Decompose the emission if it is not loaded
-		if (is_not_loaded) {
-			emission_base = glm::vec3(0.0f);
-			emission_strength = 0.0f;
-
-			// If any component is greater than 1, normalize it
-			glm::vec3 emission = material->emission;
-			if (emission.r > 1.0f || emission.g > 1.0f || emission.b > 1.0f) {
-				emission_strength = glm::length(emission);
-				emission_base = emission / emission_strength;
-			}
-		}
-
-		bool updated_material = false;
-
-		if (ImGui::ColorEdit3("Diffuse", &diffuse.r)) {
-			material->diffuse = diffuse;
-			updated_material = true;
-		}
-
-		if (ImGui::ColorEdit3("Specular", &specular.r)) {
-			material->specular = specular;
-			updated_material = true;
-		}
-
-		// TODO: remove ambient from material
-
-		// TODO: use an HSL color picker + intensity slider
-		if (ImGui::ColorEdit3("Emission", &emission_base.r)) {
-			material->emission = emission_strength * emission_base;
-			updated_material = true;
-		}
-
-		if (ImGui::SliderFloat("Intensity", &emission_strength, 0.0f, 1000.0f)) {
-			material->emission = emission_strength * emission_base;
-			updated_material = true;
-		}
-
-		// TODO: emission intensity
-		if (ImGui::SliderFloat("Roughness", &roughness, 0.0f, 1.0f)) {
-			material->roughness = std::max(roughness, 0.001f);
-			updated_material = true;
-		}
-
-		// Transmission index of refraction
-		if (ImGui::SliderFloat("IOR", &material->refraction, 1.0f, 3.0f))
-			updated_material = true;
-
-		// TODO: option for transmission
-		bool transmission = (material->type == eTransmission);
-		if (ImGui::Checkbox("Transmission", &transmission)) {
-			material->type = transmission ? eTransmission : eDiffuse;
-			updated_material = true;
-		}
-
-		ImGui::Separator();
-
-		if (material->has_albedo()) {
-			ImGui::Text("Diffuse Texture:");
-
-			std::string diffuse_path = material->diffuse_texture;
-			if (is_not_loaded)
-				m_diffuse_set = imgui_allocate_image(diffuse_path);
-
-			ImGui::Image(m_diffuse_set, ImVec2(256, 256));
-			ImGui::Separator();
-		}
-
-		if (material->has_normal()) {
-			ImGui::Text("Normal Texture:");
-
-			std::string normal_path = material->normal_texture;
-			if (is_not_loaded)
-				m_normal_set = imgui_allocate_image(normal_path);
-
-			ImGui::Image(m_normal_set, ImVec2(256, 256));
-			ImGui::Separator();
-		}
-
-		// Notify the daemon that the material has been updated
-		if (updated_material) {
-			// kobra::Material::daemon.update(material_index);
-			std::lock_guard <std::mutex> lock_guard
-				(m_editor->m_renderers.movement_mutex);
-			m_editor->m_renderers.movement.push(0);
-
-                        std::cout << "Updating material " << material_index << std::endl;
-                        signal_update(md, material_index);
-		}
-
-		ImGui::End();
-	}
-};
-
-// void load_attachment(Editor *editor)
-// {
-// 	std::cout << "Loading RTX plugin..." << std::endl;
-//
-// 	std::string current_path = std::filesystem::current_path();
-// 	nfdchar_t *path = nullptr;
-// 	nfdfilteritem_t filter = {"RTX Plugin", "rtxa"};
-// 	nfdresult_t result = NFD_OpenDialog(&path, &filter, 1, current_path.c_str());
-//
-// 	if (result == NFD_OKAY) {
-// 		std::cout << "Loading " << path << std::endl;
-//
-// 		void *handle = dlopen(path, RTLD_LAZY);
-// 		if (!handle) {
-// 			std::cerr << "Error: " << dlerror() << std::endl;
-// 			return;
-// 		}
-//
-// 		// Load the plugin
-// 		struct Attachment {
-// 			const char *name;
-// 			kobra::amadeus::AttachmentRTX *ptr;
-// 		};
-//
-// 		typedef Attachment (*plugin_t)();
-//
-// 		plugin_t plugin = (plugin_t) dlsym(handle, "load_attachment");
-// 		if (!plugin) {
-// 			kobra::logger("Editor::load_attachment", kobra::Log::ERROR)
-// 				<< "Error: " << dlerror() << "\n";
-// 			return;
-// 		}
-//
-// 		// TODO: use rtxa extension, and ignore metadata
-// 		std::cout << "Loading plugin..." << std::endl;
-// 		Attachment attachment = plugin();
-// 		std::cout << "Attachment loaded: " << attachment.name << "@" << attachment.ptr << std::endl;
-// 		if (!attachment.ptr) {
-// 			KOBRA_LOG_FILE(kobra::Log::ERROR) << "Error: plugin is null\n";
-// 			dlclose(handle);
-// 			return;
-// 		}
-//
-// 		editor->m_renderers.armada_rtx->attach(
-// 			attachment.name,
-// 			std::shared_ptr <kobra::amadeus::AttachmentRTX> (attachment.ptr)
-// 		);
-//
-// 		{
-// 			std::lock_guard <std::mutex> lock_guard
-// 				(editor->m_renderers.movement_mutex);
-// 			editor->m_renderers.movement.push(0);
-// 		}
-//
-// 		std::cout << "All attachments:" << std::endl;
-// 		for (auto &attachment : editor->m_renderers.armada_rtx->attachments()) {
-// 			std::cout << "\t" << attachment << std::endl;
-// 		}
-//
-// 		dlclose(handle);
-//
-// 		// Signal
-// 	} else if (result == NFD_CANCEL) {
-// 		std::cout << "User cancelled" << std::endl;
-// 	} else {
-// 		std::cout << "Error: " << NFD_GetError() << std::endl;
-// 	}
-// }
 
 void request_capture(Editor *editor)
 {
@@ -1023,7 +698,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 
 	// Attach UI layers
 	m_material_editor = std::make_shared <MaterialEditor>
-                (this, &m_texture_loader, m_scene.system->material_daemon);
+                (*device, material_preview, &m_texture_loader, m_scene.system->material_daemon);
 
 	auto scene_graph = std::make_shared <SceneGraph> ();
 	scene_graph->set_scene(&m_scene);

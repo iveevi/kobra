@@ -11,7 +11,7 @@
 #include "include/cuda/material.cuh"
 #include "include/cuda/random.cuh"
 
-#define SPARSITY_SITRDE 4
+#define SPARSITY_STRIDE 4
 
 // Local headers
 #include "../path_tracer.cuh"
@@ -54,6 +54,7 @@ void convert_material(const cuda::_material &src, cuda::Material &dst, float2 uv
 }
 
 // Reservoir sample and structure
+// TODO: struct of arrays instead
 template <class T>
 struct Reservoir {
 	T data;
@@ -120,6 +121,17 @@ struct DirectLightingSample {
 	int type;
 };
 
+// Irradiance probe
+struct IrradianceProbe {
+        constexpr static int N = SPARSITY_STRIDE;
+
+        // Layed out using octahedral projection
+        float3 values[N * N];
+        float pdfs[N * N];
+        float depth[N * N];
+        float3 normal;
+};
+
 // Orthogonal camera axis
 struct CameraAxis {
         float3 U;
@@ -135,10 +147,11 @@ struct SparseGIParameters {
         OptixTraversableHandle handle;
 
         // Global parameters
-        float time;
-        bool reset;
         bool dirty;
+        bool reset;
+        float time;
         int samples;
+        uint counter;
 
         // Previous camera matrices
         glm::mat4 previous_view;
@@ -172,8 +185,11 @@ struct SparseGIParameters {
 
         // Indirect lighting caches
         struct {
+                uint *block_offsets;
+
                 float4 *screen_irradiance; // (R, G, B, # samples)
                 float4 *final_irradiance;
+                float *irradiance_samples;
 
                 float4 *irradiance_directions;
                 float *direction_samples;
@@ -185,12 +201,6 @@ struct SparseGIParameters {
                 int N;
         } indirect;
 
-        // Additional options during rendering
-        struct {
-                bool direct;
-                bool indirect;
-        } options;
-        
         // IO interface
         OptixIO io;
 };

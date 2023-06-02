@@ -53,6 +53,65 @@
 // Aliasing declarations
 using namespace kobra;
 
+struct WindowBounds {
+        glm::vec2 min;
+        glm::vec2 max;
+};
+
+inline bool within(const glm::vec2 &x, const WindowBounds &wb)
+{
+        return x.x >= wb.min.x && x.x <= wb.max.x
+                && x.y >= wb.min.y && x.y <= wb.max.y;
+}
+
+inline glm::vec2 normalize(const glm::vec2 &x, const WindowBounds &wb)
+{
+        return glm::vec2 {
+                (x.x - wb.min.x) / (wb.max.x - wb.min.x),
+                (x.y - wb.min.y) / (wb.max.y - wb.min.y),
+        };
+}
+
+// Input event handling
+struct InputRequest {
+        glm::vec2 position;
+        glm::vec2 delta;
+        glm::vec2 start;
+        
+        enum {
+                eNone,
+                ePress,
+                eRelease,
+                eDrag
+        } type;
+};
+
+struct InputContext {
+        // Viewport window
+        struct : WindowBounds {
+                float sensitivity = 0.001f;
+                float yaw = 0.0f;
+                float pitch = 0.0f;
+                bool dragging = false;
+        } viewport;
+
+        // Material preview window
+        struct : WindowBounds {
+                float sensitivity = 0.05f;
+                bool dragging = false;
+        } material_preview;
+
+        // Input requests
+        std::queue <InputRequest> requests;
+
+        // Dragging states
+        bool dragging = false;
+        bool alt_dragging = false;
+        glm::vec2 drag_start;
+};
+
+extern InputContext input_context; // TODO: g_input_context
+
 // Render packet information
 struct RenderInfo {
         Camera camera;

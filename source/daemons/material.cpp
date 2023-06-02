@@ -106,8 +106,10 @@ int32_t load(MaterialDaemon *daemon, const std::filesystem::path &path)
         }
 
         Material material = load_material(file);
-        if (daemon->lookup.find(material.name) != daemon->lookup.end())
+        if (daemon->lookup.find(material.name) != daemon->lookup.end()) {
+                std::cout << "Material already loaded: " << material.name << std::endl;
                 return daemon->lookup[material.name];
+        }
 
         int32_t id = daemon->materials.size();
         daemon->materials.push_back(material);
@@ -119,8 +121,10 @@ int32_t load(MaterialDaemon *daemon, const std::filesystem::path &path)
 
 int32_t load(MaterialDaemon *daemon, const Material &material)
 {
-        if (daemon->lookup.find(material.name) != daemon->lookup.end())
+        if (daemon->lookup.find(material.name) != daemon->lookup.end()) {
+                std::cout << "Material already loaded: " << material.name << std::endl;
                 return daemon->lookup[material.name];
+        }
 
         int32_t id = daemon->materials.size();
         daemon->materials.push_back(material);
