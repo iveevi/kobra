@@ -210,9 +210,11 @@ void irradiance_filter(IrradianceFilterInfo info)
                         float3 new_normal = make_float3(raw_new_normal);
                         float3 new_mean_direction = make_float3(info.mean_directions[new_pos.x + new_pos.y * width]);
 
-                        if (raw_new_index == -1
-                                || dot(normal, new_normal) < 0.4f
-                                || length(new_position - position) > 0.5f)
+                        // if (raw_new_index == -1
+                        //         || dot(normal, new_normal) < 0.4f
+                        //         || length(new_position - position) > 0.1f)
+                        //         continue;
+                        if (raw_new_index == -1 || dot(normal, new_normal) < 0.4f)
                                 continue;
 
                         float w = abs(dot(new_mean_direction, normal)/dot(mean_direction, normal));
@@ -412,7 +414,10 @@ void SparseGI::render(EditorViewport *ev,
         launch_params.dirty = render_info.camera_transform_dirty;
         launch_params.reset = ev->render_state.sparse_gi_reset
                         | ev->common_rtx.material_reset
+                        | ev->common_rtx.transform_reset
                         | manual_reset;
+
+        // TODO: these samples are not useful...
         launch_params.samples++;
 
         uint N = launch_params.indirect.N;
@@ -421,12 +426,13 @@ void SparseGI::render(EditorViewport *ev,
         if (launch_params.reset)
                 manual_reset = false;
 
+        // TODO: move to common rtx
         ev->render_state.sparse_gi_reset = false;
-        if (ev->render_state.sparse_gi_reset) {
-                launch_params.previous_view = camera.view_matrix(camera_transform);
-                launch_params.previous_projection = camera.perspective_matrix();
-                launch_params.samples = 0;
-        }
+        // if (ev->render_state.sparse_gi_reset) {
+        //         launch_params.previous_view = camera.view_matrix(camera_transform);
+        //         launch_params.previous_projection = camera.perspective_matrix();
+        //         launch_params.samples = 0;
+        // }
 
         // Configure camera axis
         auto uvw = uvw_frame(camera, camera_transform);

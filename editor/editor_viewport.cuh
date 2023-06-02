@@ -37,11 +37,19 @@ struct CommonRaytracing {
         CUdeviceptr dev_traced = 0;
 
         Timer timer;
-        bool clk_rise = true;
 
-        // Material update queue
+        // Update states
         std::queue <int32_t> material_update_queue;
+        
+        bool clk_rise = true;
         bool material_reset = false;
+        bool transform_reset = false;
+
+        void reset() {
+                clk_rise = true;
+                material_reset = false;
+                transform_reset = false;
+        }
 };
 
 void update_materials(CommonRaytracing *, const MaterialDaemon *, TextureLoader *, const Device *);

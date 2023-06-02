@@ -143,9 +143,9 @@ struct RenderState {
                 eTextureCoordinates,
                 eAlbedo,
                 eSparseGlobalIllumination,
-                ePathTraced,
+                ePathTracer,
                 // ePathTraced_Amadeus
-        } mode = ePathTraced;
+        } mode = ePathTracer;
 
         enum {
                 eRasterized,
@@ -155,6 +155,7 @@ struct RenderState {
         bool bounding_boxes = false;
         bool initialized = false;
         bool sparse_gi_reset = false;
+        bool path_tracer_reset = false;
 };
 
 // Modules within the editor rendering pipeline

@@ -52,10 +52,10 @@ struct Material {
 
 	// Construct the default material
 	// NOTE: different from the uninitialized material
-	static Material default_material() {
+	static Material default_material(const std::string &name) {
                 // TODO: mathod in the material daemon instead...
 		Material mat;
-		mat.name = "default";
+		mat.name = name;
 		mat.diffuse = glm::vec3 {1, 0, 1};
 		mat.specular = glm::vec3 { 0.5f };
 		mat.roughness = 0.2f;

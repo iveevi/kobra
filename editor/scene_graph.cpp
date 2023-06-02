@@ -5,7 +5,25 @@
 #include "scene_graph.hpp"
 
 using namespace kobra;
-	
+
+int duplicate_count(System *system, const std::string &name)
+{
+        int max = 0;
+        for (auto &entity : system->entities) {
+                // Look for entities "[name] (count)"
+                if (entity.name.find(name) == 0) {
+                        std::string suffix = entity.name.substr(name.size());
+                        if (suffix.size() > 0 && suffix[0] == ' ') {
+                                suffix = suffix.substr(1);
+                                if (std::all_of(suffix.begin(), suffix.end(), isdigit))
+                                        max = std::max(max, std::stoi(suffix));
+                        }
+                }
+        }
+
+        return max;
+}
+
 void SceneGraph::set_scene(const Scene *scene)
 {
         m_scene = scene;
@@ -45,22 +63,23 @@ void SceneGraph::render()
                                 if (ImGui::MenuItem("Box")) {
                                         Mesh box = Mesh::box();
                                         // TODO: method to request new material from a daemon...
-                                        // box.submeshes[0].material_index = Material::all.size();
-                                        // Material::all.push_back(Material::default_material());
-                                        int32_t index = load(md, Material::default_material());
+                                        int count = duplicate_count(system, "Box");
+                                        int32_t index = load(md, Material::default_material("box_" + std::to_string(count + 1) + "_material"));
                                         box.submeshes[0].material_index = index;
-                                        auto &entity = system->make_entity("Box");
+
+                                        auto &entity = system->make_entity("Box " + std::to_string(count + 1));
                                         entity.add <Mesh> (box);
                                         entity.add <Renderable> (g_application.context, &entity.get <Mesh> ());
                                 }
 
                                 if (ImGui::MenuItem("Plane")) {
                                         Mesh plane = Mesh::plane();
-                                        // plane.submeshes[0].material_index = Material::all.size();
-                                        // Material::all.push_back(Material::default_material());
-                                        int32_t index = load(md, Material::default_material());
+                                        
+                                        int count = duplicate_count(system, "Plane");
+                                        int32_t index = load(md, Material::default_material("plane_" + std::to_string(count + 1) + "_material"));
                                         plane.submeshes[0].material_index = index;
-                                        auto &entity = system->make_entity("Plane");
+
+                                        auto &entity = system->make_entity("Plane" + std::to_string(count + 1));
                                         entity.add <Mesh> (plane);
                                         entity.add <Renderable> (g_application.context, &entity.get <Mesh> ());
                                 }

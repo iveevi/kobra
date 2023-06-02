@@ -100,7 +100,7 @@ void update_materials(CommonRaytracing *crtx, const MaterialDaemon *md, TextureL
 }
 
 // Prerender process for raytracing
-// TODO: common rtx method...
+// TODO: common rtx method... ::prepare()
 void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
                 const TransformDaemon *td,
                 const MaterialDaemon *md)
@@ -117,8 +117,10 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
                 const auto &renderable = entity.get <Renderable> ();
                 const auto &transform = entity.get <Transform> ();
 
-                if (td->changed(id))
+                if (td->changed(id)) {
                         rebuild_tlas |= true;
+                        rebuild_sbt |= true;
+                }
 
                 // Generate cache data
                 mesh_memory->cache_cuda(entity);
@@ -171,9 +173,11 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
 
                                 rebuild_tlas = true;
                                 rebuild_sbt = true;
+                        } else if (td->changed(id)) {
+                                int record_index = common_rtx.record_refs[index];
+                                auto &record = common_rtx.records[record_index];
+                                record.data.model = transform.matrix();
                         }
-
-                        // TODO: checking for transformations...
                 }
         }
 
@@ -185,6 +189,7 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
                 gbuffer_rtx.launch_params.handle = handle;
                 path_tracer.launch_params.handle = handle;
                 sparse_gi.launch_params.handle = handle;
+                common_rtx.transform_reset = true;
         }
 
         if (rebuild_sbt) {
@@ -219,6 +224,7 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
                 if (path_tracer.sbt.hitgroupRecordBase)
                         cuda::free(path_tracer.sbt.hitgroupRecordBase);
 
+                // TODO: method,common rtx holds refs to others
                 path_tracer.sbt.hitgroupRecordBase = cuda::make_buffer_ptr(common_rtx.records);
                 path_tracer.sbt.hitgroupRecordStrideInBytes = sizeof(optix::Record <Hit>);
                 path_tracer.sbt.hitgroupRecordCount = common_rtx.records.size();
@@ -472,8 +478,13 @@ void EditorViewport::render_path_traced
         path_tracer.launch_params.time = common_rtx.timer.elapsed_start();
         path_tracer.launch_params.depth = path_tracer.depth;
         path_tracer.launch_params.samples += 1;
-        if (render_info.camera_transform_dirty)
+        if (render_info.camera_transform_dirty
+                        || common_rtx.material_reset
+                        || common_rtx.transform_reset
+                        || render_state.path_tracer_reset) {
                 path_tracer.launch_params.samples = 0;
+                render_state.path_tracer_reset = false;
+        }
 
         auto uvw = uvw_frame(render_info.camera, render_info.camera_transform);
 
@@ -841,7 +852,6 @@ void EditorViewport::render_highlight(const RenderInfo &render_info, const std::
         // Draw
         render_info.cmd.bindVertexBuffers(0, { *presentation_mesh_buffer.buffer }, { 0 });
         render_info.cmd.draw(6, 1, 0, 0);
-
         render_info.cmd.endRenderPass();
 }
 
@@ -853,8 +863,7 @@ void EditorViewport::render(const RenderInfo &render_info,
         // TODO: pass camera as an entity, and then check if its moved using the
                                 // daemon...
         // Set state
-        common_rtx.clk_rise = true;
-        common_rtx.material_reset = false;
+        common_rtx.reset();
 
         // TODO: if a click is detected, then we need to run the G-buffer pass
         // at least once to keep up to date with the latest changes
@@ -888,7 +897,7 @@ void EditorViewport::render(const RenderInfo &render_info,
                 blit_raytraced(this, render_info);
                 break;
         
-        case RenderState::ePathTraced:
+        case RenderState::ePathTracer:
                 prerender_raytrace(entities, &td, md);
                 render_gbuffer(render_info, entities, &td, md);
                 render_path_traced(render_info, entities, md);
@@ -980,14 +989,16 @@ static void show_mode_menu(RenderState *render_state)
 
                 if (ImGui::MenuItem("Albedo"))
                         render_state->mode = RenderState::eAlbedo;
+
+                if (ImGui::MenuItem("Path Traced (G-buffer)")) {
+                        render_state->mode = RenderState::ePathTracer;
+                        render_state->path_tracer_reset = true;
+                }
                 
                 if (ImGui::MenuItem("Sparse Global Illumination")) {
                         render_state->mode = RenderState::eSparseGlobalIllumination;
                         render_state->sparse_gi_reset = true;
                 }
-
-                if (ImGui::MenuItem("Path Traced (G-buffer)"))
-                        render_state->mode = RenderState::ePathTraced;
 
                 if (ImGui::Checkbox("Show bounding boxes", &render_state->bounding_boxes));
 
@@ -1008,7 +1019,7 @@ static void show_mode_submenu(RenderState *render_state, const _submenu_args &ar
                 { RenderState::eTextureCoordinates, "Texture Coordinates" },
                 { RenderState::eAlbedo, "Albedo" },
                 { RenderState::eSparseGlobalIllumination, "Sparse Global Illumination" },
-                { RenderState::ePathTraced, "Path Traced (G-buffer)" },
+                { RenderState::ePathTracer, "Path Traced (G-buffer)" },
         };
 
         // Mode-specific settings
@@ -1017,7 +1028,7 @@ static void show_mode_submenu(RenderState *render_state, const _submenu_args &ar
                 mode_string = modes.at(render_state->mode);
 
         if (ImGui::BeginMenu(mode_string.c_str())) {
-                if (render_state->mode == RenderState::ePathTraced)
+                if (render_state->mode == RenderState::ePathTracer)
                         if (ImGui::SliderInt("Depth", &args.path_tracer->depth, 1, 10));
                 
                 if (render_state->mode == RenderState::eSparseGlobalIllumination) {

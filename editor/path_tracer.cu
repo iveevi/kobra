@@ -298,7 +298,7 @@ extern "C" __global__ void __raygen__()
                         );
 
                         if (packet.miss) {
-                                color += beta * make_float3(sky_at(wi));
+                                color += brdf * beta * make_float3(sky_at(wi));
                                 break;
                         } else {
                                 cuda::_material m = parameters.materials[packet.id];

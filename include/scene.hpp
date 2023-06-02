@@ -35,25 +35,25 @@ struct Scene {
                 scene.name = "Example";
                 scene.system = std::make_shared <System> (nullptr);
 
-                // Add a plane
-                Mesh plane = Mesh::plane();
+                // Add a box
+                Mesh box = Mesh::box();
 
                 // Manually allocate materials
                 // Material::all.clear();
                 Material plane_material;
-                plane_material.name = "Plane";
+                plane_material.name = "Box";
 
                 int32_t index = kobra::load(md, plane_material);
                 // int index = Material::all.size();
                 // Material::all.push_back(plane_material);
 
-                for (auto &submesh : plane.submeshes)
+                for (auto &submesh : box.submeshes)
                         submesh.material_index = index;
                
                 // Create the plane entity
                 Entity entity;
                 entity = scene.system->make_entity("Plane");
-                entity.add <Mesh> (plane);
+                entity.add <Mesh> (box);
 
                 Mesh *mesh = &entity.get <Mesh> ();
                 entity.add <Renderable> (context, mesh);

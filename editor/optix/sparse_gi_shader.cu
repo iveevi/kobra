@@ -282,7 +282,8 @@ extern "C" __global__ void __raygen__()
                         convert_material(m, sh.mat, packet.uv);
 
                         // indirect = float(N2) * brdf * sh.mat.emission * abs(dot(sh.n, wi)) / pdf;
-                        indirect = float(N2/2) * sh.mat.emission * abs(dot(sh.n, wi));
+                        // indirect = float(N2/2) * sh.mat.emission * abs(dot(sh.n, wi));
+                        indirect = float(N2/2) * Ld(sh, seed) * abs(dot(sh.n, wi));
 
                         // TODO: cache irradiance
                 }
