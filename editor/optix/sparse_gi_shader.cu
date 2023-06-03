@@ -266,7 +266,7 @@ extern "C" __global__ void __raygen__()
                 );
 
                 if (packet.miss) {
-                        indirect = float(N2/2) * make_float3(sky_at(parameters.sky, wi));
+                        indirect = float(N2/2) * make_float3(sky_at(parameters.sky, wi)) * abs(dot(sh.n, wi));
                         // indirect = float(N2) * brdf * make_float3(sky_at(wi)) / pdf;
                 } else {
                         // TODO: if specular then skip direct lighting and do

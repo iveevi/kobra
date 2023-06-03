@@ -89,8 +89,22 @@ struct SparseGI {
         void render(EditorViewport *, const RenderInfo &, const std::vector <Entity> &, const MaterialDaemon *);
 };
 
-void initialize(SparseGI *, const Context &, const OptixDeviceContext &);
+void initialize(SparseGI *, const OptixDeviceContext &);
 void render(EditorViewport *, SparseGI *, const RenderInfo &, const std::vector <Entity> &, const MaterialDaemon *);
+
+// Xenon global illumination
+struct Xenon {
+        // OptiX resources
+        OptixPipeline pipeline = 0;
+        OptixModule module = 0;
+        
+        OptixProgramGroup ray_generation = 0;
+        OptixProgramGroup closest_hit = 0;
+        OptixProgramGroup miss = 0;
+
+        // Constructor
+        Xenon(const OptixDeviceContext &);
+};
 
 // Editor rendering
 struct EditorViewport {

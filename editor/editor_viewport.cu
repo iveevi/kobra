@@ -57,7 +57,7 @@ EditorViewport::EditorViewport(const Context &context,
         configure_highlight_pipeline();
 
         configure_gbuffer_rtx();
-        initialize(&sparse_gi, context, system->context());
+        initialize(&sparse_gi, system->context());
         // configure_amadeus_path_tracer(context);
         configure_path_tracer(context);
       

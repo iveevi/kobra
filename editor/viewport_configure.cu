@@ -905,7 +905,7 @@ void EditorViewport::configure_path_tracer(const Context &ctx)
         path_tracer.launch_params.io = optix_io_create();
 }
 
-void initialize(SparseGI *sparse_gi, const Context &ctx, const OptixDeviceContext &context)
+void initialize(SparseGI *sparse_gi, const OptixDeviceContext &context)
 {
         static constexpr const char OPTIX_PTX_FILE[] = "bin/ptx/sparse_gi_shader.o";
 
@@ -977,7 +977,6 @@ void initialize(SparseGI *sparse_gi, const Context &ctx, const OptixDeviceContex
         
         // Setup parameters
         sparse_gi->launch_params = {};
-        sparse_gi->launch_params.samples = 0;
         sparse_gi->launch_params.counter = 0;
         sparse_gi->launch_params.indirect.N = SPARSITY_STRIDE;
         sparse_gi->launch_params.io = optix_io_create();

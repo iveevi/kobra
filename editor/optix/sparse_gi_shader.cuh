@@ -150,7 +150,6 @@ struct SparseGIParameters {
         bool dirty;
         bool reset;
         float time;
-        int samples;
         uint counter;
 
         // Previous camera matrices

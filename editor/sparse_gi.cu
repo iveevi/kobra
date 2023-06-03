@@ -4,125 +4,6 @@
 #include "include/daemons/material.hpp"
 #include "optix/sparse_gi_shader.cuh"
 
-// Gaussian blur of irradiance per pixel
-// __constant__ float gauss_filter_kernel_5x5[25] = {
-//         0.00296902,    0.0133062,    0.0219382,    0.0133062,    0.00296902,
-//         0.0133062,    0.0596343,    0.0983203,    0.0596343,    0.0133062,
-//         0.0219382,    0.0983203,    0.162103,    0.0983203,    0.0219382,
-//         0.0133062,    0.0596343,    0.0983203,    0.0596343,    0.0133062,
-//         0.00296902,    0.0133062,    0.0219382,    0.0133062,    0.00296902
-// };
-//
-// __global__
-// void box_filter(float4 *irradiance, float4 *out, vk::Extent2D extent, cudaSurfaceObject_t normal_surface, int N)
-// {
-//         int index = threadIdx.x + blockIdx.x * blockDim.x;
-//         int base_x = index % extent.width;
-//         int base_y = index / extent.width;
-//
-//         if (base_x < 0 || base_x >= extent.width ||
-//             base_y < 0 || base_y >= extent.height)
-//                 return;
-//
-//         float3 sum = make_float3(0.0f);
-//
-//         float4 raw_central_normal = make_float4(0.0f);
-//         surf2Dread(&raw_central_normal, normal_surface, base_x * sizeof(float4), extent.height - (base_y + 1));
-//         float3 central_normal = make_float3(raw_central_normal);
-//
-//         int samples = 0;
-//         for (int i = -N; i <= N; i++) {
-//                 for (int j = -N; j <= N; j++) {
-//                         int x = base_x + i;
-//                         int y = base_y + j;
-//
-//                         if (x < 0 || x >= extent.width ||
-//                             y < 0 || y >= extent.height)
-//                                 continue;
-//
-//                         int new_index = x + y * extent.width;
-//                         float4 raw_normal = make_float4(0.0f);
-//                         surf2Dread(&raw_normal, normal_surface, x * sizeof(float4), extent.height - (y + 1));
-//                         float3 normal = make_float3(raw_normal);
-//
-//                         if (dot(normal, central_normal) < 0.4f)
-//                                 continue;
-//
-//                         sum += make_float3(irradiance[new_index]);
-//                         samples++;
-//                 }
-//         }
-//
-//         out[index] = samples > 0 ? make_float4(sum/float(samples), 1.0f) : irradiance[index];
-//
-//         // Copy back to irradiance (except last channel which may be important)
-//         irradiance[index].x = out[index].x;
-//         irradiance[index].y = out[index].y;
-//         irradiance[index].z = out[index].z;
-//
-//         // TODO: better filter that accounts for normals (bilateral filter...)
-// }
-//
-// __global__
-// void gauss_filter(float4 *irradiance, float4 *out,
-//                   cudaSurfaceObject_t normals,
-//                   cudaSurfaceObject_t positions,
-//                   vk::Extent2D extent)
-// {
-//         int x = threadIdx.x + blockIdx.x * blockDim.x;
-//
-//         if (x < 0 || x >= extent.width * extent.height)
-//                 return;
-//
-//         int2 pos = make_int2(x % extent.width, x / extent.width);
-//         float4 raw_normal = make_float4(0.0f);
-//         float4 raw_pos = make_float4(0.0f);
-//         surf2Dread(&raw_normal, normals, pos.x * sizeof(float4), extent.height - (pos.y + 1));
-//         surf2Dread(&raw_pos, positions, pos.x * sizeof(float4), extent.height - (pos.y + 1));
-//         float3 normal = make_float3(raw_normal);
-//         float3 position = make_float3(raw_pos);
-//
-//         float3 sum = make_float3(0.0f, 0.0f, 0.0f);
-//         float sum_weights = 0.0f;
-//
-//         for (int i = -2; i <= 2; i++) {
-//                 for (int j = -2; j <= 2; j++) {
-//                         int2 offset = make_int2(i, j);
-//                         int2 pos = make_int2(x % extent.width, x / extent.width);
-//                         int2 new_pos = pos + offset;
-//
-//                         if (new_pos.x < 0 || new_pos.x >= extent.width ||
-//                                 new_pos.y < 0 || new_pos.y >= extent.height)
-//                                 continue;
-//
-//                         float4 raw_new_normal = make_float4(0.0f);
-//                         float4 raw_new_pos = make_float4(0.0f);
-//                         surf2Dread(&raw_new_normal, normals, new_pos.x * sizeof(float4), extent.height - (new_pos.y + 1));
-//                         surf2Dread(&raw_new_pos, positions, new_pos.x * sizeof(float4), extent.height - (new_pos.y + 1));
-//                         float3 new_normal = make_float3(raw_new_normal);
-//                         float3 new_position = make_float3(raw_new_pos);
-//
-//                         if (dot(normal, new_normal) < 0.4f ||
-//                                 length(new_position - position) > 0.5f)
-//                                 continue;
-//
-//                         int new_index = new_pos.x + new_pos.y * extent.width;
-//                         float weight = gauss_filter_kernel_5x5[(i + 2) + (j + 2) * 5];
-//                         sum += make_float3(irradiance[new_index] * weight);
-//                         sum_weights += weight;
-//                 }
-//         }
-//
-//         out[x] = sum_weights > 0 ? make_float4(sum/sum_weights, 1.0f) : irradiance[x];
-//         
-//         // Copy back to irradiance (except last channel which may be important)
-//         irradiance[x].x = out[x].x;
-//         irradiance[x].y = out[x].y;
-//         irradiance[x].z = out[x].z;
-//
-//         // TODO: better filter that accounts for normals (bilateral filter...)
-// }
-
 __forceinline__ __device__
 float3 cleanse(float3 in)
 {
@@ -134,7 +15,6 @@ float3 cleanse(float3 in)
 struct IrradianceFilterInfo {
         float4 *irradiance;
         float4 *dst;
-        float4 *mean_directions;
         
         cudaSurfaceObject_t positions;
         cudaSurfaceObject_t normals;
@@ -175,8 +55,6 @@ void irradiance_filter(IrradianceFilterInfo info)
         float3 normal = make_float3(raw_normal);
         float3 position = make_float3(raw_position);
         float2 uv = make_float2(raw_uv);
-        float3 mean_direction = make_float3(info.mean_directions[x]);
-        int32_t material_id = raw_index & 0xFFFF;
         
         float3 sum = make_float3(0.0f, 0.0f, 0.0f);
         float wsum = 0;
@@ -208,38 +86,20 @@ void irradiance_filter(IrradianceFilterInfo info)
 
                         float3 new_position = make_float3(raw_new_position);
                         float3 new_normal = make_float3(raw_new_normal);
-                        float3 new_mean_direction = make_float3(info.mean_directions[new_pos.x + new_pos.y * width]);
-
-                        // if (raw_new_index == -1
-                        //         || dot(normal, new_normal) < 0.4f
-                        //         || length(new_position - position) > 0.1f)
-                        //         continue;
-                        if (raw_new_index == -1 || dot(normal, new_normal) < 0.4f)
+                        if (raw_new_index == -1)
                                 continue;
 
-                        float w = abs(dot(new_mean_direction, normal)/dot(mean_direction, normal));
+                        float cos_ratio = clamp(dot(new_normal, normal), 0.0f, 1.0f);
+                        float w = expf(-length(new_position - position)/0.1f);
+
                         int new_index = new_pos.x + new_pos.y * width;
-                        sum += w * make_float3(info.irradiance[new_index]);
+                        sum += w * make_float3(cos_ratio * info.irradiance[new_index]);
                         wsum += w;
                 }
         }
 
         float3 final = cleanse(wsum > 0 ? sum/wsum : make_float3(0.0f, 0.0f, 0.0f));
         info.dst[x] = make_float4(final, 1.0f);
-}
-
-__global__
-void irradiance_filter_restart(IrradianceFilterInfo info)
-{
-        int width = info.extent.width;
-        int height = info.extent.height;
-        int x = threadIdx.x + blockIdx.x * blockDim.x;
-        if (x < 0 || x >= width * height)
-                return;
-
-        info.irradiance[x].x = info.dst[x].x;
-        info.irradiance[x].y = info.dst[x].y;
-        info.irradiance[x].z = info.dst[x].z;
 }
 
 struct FinalGatherInfo {
@@ -337,7 +197,7 @@ void final_gather(FinalGatherInfo info)
         float3 brdf = cuda::brdf(sh, wi, eDiffuse);
         float pdf = cuda::pdf(sh, wi, eDiffuse);
 
-        float3 indirect = pdf > 0.0 ? brdf * make_float3(info.indirect_irradiance[index])/pdf : make_float3(0.0f);
+        float3 indirect = pdf > 0.0 ? brdf * dot(wi, sh.n) * make_float3(info.indirect_irradiance[index])/pdf : make_float3(0.0f);
         if (info.irradiance)
                 indirect = make_float3(info.indirect_irradiance[index]);
 
@@ -417,22 +277,13 @@ void SparseGI::render(EditorViewport *ev,
                         | ev->common_rtx.transform_reset
                         | manual_reset;
 
-        // TODO: these samples are not useful...
-        launch_params.samples++;
-
         uint N = launch_params.indirect.N;
         launch_params.counter = (launch_params.counter + 1) % (N * N);
                 
         if (launch_params.reset)
                 manual_reset = false;
 
-        // TODO: move to common rtx
         ev->render_state.sparse_gi_reset = false;
-        // if (ev->render_state.sparse_gi_reset) {
-        //         launch_params.previous_view = camera.view_matrix(camera_transform);
-        //         launch_params.previous_projection = camera.perspective_matrix();
-        //         launch_params.samples = 0;
-        // }
 
         // Configure camera axis
         auto uvw = uvw_frame(camera, camera_transform);
@@ -456,7 +307,10 @@ void SparseGI::render(EditorViewport *ev,
         
         SparseGIParameters *dev_params = (SparseGIParameters *) dev_launch_params;
         CUDA_CHECK(cudaMemcpy(dev_params, &launch_params, sizeof(SparseGIParameters), cudaMemcpyHostToDevice));
-        
+       
+        // TODO: parallelize by having one stage for direct, one for indirect
+        // (and then for spatil reuse in restir we paralleize with indirect
+        // filtering...)
         OPTIX_CHECK(
                 optixLaunch(pipeline, 0,
                         dev_launch_params,
@@ -476,7 +330,6 @@ void SparseGI::render(EditorViewport *ev,
                 info.irradiance = launch_params.indirect.screen_irradiance;
                 info.dst = launch_params.indirect.final_irradiance;
                 info.normals = launch_params.normal_surface;
-                info.mean_directions = launch_params.indirect.irradiance_directions;
                 info.positions = launch_params.position_surface;
                 info.uvs = launch_params.uv_surface;
                 info.indices = launch_params.index_surface;
@@ -484,17 +337,7 @@ void SparseGI::render(EditorViewport *ev,
                 info.radius = 2;
 
                 uint blocks = (ev->extent.width * ev->extent.height + 255) / 256;
-                // irradiance_filter <<< blocks, 256 >>> (info);
-
-                for (int i = 0; i < 3; i++) {
-                        // TODO: a trous style without needing to block and copy
-                        irradiance_filter <<< blocks, 256 >>> (info);
-                        CUDA_SYNC_CHECK();
-                        irradiance_filter_restart <<< blocks, 256 >>> (info);
-                        CUDA_SYNC_CHECK();
-                }
-
-                // CUDA_SYNC_CHECK();
+                irradiance_filter <<< blocks, 256 >>> (info);
         } else {
                 CUDA_CHECK(cudaMemcpy(
                         (void *) launch_params.indirect.final_irradiance,
