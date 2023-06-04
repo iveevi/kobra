@@ -12,8 +12,19 @@
 #include "include/cuda/random.cuh"
 #include "include/vertex.hpp"
 
+// Irradiance probe
+struct IrradianceProbe {
+        constexpr static int size = 4;
+
+        // Layed out using octahedral projection
+        float3 values[size * size];
+        float pdfs[size * size];
+        float depth[size * size];
+        float3 normal;
+};
+
 // Launch info for the G-buffer raytracer
-struct SparseGIParameters {
+struct MambaLaunchInfo {
         // Acceleration structure
         OptixTraversableHandle handle;
 
@@ -32,13 +43,12 @@ struct SparseGIParameters {
         // Camera parameters
         CameraAxis camera;
 
-        // G-buffer textures
-        struct {
-                cudaTextureObject_t position;
-                cudaTextureObject_t normal;
-                cudaTextureObject_t uv;
-                cudaTextureObject_t index;
-        } gbuffer;
+        // G-buffer source surfaces
+        // TODO: texure objects
+        cudaSurfaceObject_t position_surface;
+        cudaSurfaceObject_t normal_surface;
+        cudaSurfaceObject_t uv_surface;
+        cudaSurfaceObject_t index_surface;
 
         // List of all materials
         kobra::cuda::_material *materials;
@@ -53,7 +63,7 @@ struct SparseGIParameters {
         Sky sky;
 
         // Direct lighting (ReSTIR)
-        float3 *direct_lighting;
+        Reservoir <DirectLightingSample> *direct_lighting;
 
         // Indirect lighting caches
         struct {

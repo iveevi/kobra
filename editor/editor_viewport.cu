@@ -60,6 +60,8 @@ EditorViewport::EditorViewport(const Context &context,
         initialize(&sparse_gi, system->context());
         // configure_amadeus_path_tracer(context);
         configure_path_tracer(context);
+        
+        mamba = new Mamba(system->context());
       
         // Common raytracing data
         common_rtx.framer = kobra::layers::Framer(context, present_render_pass);
@@ -73,7 +75,7 @@ EditorViewport::EditorViewport(const Context &context,
 static void import_vulkan_texture
                 (const vk::raii::Device &device,
                 const ImageData &image,
-                // cudaTextureObject_t &texture,
+                cudaTextureObject_t &texture,
                 cudaSurfaceObject_t &surface,
                 cudaChannelFormatDesc &channel_desc)
 {
@@ -130,94 +132,19 @@ static void import_vulkan_texture
         if (channel_desc.f != cudaChannelFormatKindFloat)
                 tex_desc.filterMode = cudaFilterModePoint;
         
-        // CUDA_CHECK(cudaCreateTextureObject(
-        //         &texture,
-        //         &res_desc, &tex_desc, nullptr
-        // ));
+        CUDA_CHECK(cudaCreateTextureObject(&texture, &res_desc, &tex_desc, nullptr));
 }
 
 void EditorViewport::resize(const vk::Extent2D &new_extent)
 {
-        static vk::Format formats[] = {
-                vk::Format::eR32G32B32A32Sfloat, // Viewport
-                vk::Format::eR32G32B32A32Sfloat, // Position
-                vk::Format::eR32G32B32A32Sfloat, // Normal
-                vk::Format::eR32G32B32A32Sfloat, // UV
-                vk::Format::eR32Sint,            // Material index
-        };
+        // Update extent
+        extent = new_extent;
 
-        // Other image propreties
-        static vk::MemoryPropertyFlags mem_flags = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        static vk::ImageAspectFlags aspect = vk::ImageAspectFlagBits::eColor;
-        static vk::ImageTiling tiling = vk::ImageTiling::eOptimal;
-        static vk::ImageUsageFlags usage = vk::ImageUsageFlagBits::eColorAttachment
-                | vk::ImageUsageFlagBits::eTransferSrc
-                | vk::ImageUsageFlagBits::eTransferDst
-                | vk::ImageUsageFlagBits::eStorage;
+        KOBRA_LOG_FUNC(Log::INFO) << "Resizing viewport to " << new_extent.width << "x" << new_extent.height << std::endl;
+        if (framebuffer_images != nullptr)
+                delete framebuffer_images;
 
-        // Allocate viewport image
-        framebuffer_images.viewport = ImageData {
-                *phdev, *device,
-                formats[0], new_extent, tiling,
-                usage, mem_flags, aspect
-        };
-
-        framebuffer_images.position = ImageData {
-                *phdev, *device,
-                formats[1], new_extent, tiling,
-                usage, mem_flags, aspect, true
-        };
-
-        framebuffer_images.normal = ImageData {
-                *phdev, *device,
-                formats[2], new_extent, tiling,
-                usage, mem_flags, aspect, true
-        };
-
-        framebuffer_images.uv = ImageData {
-                *phdev, *device,
-                formats[3], new_extent, tiling,
-                usage, mem_flags, aspect, true
-        };
-
-        framebuffer_images.material_index = ImageData {
-                *phdev, *device,
-                formats[4], new_extent, tiling,
-                usage, mem_flags, aspect, true
-        };
-
-        depth_buffer = DepthBuffer {
-                *phdev, *device,
-                vk::Format::eD32Sfloat, new_extent
-        };
-
-        // Import into CUDA
-        // TODO: free old resources if needed...
-        KOBRA_LOG_FUNC(Log::OK) << "Importing Vulkan textures into CUDA\n";
-
-        cudaChannelFormatDesc channel_desc_f32 = cudaCreateChannelDesc(32, 32, 32, 32, cudaChannelFormatKindFloat);
-        // cudaChannelFormatDesc channel_desc_f32_rg = cudaCreateChannelDesc(32, 32, 0, 0, cudaChannelFormatKindFloat);
-        cudaChannelFormatDesc channel_desc_i32 = cudaCreateChannelDesc(32, 0, 0, 0, cudaChannelFormatKindSigned);
-
-        import_vulkan_texture(*device,
-                framebuffer_images.position,
-                framebuffer_images.cu_position_surface,
-                channel_desc_f32);
-
-        import_vulkan_texture(*device,
-                framebuffer_images.normal,
-                framebuffer_images.cu_normal_surface,
-                channel_desc_f32);
-
-        import_vulkan_texture(*device,
-                framebuffer_images.uv,
-                framebuffer_images.cu_uv_surface,
-                channel_desc_f32);
-
-        import_vulkan_texture(*device,
-                framebuffer_images.material_index,
-                framebuffer_images.cu_material_index_surface,
-                channel_desc_i32);
+        framebuffer_images = new FramebufferResources(*phdev, *device, new_extent);
 
         // TODO: cuda free the surfaces...
 
@@ -226,11 +153,11 @@ void EditorViewport::resize(const vk::Extent2D &new_extent)
                 CUDA_CHECK(cudaFree(common_rtx.dev_color));
 
         CUDA_CHECK(cudaMalloc(&common_rtx.dev_color, new_extent.width * new_extent.height * sizeof(float4)));
-        
+
         if (common_rtx.dev_traced != 0)
                 CUDA_CHECK(cudaFree((void *) common_rtx.dev_traced));
 
-        CUDA_CHECK(cudaMalloc((void **) &common_rtx.dev_traced, new_extent.width * new_extent.height * sizeof(uint32_t)));
+        common_rtx.dev_traced = (CUdeviceptr) cuda::alloc <uint32_t> (new_extent.width * new_extent.height);
         common_rtx.traced.resize(new_extent.width * new_extent.height * sizeof(uint32_t));
 
         // Send resize event to the sparse GI pipeline
@@ -258,112 +185,201 @@ void EditorViewport::resize(const vk::Extent2D &new_extent)
         };
 
         // If needed, recreate framebuffer and rebind descriptor sets
-        if (render_state.initialized) {
-                // TODO: put the framebuffer code into a smaller function
-                // Recreate G-buffer framebuffer
-                std::vector <vk::ImageView> attachment_views {
-                        *framebuffer_images.position.view,
-                        *framebuffer_images.normal.view,
-                        *framebuffer_images.uv.view,
-                        *framebuffer_images.material_index.view,
-                        *depth_buffer.view
-                };
+        if (!render_state.initialized)
+                return;
 
-                vk::FramebufferCreateInfo fb_info {
-                        vk::FramebufferCreateFlags {},
-                        *gbuffer_render_pass,
-                        attachment_views,
-                        new_extent.width, new_extent.height, 1
-                };
+        // TODO: put the framebuffer code into a smaller struct
+        // Recreate G-buffer framebuffer
+        std::vector <vk::ImageView> attachment_views {
+                *framebuffer_images->position.view,
+                *framebuffer_images->normal.view,
+                *framebuffer_images->uv.view,
+                *framebuffer_images->material_index.view,
+                *framebuffer_images->depth_buffer.view
+        };
 
-                gbuffer_fb = vk::raii::Framebuffer {*device, fb_info};
+        vk::FramebufferCreateInfo fb_info {
+                vk::FramebufferCreateFlags {},
+                *gbuffer_render_pass,
+                attachment_views,
+                new_extent.width, new_extent.height, 1
+        };
 
-                // Resize viewport framebuffer
-                std::vector <vk::ImageView> viewport_attachment_views {
-                        *framebuffer_images.viewport.view,
-                        *depth_buffer.view,
-                };
+        gbuffer_fb = vk::raii::Framebuffer {*device, fb_info};
 
-                vk::FramebufferCreateInfo viewport_fb_info {
-                        vk::FramebufferCreateFlags {},
-                        *present_render_pass,
-                        viewport_attachment_views,
-                        new_extent.width, new_extent.height, 1
-                };
+        // Resize viewport framebuffer
+        std::vector <vk::ImageView> viewport_attachment_views {
+                *framebuffer_images->viewport.view,
+                *framebuffer_images->depth_buffer.view,
+        };
 
-                viewport_fb = vk::raii::Framebuffer {*device, viewport_fb_info};
-        
-                // Bind image to descriptor set
-                std::array <vk::DescriptorImageInfo, 2> sobel_dset_image_infos {
-                        vk::DescriptorImageInfo {
-                                nullptr,
-                                *framebuffer_images.material_index.view,
-                                vk::ImageLayout::eGeneral
-                        },
+        vk::FramebufferCreateInfo viewport_fb_info {
+                vk::FramebufferCreateFlags {},
+                *present_render_pass,
+                viewport_attachment_views,
+                new_extent.width, new_extent.height, 1
+        };
 
-                        vk::DescriptorImageInfo {
-                                nullptr,
-                                *sobel.output.view,
-                                vk::ImageLayout::eGeneral
-                        },
-                };
+        viewport_fb = vk::raii::Framebuffer {*device, viewport_fb_info};
 
-                std::array <vk::WriteDescriptorSet, 2> sobel_dset_writes {
-                        vk::WriteDescriptorSet {
-                                *sobel.dset,
-                                0, 0,
-                                vk::DescriptorType::eStorageImage,
-                                sobel_dset_image_infos[0],
-                        },
+        // Bind image to descriptor set
+        std::array <vk::DescriptorImageInfo, 2> sobel_dset_image_infos {
+                vk::DescriptorImageInfo {
+                        nullptr,
+                        *framebuffer_images->material_index.view,
+                        vk::ImageLayout::eGeneral
+                },
 
-                        vk::WriteDescriptorSet {
-                                *sobel.dset,
-                                1, 0,
-                                vk::DescriptorType::eStorageImage,
-                                sobel_dset_image_infos[1],
-                        },
-                };
+                vk::DescriptorImageInfo {
+                        nullptr,
+                        *sobel.output.view,
+                        vk::ImageLayout::eGeneral
+                },
+        };
 
-                device->updateDescriptorSets(sobel_dset_writes, nullptr);
-        
-                bind_ds(*device, triangulation.dset, framebuffer_images.position_sampler, framebuffer_images.position, 0);
-                bind_ds(*device, triangulation.dset, framebuffer_images.normal_sampler, framebuffer_images.normal, 1);
-                bind_ds(*device, triangulation.dset, framebuffer_images.material_index_sampler, framebuffer_images.material_index, 2);
-                bind_ds(*device, triangulation.dset, sobel.output_sampler, sobel.output, 3);
+        std::array <vk::WriteDescriptorSet, 2> sobel_dset_writes {
+                vk::WriteDescriptorSet {
+                        *sobel.dset,
+                        0, 0,
+                        vk::DescriptorType::eStorageImage,
+                        sobel_dset_image_infos[0],
+                },
 
-                bind_ds(*device, normal.dset, framebuffer_images.normal_sampler, framebuffer_images.normal, 0);
-                bind_ds(*device, uv.dset, framebuffer_images.uv_sampler, framebuffer_images.uv, 0);
-        
-                bind_ds(*device, highlight.dset,
-                        framebuffer_images.material_index_sampler,
-                        framebuffer_images.material_index, 0);
-        } else {
-                // First time initialization
+                vk::WriteDescriptorSet {
+                        *sobel.dset,
+                        1, 0,
+                        vk::DescriptorType::eStorageImage,
+                        sobel_dset_image_infos[1],
+                },
+        };
 
-                // Create samplers for the framebuffer images
-                framebuffer_images.position_sampler = make_continuous_sampler(*device);
-                framebuffer_images.normal_sampler = make_continuous_sampler(*device);
-                framebuffer_images.uv_sampler = make_continuous_sampler(*device);
+        device->updateDescriptorSets(sobel_dset_writes, nullptr);
 
-                framebuffer_images.material_index_sampler = vk::raii::Sampler {
-                        *device,
-                        vk::SamplerCreateInfo {
-                                vk::SamplerCreateFlags {},
-                                vk::Filter::eNearest,
-                                vk::Filter::eNearest,
-                                vk::SamplerMipmapMode::eNearest,
-                                vk::SamplerAddressMode::eClampToEdge,
-                                vk::SamplerAddressMode::eClampToEdge,
-                                vk::SamplerAddressMode::eClampToEdge,
-                                0.0f, VK_FALSE, 1.0f,
-                                VK_FALSE, vk::CompareOp::eNever,
-                                0.0f, 0.0f,
-                                vk::BorderColor::eFloatOpaqueWhite,
-                                VK_FALSE
-                        }
-                };
-        }
+        bind_ds(*device, triangulation.dset, framebuffer_images->position_sampler, framebuffer_images->position, 0);
+        bind_ds(*device, triangulation.dset, framebuffer_images->normal_sampler, framebuffer_images->normal, 1);
+        bind_ds(*device, triangulation.dset, framebuffer_images->material_index_sampler, framebuffer_images->material_index, 2);
+        bind_ds(*device, triangulation.dset, sobel.output_sampler, sobel.output, 3);
 
-        // Update extent
-        extent = new_extent;
+        bind_ds(*device, normal.dset, framebuffer_images->normal_sampler, framebuffer_images->normal, 0);
+        bind_ds(*device, uv.dset, framebuffer_images->uv_sampler, framebuffer_images->uv, 0);
+
+        bind_ds(*device, highlight.dset,
+                framebuffer_images->material_index_sampler,
+                framebuffer_images->material_index, 0);
+}
+
+// Constructing framebuffer resources
+FramebufferResources::FramebufferResources(const vk::raii::PhysicalDevice &phdev,
+                const vk::raii::Device &device,
+                const vk::Extent2D &extent_)
+                : extent(extent_)
+{
+        static vk::Format formats[] = {
+                vk::Format::eR32G32B32A32Sfloat, // Viewport
+                vk::Format::eR32G32B32A32Sfloat, // Position
+                vk::Format::eR32G32B32A32Sfloat, // Normal
+                vk::Format::eR32G32B32A32Sfloat, // UV
+                vk::Format::eR32Sint,            // Material index
+        };
+
+        // Other image propreties
+        static vk::MemoryPropertyFlags mem_flags = vk::MemoryPropertyFlagBits::eDeviceLocal;
+        static vk::ImageAspectFlags aspect = vk::ImageAspectFlagBits::eColor;
+        static vk::ImageTiling tiling = vk::ImageTiling::eOptimal;
+        static vk::ImageUsageFlags usage = vk::ImageUsageFlagBits::eColorAttachment
+                | vk::ImageUsageFlagBits::eTransferSrc
+                | vk::ImageUsageFlagBits::eTransferDst
+                | vk::ImageUsageFlagBits::eStorage;
+
+        // Allocate viewport image
+        viewport = ImageData {
+                phdev, device,
+                formats[0], extent, tiling,
+                usage, mem_flags, aspect
+        };
+
+        position = ImageData {
+                phdev, device,
+                formats[1], extent, tiling,
+                usage, mem_flags, aspect, true
+        };
+
+        normal = ImageData {
+                phdev, device,
+                formats[2], extent, tiling,
+                usage, mem_flags, aspect, true
+        };
+
+        uv = ImageData {
+                phdev, device,
+                formats[3], extent, tiling,
+                usage, mem_flags, aspect, true
+        };
+
+        material_index = ImageData {
+                phdev, device,
+                formats[4], extent, tiling,
+                usage, mem_flags, aspect, true
+        };
+
+        depth_buffer = DepthBuffer {
+                phdev, device,
+                vk::Format::eD32Sfloat, extent
+        };
+
+        // Import into CUDA
+        KOBRA_LOG_FUNC(Log::OK) << "Importing Vulkan textures into CUDA\n";
+
+        cudaChannelFormatDesc channel_desc_f32 = cudaCreateChannelDesc(32, 32, 32, 32, cudaChannelFormatKindFloat);
+        cudaChannelFormatDesc channel_desc_i32 = cudaCreateChannelDesc(32, 0, 0, 0, cudaChannelFormatKindSigned);
+
+        import_vulkan_texture(device,
+                position,
+                cu_position_texture,
+                cu_position_surface,
+                channel_desc_f32);
+
+        import_vulkan_texture(device,
+                normal,
+                cu_normal_texture,
+                cu_normal_surface,
+                channel_desc_f32);
+
+        import_vulkan_texture(device,
+                uv,
+                cu_uv_texture,
+                cu_uv_surface,
+                channel_desc_f32);
+
+        import_vulkan_texture(device,
+                material_index,
+                cu_material_index_texture,
+                cu_material_index_surface,
+                channel_desc_i32);
+
+        // TODO: free old resources if needed...
+        // TODO: cuda free the surfaces in the destructor
+
+        // Allocate Vulkan samplers
+        position_sampler = make_continuous_sampler(device);
+        normal_sampler = make_continuous_sampler(device);
+        uv_sampler = make_continuous_sampler(device);
+
+        material_index_sampler = vk::raii::Sampler {
+                device,
+                vk::SamplerCreateInfo {
+                        vk::SamplerCreateFlags {},
+                        vk::Filter::eNearest,
+                        vk::Filter::eNearest,
+                        vk::SamplerMipmapMode::eNearest,
+                        vk::SamplerAddressMode::eClampToEdge,
+                        vk::SamplerAddressMode::eClampToEdge,
+                        vk::SamplerAddressMode::eClampToEdge,
+                        0.0f, VK_FALSE, 1.0f,
+                        VK_FALSE, vk::CompareOp::eNever,
+                        0.0f, 0.0f,
+                        vk::BorderColor::eFloatOpaqueWhite,
+                        VK_FALSE
+                }
+        };
 }

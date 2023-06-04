@@ -1,16 +1,16 @@
 // Engine headers
-#include "include/amadeus/path_tracer.cuh"
+#include "include/cuda/brdf.cuh"
 #include "include/cuda/core.cuh"
 #include "include/cuda/random.cuh"
 #include "include/optix/core.cuh"
+#include "include/optix/sbt.cuh"
 
 // Editor headers
-#include "sparse_gi_shader.cuh"
-#include "../gbuffer_rtx_shader.cuh"
+#include "mamba_shader.cuh"
 
 extern "C" {
 
-__constant__ SparseGIParameters parameters;
+__constant__ MambaLaunchInfo info;
 
 }
 
@@ -41,16 +41,16 @@ struct LightInfo {
 __device__
 float sample_light(LightInfo &light_info, float3 &seed)
 {
-        uint total = parameters.area.count + parameters.sky.enabled;
+        uint total = info.area.count + info.sky.enabled;
         if (total == 0)
                 return -1.0f;
 
         // Choose light
         uint light_index = cuda::rand_uniform(total, seed);
 
-        if (light_index < parameters.area.count) {
+        if (light_index < info.area.count) {
                 // Choose triangle
-                AreaLight light = parameters.area.lights[light_index];
+                AreaLight light = info.area.lights[light_index];
 
                 uint triangle_index = cuda::rand_uniform(light.triangles, seed);
                 uint3 triangle = light.indices[triangle_index];
@@ -95,7 +95,7 @@ float sample_light(LightInfo &light_info, float3 &seed)
 
                 light_info.sky = true;
                 light_info.position = 1000 * dir;
-                light_info.emission = make_float3(sky_at(parameters.sky, dir));
+                light_info.emission = make_float3(sky_at(info.sky, dir));
                 light_info.area = 4 * PI;
         }
 
@@ -133,7 +133,7 @@ float3 Ld(const SurfaceHit &sh, float3 &seed)
         pack_pointer(&packet, i0, i1);
 
         optixTrace(
-                parameters.handle,
+                info.handle,
                 origin, direction,
                 0.0f, length(light_info.position - origin) - 1e-3f, 0.0f,
                 OptixVisibilityMask(0xFF),
@@ -164,21 +164,36 @@ extern "C" __global__ void __raygen__()
 {
 	// Get the launch index
 	const uint3 idx = optixGetLaunchIndex();
-        const uint2 resolution = parameters.camera.resolution;
-        float2 tex = make_float2(idx.x, idx.y)/make_float2(resolution.x, resolution.y);
-        tex.y = 1.0f - tex.y;
+        const uint2 resolution = info.camera.resolution;
       
-        float4 raw_position = tex2D <float4> (parameters.gbuffer.position, tex.x, tex.y);
-        float4 raw_normal = tex2D <float4> (parameters.gbuffer.normal, tex.x, tex.y);
-        float4 raw_uv = tex2D <float4> (parameters.gbuffer.uv, tex.x, tex.y); 
-        int32_t raw_index = tex2D <int32_t> (parameters.gbuffer.index, tex.x, tex.y);
+        int xoffset = idx.x * sizeof(float4);
+        int yoffset = (resolution.y - (idx.y + 1));
+
+        float4 raw_position;
+        float4 raw_normal;
+        float4 raw_uv;
+
+        // TODO: surfaces.position, etc.
+        surf2Dread(&raw_position, info.position_surface, xoffset, yoffset);
+        surf2Dread(&raw_normal, info.normal_surface, xoffset, yoffset);
+        surf2Dread(&raw_uv, info.uv_surface, xoffset, yoffset);
+
+        xoffset = idx.x * sizeof(int32_t);
+        yoffset = (resolution.y - (idx.y + 1));
+
+        int32_t raw_index;
+        surf2Dread(&raw_index, info.index_surface, xoffset, yoffset);
 
         int32_t triangle_id = raw_index >> 16;
         int32_t material_id = raw_index & 0xFFFF;
         
         int index = idx.x + idx.y * resolution.x;
         if (raw_index == -1) {
-                parameters.previous_position[index] = make_float4(0.0f);
+                // float3 ray = ray_at(idx);
+                // info.color[index] = sky_at(ray);
+                // // Indicate that there is no valid position here
+                // info.color[index].w = -1.0f;
+                info.previous_position[index] = make_float4(0.0f);
                 return;
         }
 
@@ -187,17 +202,17 @@ extern "C" __global__ void __raygen__()
         float2 uv = { raw_uv.x, raw_uv.y };
 
         // Correct the normal
-        float3 ray = position - parameters.camera.origin;
+        float3 ray = position - info.camera.origin;
         if (dot(ray, normal) > 0.0f)
                 normal = -normal;
 
-        float3 seed = make_float3(idx.x, idx.y, parameters.time);
+        float3 seed = make_float3(idx.x, idx.y, info.time);
         
-        cuda::_material m = parameters.materials[material_id];
+        cuda::_material m = info.materials[material_id];
         
         SurfaceHit sh;
         sh.x = position;
-        sh.wo = normalize(parameters.camera.origin - position);
+        sh.wo = normalize(info.camera.origin - position);
         sh.n = normalize(normal);
         sh.entering = (raw_normal.w > 0.0f);
         
@@ -208,15 +223,15 @@ extern "C" __global__ void __raygen__()
         // TODO: simoultaenous viewports...
         // TODO: skip direct lighting for highly specular surfaces
 
-        int N = parameters.indirect.N;
+        int N = info.indirect.N;
         int N2 = N * N;
         uint2 blocks = make_uint2(resolution.x / N, resolution.y / N);
         uint2 coord = make_uint2(idx.x/N, idx.y/N);
         uint block_index = coord.x + coord.y * blocks.x;
-        uint offset = parameters.indirect.block_offsets[block_index];
+        uint offset = info.indirect.block_offsets[block_index];
         uint2 local = make_uint2(idx.x % N, idx.y % N);
         uint local_index = local.x + local.y * N;
-        offset = (local_index + offset + parameters.counter) % (N2/2);
+        offset = (local_index + offset + info.counter) % (N2/2);
 
         // TODO: 2/N2 samples will have secondary bounces, one of which will
         // have third bounces purely for indirect cache
@@ -242,7 +257,7 @@ extern "C" __global__ void __raygen__()
                 pack_pointer(&packet, i0, i1);
 
                 optixTrace(
-                        parameters.handle,
+                        info.handle,
                         sh.x, wi,
                         0.0f, 1e16f, 0.0f,
                         OptixVisibilityMask(0xFF),
@@ -251,11 +266,12 @@ extern "C" __global__ void __raygen__()
                 );
 
                 if (packet.miss) {
-                        indirect = float(N2/2) * make_float3(sky_at(parameters.sky, wi)) * abs(dot(sh.n, wi));
+                        indirect = float(N2/2) * make_float3(sky_at(info.sky, wi)) * abs(dot(sh.n, wi));
+                        // indirect = float(N2) * brdf * make_float3(sky_at(wi)) / pdf;
                 } else {
                         // TODO: if specular then skip direct lighting and do
                         // another bounce sample
-                        cuda::_material m = parameters.materials[packet.id];
+                        cuda::_material m = info.materials[packet.id];
 
                         SurfaceHit sh; 
                         sh.x = packet.x;
@@ -264,7 +280,12 @@ extern "C" __global__ void __raygen__()
                         sh.entering = packet.entering;
 
                         convert_material(m, sh.mat, packet.uv);
+
+                        // indirect = float(N2) * brdf * sh.mat.emission * abs(dot(sh.n, wi)) / pdf;
+                        // indirect = float(N2/2) * sh.mat.emission * abs(dot(sh.n, wi));
                         indirect = float(N2/2) * Ld(sh, seed) * abs(dot(sh.n, wi));
+
+                        // TODO: cache irradiance
                 }
         }
 
@@ -273,10 +294,10 @@ extern "C" __global__ void __raygen__()
         int prev_index = index;
         float3 color { 0, 0, 0 };
 
-        if (parameters.dirty) {
+        if (info.dirty) {
                 // TODO: method to return the number of samples
                 glm::vec4 p { sh.x.x, sh.x.y, sh.x.z, 1.0f };
-                p = parameters.previous_projection * parameters.previous_view * p;
+                p = info.previous_projection * info.previous_view * p;
 
                 float u = p.x/p.w;
                 float v = p.y/p.w;
@@ -292,31 +313,38 @@ extern "C" __global__ void __raygen__()
                         int iy = v * resolution.y;
 
                         prev_index = iy * resolution.x + ix;
-                        float4 prev_color = parameters.indirect.screen_irradiance[prev_index];
+                        float4 prev_color = info.indirect.screen_irradiance[prev_index];
                         samples = prev_color.w >= 0 ? prev_color.w : 0;
                 }
 
+                // TODO: check validity of temporal accumulation
+                // in order to prevent smearing
                 if (prev_index >= 0) {
-                        float4 prev = parameters.previous_position[prev_index];
+                        float4 prev = info.previous_position[prev_index];
                         float3 ppos = { prev.x, prev.y, prev.z };
-
                         int pmat = *reinterpret_cast <int *> (&prev.w);
-                        if (pmat != material_id) {
+
+                        // TODO: use some heuristic; not every difference needs
+                        // to be discarded
+                        if (pmat != material_id) {// || length(sh.n - ppos) > 0.1f) {
                                 prev_index = index;
                                 samples = 0;
+                                // color += make_float3(0, 0.5, 0.5);
+                        } else {
+                                // color += make_float3(0.5, 0.5, 0);
                         }
                 }
         } else {
-                float4 prev_color = parameters.indirect.screen_irradiance[index];
+                float4 prev_color = info.indirect.screen_irradiance[index];
                 samples = prev_color.w >= 0 ? prev_color.w : 0;
         }
         
         // Anti-alias irradiance
-        float3 prev_irradiance = make_float3(parameters.indirect.screen_irradiance[prev_index]);
+        float3 prev_irradiance = make_float3(info.indirect.screen_irradiance[prev_index]);
         if (prev_index != index) {
                 // Account for differing viewing direction
-                float3 cpos = parameters.camera.origin;
-                float3 ppos = parameters.previous_origin;
+                float3 cpos = info.camera.origin;
+                float3 ppos = info.previous_origin;
 
                 float3 cdir = normalize(sh.x - cpos);
                 float3 pdir = normalize(sh.x - ppos);
@@ -325,26 +353,26 @@ extern "C" __global__ void __raygen__()
         }
 
         // Explicitly reset samples if necessary
-        if (parameters.reset)
+        if (info.reset)
                 samples = 0;
 
         float3 new_irradiance = (prev_irradiance * samples + indirect)/(samples + 1.0f);
-        parameters.indirect.screen_irradiance[index] = make_float4(cleanse(new_irradiance), samples + 1.0f);
+        info.indirect.screen_irradiance[index] = make_float4(cleanse(new_irradiance), samples + 1.0f);
 
         // Average indirect directions
-        int dir_samples = parameters.indirect.direction_samples[index];
-        if (parameters.reset)
+        int dir_samples = info.indirect.direction_samples[index];
+        if (info.reset)
                 dir_samples = 0;
 
         // Check normal consistency
-        float4 prev_direction_bundle = parameters.indirect.irradiance_directions[prev_index];
+        float4 prev_direction_bundle = info.indirect.irradiance_directions[prev_index];
         float3 prev_direction = make_float3(prev_direction_bundle);
         float prev_pdf_sum = dir_samples * prev_direction_bundle.w;
 
         float3 new_direction;
         float new_pdf;
 
-        if (parameters.dirty) {
+        if (info.dirty) {
                 float pdf_old = cuda::pdf(sh, prev_direction, sh.mat.type);
                 float pdf_sum = pdf_old + pdf;
                 new_direction = pdf_sum > 0 ? (pdf_old * prev_direction + pdf * wi)/pdf_sum : wi;
@@ -357,12 +385,19 @@ extern "C" __global__ void __raygen__()
                 new_pdf = pdf_sum / (dir_samples + 1.0f);
         }
 
-        parameters.indirect.irradiance_directions[index] = make_float4(new_direction, new_pdf);
-        parameters.indirect.direction_samples[index] = dir_samples + 1;
+        info.indirect.irradiance_directions[index] = make_float4(new_direction, new_pdf);
+        info.indirect.direction_samples[index] = dir_samples + 1;
 
         // Save to previous state
-        parameters.previous_position[index] = make_float4(sh.n, *reinterpret_cast <float *> (&material_id));
-        parameters.direct_lighting[index] = direct;
+        info.previous_position[index] = make_float4(sh.n, *reinterpret_cast <float *> (&material_id));
+        info.direct_lighting[index].data.Le = direct;
+
+        // TODO: for diffuse surfaces, need to modify the direct lighting a
+        // little bit to account for the change in view direction
+
+        // TODO: if shadow ray fails (e.g. hits a surface), cache that
+        // information and use it to accumulate radiance (or skip new ray
+        // altogether...)
 }
 
 extern "C" __global__ void __closesthit__()

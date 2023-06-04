@@ -143,7 +143,7 @@ void EditorViewport::configure_present()
 {
         // Create a render pass for all presentation pipelines
         present_render_pass = make_render_pass(*device,
-                { framebuffer_images.viewport.format },
+                { framebuffer_images->viewport.format },
                 { vk::AttachmentLoadOp::eClear },
                 vk::Format::eD32Sfloat,
                 vk::AttachmentLoadOp::eClear
@@ -151,8 +151,8 @@ void EditorViewport::configure_present()
 
         // Another framebuffer to render to the actual viewport
         std::vector <vk::ImageView> viewport_attachment_views {
-                *framebuffer_images.viewport.view,
-                *depth_buffer.view,
+                *framebuffer_images->viewport.view,
+                *framebuffer_images->depth_buffer.view,
         };
 
         vk::FramebufferCreateInfo viewport_fb_info {
@@ -170,10 +170,10 @@ void EditorViewport::configure_gbuffer_pipeline()
 {
         // G-buffer render pass configuration
         std::vector <vk::Format> attachment_formats {
-                framebuffer_images.position.format,
-                framebuffer_images.normal.format,
-                framebuffer_images.uv.format,
-                framebuffer_images.material_index.format,
+                framebuffer_images->position.format,
+                framebuffer_images->normal.format,
+                framebuffer_images->uv.format,
+                framebuffer_images->material_index.format,
         };
 
         gbuffer_render_pass = make_render_pass(*device,
@@ -184,17 +184,17 @@ void EditorViewport::configure_gbuffer_pipeline()
                         vk::AttachmentLoadOp::eClear,
                         vk::AttachmentLoadOp::eClear,
                 },
-                depth_buffer.format,
+                framebuffer_images->depth_buffer.format,
                 vk::AttachmentLoadOp::eClear
         );
 
         // Framebuffer
         std::vector <vk::ImageView> attachment_views {
-                *framebuffer_images.position.view,
-                *framebuffer_images.normal.view,
-                *framebuffer_images.uv.view,
-                *framebuffer_images.material_index.view,
-                *depth_buffer.view
+                *framebuffer_images->position.view,
+                *framebuffer_images->normal.view,
+                *framebuffer_images->uv.view,
+                *framebuffer_images->material_index.view,
+                *framebuffer_images->depth_buffer.view
         };
 
         vk::FramebufferCreateInfo fb_info {
@@ -346,7 +346,7 @@ void EditorViewport::configure_normals_pipeline()
                 }
         }.front());
         
-        bind_ds(*device, normal.dset, framebuffer_images.normal_sampler, framebuffer_images.normal, 0);
+        bind_ds(*device, normal.dset, framebuffer_images->normal_sampler, framebuffer_images->normal, 0);
 }
 
 void EditorViewport::configure_uv_pipeline()
@@ -396,7 +396,7 @@ void EditorViewport::configure_uv_pipeline()
                 }
         }.front());
         
-        bind_ds(*device, uv.dset, framebuffer_images.uv_sampler, framebuffer_images.uv, 0);
+        bind_ds(*device, uv.dset, framebuffer_images->uv_sampler, framebuffer_images->uv, 0);
 }
 
 void EditorViewport::configure_triangulation_pipeline()
@@ -475,9 +475,9 @@ void EditorViewport::configure_triangulation_pipeline()
                 }
         }.front());
 
-        bind_ds(*device, triangulation.dset, framebuffer_images.position_sampler, framebuffer_images.position, 0);
-        bind_ds(*device, triangulation.dset, framebuffer_images.normal_sampler, framebuffer_images.normal, 1);
-        bind_ds(*device, triangulation.dset, framebuffer_images.material_index_sampler, framebuffer_images.material_index, 2);
+        bind_ds(*device, triangulation.dset, framebuffer_images->position_sampler, framebuffer_images->position, 0);
+        bind_ds(*device, triangulation.dset, framebuffer_images->normal_sampler, framebuffer_images->normal, 1);
+        bind_ds(*device, triangulation.dset, framebuffer_images->material_index_sampler, framebuffer_images->material_index, 2);
 }
 
 void EditorViewport::configure_bounding_box_pipeline()
@@ -631,7 +631,7 @@ void EditorViewport::configure_sobel_pipeline()
         std::array <vk::DescriptorImageInfo, 2> sobel_dset_image_infos {
                 vk::DescriptorImageInfo {
                         nullptr,
-                        *framebuffer_images.material_index.view,
+                        *framebuffer_images->material_index.view,
                         vk::ImageLayout::eGeneral
                 },
 
@@ -720,8 +720,8 @@ void EditorViewport::configure_highlight_pipeline()
         }.front());
 
         bind_ds(*device, highlight.dset,
-                framebuffer_images.material_index_sampler,
-                framebuffer_images.material_index, 0);
+                framebuffer_images->material_index_sampler,
+                framebuffer_images->material_index, 0);
 }
 
 // OptiX compilation options

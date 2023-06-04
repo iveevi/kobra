@@ -244,7 +244,7 @@ static void s_load_scene(const std::filesystem::path &path, const Context &conte
 
         std::string line;
         while (std::getline(file, line)) {
-                printf("Line: %s\n", line.c_str());
+                // printf("Line: %s\n", line.c_str());
                 lines.push_back(line);
         }
 
@@ -278,7 +278,7 @@ static void s_load_scene(const std::filesystem::path &path, const Context &conte
 
                 // Check if it's a new element
                 if (line[0] == '@') {
-                        printf("New element: %s\n", line.c_str());
+                        // printf("New element: %s\n", line.c_str());
                         std::istringstream iss(line.substr(1));
 
                         std::string type;
@@ -287,14 +287,14 @@ static void s_load_scene(const std::filesystem::path &path, const Context &conte
                         if (type == "entity") {
                                 // elements.push_back(Element { Element::ENTITY });
                                 elements.push_back(Element {});
-                                printf("Entity\n");
+                                // printf("Entity\n");
 
                                 std::string name = line.substr(7);
                                 elements.back().fields["name"] = trim_whitespace(name);
                         } else if (type == "materials") {
                                 // elements.push_back(Element { Element::MATERIALS });
                                 elements.push_back(Element {});
-                                printf("Materials\n");
+                                // printf("Materials\n");
                         } else {
                                 KOBRA_LOG_FILE(Log::WARN) << "Unknown element type: " << type << std::endl;
                                 continue;
@@ -311,19 +311,19 @@ static void s_load_scene(const std::filesystem::path &path, const Context &conte
                         }
 
                         std::string field = line.substr(1);
-                        printf("Field: %s\n", field.c_str());
+                        // printf("Field: %s\n", field.c_str());
 
                         if (field.rfind("transform", 0) == 0) {
-                                printf("\tTransform\n");
+                                // printf("\tTransform\n");
 
                                 float vec[9];
                                 std::istringstream iss(field.substr(10));
                                 for (int i = 0; i < 9; i++)
                                         iss >> vec[i];
 
-                                printf("\t\t%f %f %f\n", vec[0], vec[1], vec[2]);
-                                printf("\t\t%f %f %f\n", vec[3], vec[4], vec[5]);
-                                printf("\t\t%f %f %f\n", vec[6], vec[7], vec[8]);
+                                // printf("\t\t%f %f %f\n", vec[0], vec[1], vec[2]);
+                                // printf("\t\t%f %f %f\n", vec[3], vec[4], vec[5]);
+                                // printf("\t\t%f %f %f\n", vec[6], vec[7], vec[8]);
 
                                 Transform transform {
                                         { vec[0], vec[1], vec[2] },
@@ -333,7 +333,7 @@ static void s_load_scene(const std::filesystem::path &path, const Context &conte
 
                                 current_element->fields["transform"] = transform;
                         } else if (field.rfind("mesh", 0) == 0) {
-                                printf("\tMesh\n");
+                                // printf("\tMesh\n");
 
                                 int mesh_count = std::stoi(field.substr(5));
 
@@ -353,7 +353,7 @@ static void s_load_scene(const std::filesystem::path &path, const Context &conte
                                         std::getline(iss, mesh, ',');
                                         iss >> material_path;
 
-                                        printf("\t\t%s, %s\n", mesh.c_str(), material_path.c_str());
+                                        // printf("\t\t%s, %s\n", mesh.c_str(), material_path.c_str());
                                         meshes.push_back(mesh);
                                         materials_paths.push_back(material_path);
                                 }
@@ -361,7 +361,7 @@ static void s_load_scene(const std::filesystem::path &path, const Context &conte
                                 current_element->fields["mesh"] = meshes;
                                 current_element->fields["material"] = materials_paths;
                         } else if (field.rfind("renderable", 0) == 0) {
-                                printf("\tRenderable\n");
+                                // printf("\tRenderable\n");
                                 current_element->fields["renderable"] = true;
                         } else if (field.rfind("list", 0) == 0) {
                                 if (field.length() <= 5) {
@@ -372,7 +372,7 @@ static void s_load_scene(const std::filesystem::path &path, const Context &conte
                                 std::string count = field.substr(5);
                                 elements.back().fields["count"] = std::stoi(count);
 
-                                printf("\tList of materials, count: %s\n", count.c_str());
+                                // printf("\tList of materials, count: %s\n", count.c_str());
 
                                 std::vector <std::string> materials;
                                 for (int j = 0; j < std::stoi(count); j++) {
@@ -393,7 +393,7 @@ static void s_load_scene(const std::filesystem::path &path, const Context &conte
                                 std::istringstream iss(field.substr(7));
                                 iss >> fov >> aspect;
 
-                                printf("\tCamera, fov: %f, aspect: %f\n", fov, aspect);
+                                // printf("\tCamera, fov: %f, aspect: %f\n", fov, aspect);
 
                                 current_element->fields["fov"] = fov;
                                 current_element->fields["aspect"] = aspect;
@@ -476,7 +476,7 @@ static void s_load_scene(const std::filesystem::path &path, const Context &conte
                                         // Material::all.push_back(material);
                                         int32_t index = load(material_daemon, material_path_full);
 
-                                        printf("Mesh: %s, material: %s\n", mesh.c_str(), material_path_full.c_str());
+                                        // printf("Mesh: %s, material: %s\n", mesh.c_str(), material_path_full.c_str());
 
                                         // Check the assets path
                                         std::filesystem::path mesh_path = path / ".cache" / mesh;
@@ -518,7 +518,7 @@ static void s_load_scene(const std::filesystem::path &path, const Context &conte
                                 float fov = std::get <float> (field.second);
                                 float aspect = std::get <float> (element.fields["aspect"]);
 
-                                printf("Camera: fov = %f, aspect = %f\n", fov, aspect);
+                                // printf("Camera: fov = %f, aspect = %f\n", fov, aspect);
 
                                 entity.add <Camera> (fov, aspect);
                         }

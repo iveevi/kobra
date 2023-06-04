@@ -16,10 +16,10 @@ struct IrradianceFilterInfo {
         float4 *irradiance;
         float4 *dst;
         
-        cudaSurfaceObject_t positions;
-        cudaSurfaceObject_t normals;
-        cudaSurfaceObject_t uvs;
-        cudaSurfaceObject_t indices;
+        cudaTextureObject_t position;
+        cudaTextureObject_t normal;
+        cudaTextureObject_t uv;
+        cudaTextureObject_t index;
 
         vk::Extent2D extent;
         int radius;
@@ -37,20 +37,14 @@ void irradiance_filter(IrradianceFilterInfo info)
 
         int2 pos = make_int2(x % width, x/width);
         
-        // Retrieve surface data
-        float4 raw_position;
-        float4 raw_normal;
-        float4 raw_uv;
-        int32_t raw_index;
+        // Retrieve texture data
+        float2 tex = make_float2(pos.x, pos.y)/make_float2(info.extent.width, info.extent.height);
+        tex.y = 1.0f - tex.y;
 
-        surf2Dread(&raw_position, info.positions, pos.x * sizeof(float4),
-                   info.extent.height - (pos.y + 1));
-        surf2Dread(&raw_normal, info.normals, pos.x * sizeof(float4),
-                   info.extent.height - (pos.y + 1));
-        surf2Dread(&raw_uv, info.uvs, pos.x * sizeof(float4), info.extent.height -
-                   (pos.y + 1));
-        surf2Dread(&raw_index, info.indices, pos.x * sizeof(int32_t),
-                   info.extent.height - (pos.y + 1));
+        float4 raw_position = tex2D <float4> (info.position, tex.x, tex.y);
+        float4 raw_normal = tex2D <float4> (info.normal, tex.x, tex.y);
+        float4 raw_uv = tex2D <float4> (info.uv, tex.x, tex.y);
+        int32_t raw_index = tex2D <int32_t> (info.index, tex.x, tex.y);
 
         float3 normal = make_float3(raw_normal);
         float3 position = make_float3(raw_position);
@@ -70,19 +64,13 @@ void irradiance_filter(IrradianceFilterInfo info)
                                 new_pos.y < 0 || new_pos.y >= height)
                                 continue;
 
-                        float4 raw_new_position;
-                        float4 raw_new_normal;
-                        float4 raw_new_uv;
-                        int32_t raw_new_index;
+                        float2 tex = make_float2(new_pos.x, new_pos.y)/make_float2(info.extent.width, info.extent.height);
+                        tex.y = 1.0f - tex.y;
 
-                        surf2Dread(&raw_new_position, info.positions, new_pos.x * sizeof(float4),
-                                   info.extent.height - (new_pos.y + 1));
-                        surf2Dread(&raw_new_normal, info.normals, new_pos.x * sizeof(float4),
-                                  info.extent.height - (new_pos.y + 1));
-                        surf2Dread(&raw_new_uv, info.uvs, new_pos.x * sizeof(float4),
-                                  info.extent.height - (new_pos.y + 1));
-                        surf2Dread(&raw_new_index, info.indices, new_pos.x * sizeof(int32_t),
-                                   info.extent.height - (new_pos.y + 1));
+                        float4 raw_new_position = tex2D <float4> (info.position, tex.x, tex.y);
+                        float4 raw_new_normal = tex2D <float4> (info.normal, tex.x, tex.y);
+                        float4 raw_new_uv = tex2D <float4> (info.uv, tex.x, tex.y);
+                        int32_t raw_new_index = tex2D <int32_t> (info.index, tex.x, tex.y);
 
                         float3 new_position = make_float3(raw_new_position);
                         float3 new_normal = make_float3(raw_new_normal);
@@ -109,13 +97,13 @@ struct FinalGatherInfo {
         float4 *color;
         float4 *directions;
 
-        Reservoir <DirectLightingSample> *direct_lighting;
+        float3 *direct_lighting;
         float4 *indirect_irradiance;
                 
-        cudaSurfaceObject_t position_surface;
-        cudaSurfaceObject_t normal_surface;
-        cudaSurfaceObject_t uv_surface;
-        cudaSurfaceObject_t index_surface;
+        cudaTextureObject_t position;
+        cudaTextureObject_t normal;
+        cudaTextureObject_t uv;
+        cudaTextureObject_t index;
 
         Sky sky;
         
@@ -148,15 +136,13 @@ void final_gather(FinalGatherInfo info)
                 return;
 
         // Retrieve surface data
-        float4 raw_position;
-        float4 raw_normal;
-        float4 raw_uv;
-        int32_t raw_index;
+        float2 tex = make_float2(x, y)/make_float2(info.extent.width, info.extent.height);
+        tex.y = 1.0f - tex.y;
 
-        surf2Dread(&raw_position, info.position_surface, x * sizeof(float4), info.extent.height - (y + 1));
-        surf2Dread(&raw_normal, info.normal_surface, x * sizeof(float4), info.extent.height - (y + 1));
-        surf2Dread(&raw_uv, info.uv_surface, x * sizeof(float4), info.extent.height - (y + 1));
-        surf2Dread(&raw_index, info.index_surface, x * sizeof(int32_t), info.extent.height - (y + 1));
+        float4 raw_position = tex2D <float4> (info.position, tex.x, tex.y);
+        float4 raw_normal = tex2D <float4> (info.normal, tex.x, tex.y);
+        float4 raw_uv = tex2D <float4> (info.uv, tex.x, tex.y);
+        int32_t raw_index = tex2D <int32_t> (info.index, tex.x, tex.y);
 
         // If there is a miss, then exit...
         if (raw_index == -1) {
@@ -201,7 +187,7 @@ void final_gather(FinalGatherInfo info)
         if (info.irradiance)
                 indirect = make_float3(info.indirect_irradiance[index]);
 
-        float3 direct = info.direct_lighting[index].data.Le;
+        float3 direct = info.direct_lighting[index];
         float3 color = cleanse(info.direct * direct + info.indirect * indirect);
         if (info.mean_direction)
                 color = wi * 0.5 + 0.5;
@@ -245,12 +231,11 @@ void SparseGI::render(EditorViewport *ev,
 
                 int size = new_extent.width * new_extent.height;
                 launch_params.previous_position = cuda::alloc <float4> (size);
-                // CUDA_CHECK(cudaMalloc((void **) &launch_params.previous_position, size * sizeof(float4)));
-                CUDA_CHECK(cudaMalloc((void **) &launch_params.indirect.screen_irradiance, size * sizeof(float4)));
-                CUDA_CHECK(cudaMalloc((void **) &launch_params.indirect.final_irradiance, size * sizeof(float4)));
-                CUDA_CHECK(cudaMalloc((void **) &launch_params.indirect.irradiance_directions, size * sizeof(float4)));
-                CUDA_CHECK(cudaMalloc((void **) &launch_params.indirect.direction_samples, size * sizeof(float)));
-                CUDA_CHECK(cudaMalloc((void **) &launch_params.direct_lighting, size * sizeof(Reservoir <DirectLightingSample>)));
+                launch_params.indirect.screen_irradiance = cuda::alloc <float4> (size);
+                launch_params.indirect.final_irradiance = cuda::alloc <float4> (size);
+                launch_params.indirect.irradiance_directions = cuda::alloc <float4> (size);
+                launch_params.indirect.direction_samples = cuda::alloc <float> (size);
+                launch_params.direct_lighting = cuda::alloc <float3> (size);
 
                 // Generate block offsets
                 uint N2 = launch_params.indirect.N * launch_params.indirect.N;
@@ -294,11 +279,11 @@ void SparseGI::render(EditorViewport *ev,
         launch_params.camera.origin = cuda::to_f3(render_info.camera_transform.position);
         launch_params.camera.resolution = { ev->extent.width, ev->extent.height };
 
-        // Configure surfaces
-        launch_params.position_surface = ev->framebuffer_images.cu_position_surface;
-        launch_params.normal_surface = ev->framebuffer_images.cu_normal_surface;
-        launch_params.uv_surface = ev->framebuffer_images.cu_uv_surface;
-        launch_params.index_surface = ev->framebuffer_images.cu_material_index_surface;
+        // Configure textures and other buffers
+        launch_params.gbuffer.position = ev->framebuffer_images->cu_position_texture;
+        launch_params.gbuffer.normal = ev->framebuffer_images->cu_normal_texture;
+        launch_params.gbuffer.uv = ev->framebuffer_images->cu_uv_texture;
+        launch_params.gbuffer.index = ev->framebuffer_images->cu_material_index_texture;
 
         launch_params.materials = (cuda::_material *) ev->common_rtx.dev_materials;
 
@@ -329,10 +314,10 @@ void SparseGI::render(EditorViewport *ev,
                 IrradianceFilterInfo info;
                 info.irradiance = launch_params.indirect.screen_irradiance;
                 info.dst = launch_params.indirect.final_irradiance;
-                info.normals = launch_params.normal_surface;
-                info.positions = launch_params.position_surface;
-                info.uvs = launch_params.uv_surface;
-                info.indices = launch_params.index_surface;
+                info.normal = launch_params.gbuffer.normal;
+                info.position = launch_params.gbuffer.position;
+                info.uv = launch_params.gbuffer.uv;
+                info.index = launch_params.gbuffer.index;
                 info.extent = ev->extent;
                 info.radius = 2;
 
@@ -352,13 +337,13 @@ void SparseGI::render(EditorViewport *ev,
         info.camera = launch_params.camera;
         info.color = ev->common_rtx.dev_color;
         info.direct_lighting = launch_params.direct_lighting;
-        info.index_surface = launch_params.index_surface;
         info.indirect_irradiance = launch_params.indirect.final_irradiance;
         info.materials = (cuda::_material *) ev->common_rtx.dev_materials;
-        info.normal_surface = launch_params.normal_surface;
-        info.position_surface = launch_params.position_surface;
+        info.normal = launch_params.gbuffer.normal;
+        info.position = launch_params.gbuffer.position;
+        info.uv = launch_params.gbuffer.uv;
+        info.index = launch_params.gbuffer.index;
         info.time = launch_params.time;
-        info.uv_surface = launch_params.uv_surface;
         info.sky.texture = ev->environment_map.texture;
         info.sky.enabled = ev->environment_map.valid;
         info.extent = ev->extent;

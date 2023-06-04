@@ -403,10 +403,10 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info,
                 gbuffer_rtx.launch_params.origin = cuda::to_f3(render_info.camera_transform.position);
                 gbuffer_rtx.launch_params.resolution = { extent.width, extent.height };
                 
-                gbuffer_rtx.launch_params.position_surface = framebuffer_images.cu_position_surface;
-                gbuffer_rtx.launch_params.normal_surface = framebuffer_images.cu_normal_surface;
-                gbuffer_rtx.launch_params.uv_surface = framebuffer_images.cu_uv_surface;
-                gbuffer_rtx.launch_params.index_surface = framebuffer_images.cu_material_index_surface;
+                gbuffer_rtx.launch_params.position_surface = framebuffer_images->cu_position_surface;
+                gbuffer_rtx.launch_params.normal_surface = framebuffer_images->cu_normal_surface;
+                gbuffer_rtx.launch_params.uv_surface = framebuffer_images->cu_uv_surface;
+                gbuffer_rtx.launch_params.index_surface = framebuffer_images->cu_material_index_surface;
 
                 gbuffer_rtx.launch_params.materials = (cuda::_material *) common_rtx.dev_materials;
 
@@ -431,8 +431,8 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info,
         }
 
         // Transition layout for position and normal map
-        framebuffer_images.material_index.layout = vk::ImageLayout::eUndefined;
-        framebuffer_images.material_index.transition_layout(render_info.cmd, vk::ImageLayout::eGeneral);
+        framebuffer_images->material_index.layout = vk::ImageLayout::eUndefined;
+        framebuffer_images->material_index.transition_layout(render_info.cmd, vk::ImageLayout::eGeneral);
 
         sobel.output.transition_layout(render_info.cmd, vk::ImageLayout::eGeneral);
 
@@ -452,15 +452,15 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info,
 
         // Transition framebuffer images to shader read for later stages
         // TODO: some way to avoid this hackery
-        framebuffer_images.position.layout = vk::ImageLayout::eUndefined;
-        framebuffer_images.normal.layout = vk::ImageLayout::eUndefined;
-        framebuffer_images.uv.layout = vk::ImageLayout::eUndefined;
-        framebuffer_images.material_index.layout = vk::ImageLayout::eGeneral;
+        framebuffer_images->position.layout = vk::ImageLayout::eUndefined;
+        framebuffer_images->normal.layout = vk::ImageLayout::eUndefined;
+        framebuffer_images->uv.layout = vk::ImageLayout::eUndefined;
+        framebuffer_images->material_index.layout = vk::ImageLayout::eGeneral;
 
-        framebuffer_images.position.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
-        framebuffer_images.normal.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
-        framebuffer_images.uv.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
-        framebuffer_images.material_index.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
+        framebuffer_images->position.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
+        framebuffer_images->normal.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
+        framebuffer_images->uv.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
+        framebuffer_images->material_index.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
         
         sobel.output.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
 }
@@ -495,10 +495,10 @@ void EditorViewport::render_path_traced
         path_tracer.launch_params.origin = cuda::to_f3(render_info.camera_transform.position);
         path_tracer.launch_params.resolution = { extent.width, extent.height };
         
-        path_tracer.launch_params.position_surface = framebuffer_images.cu_position_surface;
-        path_tracer.launch_params.normal_surface = framebuffer_images.cu_normal_surface;
-        path_tracer.launch_params.uv_surface = framebuffer_images.cu_uv_surface;
-        path_tracer.launch_params.index_surface = framebuffer_images.cu_material_index_surface;
+        path_tracer.launch_params.position_surface = framebuffer_images->cu_position_surface;
+        path_tracer.launch_params.normal_surface = framebuffer_images->cu_normal_surface;
+        path_tracer.launch_params.uv_surface = framebuffer_images->cu_uv_surface;
+        path_tracer.launch_params.index_surface = framebuffer_images->cu_material_index_surface;
 
         path_tracer.launch_params.materials = (cuda::_material *) common_rtx.dev_materials;
 
@@ -650,8 +650,8 @@ void EditorViewport::render_normals(const RenderInfo &render_info)
 
         // Transition framebuffer images to shader read
         // TODO: some way to avoid this hackery
-        // framebuffer_images.normal.layout = vk::ImageLayout::ePresentSrcKHR;
-        // framebuffer_images.normal.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
+        // framebuffer_images->normal.layout = vk::ImageLayout::ePresentSrcKHR;
+        // framebuffer_images->normal.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
 
         render_info.cmd.beginRenderPass(
                 vk::RenderPassBeginInfo {
@@ -924,22 +924,22 @@ EditorViewport::selection_query(const std::vector <Entity> &entities, const glm:
         submit_now(*device, queue, *command_pool,
                 [&](const vk::raii::CommandBuffer &cmd) {
                         transition_image_layout(cmd,
-                                *framebuffer_images.material_index.image,
-                                framebuffer_images.material_index.format,
+                                *framebuffer_images->material_index.image,
+                                framebuffer_images->material_index.format,
                                 vk::ImageLayout::eShaderReadOnlyOptimal,
                                 vk::ImageLayout::eTransferSrcOptimal
                         );
 
                         copy_image_to_buffer(cmd,
-                                framebuffer_images.material_index.image,
+                                framebuffer_images->material_index.image,
                                 index_staging_buffer.buffer,
-                                framebuffer_images.material_index.format,
+                                framebuffer_images->material_index.format,
                                 extent.width, extent.height
                         );
 
                         transition_image_layout(cmd,
-                                *framebuffer_images.material_index.image,
-                                framebuffer_images.material_index.format,
+                                *framebuffer_images->material_index.image,
+                                framebuffer_images->material_index.format,
                                 vk::ImageLayout::eTransferSrcOptimal,
                                 vk::ImageLayout::eShaderReadOnlyOptimal
                         );

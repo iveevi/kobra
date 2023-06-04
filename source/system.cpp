@@ -13,15 +13,15 @@ Entity &System::make_entity(const std::string &name) {
 	entities.push_back(e);
 
 	lookup[name] = id;
-        printf("System refs:\n");
-        for (int i = 0; i < transforms.size(); i++) {
-                std::string name = "";
-                for (auto pr : lookup) {
-                        if (pr.second == i)
-                                name = pr.first;
-                }
-                printf("%s -- tr: %p renderable: %p\n", name.c_str(), &transforms[i], &rasterizers[i]);
-        }
+        // printf("System refs:\n");
+        // for (int i = 0; i < transforms.size(); i++) {
+        //         std::string name = "";
+        //         for (auto pr : lookup) {
+        //                 if (pr.second == i)
+        //                         name = pr.first;
+        //         }
+        //         printf("%s -- tr: %p renderable: %p\n", name.c_str(), &transforms[i], &rasterizers[i]);
+        // }
 	return entities.back();
 }
 

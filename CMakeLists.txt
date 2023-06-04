@@ -135,6 +135,7 @@ add_executable(editor
         editor.cu
         editor/editor_viewport.cu
         editor/inspector.cpp
+        editor/mamba.cu
         editor/material_preview.cpp
         editor/scene_graph.cpp
         editor/shaders.cpp
@@ -206,6 +207,7 @@ file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/bin/ptx)
 
 file(GLOB_RECURSE OPTIX_SHADERS
 	${CMAKE_CURRENT_SOURCE_DIR}/editor/gbuffer_rtx_shader.cu
+	${CMAKE_CURRENT_SOURCE_DIR}/editor/optix/mamba_shader.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/editor/optix/sparse_gi_shader.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/editor/path_tracer.cu
 	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/amadeus_path_tracer.cu

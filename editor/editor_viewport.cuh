@@ -2,6 +2,7 @@
 
 // Editor headers
 #include "common.hpp"
+#include "mamba.cuh"
 #include "optix/sparse_gi_shader.cuh"
 
 // Forward declarations
@@ -91,19 +92,43 @@ struct SparseGI {
 
 void initialize(SparseGI *, const OptixDeviceContext &);
 void render(EditorViewport *, SparseGI *, const RenderInfo &, const std::vector <Entity> &, const MaterialDaemon *);
-
-// Xenon global illumination
-struct Xenon {
-        // OptiX resources
-        OptixPipeline pipeline = 0;
-        OptixModule module = 0;
         
-        OptixProgramGroup ray_generation = 0;
-        OptixProgramGroup closest_hit = 0;
-        OptixProgramGroup miss = 0;
+// Framebuffer resources
+struct FramebufferResources {
+        ImageData viewport = nullptr;
+        ImageData position = nullptr;
+        ImageData normal = nullptr;
+        ImageData uv = nullptr;
+        ImageData material_index = nullptr;
+        
+        DepthBuffer depth_buffer = nullptr;
+
+        // Vulkan sampler objects
+        vk::raii::Sampler position_sampler = nullptr;
+        vk::raii::Sampler normal_sampler = nullptr;
+        vk::raii::Sampler uv_sampler = nullptr;
+        vk::raii::Sampler material_index_sampler = nullptr;
+
+        // CUDA surface objects for write
+        cudaSurfaceObject_t cu_position_surface = 0;
+        cudaSurfaceObject_t cu_normal_surface = 0;
+        cudaSurfaceObject_t cu_uv_surface = 0;
+        cudaSurfaceObject_t cu_material_index_surface = 0;
+
+        // CUDA texture objects for read
+        cudaTextureObject_t cu_position_texture = 0;
+        cudaTextureObject_t cu_normal_texture = 0;
+        cudaTextureObject_t cu_uv_texture = 0;
+        cudaTextureObject_t cu_material_index_texture = 0;
+
+        // Current extent
+        vk::Extent2D extent;
 
         // Constructor
-        Xenon(const OptixDeviceContext &);
+        FramebufferResources() = delete;
+        FramebufferResources(const vk::raii::PhysicalDevice &,
+                const vk::raii::Device &,
+                const vk::Extent2D &);
 };
 
 // Editor rendering
@@ -120,28 +145,7 @@ struct EditorViewport {
         std::shared_ptr <MeshDaemon> mesh_memory = nullptr;
 
         // Buffers
-        struct FramebufferImages {
-                ImageData viewport = nullptr;
-                ImageData position = nullptr;
-                ImageData normal = nullptr;
-                ImageData uv = nullptr;
-                ImageData material_index = nullptr;
-
-                // Vulkan sampler objects
-                vk::raii::Sampler position_sampler = nullptr;
-                vk::raii::Sampler normal_sampler = nullptr;
-                vk::raii::Sampler uv_sampler = nullptr;
-                vk::raii::Sampler material_index_sampler = nullptr;
-
-                // CUDA surface objects for write
-                cudaSurfaceObject_t cu_position_surface = 0;
-                cudaSurfaceObject_t cu_normal_surface = 0;
-                cudaSurfaceObject_t cu_uv_surface = 0;
-                cudaSurfaceObject_t cu_material_index_surface = 0;
-                // cudaSurfaceObject_t cu_color_surface = 0;
-        } framebuffer_images;
-
-        DepthBuffer depth_buffer = nullptr;
+        FramebufferResources *framebuffer_images = nullptr;
 
         vk::raii::RenderPass gbuffer_render_pass = nullptr;
         vk::raii::RenderPass present_render_pass = nullptr;
@@ -209,6 +213,7 @@ struct EditorViewport {
         } path_tracer;
 
         SparseGI sparse_gi;
+        Mamba *mamba = nullptr;
 
         // Path tracer (Amadeus)
         // struct AmadeusPathTracer {
@@ -325,16 +330,17 @@ struct EditorViewport {
                         const MaterialDaemon *);
 
         // Properties
+        // TODO: remove these ones...
         ImageData &viewport() {
-                return framebuffer_images.viewport;
+                return framebuffer_images->viewport;
         }
 
         vk::raii::Image &viewport_image() {
-                return framebuffer_images.viewport.image;
+                return framebuffer_images->viewport.image;
         }
         
         vk::raii::ImageView &viewport_image_view() {
-                return framebuffer_images.viewport.view;
+                return framebuffer_images->viewport.view;
         }
 
         // Querying objects
