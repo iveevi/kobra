@@ -25,8 +25,15 @@ struct CommonRaytracing {
         std::vector <optix::Record <Hit>> records;
         std::map <MeshIndex, int> record_refs;
 
+        // Material information
         std::vector <cuda::_material> materials;
+        std::map <int32_t, std::set <Entity>> material_refs;
         CUdeviceptr dev_materials = 0;
+        
+        // Lighting information
+        std::vector <AreaLight> lights;
+        CUdeviceptr dev_lights = 0;
+        int triangle_count = 0;
 
         // TODO: store lights as well...
         
@@ -53,7 +60,7 @@ struct CommonRaytracing {
         }
 };
 
-void update_materials(CommonRaytracing *, const MaterialDaemon *, TextureLoader *, const Device *);
+// void update_materials(CommonRaytracing *, const MaterialDaemon *, TextureLoader *, const Device *);
 
 // Sparse raytracing global illumination
 struct SparseGI {
@@ -66,9 +73,6 @@ struct SparseGI {
 
         // SBT related resources
         OptixShaderBindingTable sbt = {};
-
-        // Lighting information
-        std::vector <AreaLight> lights;
 
         // Launch parameters
         SparseGIParameters launch_params;
@@ -201,9 +205,6 @@ struct EditorViewport {
 
                 // SBT related resources
                 OptixShaderBindingTable sbt = {};
-
-                // Lighting information
-                std::vector <AreaLight> lights;
 
                 // Launch parameters
                 PathTracerParameters launch_params;

@@ -21,8 +21,7 @@ struct Mamba {
         // OptiX resources
         OptixModule module = 0;
         
-        OptixPipeline direct_primary_ppl = 0;
-        OptixPipeline direct_temporal_ppl = 0;
+        OptixPipeline direct_ppl = 0;
 
         OptixProgramGroup raygen_direct_primary = 0;
         OptixProgramGroup raygen_direct_temporal = 0;

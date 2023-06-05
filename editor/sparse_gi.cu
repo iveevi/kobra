@@ -287,6 +287,10 @@ void SparseGI::render(EditorViewport *ev,
 
         launch_params.materials = (cuda::_material *) ev->common_rtx.dev_materials;
 
+        launch_params.area.lights = (AreaLight *) ev->common_rtx.dev_lights;
+        launch_params.area.count = ev->common_rtx.lights.size();
+        launch_params.area.triangle_count = ev->common_rtx.triangle_count;
+
         launch_params.sky.texture = ev->environment_map.texture;
         launch_params.sky.enabled = ev->environment_map.valid;
         

@@ -70,9 +70,13 @@ static cuda::_material convert_material(const Material &material, TextureLoader 
 
 // TODO: store texture loader and device...
 // TODO: common rtx method and header
-void update_materials(CommonRaytracing *crtx, const MaterialDaemon *md, TextureLoader *texture_loader, const vk::raii::Device &device)
+void update_materials(CommonRaytracing *crtx,
+                const std::vector <Entity> &entities,
+                const MaterialDaemon *md,
+                TextureLoader *texture_loader,
+                MeshDaemon *mesh_memory,
+                const vk::raii::Device &device)
 {
-        // TODO: only update if necessary
         bool valid_materials = (crtx->dev_materials != 0);
         bool no_updates = crtx->material_update_queue.empty();
         bool size_match = (crtx->materials.size() == md->materials.size());
@@ -82,13 +86,57 @@ void update_materials(CommonRaytracing *crtx, const MaterialDaemon *md, TextureL
         // TODO: logf for formatted
         printf("Updating materials (%d, %d, %d)\n", valid_materials, no_updates, size_match);
 
-        // if ()
         // TODO: only update the materials that have changed
         crtx->materials.clear();
-        for (const auto &material : md->materials) {
-                crtx->materials.push_back(
-                        convert_material(material, *texture_loader, device)
-                );
+        crtx->lights.clear();
+
+        for (int32_t i = 0; i < md->materials.size(); i++) {
+                const Material &material = md->materials[i];
+                crtx->materials.push_back(convert_material(material, *texture_loader, device));
+
+                // Update lights
+                const auto &entities = crtx->material_refs[i];
+                printf("Found %d entities for material %d\n", entities.size(), i);
+                for (const auto &entity : entities) {
+                        int id = entity.id;
+                        const auto &renderable = entity.get <Renderable> ();
+                        const auto &transform = entity.get <Transform> ();
+
+                        // Generate cache data
+                        mesh_memory->cache_cuda(entity);
+
+                        // Create SBT record for each submesh
+                        const auto &meshes = renderable.mesh->submeshes;
+                        for (int i = 0; i < meshes.size(); i++) {
+                                if (glm::length(material.emission) < 1e-3f)
+                                        continue;
+
+                                int material_index = meshes[i].material_index;
+                                const Material &material = md->materials[material_index];
+                                auto cachelet = mesh_memory->get(entity.id, i);
+
+                                // TODO: do we really need another
+                                // buffer for this?
+                                std::cout << "Adding area light: # of triangles = "
+                                        << meshes[i].triangles() << ": "
+                                        << meshes[i].vertices.size() << ", "
+                                        << meshes[i].indices.size() << std::endl;
+                                
+                                for (int j = 0; j < meshes[i].triangles(); j++) {
+                                        int i0 = meshes[i].indices[3 * j];
+                                        int i1 = meshes[i].indices[3 * j + 1];
+                                        int i2 = meshes[i].indices[3 * j + 2];
+                                }
+
+                                AreaLight light;
+                                light.model = transform.matrix();
+                                light.vertices = (Vertex *) cachelet.m_cuda_vertices;
+                                light.indices = (uint3 *) cachelet.m_cuda_triangles;
+                                light.triangles = meshes[i].triangles();
+                                light.emission = cuda::to_f3(material.emission);
+                                crtx->lights.push_back(light);
+                        }
+                }
         }
 
         if (crtx->dev_materials)
@@ -97,6 +145,16 @@ void update_materials(CommonRaytracing *crtx, const MaterialDaemon *md, TextureL
         crtx->dev_materials = cuda::make_buffer_ptr(crtx->materials);
         crtx->material_reset = true;
         crtx->material_update_queue = {};
+
+        // Synthesize lighting information
+        crtx->triangle_count = 0;
+        for (const auto &light : crtx->lights)
+                crtx->triangle_count += light.triangles;
+
+        if (crtx->dev_lights)
+                cuda::free(crtx->dev_lights);
+
+        crtx->dev_lights = cuda::make_buffer_ptr(crtx->lights);
 }
 
 // Prerender process for raytracing
@@ -147,7 +205,9 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
 
                                 common_rtx.records[new_index] = record;
 
-                                const Material &material = md->materials[meshes[i].material_index];
+                                // TODO: defer to material update
+                                int material_index = meshes[i].material_index;
+                                const Material &material = md->materials[material_index];
                                 if (glm::length(material.emission) > 1e-3f) {
                                         // TODO: do we really need another
                                         // buffer for this?
@@ -168,8 +228,14 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
                                         light.indices = (uint3 *) cachelet.m_cuda_triangles;
                                         light.triangles = meshes[i].triangles();
                                         light.emission = cuda::to_f3(material.emission);
-                                        path_tracer.lights.push_back(light);
+                                        common_rtx.lights.push_back(light);
                                 }
+
+                                // Record material reference
+                                if (common_rtx.material_refs.empty())
+                                        common_rtx.material_refs[material_index] = std::set <Entity> ();
+                                else
+                                        common_rtx.material_refs[material_index].insert(entity);
 
                                 rebuild_tlas = true;
                                 rebuild_sbt = true;
@@ -244,35 +310,11 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
                 path_tracer.sbt.hitgroupRecordBase = cuda::make_buffer_ptr(common_rtx.records);
                 path_tracer.sbt.hitgroupRecordStrideInBytes = sizeof(optix::Record <Hit>);
                 path_tracer.sbt.hitgroupRecordCount = common_rtx.records.size();
-
-                // Update lights for the sparse GI algorithm
-                sparse_gi.launch_params.area.lights = 0;
-                sparse_gi.launch_params.area.count = path_tracer.lights.size();
-                if (sparse_gi.launch_params.area.count > 0)
-                        sparse_gi.launch_params.area.lights = cuda::make_buffer(path_tracer.lights);
-
-                uint triangles = 0;
-                for (const auto &light : path_tracer.lights)
-                        triangles += light.triangles;
-
-                sparse_gi.launch_params.area.triangle_count = triangles;
-                
-                // Update lights for the path tracer
-                path_tracer.launch_params.area.lights = 0;
-                path_tracer.launch_params.area.count = path_tracer.lights.size();
-                if (path_tracer.lights.size() > 0)
-                        path_tracer.launch_params.area.lights = cuda::make_buffer(path_tracer.lights);
-                path_tracer.launch_params.area.triangle_count = triangles;
-
-                // Update lights for Mamba GI
-                mamba->launch_info.area.lights = 0;
-                mamba->launch_info.area.count = path_tracer.lights.size();
-                if (path_tracer.lights.size() > 0)
-                        mamba->launch_info.area.lights = cuda::make_buffer(path_tracer.lights);
         }
 
         // Update the material buffer
-        update_materials(&common_rtx, md, texture_loader, *device);
+        update_materials(&common_rtx, entities, md, texture_loader,
+                        mesh_memory.get(), *device);
 
         // Turn off signal
         common_rtx.clk_rise = false;
@@ -518,6 +560,10 @@ void EditorViewport::render_path_traced
         path_tracer.launch_params.index_surface = framebuffer_images->cu_material_index_surface;
 
         path_tracer.launch_params.materials = (cuda::_material *) common_rtx.dev_materials;
+
+        path_tracer.launch_params.area.lights = (AreaLight *) common_rtx.dev_lights;
+        path_tracer.launch_params.area.count = common_rtx.lights.size();
+        path_tracer.launch_params.area.triangle_count = common_rtx.triangle_count;
 
         path_tracer.launch_params.sky.texture = environment_map.texture;
         path_tracer.launch_params.sky.enabled = environment_map.valid;

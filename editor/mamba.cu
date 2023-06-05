@@ -67,7 +67,7 @@ Mamba::Mamba(const OptixDeviceContext &context)
                 program_groups
         );
 
-        direct_primary_ppl = optix::link_optix_pipeline(context, {
+        direct_ppl = optix::link_optix_pipeline(context, {
                 raygen_direct_primary,
                 raygen_direct_temporal,
                 raygen_direct_spatial,
@@ -75,15 +75,8 @@ Mamba::Mamba(const OptixDeviceContext &context)
                 miss,
         }, pipeline_compile_options, pipeline_link_options);
         
-        direct_temporal_ppl = optix::link_optix_pipeline(context, {
-                raygen_direct_temporal,
-                closest_hit,
-                miss,
-        }, pipeline_compile_options, pipeline_link_options);
-
         // Create shader binding table
         direct_initial_sbt = {};
-        direct_temporal_ppl = {};
 
         // Ray generation
         CUdeviceptr dev_direct_initial_raygen_record;
@@ -120,7 +113,6 @@ Mamba::Mamba(const OptixDeviceContext &context)
         direct_initial_sbt.hitgroupRecordCount = 0;
 
         // std::memcpy(&direct_temporal_sbt, &direct_initial_sbt, sizeof(OptixShaderBindingTable));
-
         // direct_temporal_sbt.raygenRecord = dev_direct_temporal_raygen_record;
         
         // Setup parameters
@@ -246,6 +238,10 @@ void Mamba::render(EditorViewport *ev,
 
         launch_info.materials = (cuda::_material *) ev->common_rtx.dev_materials;
 
+        launch_info.area.lights = (AreaLight *) ev->common_rtx.dev_lights;
+        launch_info.area.count = ev->common_rtx.lights.size();
+        launch_info.area.triangle_count = ev->common_rtx.triangle_count;
+
         launch_info.sky.texture = ev->environment_map.texture;
         launch_info.sky.enabled = ev->environment_map.valid;
        
@@ -256,7 +252,7 @@ void Mamba::render(EditorViewport *ev,
         // (and then for spatil reuse in restir we paralleize with indirect
         // filtering...)
         OPTIX_CHECK(
-                optixLaunch(direct_primary_ppl, 0,
+                optixLaunch(direct_ppl, 0,
                         dev_launch_info,
                         sizeof(MambaLaunchInfo),
                         &direct_initial_sbt, extent.width, extent.height, 1
@@ -269,7 +265,7 @@ void Mamba::render(EditorViewport *ev,
         direct_temporal_sbt.raygenRecord = dev_direct_temporal_raygen_record;
 
         OPTIX_CHECK(
-                optixLaunch(direct_primary_ppl, 0,
+                optixLaunch(direct_ppl, 0,
                         dev_launch_info,
                         sizeof(MambaLaunchInfo),
                         &direct_temporal_sbt, extent.width, extent.height, 1
@@ -282,7 +278,7 @@ void Mamba::render(EditorViewport *ev,
         direct_spatial_sbt.raygenRecord = dev_direct_spatial_raygen_record;
 
         OPTIX_CHECK(
-                optixLaunch(direct_primary_ppl, 0,
+                optixLaunch(direct_ppl, 0,
                         dev_launch_info,
                         sizeof(MambaLaunchInfo),
                         &direct_spatial_sbt, extent.width, extent.height, 1

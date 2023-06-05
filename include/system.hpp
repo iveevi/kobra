@@ -383,6 +383,23 @@ public:
 		ecs->add <T> (id, args ...);
 	}
 
+        // Comparison
+        bool operator==(const Entity &other) const {
+                return (ecs == other.ecs) && (id == other.id);
+        }
+
+        bool operator!=(const Entity &other) const {
+                return !(*this == other);
+        }
+
+        bool operator<(const Entity &other) const {
+                return (ecs < other.ecs) || ((ecs == other.ecs) && (id < other.id));
+        }
+
+        bool operator>(const Entity &other) const {
+                return (ecs > other.ecs) || ((ecs == other.ecs) && (id > other.id));
+        }
+
 	// Friend the System class
 	friend class System;
 	friend class Scene;
