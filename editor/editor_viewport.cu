@@ -42,7 +42,7 @@ EditorViewport::EditorViewport(const Context &context,
         sparse_gi.depth = 2;
 
         // amadeus_path_tracer.depth = 2;
-
+        mamba = new Mamba(system->context());
         resize(context.extent);
 
         configure_present();
@@ -60,8 +60,6 @@ EditorViewport::EditorViewport(const Context &context,
         initialize(&sparse_gi, system->context());
         // configure_amadeus_path_tracer(context);
         configure_path_tracer(context);
-        
-        mamba = new Mamba(system->context());
       
         // Common raytracing data
         common_rtx.framer = kobra::layers::Framer(context, present_render_pass);
@@ -70,6 +68,15 @@ EditorViewport::EditorViewport(const Context &context,
 
         // Daemon interactions
         subscribe(md, &common_rtx.material_update_queue);
+}
+
+// Destructor
+EditorViewport::~EditorViewport()
+{
+        if (framebuffer_images)
+                delete framebuffer_images;
+        if (mamba)
+                delete mamba;
 }
 
 static void import_vulkan_texture
@@ -160,8 +167,9 @@ void EditorViewport::resize(const vk::Extent2D &new_extent)
         common_rtx.dev_traced = (CUdeviceptr) cuda::alloc <uint32_t> (new_extent.width * new_extent.height);
         common_rtx.traced.resize(new_extent.width * new_extent.height * sizeof(uint32_t));
 
-        // Send resize event to the sparse GI pipeline
+        // Send resize events
         sparse_gi.resize_queue.push(new_extent);
+        mamba->resize_queue.push(new_extent);
 
         // Allocate Sobel filter output image
         sobel.output = ImageData {

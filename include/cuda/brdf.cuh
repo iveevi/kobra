@@ -140,7 +140,7 @@ struct Glass : ScatteringBase {
                 float3 r_out_parallel = ni_over_nt * (v + cos_theta * n);
                 float r_out_length = length(r_out_parallel);
                 float r_out_length_squared = r_out_length * r_out_length;
-                float3 r_out_perp = -sqrt(fabs(1.0 - r_out_length_squared)) * n;
+                float3 r_out_perp = -sqrtf(fabs(1.0f - r_out_length_squared)) * n;
                 return r_out_parallel + r_out_perp;
         }
 

@@ -203,7 +203,8 @@ float3 radiance(const SurfaceHit &sh, float3 &seed)
 
                 float weight = power_heuristic(light_pdf, pdf);
 
-                out_radiance = weight * brdf * light_info.emission * ldotn * ndotwi/(light_pdf * falloff);
+                // out_radiance = weight * brdf * light_info.emission * ldotn * ndotwi/(light_pdf * falloff);
+                out_radiance = brdf * light_info.emission * ldotn * ndotwi/(light_pdf * falloff);
         }
 
         return out_radiance;
@@ -278,7 +279,9 @@ extern "C" __global__ void __raygen__()
                 Shading out;
 
                 float3 brdf = eval(sh, wi, pdf, out, seed);
-                if (pdf > 0.0 && depth < parameters.depth - 1) {
+                bool valid_ray = !(isnan(wi.x) || isnan(wi.y) || isnan(wi.z))
+                        && (fabs(length(wi) - 1.0) < 1e-3f);
+                if (depth < parameters.depth - 1 && valid_ray && pdf > 0.0f) {
                         Packet packet;
                         packet.miss = false;
                         packet.entering = false;

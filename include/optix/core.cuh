@@ -120,7 +120,7 @@ inline OptixDeviceContext make_context()
 
 	OptixDeviceContext context = 0;
 	OPTIX_CHECK(optixDeviceContextCreate(cuda_context, &options, &context));
-        // OPTIX_CHECK(optixDeviceContextSetCacheEnabled(context, 0));
+        OPTIX_CHECK(optixDeviceContextSetCacheEnabled(context, 0));
 
 	return context;
 }

@@ -65,13 +65,13 @@ struct Reservoir {
 		static std::uniform_real_distribution <float> dis(0.0f, 1.0f);
 
 		// Initialize the seed
-		seed = {dis(gen), dis(gen), dis(gen)};
+		seed = { dis(gen), dis(gen), dis(gen) };
 	}
 
-	__forceinline__ __device__
-	Reservoir(const glm::vec4 &_seed)
-			: data(), w(0.0f), W(0.0f), M(0),
-			seed {_seed.x, _seed.y, _seed.z} {}
+        __forceinline__ __device__
+        Reservoir(const float3 &_seed)
+                        : data(), w(0.0f), W(0.0f), M(0),
+                        seed { _seed.x, _seed.y, _seed.z } {}
 
 	__forceinline__ __device__
 	bool update(const T &sample, float weight) {
@@ -105,14 +105,6 @@ struct Reservoir {
 	int size() const {
 		return M;
 	}
-};
-
-// TODO: refactor to direct sample
-struct DirectLightingSample {
-	float3 Le;
-	float3 normal;
-	float3 point;
-	int type;
 };
 
 // Orthogonal camera axis

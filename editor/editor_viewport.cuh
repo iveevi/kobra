@@ -91,7 +91,6 @@ struct SparseGI {
 };
 
 void initialize(SparseGI *, const OptixDeviceContext &);
-void render(EditorViewport *, SparseGI *, const RenderInfo &, const std::vector <Entity> &, const MaterialDaemon *);
         
 // Framebuffer resources
 struct FramebufferResources {
@@ -282,11 +281,15 @@ struct EditorViewport {
 
         // TODO: table mapping render_state to function for presenting
 
+        // Constructors
         EditorViewport() = delete;
         EditorViewport(const Context &,
                 const std::shared_ptr <amadeus::Accelerator> &,
                 const std::shared_ptr <MeshDaemon> &,
                 MaterialDaemon *);
+
+        // Destructor
+        ~EditorViewport();
 
         // Configuration methods
         void configure_present();

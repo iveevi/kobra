@@ -189,6 +189,7 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
                 gbuffer_rtx.launch_params.handle = handle;
                 path_tracer.launch_params.handle = handle;
                 sparse_gi.launch_params.handle = handle;
+                mamba->launch_info.handle = handle;
                 common_rtx.transform_reset = true;
         }
 
@@ -216,6 +217,21 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
                 sparse_gi.sbt.hitgroupRecordBase = cuda::make_buffer_ptr(common_rtx.records);
                 sparse_gi.sbt.hitgroupRecordStrideInBytes = sizeof(optix::Record <Hit>);
                 sparse_gi.sbt.hitgroupRecordCount = common_rtx.records.size();
+
+                // Mamba GI hit SBT
+                for (auto &record : common_rtx.records)
+                        optix::pack_header(mamba->closest_hit, record);
+                
+                if (mamba->direct_initial_sbt.hitgroupRecordBase)
+                        cuda::free(mamba->direct_initial_sbt.hitgroupRecordBase);
+
+                mamba->direct_initial_sbt.hitgroupRecordBase = cuda::make_buffer_ptr(common_rtx.records);
+                mamba->direct_initial_sbt.hitgroupRecordStrideInBytes = sizeof(optix::Record <Hit>);
+                mamba->direct_initial_sbt.hitgroupRecordCount = common_rtx.records.size();
+
+                mamba->direct_temporal_sbt.hitgroupRecordBase = cuda::make_buffer_ptr(common_rtx.records);
+                mamba->direct_temporal_sbt.hitgroupRecordStrideInBytes = sizeof(optix::Record <Hit>);
+                mamba->direct_temporal_sbt.hitgroupRecordCount = common_rtx.records.size();
 
                 // Path tracer hit SBT
                 for (auto &record : common_rtx.records)
@@ -246,12 +262,13 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
                 path_tracer.launch_params.area.count = path_tracer.lights.size();
                 if (path_tracer.lights.size() > 0)
                         path_tracer.launch_params.area.lights = cuda::make_buffer(path_tracer.lights);
-               
-                // TODO: do we really need this?
-                // uint triangles = 0;
-                // for (const auto &light : path_tracer.lights)
-                //         triangles += light.triangles;
                 path_tracer.launch_params.area.triangle_count = triangles;
+
+                // Update lights for Mamba GI
+                mamba->launch_info.area.lights = 0;
+                mamba->launch_info.area.count = path_tracer.lights.size();
+                if (path_tracer.lights.size() > 0)
+                        mamba->launch_info.area.lights = cuda::make_buffer(path_tracer.lights);
         }
 
         // Update the material buffer
@@ -887,22 +904,28 @@ void EditorViewport::render(const RenderInfo &render_info,
         case RenderState::eAlbedo:
                 render_gbuffer(render_info, entities, &td, md);
                 render_albedo(render_info, entities, md);
-                break;
-        
-        case RenderState::eSparseGlobalIllumination:
-                prerender_raytrace(entities, &td, md);
-                render_gbuffer(render_info, entities, &td, md);
-                // ::render(this, &sparse_gi, render_info, entities, md);
-                sparse_gi.render(this, render_info, entities, md);
-                blit_raytraced(this, render_info);
-                break;
-        
+ 
         case RenderState::ePathTracer:
                 prerender_raytrace(entities, &td, md);
                 render_gbuffer(render_info, entities, &td, md);
                 render_path_traced(render_info, entities, md);
                 blit_raytraced(this, render_info);
+                break;               break;
+        
+        case RenderState::eSparseGlobalIllumination:
+                prerender_raytrace(entities, &td, md);
+                render_gbuffer(render_info, entities, &td, md);
+                sparse_gi.render(this, render_info, entities, md);
+                blit_raytraced(this, render_info);
                 break;
+        
+        case RenderState::eMamba:
+                prerender_raytrace(entities, &td, md);
+                render_gbuffer(render_info, entities, &td, md);
+                mamba->render(this, render_info, entities, md);
+                blit_raytraced(this, render_info);
+                break;
+
         default:
                 printf("ERROR: EditorViewport::render called in invalid mode\n");
         }
@@ -999,6 +1022,11 @@ static void show_mode_menu(RenderState *render_state)
                         render_state->mode = RenderState::eSparseGlobalIllumination;
                         render_state->sparse_gi_reset = true;
                 }
+                
+                if (ImGui::MenuItem("Mamba Global Illumination")) {
+                        render_state->mode = RenderState::eMamba;
+                        render_state->mamba_reset = true;
+                }
 
                 if (ImGui::Checkbox("Show bounding boxes", &render_state->bounding_boxes));
 
@@ -1018,8 +1046,9 @@ static void show_mode_submenu(RenderState *render_state, const _submenu_args &ar
                 { RenderState::eNormals, "Normals" },
                 { RenderState::eTextureCoordinates, "Texture Coordinates" },
                 { RenderState::eAlbedo, "Albedo" },
-                { RenderState::eSparseGlobalIllumination, "Sparse Global Illumination" },
                 { RenderState::ePathTracer, "Path Traced (G-buffer)" },
+                { RenderState::eSparseGlobalIllumination, "Sparse Global Illumination" },
+                { RenderState::eMamba, "Mamba Global Illumination" },
         };
 
         // Mode-specific settings

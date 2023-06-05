@@ -12,6 +12,15 @@
 #include "include/cuda/random.cuh"
 #include "include/vertex.hpp"
 
+// Sampled lighting information
+struct LightInfo {
+        float3 position;
+        float3 normal;
+        float3 emission;
+        float area;
+        bool sky;
+};
+
 // Irradiance probe
 struct IrradianceProbe {
         constexpr static int size = 4;
@@ -32,23 +41,22 @@ struct MambaLaunchInfo {
         bool dirty;
         bool reset;
         float time;
+        int samples;
         uint counter;
 
         // Previous camera matrices
         glm::mat4 previous_view;
         glm::mat4 previous_projection;
         float3 previous_origin;
-        float4 *previous_position;
 
         // Camera parameters
         CameraAxis camera;
 
-        // G-buffer source surfaces
-        // TODO: texure objects
-        cudaSurfaceObject_t position_surface;
-        cudaSurfaceObject_t normal_surface;
-        cudaSurfaceObject_t uv_surface;
-        cudaSurfaceObject_t index_surface;
+        // G-buffer information
+        cudaSurfaceObject_t position;
+        cudaSurfaceObject_t normal;
+        cudaSurfaceObject_t uv;
+        cudaSurfaceObject_t index;
 
         // List of all materials
         kobra::cuda::_material *materials;
@@ -63,24 +71,17 @@ struct MambaLaunchInfo {
         Sky sky;
 
         // Direct lighting (ReSTIR)
-        Reservoir <DirectLightingSample> *direct_lighting;
+        struct {
+                Reservoir <LightInfo> *reservoirs;
+                Reservoir <LightInfo> *previous;
+                float3 *Le;
+        } direct;
 
         // Indirect lighting caches
         struct {
                 uint *block_offsets;
-
-                float4 *screen_irradiance; // (R, G, B, # samples)
-                float4 *final_irradiance;
-                float *irradiance_samples;
-
-                float4 *irradiance_directions;
-                float *direction_samples;
-
-                // Screen space irradiance probes
-                // (R, G, B, depth) arranged in Bw x Bh grid
-                // (each probe in NxN grid layed out with octahedral projection)
-                float4 *screen_probes;
-                int N;
+                float3 *Le;
+                float3 *wo;
         } indirect;
 
         // IO interface

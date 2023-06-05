@@ -215,14 +215,9 @@ file(GLOB_RECURSE OPTIX_SHADERS
 	${CMAKE_CURRENT_SOURCE_DIR}/source/optix/amadeus_restir.cu
 )
 
-add_library(optix_shaders
-	OBJECT ${OPTIX_SHADERS}
-)
+add_library(optix_shaders OBJECT ${OPTIX_SHADERS})
 
-set_target_properties(optix_shaders PROPERTIES
-        # CUDA_OPTIX_IR_COMPILATION ON
-	COMPILE_FLAGS "-optix-ir -lineinfo"
-)
+set_target_properties(optix_shaders PROPERTIES COMPILE_FLAGS "-optix-ir -lineinfo")
 
 # Fake target to copy shader outputs to bin folder
 # TODO: Any cleaner way of doing this? (run a script for example)
