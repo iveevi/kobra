@@ -121,7 +121,7 @@ void update_materials(CommonRaytracing *crtx,
                                         << meshes[i].triangles() << ": "
                                         << meshes[i].vertices.size() << ", "
                                         << meshes[i].indices.size() << std::endl;
-                                
+
                                 for (int j = 0; j < meshes[i].triangles(); j++) {
                                         int i0 = meshes[i].indices[3 * j];
                                         int i1 = meshes[i].indices[3 * j + 1];
@@ -154,7 +154,10 @@ void update_materials(CommonRaytracing *crtx,
         if (crtx->dev_lights)
                 cuda::free(crtx->dev_lights);
 
-        crtx->dev_lights = cuda::make_buffer_ptr(crtx->lights);
+	if (crtx->triangle_count > 0)
+		crtx->dev_lights = cuda::make_buffer_ptr(crtx->lights);
+	else
+		crtx->dev_lights = 0;
 }
 
 // Prerender process for raytracing
@@ -215,7 +218,7 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
                                                 << meshes[i].triangles() << ": "
                                                 << meshes[i].vertices.size() << ", "
                                                 << meshes[i].indices.size() << std::endl;
-                                        
+
                                         for (int j = 0; j < meshes[i].triangles(); j++) {
                                                 int i0 = meshes[i].indices[3 * j];
                                                 int i1 = meshes[i].indices[3 * j + 1];
@@ -268,7 +271,7 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
 
                 if (gbuffer_rtx.sbt.hitgroupRecordBase)
                         cuda::free(gbuffer_rtx.sbt.hitgroupRecordBase);
-        
+
                 gbuffer_rtx.sbt.hitgroupRecordBase = cuda::make_buffer_ptr(common_rtx.records);
                 gbuffer_rtx.sbt.hitgroupRecordStrideInBytes = sizeof(optix::Record <Hit>);
                 gbuffer_rtx.sbt.hitgroupRecordCount = common_rtx.records.size();
@@ -287,7 +290,7 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
                 // Mamba GI hit SBT
                 for (auto &record : common_rtx.records)
                         optix::pack_header(mamba->closest_hit, record);
-                
+
                 if (mamba->direct_initial_sbt.hitgroupRecordBase)
                         cuda::free(mamba->direct_initial_sbt.hitgroupRecordBase);
 
@@ -343,7 +346,7 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info,
                                 if (gbuffer.dset_refs.find(index) == gbuffer.dset_refs.end()) {
                                         int new_index = gbuffer.dsets.size();
                                         gbuffer.dset_refs[index] = new_index;
-                                        
+
                                         gbuffer.dsets.emplace_back(
                                                 std::move(
                                                         vk::raii::DescriptorSets {
@@ -358,7 +361,7 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info,
                                         assert(meshes[i].material_index >= 0);
                                         assert(meshes[i].material_index < md->materials.size());
                                         Material material = md->materials[meshes[i].material_index];
-                
+
                                         std::string albedo = "blank";
                                         if (material.has_albedo())
                                                 albedo = material.diffuse_texture;
@@ -427,7 +430,7 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info,
 
                                 // Material material = Material::all[material_index];
                                 Material material = md->materials[material_index];
-                                
+
                                 int texture_status = 0;
                                 texture_status |= (material.has_albedo());
                                 texture_status |= (material.has_normal() << 1);
@@ -458,10 +461,10 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info,
                 gbuffer_rtx.launch_params.U = cuda::to_f3(uvw.u);
                 gbuffer_rtx.launch_params.V = cuda::to_f3(uvw.v);
                 gbuffer_rtx.launch_params.W = cuda::to_f3(uvw.w);
-                
+
                 gbuffer_rtx.launch_params.origin = cuda::to_f3(render_info.camera_transform.position);
                 gbuffer_rtx.launch_params.resolution = { extent.width, extent.height };
-                
+
                 gbuffer_rtx.launch_params.position_surface = framebuffer_images->cu_position_surface;
                 gbuffer_rtx.launch_params.normal_surface = framebuffer_images->cu_normal_surface;
                 gbuffer_rtx.launch_params.uv_surface = framebuffer_images->cu_uv_surface;
@@ -472,7 +475,7 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info,
                 // cuda::copy(gbuffer_rtx.dev_launch_params, &gbuffer_rtx.launch_params, 1);
                 GBufferParameters *dev_params = (GBufferParameters *) gbuffer_rtx.dev_launch_params;
                 CUDA_CHECK(cudaMemcpy(dev_params, &gbuffer_rtx.launch_params, sizeof(GBufferParameters), cudaMemcpyHostToDevice));
-                
+
                 OPTIX_CHECK(
                         optixLaunch(
                                 gbuffer_rtx.pipeline, 0,
@@ -520,7 +523,7 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info,
         framebuffer_images->normal.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
         framebuffer_images->uv.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
         framebuffer_images->material_index.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
-        
+
         sobel.output.transition_layout(render_info.cmd, vk::ImageLayout::eShaderReadOnlyOptimal);
 }
 
@@ -550,10 +553,10 @@ void EditorViewport::render_path_traced
         path_tracer.launch_params.U = cuda::to_f3(uvw.u);
         path_tracer.launch_params.V = cuda::to_f3(uvw.v);
         path_tracer.launch_params.W = cuda::to_f3(uvw.w);
-        
+
         path_tracer.launch_params.origin = cuda::to_f3(render_info.camera_transform.position);
         path_tracer.launch_params.resolution = { extent.width, extent.height };
-        
+
         path_tracer.launch_params.position_surface = framebuffer_images->cu_position_surface;
         path_tracer.launch_params.normal_surface = framebuffer_images->cu_normal_surface;
         path_tracer.launch_params.uv_surface = framebuffer_images->cu_uv_surface;
@@ -567,10 +570,10 @@ void EditorViewport::render_path_traced
 
         path_tracer.launch_params.sky.texture = environment_map.texture;
         path_tracer.launch_params.sky.enabled = environment_map.valid;
-        
+
         PathTracerParameters *dev_params = (PathTracerParameters *) path_tracer.dev_launch_params;
         CUDA_CHECK(cudaMemcpy(dev_params, &path_tracer.launch_params, sizeof(PathTracerParameters), cudaMemcpyHostToDevice));
-        
+
         OPTIX_CHECK(
                 optixLaunch(
                         path_tracer.pipeline, 0,
@@ -604,7 +607,7 @@ void EditorViewport::render_albedo(const RenderInfo &render_info,
                         if (albedo.dset_refs.find(index) == albedo.dset_refs.end()) {
                                 int new_index = albedo.dsets.size();
                                 albedo.dset_refs[index] = new_index;
-                                
+
                                 albedo.dsets.emplace_back(
                                         std::move(
                                                 vk::raii::DescriptorSets {
@@ -617,7 +620,7 @@ void EditorViewport::render_albedo(const RenderInfo &render_info,
                                 // Bind inforation to descriptor set
                                 // Material material = Material::all[meshes[i].material_index];
                                 Material material = md->materials[meshes[i].material_index];
-        
+
                                 std::string albedo_src = "blank";
                                 if (material.has_albedo())
                                         albedo_src = material.diffuse_texture;
@@ -827,7 +830,7 @@ void EditorViewport::render_bounding_box(const RenderInfo &render_info, const st
 
         // Push constants
         BoundingBox_PushConstants push_constants;
-        
+
         push_constants.view = render_info.camera.view_matrix(render_info.camera_transform);
         push_constants.projection = render_info.camera.perspective_matrix();
         push_constants.color = glm::vec4 { 0.0f, 1.0f, 0.0f, 1.0f };
@@ -897,7 +900,7 @@ void EditorViewport::render_highlight(const RenderInfo &render_info, const std::
 
         // Start the pipeline
         render_info.cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *highlight.pipeline);
-        
+
         // Bind descriptor set
         render_info.cmd.bindDescriptorSets(
                 vk::PipelineBindPoint::eGraphics,
@@ -941,7 +944,7 @@ void EditorViewport::render(const RenderInfo &render_info,
                 render_gbuffer(render_info, entities, &td, md);
                 render_normals(render_info);
                 break;
-        
+
         case RenderState::eTextureCoordinates:
                 render_gbuffer(render_info, entities, &td, md);
                 render_uv(render_info);
@@ -950,21 +953,21 @@ void EditorViewport::render(const RenderInfo &render_info,
         case RenderState::eAlbedo:
                 render_gbuffer(render_info, entities, &td, md);
                 render_albedo(render_info, entities, md);
- 
+
         case RenderState::ePathTracer:
                 prerender_raytrace(entities, &td, md);
                 render_gbuffer(render_info, entities, &td, md);
                 render_path_traced(render_info, entities, md);
                 blit_raytraced(this, render_info);
                 break;               break;
-        
+
         case RenderState::eSparseGlobalIllumination:
                 prerender_raytrace(entities, &td, md);
                 render_gbuffer(render_info, entities, &td, md);
                 sparse_gi.render(this, render_info, entities, md);
                 blit_raytraced(this, render_info);
                 break;
-        
+
         case RenderState::eMamba:
                 prerender_raytrace(entities, &td, md);
                 render_gbuffer(render_info, entities, &td, md);
@@ -1049,10 +1052,10 @@ static void show_mode_menu(RenderState *render_state)
 
                 // if (ImGui::MenuItem("Wireframe"))
                 //         render_state->mode = RenderState::eWireframe;
-                
+
                 if (ImGui::MenuItem("Normals"))
                         render_state->mode = RenderState::eNormals;
-                
+
                 if (ImGui::MenuItem("Texture Coordinates"))
                         render_state->mode = RenderState::eTextureCoordinates;
 
@@ -1063,12 +1066,12 @@ static void show_mode_menu(RenderState *render_state)
                         render_state->mode = RenderState::ePathTracer;
                         render_state->path_tracer_reset = true;
                 }
-                
+
                 if (ImGui::MenuItem("Sparse Global Illumination")) {
                         render_state->mode = RenderState::eSparseGlobalIllumination;
                         render_state->sparse_gi_reset = true;
                 }
-                
+
                 if (ImGui::MenuItem("Mamba Global Illumination")) {
                         render_state->mode = RenderState::eMamba;
                         render_state->mamba_reset = true;
@@ -1083,6 +1086,7 @@ static void show_mode_menu(RenderState *render_state)
 struct _submenu_args {
         EditorViewport::PathTracer *path_tracer;
         SparseGI *sparse_gi;
+        Mamba *mamba;
 };
 
 static void show_mode_submenu(RenderState *render_state, const _submenu_args &args)
@@ -1105,7 +1109,7 @@ static void show_mode_submenu(RenderState *render_state, const _submenu_args &ar
         if (ImGui::BeginMenu(mode_string.c_str())) {
                 if (render_state->mode == RenderState::ePathTracer)
                         if (ImGui::SliderInt("Depth", &args.path_tracer->depth, 1, 10));
-                
+
                 if (render_state->mode == RenderState::eSparseGlobalIllumination) {
                         auto *sparse_gi = args.sparse_gi;
                         if (ImGui::SliderInt("Depth", &sparse_gi->depth, 1, 10));
@@ -1136,6 +1140,22 @@ static void show_mode_submenu(RenderState *render_state, const _submenu_args &ar
                         }
                 }
 
+                if (render_state->mode == RenderState::eMamba) {
+                        auto *mamba = args.mamba;
+
+                        if (ImGui::Checkbox("Temporal Reuse", &mamba->temporal_reuse)) {
+                                std::cout << "Temporal reuse: " << mamba->temporal_reuse << std::endl;
+                                mamba->manual_reset = true;
+                        }
+
+                        if (ImGui::Checkbox("Spatial Reuse", &mamba->spatial_reuse)) {
+                                std::cout << "Spatial reuse: " << mamba->spatial_reuse << std::endl;
+                                mamba->manual_reset = true;
+                        }
+                        
+			if (ImGui::Checkbox("Brute Force", &mamba->brute_force));
+                }
+
                 ImGui::EndMenu();
         }
 }
@@ -1160,7 +1180,13 @@ void show_menu(const std::shared_ptr <EditorViewport> &ev, const MenuOptions &op
 {
         if (ImGui::BeginMenuBar()) {
                 show_mode_menu(&ev->render_state);
-                show_mode_submenu(&ev->render_state, { &ev->path_tracer, &ev->sparse_gi });
+                show_mode_submenu(&ev->render_state,
+                        {
+                                &ev->path_tracer,
+                                &ev->sparse_gi,
+                                ev->mamba
+                        }
+                );
 
                 // Camera settings
                 if (ImGui::BeginMenu("Camera")) {
@@ -1176,7 +1202,7 @@ void show_menu(const std::shared_ptr <EditorViewport> &ev, const MenuOptions &op
                 ImGui::EndMenuBar();
         }
 }
-        
+
 // TODO: common rtx method
 void blit_raytraced(EditorViewport *ev, const RenderInfo &render_info)
 {
@@ -1204,7 +1230,7 @@ void blit_raytraced(EditorViewport *ev, const RenderInfo &render_info)
                         .channels = 4
                 }
         );
-        
+
         // Start render pass and blit
         // TODO: function to start render pass for presentation
         render_info.render_area.apply(render_info.cmd, render_info.extent);

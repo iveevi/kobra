@@ -12,6 +12,9 @@
 #include "include/cuda/random.cuh"
 #include "include/vertex.hpp"
 
+// Forward declarations
+struct IrradianceProbeTable;
+
 // Sampled lighting information
 struct LightInfo {
         float3 position;
@@ -21,15 +24,10 @@ struct LightInfo {
         bool sky;
 };
 
-// Irradiance probe
-struct IrradianceProbe {
-        constexpr static int size = 4;
-
-        // Layed out using octahedral projection
-        float3 values[size * size];
-        float pdfs[size * size];
-        float depth[size * size];
-        float3 normal;
+struct ProbeSketch {
+        float3 position;
+        float radius;
+        // TODO: radius
 };
 
 // Launch info for the G-buffer raytracer
@@ -82,7 +80,21 @@ struct MambaLaunchInfo {
                 uint *block_offsets;
                 float3 *Le;
                 float3 *wo;
+
+                float *sobel;
+
+                ProbeSketch *sketches;
+                int *sketch_count;
+                int *block_sketch_index;
+
+		IrradianceProbeTable *probes;
         } indirect;
+
+        // Extra options
+        struct {
+                bool temporal;
+                bool spatial;
+        } options;
 
         // IO interface
         OptixIO io;

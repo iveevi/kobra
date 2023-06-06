@@ -102,7 +102,7 @@ float sample_light(LightInfo &light_info, float3 &seed)
                 light_info.position = make_float3(gpoint.x, gpoint.y, gpoint.z);
                 light_info.normal = make_float3(gnormal.x, gnormal.y, gnormal.z);
                 light_info.emission = light.emission;
-                light_info.area = glm::length(glm::cross(v1 - v0, v2 - v0));
+                light_info.area = 0.5 * glm::length(glm::cross(v1 - v0, v2 - v0));
         } else {
                 // Environment light, sample direction
                 float theta = 2 * PI * cuda::rand_uniform(seed);

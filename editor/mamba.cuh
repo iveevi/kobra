@@ -20,7 +20,7 @@ struct Mamba {
 
         // OptiX resources
         OptixModule module = 0;
-        
+
         OptixPipeline direct_ppl = 0;
 
         OptixProgramGroup raygen_direct_primary = 0;
@@ -47,8 +47,13 @@ struct Mamba {
         bool manual_reset = false;
         std::queue <vk::Extent2D> resize_queue;
 
+        // Options
+        bool temporal_reuse = true;
+        bool spatial_reuse = true;
+	bool brute_force = false;
+
         // Constructor
         Mamba(const OptixDeviceContext &);
-        
+
         void render(EditorViewport *, const RenderInfo &, const std::vector <Entity> &, const MaterialDaemon *);
 };

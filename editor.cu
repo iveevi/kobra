@@ -33,7 +33,7 @@ struct Editor : public kobra::BaseApp {
         std::shared_ptr <kobra::TransformDaemon> transform_daemon;
 
 	std::shared_ptr <kobra::layers::UserInterface> m_ui;
-        
+
         // User interface attachments
         Inspector *m_inspector;
 
@@ -68,7 +68,7 @@ struct Editor : public kobra::BaseApp {
 
 		ImVec2 min = {1/0.0f, 1/0.0f};
 		ImVec2 max = {-1.0f, -1.0f};
-		
+
                 vk::raii::Sampler sampler = nullptr;
 	} m_viewport;
 
@@ -106,7 +106,7 @@ struct Editor : public kobra::BaseApp {
 	// TODO: frustrum culling structure to cull once per pass (store status
 	// in a map) and then is passed to other layers for rendering
 };
-	
+
 void mouse_callback(void *, const kobra::io::MouseEvent &);
 void keyboard_callback(void *, const kobra::io::KeyboardEvent &);
 void set_imgui_theme();
@@ -308,13 +308,13 @@ class Viewport : public kobra::ui::ImGuiAttachment {
 	ImVec2 m_old_size = ImVec2(0.0f, 0.0f);
 	float m_old_aspect = 0.0f;
 	vk::Image m_old_image = nullptr;
-        
+
         kobra::Transform *transform = nullptr;
         glm::mat4 proxy;
 
         const kobra::Camera *camera = nullptr;
         const kobra::Transform *camera_transform = nullptr;
-        
+
         ImGuizmo::OPERATION current_operation = ImGuizmo::TRANSLATE;
 public:
 	Viewport() = delete;
@@ -374,7 +374,7 @@ public:
 
 		// TODO: separate attachment for the main menu bar
 		ImGui::Begin("Viewport", nullptr, ImGuiWindowFlags_MenuBar);
-                        
+
                 MenuOptions options {
                         .camera = &m_editor->m_viewport.camera,
                         .speed = &g_application.speed,
@@ -390,7 +390,7 @@ public:
 
 			// TODO: set the window aspect ratio
 			ImGui::Image(m_dset, window_size);
-               
+
                         // TODO: function to extract window bounds...
                         ImVec2 pmin = ImGui::GetItemRectMin();
                         ImVec2 pmax = ImGui::GetItemRectMax();
@@ -451,7 +451,7 @@ public:
 				(vk::ImageLayout::eShaderReadOnlyOptimal)
 			);
 		}
-                
+
                 if (transform) {
                         camera = &m_editor->m_viewport.camera;
                         camera_transform = &m_editor->m_viewport.camera_transform;
@@ -674,7 +674,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 
 	// Load scene
  	m_project.load_project(g_application.project);
-	
+
 	// m_scene.load(get_context(), project.scene);
 	m_scene = m_project.load_scene(get_context());
 	assert(m_scene.system);
@@ -714,7 +714,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	m_ui->attach(scene_graph);
 
         m_inspector = make_inspector(m_scene.system.get());
-        
+
         // TODO: UI attachemtn that shows frametime as little chunks per frame
 
         // EditorViewport
@@ -1013,7 +1013,7 @@ void handle_viewport_input(Editor *editor, const InputRequest &request)
                                 viewport.pitch = 89.0f;
                         if (viewport.pitch < -89.0f)
                                 viewport.pitch = -89.0f;
-                
+
                         kobra::Transform &transform = editor->m_viewport.camera_transform;
                         transform.rotation.x = viewport.pitch;
                         transform.rotation.y = viewport.yaw;
@@ -1062,7 +1062,7 @@ void handle_material_preview_input(Editor *editor, const InputRequest &request)
                                 sin(glm::radians(phi)),
                                 sin(glm::radians(theta)) * cos(glm::radians(phi))
                         };
-                        
+
                         // editor->material_preview->view_transform = glm::lookAt(eye, glm::vec3(0), up);
                         editor->material_preview->origin = eye;
 
@@ -1163,7 +1163,7 @@ void mouse_callback(void *us, const kobra::io::MouseEvent &event)
         //         request.type = InputRequest::eDrag;
         //         request.delta = { dx, dy };
         // }
-        
+
         if (input_context.dragging) {
                 request.type = InputRequest::eDrag;
                 request.delta = { dx, dy };
@@ -1183,7 +1183,7 @@ void keyboard_callback(void *us, const kobra::io::KeyboardEvent &event)
 	Editor *editor = static_cast <Editor *> (us);
 	if (event.action == GLFW_PRESS) {
                 auto &viewport = editor->m_ui_attachments.viewport;
-		
+
 		if (event.key == GLFW_KEY_ESCAPE) {
                         // TODO: callback
 			editor->m_selection = {-1, -1};

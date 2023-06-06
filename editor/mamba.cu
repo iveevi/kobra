@@ -8,6 +8,250 @@
 
 using namespace kobra;
 
+// TODO: probe.cuh
+// Irradiance probe
+struct IrradianceProbe {
+        constexpr static int size = 4;
+
+        // Layed out using octahedral projection
+        float3 values[size * size];
+        float pdfs[size * size];
+        float depth[size * size];
+
+        float3 normal;
+	float3 position;
+};
+
+// A single level-node of the irradiance probe LUT
+struct IrradianceProbeLUT {
+       constexpr static int MAX_REFS = (1 << 13) - 1;
+       // constexpr static int MAX_REFS = (1 << 10) - 1;
+
+	// Cell properties
+        float resolution;
+	float size;
+	float3 center;
+
+        int32_t level = 0;
+	int32_t counter = 0;
+
+	int32_t refs[MAX_REFS];
+	uint32_t hashes[MAX_REFS];
+	float3 positions[MAX_REFS];
+
+	static void alloc(IrradianceProbeLUT *lut) {
+		lut->level = 0;
+		lut->size = 10.0f;
+		lut->resolution = lut->size/25.0f;
+		lut->center = make_float3(0.0f, 0.0f, 0.0f);
+
+		for (int i = 0; i < MAX_REFS; i++) {
+			lut->refs[i] = -1;
+			lut->hashes[i] = 0xFFFFFFFF;
+		}
+	}
+
+	__forceinline__ __device__
+	static void alloc(IrradianceProbeLUT *lut, int level, float size, float3 center) {
+		lut->level = level;
+		lut->size = size;
+		lut->resolution = size/powf(MAX_REFS, 1.0f/3.0f);
+		lut->center = center;
+	}
+
+	__forceinline__ __device__
+	bool contains(float3 x, bool neighbor = false) {
+		float3 min = center - make_float3(size/2.0f + neighbor * resolution);
+		float3 max = center + make_float3(size/2.0f + neighbor * resolution);
+		return (x.x >= min.x && x.y >= min.y && x.z >= min.z)
+			&& (x.x <= max.x && x.y <= max.y && x.z <= max.z);
+	}
+
+        __forceinline__ __device__
+        uint32_t hash(float3 x, int32_t dx = 0, int32_t dy = 0, int32_t dz = 0) {
+		float cdx = x.x - center.x + size/2.0f;
+		float cdy = x.y - center.y + size/2.0f;
+		float cdz = x.z - center.z + size/2.0f;
+
+		int32_t ix = (int32_t) ((cdx / resolution) + dx);
+		int32_t iy = (int32_t) ((cdy / resolution) + dy);
+		int32_t iz = (int32_t) ((cdz / resolution) + dz);
+
+		int32_t h = (ix & 0x7FF) | ((iy & 0x7FF) << 11) | ((iz & 0x7FF) << 22);
+
+		// Shuffle bits
+		h ^= (h >> 11) ^ (h >> 22);
+		h ^= (h << 7) & 0x9D2C5680;
+		h ^= (h << 15) & 0xEFC60000;
+
+		return *((uint32_t *) &h);
+        }
+
+	// TODO: radius (e.g. multiplication factor)
+	__forceinline__ __device__
+	uint32_t neighboring_hash(float3 x, int8_t ni) {
+		// Options are ni from 0 to 26, e.g. sides of a cube
+		int32_t dx = ni % 3 - 1;
+		int32_t dy = (ni / 3) % 3 - 1;
+		int32_t dz = ni / 9 - 1;
+
+		return hash(x, dx, dy, dz);
+	}
+
+        // TODO: try double hashing instead?
+        // NOTE: linear probing would be more cache friendly, but double hashing
+        // leads to better distribution
+        static constexpr int32_t MAX_TRIES = (1 << 2);
+
+	__forceinline__ __device__
+	uint32_t double_hash(uint32_t h, int32_t i) {
+		// Double hashing (shuffle again)
+		int32_t oh = h;
+
+		h = (h ^ 61) ^ (h >> 16);
+		h = h + (h << 3);
+		h = h ^ (h >> 4);
+		h = h * 0x27d4eb2d;
+		h = h ^ (h >> 15);
+
+		return oh + (i + 1) * h;
+	}
+
+	// Allocating new reference
+	// TODO: cuckoo hashing; if there is an infinite loop, then kick out the oldest (LRU)
+	__forceinline__ __device__
+	int32_t request(float3 x) {
+		// TODO: return index if already allocated
+
+		uint32_t h = hash(x);
+		int32_t success = -1;
+
+		int32_t i = 0;
+		int32_t old = INT_MAX;
+
+		while (i < MAX_TRIES) {
+			int32_t j = double_hash(h, i) % MAX_REFS;
+			old = atomicCAS(&refs[j], -1, h);
+			if (old == -1) {
+				success = j;
+				break;
+			}
+
+			i++;
+		}
+
+		if (old == -1) {
+			hashes[success] = h;
+			positions[success] = x;
+			atomicAdd(&counter, 1);
+		}
+
+		return success;
+	}
+
+	// Find the nearest reference to the given position
+	// TODO: return the distance to the nearest reference
+	__forceinline__ __device__
+	int32_t lookup(float3 x, int32_t ni) {
+		if (!contains(x, ni != -1))
+			return -1;
+
+		uint32_t h = (ni == -1) ? hash(x) : neighboring_hash(x, ni);
+
+		int32_t i = 0;
+		int32_t index = -1;
+
+		float closest = FLT_MAX;
+		while (i < MAX_TRIES) {
+			int32_t j = double_hash(h, i) % MAX_REFS;
+			int32_t ref = refs[j];
+			if (ref == -1)
+				break;
+
+			if (hashes[j] == h) {
+				float dist = length(positions[j] - x);
+				if (dist < closest) {
+					closest = dist;
+					index = j;
+				}
+			}
+
+			i++;
+		}
+
+		return index;
+	}
+};
+
+// Table of all irradiance probes and LUTs
+struct IrradianceProbeTable {
+        constexpr static int MAX_PROBES = 1 << 20;
+	constexpr static int MAX_LUTS = 1 << 8;
+
+        IrradianceProbe *probes = nullptr;
+        int32_t counter = 0;
+
+	IrradianceProbeLUT *luts = nullptr;
+	int32_t lut_counter = 0;
+
+	IrradianceProbeTable() {
+		probes = new IrradianceProbe[MAX_PROBES];
+
+		// Allocate top level LUT upon front
+		luts = new IrradianceProbeLUT[MAX_LUTS];
+		IrradianceProbeLUT::alloc(&luts[0]);
+		lut_counter++;
+	}
+
+	IrradianceProbeTable device_copy() const {
+		IrradianceProbeTable table;
+
+		CUDA_CHECK(cudaMalloc(&table.probes, sizeof(IrradianceProbe) * MAX_PROBES));
+		CUDA_CHECK(cudaMemcpy(table.probes, probes, sizeof(IrradianceProbe) * MAX_PROBES, cudaMemcpyHostToDevice));
+		table.counter = counter;
+
+		CUDA_CHECK(cudaMalloc(&table.luts, sizeof(IrradianceProbeLUT) * MAX_LUTS));
+		CUDA_CHECK(cudaMemcpy(table.luts, luts, sizeof(IrradianceProbeLUT) * MAX_LUTS, cudaMemcpyHostToDevice));
+		table.lut_counter = lut_counter;
+
+		return table;
+	}
+
+	__forceinline__ __device__
+	int32_t next() {
+		int32_t index = atomicAdd(&counter, 1);
+		if (index >= MAX_PROBES)
+			return -1;
+		return index;
+	}
+
+	__forceinline__ __device__
+	int32_t lut_next() {
+		int32_t index = atomicAdd(&lut_counter, 1);
+		if (index >= MAX_LUTS)
+			return -1;
+		return index;
+	}
+
+	__forceinline__ __device__
+	void clear() {
+		counter = 0;
+		lut_counter = 0;
+	}
+};
+
+inline IrradianceProbeTable *alloc_table()
+{
+	IrradianceProbeTable table;
+	IrradianceProbeTable proxy_table = table.device_copy();
+	IrradianceProbeTable *device_table;
+
+	CUDA_CHECK(cudaMalloc(&device_table, sizeof(IrradianceProbeTable)));
+	CUDA_CHECK(cudaMemcpy(device_table, &proxy_table, sizeof(IrradianceProbeTable), cudaMemcpyHostToDevice));
+
+	return device_table;
+}
+
 // OptiX compilation options
 static constexpr OptixPipelineCompileOptions pipeline_compile_options = {
 	.usesMotionBlur = false,
@@ -74,7 +318,7 @@ Mamba::Mamba(const OptixDeviceContext &context)
                 closest_hit,
                 miss,
         }, pipeline_compile_options, pipeline_link_options);
-        
+
         // Create shader binding table
         direct_initial_sbt = {};
 
@@ -114,12 +358,13 @@ Mamba::Mamba(const OptixDeviceContext &context)
 
         // std::memcpy(&direct_temporal_sbt, &direct_initial_sbt, sizeof(OptixShaderBindingTable));
         // direct_temporal_sbt.raygenRecord = dev_direct_temporal_raygen_record;
-        
+
         // Setup parameters
         launch_info = {};
         launch_info.io = optix_io_create();
         launch_info.direct.reservoirs = 0;
         launch_info.direct.Le = 0;
+	launch_info.indirect.probes = alloc_table();
 
         // Allocate device pointers
         // TODO: for probes, crete lazily on first use
@@ -127,9 +372,165 @@ Mamba::Mamba(const OptixDeviceContext &context)
 }
 
 // Final gather functions
+__global__
+void sobel_normal(cudaSurfaceObject_t normal_surface, float *sobel_target, vk::Extent2D extent)
+{
+        int index = threadIdx.x + blockIdx.x * blockDim.x;
+        int x = index % extent.width;
+        int y = index / extent.width;
+        y = extent.height - (y + 1);
+
+        if (x >= extent.width || y >= extent.height)
+                return;
+
+        float4 raw_normal;
+        surf2Dread(&raw_normal, normal_surface, x * sizeof(float4), y);
+        float3 normal = make_float3(raw_normal);
+
+        sobel_target[index] = 0;
+        for (int i = -1; i <= 1; i++) {
+                for (int j = -1; j <= 1; j++) {
+                        int x2 = x + i;
+                        int y2 = y + j;
+
+                        if (x2 < 0 || x2 >= extent.width || y2 < 0 || y2 >= extent.height)
+                                continue;
+
+                        float4 raw_normal2;
+                        surf2Dread(&raw_normal2, normal_surface, x2 * sizeof(float4), y2);
+
+                        float3 normal2 = make_float3(raw_normal2);
+                        float3 diff = normal - normal2;
+                        sobel_target[index] += length(diff);
+                }
+        }
+}
+
+struct ProbeAllocationInfo {
+        cudaSurfaceObject_t index_surface;
+        cudaSurfaceObject_t position_surface;
+	cudaSurfaceObject_t normal_surface;
+
+        float *sobel;
+
+        ProbeSketch *sketches;
+        int *counter;
+        int *block_sketch_indices;
+
+	IrradianceProbeTable *probes;
+
+        vk::Extent2D extent;
+};
+
+__global__
+void probe_allocation(ProbeAllocationInfo info)
+{
+        // TODO: use block parallelization
+        // i.e. sync threads in block, then use atomicAdd
+
+        int index = threadIdx.x + blockIdx.x * blockDim.x;
+
+        // Each thread goes through 16x16 block to allocate probes
+        // int x = (index % info.extent.width) / 16;
+        // int y = (index / info.extent.width) / 16;
+        int x = index % (info.extent.width/16);
+        int y = index / (info.extent.width/16);
+
+        // if (x >= (info.extent.width / 16 + 1) || y >= (info.extent.height / 16 + 1))
+        //         return;
+        if (x >= (info.extent.width/16) || y >= (info.extent.height/16))
+                return;
+
+        int x2 = x * 16;
+        int y2 = y * 16;
+
+        // TODO: shared memory: project existing probes onto 16x16 block
+
+        bool covered[16 * 16] { false }; // TODO: pack into int_16 array
+
+        // TODO: need to check if block has invalid regions
+
+        // For now lazily allocate at the central position of the block
+        int x3 = x2 + 8;
+        int y3 = y2 + 8;
+        y3 = info.extent.height - (y3 + 1);
+
+        int32_t raw_index;
+        surf2Dread(&raw_index, info.index_surface, x3 * sizeof(int32_t), y3);
+        if (raw_index == -1)
+                return;
+
+        float4 raw_position;
+        surf2Dread(&raw_position, info.position_surface, x3 * sizeof(float4), y3);
+        float3 position = make_float3(raw_position);
+
+	float4 raw_normal;
+	surf2Dread(&raw_normal, info.normal_surface, x3 * sizeof(float4), y3);
+	float3 normal = make_float3(raw_normal);
+
+        float radius = 0.01f;
+
+        // Acquire next index atomically
+        int next_index = atomicAdd(info.counter, 1);
+        // if (next_index >= MAX_PROBES)
+        //         return;
+
+        ProbeSketch &sketch = info.sketches[next_index];
+        sketch.position = position;
+        sketch.radius = radius;
+
+        info.block_sketch_indices[index] = next_index;
+
+	// Allocate probe on the table
+	// TODO: iterate through LUTs
+
+	IrradianceProbeLUT *lut = &info.probes->luts[0];
+	if (!lut->contains(position))
+		return;
+
+	uint32_t hash = lut->hash(position);
+	int32_t success = lut->request(position);
+	if (success == -1)
+		return;
+
+	int32_t probe_index = info.probes->next();
+	if (probe_index == -1) {
+		// TODO: does this need to be atomic?
+		// lut->refs[success] = -1;
+		return;
+	}
+
+	// printf("(%f, %f, %f) hash: %u, success: %d, probe %d\n", position.x, position.y, position.z, hash, success, probe_index);
+
+	// IrradianceProbe *probe = &info.probes->probes[probe_index];
+	//
+	// *probe = {};
+	// probe->position = position;
+	// probe->normal = normal;
+
+	info.probes->probes[probe_index].position = position;
+	info.probes->probes[probe_index].normal = normal;
+	lut->refs[success] = probe_index;
+}
+
+struct ProbeHashTable {
+        // Sources
+        ProbeSketch *sketches;
+        int size;
+};
+
 struct FinalGather {
         float4 *color;
         float3 *direct;
+        float *sobel;
+
+        cudaSurfaceObject_t position_surface;
+
+        ProbeSketch *sketches;
+        int *block_sketch_indices;
+
+	IrradianceProbeTable *table;
+	bool brute_force;
 
         vk::Extent2D extent;
 };
@@ -137,6 +538,7 @@ struct FinalGather {
 __global__
 void final_gather(FinalGather info)
 {
+        // TODO: return sky ray if invalid/no hit
         int index = threadIdx.x + blockIdx.x * blockDim.x;
 
         int x = index % info.extent.width;
@@ -144,8 +546,53 @@ void final_gather(FinalGather info)
         if (x >= info.extent.width || y >= info.extent.height)
                 return;
 
-        float4 &color = info.color[index];
-        color = make_float4(info.direct[index], 1.0f);
+	// Get position
+	float4 raw_position;
+	surf2Dread(&raw_position, info.position_surface, x * sizeof(float4), (info.extent.height - (y + 1)));
+	float3 position = make_float3(raw_position);
+
+        // float4 &color = info.color[index];
+
+        bool border = (info.sobel[index] > 0.7f);
+        float3 color = 1 * info.direct[index] + 0 * border;
+        // color = make_float4(1 * info.direct[index] + 0 * border, 1.0f);
+
+        int x_16 = x / 16;
+        int y_16 = y / 16;
+
+	IrradianceProbeLUT *lut = &info.table->luts[0];
+
+	// TODO: flag to render probes	
+	float3 covered_color = make_float3(0);
+
+	int32_t result;
+	result = lut->lookup(position, -1);
+	if (result != -1) {
+		int32_t probe_index = lut->refs[result];
+		float3 diff = position - info.table->probes[probe_index].position;
+		float dist = length(diff);
+
+		if (dist < 0.3 * lut->resolution)
+			covered_color = info.table->probes[probe_index].normal * 0.5f + 0.5f;
+	}
+
+	// Also consider neighboring probes
+	for (int ni = 0; ni < 27; ni++) {
+		int32_t result = lut->lookup(position, ni);
+		if (result == -1)
+			continue;
+
+		int32_t probe_index = lut->refs[result];
+		float3 diff = position - info.table->probes[probe_index].position;
+		float dist = length(diff);
+
+		if (dist < 0.3 * lut->resolution)
+			covered_color = info.table->probes[probe_index].normal * 0.5f + 0.5f;
+	}
+
+        info.color[index] = make_float4(color + covered_color, 1.0f);
+	if (index == 0)
+		printf("LUT size is %d\n", info.table->luts[0].counter);
 }
 
 // Rendering function
@@ -157,20 +604,18 @@ void Mamba::render(EditorViewport *ev,
         const Camera &camera = render_info.camera;
         const Transform &camera_transform = render_info.camera_transform;
         const vk::Extent2D &extent = ev->extent;
-       
+
         // TODO: pass common rtx instead of ev..
-        
+
         // Handle resizing
         if (resize_queue.size() > 0) {
                 vk::Extent2D new_extent = resize_queue.back();
                 resize_queue = {};
-                
-                // if (launch_info.indirect.block_offsets != 0)
-                //         CUDA_CHECK(cudaFree((void *) launch_info.indirect.block_offsets));
 
+                // Direct lighting buffers
                 if (launch_info.direct.reservoirs != 0)
                         CUDA_CHECK(cudaFree((void *) launch_info.direct.reservoirs));
-                
+
                 if (launch_info.direct.previous != 0)
                         CUDA_CHECK(cudaFree((void *) launch_info.direct.previous));
 
@@ -184,38 +629,34 @@ void Mamba::render(EditorViewport *ev,
                 launch_info.direct.previous = cuda::alloc <Reservoir <LightInfo>> (size);
                 launch_info.direct.Le = cuda::alloc <float3> (size);
 
-                // Generate block offsets
-                // uint N2 = launch_info.indirect.N * launch_info.indirect.N;
-                // uint2 nblocks;
-                // nblocks.x = 1 + (new_extent.width / launch_info.indirect.N);
-                // nblocks.y = 1 + (new_extent.height / launch_info.indirect.N);
-                //
-                // std::vector <uint> block_offsets(nblocks.x * nblocks.y);
-                // std::mt19937 rng;
-                // std::uniform_int_distribution <uint> dist(0, N2 - 1);
-                // for (uint i = 0; i < block_offsets.size(); i++) {
-                //         uint offset = dist(rng);
-                //         block_offsets[i] = offset;
-                // }
-                //
-                // launch_info.indirect.block_offsets = cuda::make_buffer(block_offsets);
+                // Indirect lighting buffers
+                if (launch_info.indirect.sobel != 0)
+                        CUDA_CHECK(cudaFree((void *) launch_info.indirect.sobel));
+
+                if (launch_info.indirect.sketches != 0)
+                        CUDA_CHECK(cudaFree((void *) launch_info.indirect.sketches));
+
+                if (launch_info.indirect.block_sketch_index != 0)
+                        CUDA_CHECK(cudaFree((void *) launch_info.indirect.block_sketch_index));
+
+                launch_info.indirect.sobel = cuda::alloc <float> (size);
+                // TODO: allocate some initial max size
+                launch_info.indirect.sketches = cuda::alloc <ProbeSketch> (size);
+                launch_info.indirect.sketch_count = cuda::alloc <int> (1);
+                launch_info.indirect.block_sketch_index = cuda::alloc <int> (size);
         }
 
         // Configure launch parameters
         launch_info.time = ev->common_rtx.timer.elapsed_start();
         launch_info.dirty = render_info.camera_transform_dirty;
-        launch_info.reset = ev->render_state.sparse_gi_reset
+        launch_info.reset = ev->render_state.mamba_reset
                         | ev->common_rtx.material_reset
                         | ev->common_rtx.transform_reset
                         | manual_reset;
 
-        // uint N = launch_info.indirect.N;
-        // launch_info.counter = (launch_info.counter + 1) % (N * N);
-                
         if (launch_info.reset)
                 manual_reset = false;
-
-        ev->render_state.sparse_gi_reset = false;
+        ev->render_state.mamba_reset = false;
 
         launch_info.samples++;
         if (launch_info.dirty)
@@ -244,10 +685,13 @@ void Mamba::render(EditorViewport *ev,
 
         launch_info.sky.texture = ev->environment_map.texture;
         launch_info.sky.enabled = ev->environment_map.valid;
-       
+
+        launch_info.options.temporal = temporal_reuse;
+        launch_info.options.spatial = spatial_reuse;
+
         // Copy parameters and launch
         cuda::copy(dev_launch_info, &launch_info, 1, cudaMemcpyHostToDevice);
-       
+
         // TODO: parallelize by having one stage for direct, one for indirect
         // (and then for spatil reuse in restir we paralleize with indirect
         // filtering...)
@@ -260,53 +704,91 @@ void Mamba::render(EditorViewport *ev,
         );
 
         CUDA_SYNC_CHECK();
-       
-        std::memcpy(&direct_temporal_sbt, &direct_initial_sbt, sizeof(OptixShaderBindingTable));
-        direct_temporal_sbt.raygenRecord = dev_direct_temporal_raygen_record;
 
-        OPTIX_CHECK(
-                optixLaunch(direct_ppl, 0,
-                        dev_launch_info,
-                        sizeof(MambaLaunchInfo),
-                        &direct_temporal_sbt, extent.width, extent.height, 1
-                )
-        );
-        
-        CUDA_SYNC_CHECK();
-        
-        std::memcpy(&direct_spatial_sbt, &direct_initial_sbt, sizeof(OptixShaderBindingTable));
-        direct_spatial_sbt.raygenRecord = dev_direct_spatial_raygen_record;
+        if (temporal_reuse) {
+                std::memcpy(&direct_temporal_sbt, &direct_initial_sbt, sizeof(OptixShaderBindingTable));
+                direct_temporal_sbt.raygenRecord = dev_direct_temporal_raygen_record;
 
-        OPTIX_CHECK(
-                optixLaunch(direct_ppl, 0,
-                        dev_launch_info,
-                        sizeof(MambaLaunchInfo),
-                        &direct_spatial_sbt, extent.width, extent.height, 1
-                )
-        );
-        
-        CUDA_SYNC_CHECK();
+                OPTIX_CHECK(
+                        optixLaunch(direct_ppl, 0,
+                                dev_launch_info,
+                                sizeof(MambaLaunchInfo),
+                                &direct_temporal_sbt, extent.width, extent.height, 1
+                        )
+                );
 
-        // Final gather
-        FinalGather info;
-        info.color = ev->common_rtx.dev_color;
-        info.direct = launch_info.direct.Le;
-        info.extent = extent;
+                CUDA_SYNC_CHECK();
+        }
+
+        if (spatial_reuse) {
+                std::memcpy(&direct_spatial_sbt, &direct_initial_sbt, sizeof(OptixShaderBindingTable));
+                direct_spatial_sbt.raygenRecord = dev_direct_spatial_raygen_record;
+
+                OPTIX_CHECK(
+                        optixLaunch(direct_ppl, 0,
+                                dev_launch_info,
+                                sizeof(MambaLaunchInfo),
+                                &direct_spatial_sbt, extent.width, extent.height, 1
+                        )
+                );
+
+                CUDA_SYNC_CHECK();
+        }
 
         // TODO: more advanced parallelization
         uint block_size = 256;
         uint blocks = (extent.width * extent.height + 255) / 256;
 
+        // Final gather
+        sobel_normal <<< blocks, block_size >>> (launch_info.normal, launch_info.indirect.sobel, extent);
+        CUDA_SYNC_CHECK();
+
+        ProbeAllocationInfo probe_info;
+        probe_info.index_surface = launch_info.index;
+        probe_info.position_surface = launch_info.position;
+	probe_info.normal_surface = launch_info.normal;
+        probe_info.sobel = launch_info.indirect.sobel;
+        probe_info.sketches = launch_info.indirect.sketches;
+        probe_info.counter = launch_info.indirect.sketch_count;
+        probe_info.block_sketch_indices = launch_info.indirect.block_sketch_index;
+	probe_info.probes = launch_info.indirect.probes;
+        probe_info.extent = extent;
+
+        CUDA_CHECK(cudaMemset(launch_info.indirect.sketch_count, 0, sizeof(int)));
+
+        std::vector <int> block_sketch_index(blocks, -1);
+        CUDA_CHECK(cudaMemcpy(launch_info.indirect.block_sketch_index, block_sketch_index.data(), sizeof(int) * blocks, cudaMemcpyHostToDevice));
+
+        probe_allocation <<< blocks, block_size >>> (probe_info);
+        CUDA_SYNC_CHECK();
+
+        int sketch_count;
+        CUDA_CHECK(cudaMemcpy(&sketch_count, launch_info.indirect.sketch_count, sizeof(int), cudaMemcpyDeviceToHost));
+        // printf("Sketch count: %d/%d total pixels\n", sketch_count, extent.width * extent.height);
+
+        FinalGather info;
+        info.color = ev->common_rtx.dev_color;
+        info.direct = launch_info.direct.Le;
+        info.position_surface = launch_info.position;
+        info.sobel = launch_info.indirect.sobel;
+        info.sketches = launch_info.indirect.sketches;
+        info.block_sketch_indices = launch_info.indirect.block_sketch_index;
+	info.table = launch_info.indirect.probes;
+	info.brute_force = brute_force;
+        info.extent = extent;
+
         final_gather <<< blocks, block_size >>> (info);
         CUDA_SYNC_CHECK();
-        
+
         // Report any IO exchanges
         std::string io = optix_io_read(&launch_info.io);
-        std::cout << "Mamba GI output: \"" << io << "\"" << std::endl;
+        // std::cout << "Mamba GI output: \"" << io << "\"" << std::endl;
         optix_io_clear(&launch_info.io);
-        
+
         // Update previous camera state
         launch_info.previous_view = camera.view_matrix(camera_transform);
         launch_info.previous_projection = camera.perspective_matrix();
         launch_info.previous_origin = cuda::to_f3(render_info.camera_transform.position);
+
+        // TODO: Creat profile graphs across a fixed animation test
 }

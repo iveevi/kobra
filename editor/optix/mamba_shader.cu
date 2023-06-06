@@ -141,7 +141,7 @@ float sample_light(LightInfo &light_info, float3 &seed)
                 light_info.position = make_float3(gpoint.x, gpoint.y, gpoint.z);
                 light_info.normal = make_float3(gnormal.x, gnormal.y, gnormal.z);
                 light_info.emission = light.emission;
-                light_info.area = glm::length(glm::cross(v1 - v0, v2 - v0));
+                light_info.area = 0.5 * glm::length(glm::cross(v1 - v0, v2 - v0));
         } else {
                 // Environment light, sample direction
                 float theta = 2 * PI * cuda::rand_uniform(seed);
@@ -270,6 +270,7 @@ bool load_surface_hit(SurfaceHit &sh, const uint3 &idx)
 extern "C" __global__ void __raygen__direct_primary()
 {
         auto direct = info.direct;
+        bool end = !info.options.temporal && !info.options.spatial;
 
 	// Compute coordinates
 	const uint3 idx = optixGetLaunchIndex();
@@ -285,8 +286,10 @@ extern "C" __global__ void __raygen__direct_primary()
 
         direct.reservoirs[index].reset();
         SurfaceHit sh;
-        if (!load_surface_hit(sh, idx))
+        if (!load_surface_hit(sh, idx)) {
+                direct.Le[index] = make_float3(sky_at(info.sky, ray_at(idx)));
                 return;
+        }
 
         // Sample direct lighting
         float3 seed = make_float3(idx.x, idx.y, info.time);
@@ -305,12 +308,12 @@ extern "C" __global__ void __raygen__direct_primary()
         float3 Ld_resampled = direct_unoccluded(sh, resampled);
         bool is_occluded = occluded(sh.x, resampled.position);
         direct.reservoirs[index].resample(luminance(Ld_resampled * (1.0f - is_occluded)));
-        // float3 new_direct = Ld_resampled * (1.0f - is_occluded) * direct.reservoirs[index].W;
-        // float3 new_direct = pdf > 0 ? Ld_resampled * (1.0f - is_occluded)/pdf : make_float3(0.0f);
 
-        // int samples = info.samples;
-        // direct.Le[index] = (direct.Le[index] * samples + sh.mat.emission + new_direct)/(samples + 1);
-        // direct.Le[index] = make_float3(0,1,0);
+        if (end) {
+                int samples = info.samples;
+                float3 new_direct = cleanse(Ld_resampled * (1.0f - is_occluded) * direct.reservoirs[index].W);
+                direct.Le[index] = (direct.Le[index] * samples + sh.mat.emission + new_direct)/(samples + 1);
+        }
 }
 
 // Calculate target function for reservoir
@@ -366,6 +369,7 @@ int reproject(int index, glm::vec3 position)
 extern "C" __global__ void __raygen__temporal_reuse()
 {
         auto direct = info.direct;
+        bool end = !info.options.spatial;
 
 	// Compute coordinates
 	const uint3 idx = optixGetLaunchIndex();
@@ -392,7 +396,7 @@ extern "C" __global__ void __raygen__temporal_reuse()
         Reservoir <LightInfo> *current = &direct.reservoirs[index];
         Reservoir <LightInfo> *previous = nullptr;
         if (pindex >= 0)
-                previous = &direct.reservoirs[pindex];
+                previous = &direct.previous[pindex];
 
         if (current->size() <= 0) {
                 // direct.Le[index] = make_float3(0,0,1);
@@ -422,15 +426,16 @@ extern "C" __global__ void __raygen__temporal_reuse()
         float t_merged = target(sh, merged);
         merged.resample(t_merged);
         *current = merged;
-        
-        // LightInfo resampled = current->data;
-        // float3 Ld_resampled = direct_unoccluded(sh, resampled);
-        // bool is_occluded = occluded(sh.x, resampled.position);
-        // float3 new_direct = Ld_resampled * (1.0f - is_occluded) * current->W;
-        // int samples = info.samples;
-        // direct.Le[index] = (direct.Le[index] * samples + sh.mat.emission + new_direct)/(samples + 1);
-        // direct.previous[index] = *current;
-        // TODO: or memcpy previous reservoirs?
+       
+        if (end) {
+                LightInfo resampled = current->data;
+                float3 Ld_resampled = direct_unoccluded(sh, resampled);
+                bool is_occluded = occluded(sh.x, resampled.position);
+                int samples = info.samples;
+                float3 new_direct = cleanse(Ld_resampled * (1.0f - is_occluded) * current->W);
+                direct.Le[index] = (direct.Le[index] * samples + sh.mat.emission + new_direct)/(samples + 1);
+                direct.previous[index] = *current;
+        }
 }
 
 __forceinline__ __device__
@@ -495,30 +500,28 @@ extern "C" __global__ void __raygen__spatial_reuse()
         merged.update(current->data, t_current * current->W * current->M);
 
         // Sample spatial neighborhood
-        constexpr int SAMPLES = 5;
+        constexpr int SAMPLES = 2;
 
         SurfaceHit hits[SAMPLES];
         int sizes[SAMPLES];
 
         int count = 0;
         for (int i = 0; i < SAMPLES; i++) {
-                int index0 = sample_spatial_neighborhood(index, merged.seed, 30);
+                int index0 = sample_spatial_neighborhood(index, merged.seed, 20);
                 uint3 idx0 = make_uint3(index0 % resolution.x, index0/resolution.x, 1);
 
                 Reservoir <LightInfo> neighbor = info.direct.reservoirs[index0];
+		neighbor.M = min(neighbor.M, 200);
+
                 float t_neighbor = occluded_target(sh, neighbor);
 
                 if (neighbor.size() > 0)
                         merged.update(neighbor.data, t_neighbor * neighbor.W * neighbor.M);
 
-                // Reconstruct neighbor surface intersection information
-                // Material material0 = parameters.materials_buffer[index0];
-                // glm::vec3 position0 = parameters.buffers.position[index0];
-                // glm::vec3 normal0 = parameters.buffers.normal[index0];
-                // SurfaceHit sh0;
                 load_surface_hit(hits[i], idx0);
+                hits[i].wo = sh.wo;
+                hits[i].entering = (neighbor.size() > 0);
 
-                // hits[i] = sh0;
                 sizes[i] = neighbor.size();
 
                 // Add to count
@@ -546,7 +549,7 @@ extern "C" __global__ void __raygen__spatial_reuse()
         LightInfo resampled = current->data;
         float3 Ld_resampled = direct_unoccluded(sh, resampled);
         bool is_occluded = occluded(sh.x, resampled.position);
-        float3 new_direct = Ld_resampled * (1.0f - is_occluded) * current->W;
+        float3 new_direct = cleanse(Ld_resampled * (1.0f - is_occluded) * current->W);
         int samples = info.samples;
         direct.Le[index] = (direct.Le[index] * samples + sh.mat.emission + new_direct)/(samples + 1);
         direct.previous[index] = *current;
