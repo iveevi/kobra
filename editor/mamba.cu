@@ -4,6 +4,7 @@
 // Local headers
 #include "editor/common.hpp"
 #include "editor/editor_viewport.cuh"
+#include "include/cuda/brdf.cuh"
 #include "mamba.cuh"
 
 using namespace kobra;
@@ -20,6 +21,16 @@ struct IrradianceProbe {
 
         float3 normal;
 	float3 position;
+
+	// Octahedral projection
+	__forceinline__ __device__
+	float2 project(float3 v) const {
+		// TODO: cache this structure
+		cuda::ONB onb = cuda::ONB::from_normal(normal);
+		float3 p = onb.local(normalize(v));
+		float2 r = make_float2(p.x, p.z) / (fabsf(p.x) + fabsf(p.y) + fabsf(p.z));
+		float2 s = make_float2(r.x + r.y, r.x - r.y);
+	}
 };
 
 // A single level-node of the irradiance probe LUT
@@ -410,12 +421,7 @@ struct ProbeAllocationInfo {
         cudaSurfaceObject_t index_surface;
         cudaSurfaceObject_t position_surface;
 	cudaSurfaceObject_t normal_surface;
-
         float *sobel;
-
-        ProbeSketch *sketches;
-        int *counter;
-        int *block_sketch_indices;
 
 	IrradianceProbeTable *probes;
 
@@ -470,17 +476,6 @@ void probe_allocation(ProbeAllocationInfo info)
 
         float radius = 0.01f;
 
-        // Acquire next index atomically
-        int next_index = atomicAdd(info.counter, 1);
-        // if (next_index >= MAX_PROBES)
-        //         return;
-
-        ProbeSketch &sketch = info.sketches[next_index];
-        sketch.position = position;
-        sketch.radius = radius;
-
-        info.block_sketch_indices[index] = next_index;
-
 	// Allocate probe on the table
 	// TODO: iterate through LUTs
 
@@ -513,21 +508,12 @@ void probe_allocation(ProbeAllocationInfo info)
 	lut->refs[success] = probe_index;
 }
 
-struct ProbeHashTable {
-        // Sources
-        ProbeSketch *sketches;
-        int size;
-};
-
 struct FinalGather {
         float4 *color;
         float3 *direct;
         float *sobel;
 
         cudaSurfaceObject_t position_surface;
-
-        ProbeSketch *sketches;
-        int *block_sketch_indices;
 
 	IrradianceProbeTable *table;
 	bool brute_force;
@@ -633,17 +619,7 @@ void Mamba::render(EditorViewport *ev,
                 if (launch_info.indirect.sobel != 0)
                         CUDA_CHECK(cudaFree((void *) launch_info.indirect.sobel));
 
-                if (launch_info.indirect.sketches != 0)
-                        CUDA_CHECK(cudaFree((void *) launch_info.indirect.sketches));
-
-                if (launch_info.indirect.block_sketch_index != 0)
-                        CUDA_CHECK(cudaFree((void *) launch_info.indirect.block_sketch_index));
-
                 launch_info.indirect.sobel = cuda::alloc <float> (size);
-                // TODO: allocate some initial max size
-                launch_info.indirect.sketches = cuda::alloc <ProbeSketch> (size);
-                launch_info.indirect.sketch_count = cuda::alloc <int> (1);
-                launch_info.indirect.block_sketch_index = cuda::alloc <int> (size);
         }
 
         // Configure launch parameters
@@ -748,31 +724,17 @@ void Mamba::render(EditorViewport *ev,
         probe_info.position_surface = launch_info.position;
 	probe_info.normal_surface = launch_info.normal;
         probe_info.sobel = launch_info.indirect.sobel;
-        probe_info.sketches = launch_info.indirect.sketches;
-        probe_info.counter = launch_info.indirect.sketch_count;
-        probe_info.block_sketch_indices = launch_info.indirect.block_sketch_index;
 	probe_info.probes = launch_info.indirect.probes;
         probe_info.extent = extent;
 
-        CUDA_CHECK(cudaMemset(launch_info.indirect.sketch_count, 0, sizeof(int)));
-
-        std::vector <int> block_sketch_index(blocks, -1);
-        CUDA_CHECK(cudaMemcpy(launch_info.indirect.block_sketch_index, block_sketch_index.data(), sizeof(int) * blocks, cudaMemcpyHostToDevice));
-
         probe_allocation <<< blocks, block_size >>> (probe_info);
         CUDA_SYNC_CHECK();
-
-        int sketch_count;
-        CUDA_CHECK(cudaMemcpy(&sketch_count, launch_info.indirect.sketch_count, sizeof(int), cudaMemcpyDeviceToHost));
-        // printf("Sketch count: %d/%d total pixels\n", sketch_count, extent.width * extent.height);
 
         FinalGather info;
         info.color = ev->common_rtx.dev_color;
         info.direct = launch_info.direct.Le;
         info.position_surface = launch_info.position;
         info.sobel = launch_info.indirect.sobel;
-        info.sketches = launch_info.indirect.sketches;
-        info.block_sketch_indices = launch_info.indirect.block_sketch_index;
 	info.table = launch_info.indirect.probes;
 	info.brute_force = brute_force;
         info.extent = extent;

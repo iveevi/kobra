@@ -24,12 +24,6 @@ struct LightInfo {
         bool sky;
 };
 
-struct ProbeSketch {
-        float3 position;
-        float radius;
-        // TODO: radius
-};
-
 // Launch info for the G-buffer raytracer
 struct MambaLaunchInfo {
         // Acceleration structure
@@ -82,10 +76,6 @@ struct MambaLaunchInfo {
                 float3 *wo;
 
                 float *sobel;
-
-                ProbeSketch *sketches;
-                int *sketch_count;
-                int *block_sketch_index;
 
 		IrradianceProbeTable *probes;
         } indirect;
