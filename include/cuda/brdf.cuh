@@ -79,10 +79,17 @@ struct ONB {
         float3 v;
         float3 w;
 
+	// Convert from local to world
         __forceinline__ __device__
         float3 local(const float3 &a) const {
                 return a.x * u + a.y * v + a.z * w;
         }
+
+	// Convert from world to local
+	__forceinline__ __device__
+	float3 inv_local(const float3 &a) const {
+		return float3 { dot(a, u), dot(a, v), dot(a, w) };
+	}
 
         __forceinline__ __device__
         static ONB from_normal(const float3 &n) {

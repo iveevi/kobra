@@ -12,7 +12,7 @@ using namespace kobra;
 // TODO: probe.cuh
 // Irradiance probe
 struct IrradianceProbe {
-        constexpr static int size = 4;
+        constexpr static int size = 6;
 
         // Layed out using octahedral projection
         float3 values[size * size];
@@ -22,21 +22,35 @@ struct IrradianceProbe {
         float3 normal;
 	float3 position;
 
+	constexpr static float sqrt_2 = 1.41421356237f;
+	constexpr static float inv_sqrt_2 = 1.0f/sqrt_2;
+
+	// NOTE: Direction is expected to be in local space
+
 	// Octahedral projection
 	__forceinline__ __device__
-	float2 project(float3 v) const {
-		// TODO: cache this structure
-		cuda::ONB onb = cuda::ONB::from_normal(normal);
-		float3 p = onb.local(normalize(v));
-		float2 r = make_float2(p.x, p.z) / (fabsf(p.x) + fabsf(p.y) + fabsf(p.z));
-		float2 s = make_float2(r.x + r.y, r.x - r.y);
+	float2 to_oct(float3 v) const {
+		float3 r = v / (abs(v.x) + abs(v.y) + abs(v.z));
+		// float2 s = make_float2(r.x + r.y, r.x - r.y);
+		float2 s = make_float2(r);
+		return (s + 1.0f) / 2.0f;
+	}
+
+	// Disk projection
+	__forceinline__ __device__
+	float2 to_disk(float3 v) const {
+		float2 s = make_float2(v.x, v.y);
+		float theta = atan2f(s.y, s.x);
+		if (theta < 0.0f)
+			theta += 2.0f * M_PI;
+		float rp = pow(s.x * s.x + s.y * s.y, 0.3f);
+		return make_float2(theta/(2.0f * M_PI), rp);
 	}
 };
 
 // A single level-node of the irradiance probe LUT
 struct IrradianceProbeLUT {
-       constexpr static int MAX_REFS = (1 << 13) - 1;
-       // constexpr static int MAX_REFS = (1 << 10) - 1;
+       constexpr static int MAX_REFS = (1 << 15) - 1;
 
 	// Cell properties
         float resolution;
@@ -114,18 +128,20 @@ struct IrradianceProbeLUT {
         // leads to better distribution
         static constexpr int32_t MAX_TRIES = (1 << 2);
 
+	// TODO: analyze how well it is able to cover surfaces with higher number of tries..
 	__forceinline__ __device__
 	uint32_t double_hash(uint32_t h, int32_t i) {
 		// Double hashing (shuffle again)
-		int32_t oh = h;
-
-		h = (h ^ 61) ^ (h >> 16);
-		h = h + (h << 3);
-		h = h ^ (h >> 4);
-		h = h * 0x27d4eb2d;
-		h = h ^ (h >> 15);
-
-		return oh + (i + 1) * h;
+		// int32_t oh = h;
+		//
+		// h = (h ^ 61) ^ (h >> 16);
+		// h = h + (h << 3);
+		// h = h ^ (h >> 4);
+		// h = h * 0x27d4eb2d;
+		// h = h ^ (h >> 15);
+		//
+		// return oh + (i + 1) * h;
+		return h + (i * i);
 	}
 
 	// Allocating new reference
@@ -548,18 +564,23 @@ void final_gather(FinalGather info)
 
 	IrradianceProbeLUT *lut = &info.table->luts[0];
 
-	// TODO: flag to render probes	
+	// TODO: flag to render probes
 	float3 covered_color = make_float3(0);
 
-	int32_t result;
-	result = lut->lookup(position, -1);
+	float closest = FLT_MAX;
+	int32_t closest_index = -1;
+
+	int32_t result = lut->lookup(position, -1);
 	if (result != -1) {
 		int32_t probe_index = lut->refs[result];
-		float3 diff = position - info.table->probes[probe_index].position;
+		IrradianceProbe *probe = &info.table->probes[probe_index];
+		float3 diff = position - probe->position;
 		float dist = length(diff);
 
-		if (dist < 0.3 * lut->resolution)
-			covered_color = info.table->probes[probe_index].normal * 0.5f + 0.5f;
+		if (dist < closest) {
+			closest = dist;
+			closest_index = probe_index;
+		}
 	}
 
 	// Also consider neighboring probes
@@ -569,16 +590,44 @@ void final_gather(FinalGather info)
 			continue;
 
 		int32_t probe_index = lut->refs[result];
-		float3 diff = position - info.table->probes[probe_index].position;
+		IrradianceProbe *probe = &info.table->probes[probe_index];
+		float3 diff = position - probe->position;
 		float dist = length(diff);
 
-		if (dist < 0.3 * lut->resolution)
-			covered_color = info.table->probes[probe_index].normal * 0.5f + 0.5f;
+		if (dist < closest) {
+			closest = dist;
+			closest_index = probe_index;
+		}
 	}
 
-        info.color[index] = make_float4(color + covered_color, 1.0f);
-	if (index == 0)
-		printf("LUT size is %d\n", info.table->luts[0].counter);
+	if (closest_index != -1) {
+		int32_t probe_index = closest_index;
+		IrradianceProbe *probe = &info.table->probes[probe_index];
+		float3 diff = position - probe->position;
+
+		cuda::ONB onb = cuda::ONB::from_normal(probe->normal);
+		float3 local = onb.inv_local(diff)/lut->resolution;
+		local.z = 0;
+		float dist = length(local);
+
+		if (dist < 1) {
+			float3 wi = make_float3(local.x, local.y, sqrtf(1 - local.x * local.x - local.y * local.y));
+			wi = normalize(wi);
+
+			float2 s = probe->to_disk(wi);
+
+			constexpr int32_t size = IrradianceProbe::size;
+			int32_t ix = s.x * size;
+			int32_t iy = s.y * size;
+			int32_t index = ix + iy * size;
+
+			covered_color = make_float3((ix + iy) % 2);
+		}
+	}
+
+        info.color[index] = make_float4(0.1 * color + covered_color, 1.0f);
+	// if (index == 0)
+	// 	printf("LUT size is %d\n", info.table->luts[0].counter);
 }
 
 // Rendering function
