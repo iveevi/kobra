@@ -348,7 +348,7 @@ std::string load_components(Entity &e, std::ifstream &fin, const Context &contex
 
 void Scene::load(const Context &context, const std::string &path)
 {
-	KOBRA_PROFILE_TASK(Scene loading)
+	KOBRA_PROFILE_TASK("Scene loading");
 
 	static char buf[1024] = "";
 

@@ -772,7 +772,7 @@ namespace assimp {
 
 static std::tuple <Submesh, Material> process_mesh(aiMesh *mesh, const aiScene *scene, const std::string &dir)
 {
-	KOBRA_PROFILE_FUNCTION();
+	KOBRA_PROFILE_TASK("Assimp process mesh");
 
 	// Mesh data
 	VertexList vertices;
@@ -898,7 +898,7 @@ static std::tuple <Mesh, std::vector <Material>> process_node(aiNode *node, cons
 
 std::optional <std::tuple <Mesh, std::vector <Material>>> load_mesh(const std::string &path)
 {
-	KOBRA_PROFILE_FUNCTION();
+	KOBRA_PROFILE_TASK("Assimp load mesh");
 
 	// Create the Assimp importer
 	Assimp::Importer importer;
@@ -929,7 +929,7 @@ namespace tinyobjloader {
 // TODO: alias for std::optional <std::tuple <Mesh, std::vector <Material>>>
 std::optional <std::tuple <Mesh, std::vector <Material>>> load_mesh(const std::string &path)
 {
-	KOBRA_PROFILE_TASK(Loading mesh);
+	KOBRA_PROFILE_TASK("Loading mesh");
 
 	// Loader configuration
 	tinyobj::ObjReaderConfig reader_config;
@@ -939,7 +939,7 @@ std::optional <std::tuple <Mesh, std::vector <Material>>> load_mesh(const std::s
 	tinyobj::ObjReader reader;
 
 	{
-		KOBRA_PROFILE_TASK(Loading mesh: reading file);
+		KOBRA_PROFILE_TASK("Loading mesh: reading file");
 
 		// Load the mesh
 		if (!reader.ParseFromFile(path, reader_config)) {
@@ -965,7 +965,7 @@ std::optional <std::tuple <Mesh, std::vector <Material>>> load_mesh(const std::s
         std::vector <Material> mats;
 
 	{
-		KOBRA_PROFILE_TASK(Loading mesh: Loading submeshes);
+		KOBRA_PROFILE_TASK("Loading mesh: Loading submeshes");
 
 		std::mutex submeshes_mutex;
 

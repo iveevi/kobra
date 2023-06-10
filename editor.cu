@@ -6,6 +6,8 @@
 #include "editor/startup.hpp"
 #include "editor/ui/material_editor.hpp"
 
+#include "include/profiler.hpp"
+
 // Forward declarations
 struct ProgressBar;
 struct Console;
@@ -495,7 +497,7 @@ public:
 
 struct Performance : public kobra::ui::ImGuiAttachment {
 	std::chrono::high_resolution_clock::time_point start_time;
-public:
+
 	Performance() {
 		start_time = std::chrono::high_resolution_clock::now();
 	}
@@ -532,6 +534,75 @@ public:
 			ImPlot::PlotLine("Framrate", times.data(), fpses.data(), times.size());
 			ImPlot::EndPlot();
 		}
+
+		ImGui::End();
+	}
+};
+
+// Profiler
+struct EventProfiler : public kobra::ui::ImGuiAttachment {
+	EventProfiler() = default;
+
+	void render_frame(const kobra::Profiler::Frame &frame, float parent_us = 0, int id = 0) {
+		// TODO: also a bar graph of the frame times (include total ImGui time as well)
+		if (frame.children.size() == 0) {
+			int ms = frame.time/1000.0f;
+			int us = frame.time - ms * 1000.0f;
+
+			if (parent_us > 0) {
+				float percent = frame.time/parent_us * 100.0f;
+				ImGui::Text("[%2.2f%%] %s %d ms %d us", frame.name.c_str(), percent, ms, us);
+			} else {
+				ImGui::Text("%s %d ms %d us", frame.name.c_str(), ms, us);
+			}
+		} else {
+			ImGui::PushID(id++);
+
+			int ms = frame.time/1000.0f;
+			int us = frame.time - ms * 1000.0f;
+
+			if (ImGui::TreeNode(frame.name.c_str())) {
+				if (parent_us > 0) {
+					float percent = frame.time/parent_us * 100.0f;
+					ImGui::Text("Total time: %d ms %d us [%2.2f%%]", ms, us, percent);
+				} else {
+					ImGui::Text("Total time: %d ms %d us", ms, us);
+				}
+
+				ImGui::Indent();
+				for (auto &child : frame.children)
+					render_frame(child, frame.time);
+				ImGui::Unindent();
+
+				ImGui::TreePop();
+			}
+			ImGui::PopID();
+		}
+	}
+
+	void count(const kobra::Profiler::Frame &frame, int &counter) {
+		if (frame.children.size() > 0) {
+			for (auto &child : frame.children)
+				count(child, counter);
+		}
+			
+		counter++;
+	}
+
+	void render() override {
+		ImGui::Begin("Profiler");
+
+		int counter = 0;
+		while (kobra::Profiler::one().size()) {
+			kobra::Profiler::Frame frame = kobra::Profiler::one().pop();
+			render_frame(frame);
+			count(frame, counter);
+		}
+
+		if (counter == 0)
+			ImGui::Text("No events");
+		else
+			ImGui::Text("Recorded %d total events", counter);
 
 		ImGui::End();
 	}
@@ -710,6 +781,7 @@ Editor::Editor(const vk::raii::PhysicalDevice &phdev,
 	m_ui->attach(m_material_editor);
 	// m_ui->attach(std::make_shared <RTXRenderer> (this));
 	m_ui->attach(std::make_shared <Performance> ());
+	m_ui->attach(std::make_shared <EventProfiler> ());
         m_ui->attach(m_ui_attachments.viewport);
 	m_ui->attach(scene_graph);
 
@@ -801,6 +873,8 @@ void handle_camera_input(Editor *editor)
 void Editor::record(const vk::raii::CommandBuffer &cmd,
 		const vk::raii::Framebuffer &framebuffer)
 {
+	KOBRA_PROFILE_TASK("Editor::record");
+
 	// Camera movement
 	if (m_input.viewport_focused || input_context.dragging || input_context.alt_dragging)
                 handle_camera_input(this);
@@ -1114,6 +1188,9 @@ void Editor::after_present()
         // Daemon update cycle
         transform_daemon->update();
         update(m_scene.system->material_daemon);
+
+	// TODO: push profiler frame to UI
+	// KOBRA_PROFILE_PRINT();
 }
 
 void mouse_callback(void *us, const kobra::io::MouseEvent &event)

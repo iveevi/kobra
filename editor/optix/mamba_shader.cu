@@ -287,11 +287,12 @@ extern "C" __global__ void __raygen__direct_primary()
         direct.reservoirs[index].reset();
         SurfaceHit sh;
         if (!load_surface_hit(sh, idx)) {
-                direct.Le[index] = make_float3(sky_at(info.sky, ray_at(idx)));
+                // direct.Le[index] = make_float3(sky_at(info.sky, ray_at(idx)));
                 return;
         }
 
         // Sample direct lighting
+	// TODO: generate these samples in parallel in a kernel before this one
         float3 seed = make_float3(idx.x, idx.y, info.time);
         for (int i = 0; i < 32; i++) {
                 LightInfo lighting;
@@ -385,7 +386,7 @@ extern "C" __global__ void __raygen__temporal_reuse()
 
         SurfaceHit sh;
         if (!load_surface_hit(sh, idx)) {
-                direct.Le[index] = make_float3(sky_at(info.sky, ray_at(idx)));
+                // direct.Le[index] = make_float3(sky_at(info.sky, ray_at(idx)));
                 direct.previous[index].reset();
                 return;
         }
@@ -480,7 +481,7 @@ extern "C" __global__ void __raygen__spatial_reuse()
 
         SurfaceHit sh;
         if (!load_surface_hit(sh, idx)) {
-                direct.Le[index] = make_float3(sky_at(info.sky, ray_at(idx)));
+                // direct.Le[index] = make_float3(sky_at(info.sky, ray_at(idx)));
                 direct.previous[index].reset();
                 return;
         }
@@ -553,6 +554,12 @@ extern "C" __global__ void __raygen__spatial_reuse()
         int samples = info.samples;
         direct.Le[index] = (direct.Le[index] * samples + sh.mat.emission + new_direct)/(samples + 1);
         direct.previous[index] = *current;
+}
+
+// Secondary rays
+extern "C" __global__ void __raygen__secondary()
+{
+	const uint3 idx = optixGetLaunchIndex();
 }
 
 // Closest hit for indirect rays

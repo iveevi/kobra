@@ -1,121 +1,72 @@
-#ifndef PROFILER_H_
-#define PROFILER_H_
+#pragma once
 
 // Standard headers
 #include <cmath>
+#include <iostream>
 #include <mutex>
 #include <queue>
 #include <stack>
 #include <string>
 #include <vector>
 
-// TODO: remove
-#include <iostream>
-
-// Engine headers
-#include "timer.hpp"
-
 namespace kobra {
 
+// Forward declarations
+struct Profiler;
+
+// Timer event types
+enum class EventType {
+	eCPU,
+	eCUDA
+};
+
 // Profiler class
-class Profiler {
-public:
+struct Profiler {
+	using clk = std::chrono::high_resolution_clock;
+	using time_point = clk::time_point;
+
 	// Frame structure (as a tree)
 	struct Frame {
-		std::string		name;
-		Timer::time_point	start;
-		double			time;
-		std::vector <Frame>	children;
+		double time = 0.0;
+		std::string name = "";
+		std::vector <Frame> children = {};
 
-		// Constructor
-		Frame(const std::string &n, const Timer::time_point &s)
-			: name(n), start(s), time(0.0) {}
+		// Default constructor
+		Frame() = default;
 	};
 
-	// Scoped task
-	struct ScopedFrame {
-		Profiler	*_profiler;
+	std::queue <Frame> frames;
+	std::stack <Frame> stack;
 
-		// Constructor
-		ScopedFrame(Profiler *p, const std::string &n)
-			: _profiler(p) {
-			_profiler->frame(n);
-		}
-
-		// Destructor
-		~ScopedFrame() {
-			_profiler->end();
-		}
-	};
-private:
-	// Frame queue
-	std::queue <Frame>	_frames;
-
-	// Timer
-	Timer			_timer;
-
-	// Frame stack
-	std::stack <Frame>	_stack;
-
-	Timer::time_point	_start;
-
-	// Mutex
-	std::mutex		_mutex;
-public:
-	// Constructor
-	Profiler() {
-		_start = _timer.now();
-	}
+	// Default constructor
+	Profiler() = default;
 
 	// Number of recorded frames
 	size_t size() const {
-		return _frames.size();
+		return frames.size();
 	}
 
-	// Create a new frame
-	void frame(const std::string &name) {
-		Frame frame {name, _timer.now()};
-
-		// Add frame to stack
-		_mutex.lock();
-		_stack.push(frame);
-		_mutex.unlock();
-	}
-
-	// Scoped task
-	ScopedFrame scoped_frame(const std::string &name) {
-		return ScopedFrame(this, name);
+	Frame *new_frame() {
+		stack.push(Frame {});
+		return &stack.top();
 	}
 
 	// End current frame
 	void end() {
-		// Get current frame
-		Frame frame = _stack.top();
-
-		// Get time
-		frame.time = _timer.elapsed(frame.start);
-
-		// Pop frame from stack
-		_mutex.lock();
-		_stack.pop();
+		Frame frame = stack.top();
+		stack.pop();
 
 		// If frame has no parent, add to queue
-		if (_stack.empty())
-			_frames.push(frame);
+		if (stack.empty())
+			frames.push(frame);
 		else
-			_stack.top().children.push_back(frame);
-
-		_mutex.unlock();
+			stack.top().children.push_back(frame);
 	}
 
 	// Return front of queue
 	Frame pop() {
-		Frame frame = _frames.front();
-		
-		_mutex.lock();
-		_frames.pop();
-		_mutex.unlock();
-
+		Frame frame = frames.front();
+		frames.pop();
 		return frame;
 	}
 
@@ -178,6 +129,70 @@ public:
 	}
 };
 
+// General scoped event
+template <EventType>
+struct ScopedEvent;
+
+// Specialization for CPU events
+template <>
+struct ScopedEvent <EventType::eCPU> {
+	Profiler::Frame *frame = nullptr;
+	Profiler::time_point start;
+
+	// Constructor
+	ScopedEvent(const std::string &name) {
+		start = Profiler::clk::now();
+		// Profiler::one().frame(name);
+		frame = Profiler::one().new_frame();
+		frame->name = name;
+	}
+
+	// Destructor
+	~ScopedEvent() {
+		Profiler::time_point end = Profiler::clk::now();
+		double time = std::chrono::duration_cast
+			<std::chrono::microseconds> (end - start).count();
+		frame->time = time;
+		Profiler::one().end();
+	}
+};
+
+#ifdef __CUDACC__
+
+// Specialization for CUDA events
+template <>
+struct ScopedEvent <EventType::eCUDA> {
+	cudaEvent_t start;
+	cudaEvent_t end;
+
+	Profiler::Frame *frame = nullptr;
+
+	// Constructor
+	ScopedEvent(const std::string &name) {
+		cudaEventCreate(&start);
+		cudaEventCreate(&end);
+		cudaEventRecord(start);
+
+		frame = Profiler::one().new_frame();
+		frame->name = name;
+	}
+
+	// Destructor
+	~ScopedEvent() {
+		cudaEventRecord(end);
+		cudaEventSynchronize(end);
+		float time;
+		cudaEventElapsedTime(&time, start, end);
+		cudaEventDestroy(start);
+		cudaEventDestroy(end);
+
+		frame->time = time * 1000.0f;
+		Profiler::one().end();
+	}
+};
+
+#endif
+
 }
 
 #define KOBRA_PROFILING
@@ -188,18 +203,13 @@ public:
 #define CONCAT(a, b) CONCAT_INNER(a, b)
 #define CONCAT_INNER(a, b) a ## b
 
-// TODO: pass string, to make more consistent...
-#define KOBRA_PROFILE_TASK(name) \
-	kobra::Profiler::ScopedFrame CONCAT(sf_, CONCAT(__LINE__, __COUNTER__)) \
-		= kobra::Profiler::one().scoped_frame(#name);
+#define KOBRA_PROFILE_TASK(name)				\
+	auto CONCAT(sf_, CONCAT(__LINE__, __COUNTER__))		\
+	= kobra::ScopedEvent <kobra::EventType::eCPU> (name)
 
-#define KOBRA_PROFILE_FUNCTION() KOBRA_PROFILE_TASK(__FUNCTION__)
-
-#define KOBRA_PROFILE_AUTO() \
-	kobra::Profiler::ScopedFrame CONCAT(sf_, CONCAT(__LINE__, __COUNTER__)) \
-		= kobra::Profiler::one().scoped_frame( \
-			std::string(__FILE__) + ":" + std::to_string(__LINE__) \
-		);
+#define KOBRA_PROFILE_CUDA_TASK(name)				\
+	auto CONCAT(sf_, CONCAT(__LINE__, __COUNTER__))		\
+	= kobra::ScopedEvent <kobra::EventType::eCUDA> (name);
 
 #define KOBRA_PROFILE_PRINT() \
 	while (kobra::Profiler::one().size()) { \
@@ -216,11 +226,8 @@ public:
 #warning "Profiling disabled"
 
 #define KOBRA_PROFILE_TASK(name)
-#define KOBRA_PROFILE_FUNCTION()
-#define KOBRA_PROFILE_AUTO()
+#define KOBRA_PROFILE_CUDA_TASK(name)
 #define KOBRA_PROFILE_PRINT()
 #define KOBRA_PROFILE_RESET()
-
-#endif
 
 #endif

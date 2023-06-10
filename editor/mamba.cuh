@@ -48,9 +48,11 @@ struct Mamba {
         std::queue <vk::Extent2D> resize_queue;
 
         // Options
-        bool temporal_reuse = true;
-        bool spatial_reuse = true;
-	bool brute_force = false;
+	// TODO: wrapper struct
+        bool temporal_reuse = false;
+        bool spatial_reuse = false;
+	bool render_probes = false;
+	bool render_probe_aux = false;
 
         // Constructor
         Mamba(const OptixDeviceContext &);

@@ -78,7 +78,20 @@ struct MambaLaunchInfo {
                 float *sobel;
 
 		IrradianceProbeTable *probes;
+		float *raster;
+		float *raster_aux;
         } indirect;
+
+	// Information for secondary/ternary rays
+	struct {
+		cuda::SurfaceHit *hits;
+		float3 *wi;
+		
+		cuda::SurfaceHit *caustic_hits;
+		float3 *caustic_wi;
+
+		uint2 resolution;
+	} secondary;
 
         // Extra options
         struct {

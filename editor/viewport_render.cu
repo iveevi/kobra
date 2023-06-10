@@ -3,6 +3,7 @@
 #include "include/cuda/error.cuh"
 #include "include/cuda/interop.cuh"
 #include "include/daemons/material.hpp"
+#include "include/profiler.hpp"
 #include "push_constants.hpp"
 
 static cuda::_material convert_material(const Material &material, TextureLoader &texture_loader, const vk::raii::Device &device)
@@ -77,6 +78,8 @@ void update_materials(CommonRaytracing *crtx,
                 MeshDaemon *mesh_memory,
                 const vk::raii::Device &device)
 {
+	KOBRA_PROFILE_TASK("Update materials");
+
         bool valid_materials = (crtx->dev_materials != 0);
         bool no_updates = crtx->material_update_queue.empty();
         bool size_match = (crtx->materials.size() == md->materials.size());
@@ -166,6 +169,7 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
                 const TransformDaemon *td,
                 const MaterialDaemon *md)
 {
+	KOBRA_PROFILE_TASK("Prerender raytrace");
         if (!common_rtx.clk_rise)
                 return;
 
@@ -329,6 +333,7 @@ void EditorViewport::render_gbuffer(const RenderInfo &render_info,
                                     const TransformDaemon *td,
                                     const MaterialDaemon *md)
 {
+	KOBRA_PROFILE_TASK("Render G-buffer");
         if (render_state.backend == RenderState::eRasterized) {
                 // The given entities are assumed to have all the necessary
                 // components (Transform and Renderable)
@@ -1153,7 +1158,8 @@ static void show_mode_submenu(RenderState *render_state, const _submenu_args &ar
                                 mamba->manual_reset = true;
                         }
                         
-			if (ImGui::Checkbox("Brute Force", &mamba->brute_force));
+			if (ImGui::Checkbox("Render Probes", &mamba->render_probes));
+			if (ImGui::Checkbox("Render Auxiliary Info", &mamba->render_probe_aux));
                 }
 
                 ImGui::EndMenu();
