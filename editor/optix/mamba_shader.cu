@@ -136,7 +136,7 @@ float sample_light(LightInfo &light_info, float3 &seed)
                 }
 
                 glm::vec3 gpoint = v0 * (1.0f - u - v) + v1 * u + v2 * v;
-                
+
                 light_info.sky = false;
                 light_info.position = make_float3(gpoint.x, gpoint.y, gpoint.z);
                 light_info.normal = make_float3(gnormal.x, gnormal.y, gnormal.z);
@@ -174,7 +174,7 @@ float3 Ld(const SurfaceHit &sh, float3 &seed)
 
         float3 direction = normalize(light_info.position - sh.x);
         float3 origin = sh.x;
-        
+
         uint i0 = 0;
         uint i1 = 0;
 
@@ -199,7 +199,7 @@ float3 Ld(const SurfaceHit &sh, float3 &seed)
         if (packet.miss && length(out_radiance) < 1e-3f) {
                 float3 wi = normalize(light_info.position - origin);
                 float R = length(light_info.position - origin);
-	
+
                 float3 brdf = cleanse(cuda::brdf(sh, wi, sh.mat.type));
 
                 float ldotn = light_info.sky ? 1.0f : abs(dot(light_info.normal, wi));
@@ -221,10 +221,10 @@ bool load_surface_hit(SurfaceHit &sh, const uint3 &idx)
         float4 raw_position;
         float4 raw_normal;
         float4 raw_uv;
-        
+
         int xoffset = idx.x * sizeof(float4);
         int yoffset = (resolution.y - (idx.y + 1));
-        
+
         surf2Dread(&raw_position, info.position, xoffset, yoffset);
         surf2Dread(&raw_normal, info.normal, xoffset, yoffset);
         surf2Dread(&raw_uv, info.uv, xoffset, yoffset);
@@ -237,7 +237,7 @@ bool load_surface_hit(SurfaceHit &sh, const uint3 &idx)
 
         int32_t triangle_id = raw_index >> 16;
         int32_t material_id = raw_index & 0xFFFF;
-       
+
         if (raw_index == -1)
                 return false;
 
@@ -256,7 +256,7 @@ bool load_surface_hit(SurfaceHit &sh, const uint3 &idx)
         sh.wo = normalize(info.camera.origin - position);
         sh.n = normalize(normal);
         sh.entering = (raw_normal.w > 0.0f);
-        
+
         cuda::_material m = info.materials[material_id];
         convert_material(m, sh.mat, uv);
 
@@ -294,7 +294,9 @@ extern "C" __global__ void __raygen__direct_primary()
         // Sample direct lighting
 	// TODO: generate these samples in parallel in a kernel before this one
         float3 seed = make_float3(idx.x, idx.y, info.time);
-        for (int i = 0; i < 32; i++) {
+
+	constexpr int M = 8;
+        for (int i = 0; i < M; i++) {
                 LightInfo lighting;
                 float pdf = sample_light(lighting, seed);
 
@@ -408,7 +410,7 @@ extern "C" __global__ void __raygen__temporal_reuse()
         // TODO: reproject to get previous position
         float3 seed = make_float3(idx.x, idx.y, info.time);
         Reservoir <LightInfo> merged(2.0 * seed);
-	
+
         float t_current = occluded_target(sh, *current);
         merged.update(current->data, t_current * current->W * current->M);
 
@@ -427,7 +429,7 @@ extern "C" __global__ void __raygen__temporal_reuse()
         float t_merged = target(sh, merged);
         merged.resample(t_merged);
         *current = merged;
-       
+
         if (end) {
                 LightInfo resampled = current->data;
                 float3 Ld_resampled = direct_unoccluded(sh, resampled);
@@ -493,7 +495,7 @@ extern "C" __global__ void __raygen__spatial_reuse()
                 direct.previous[index].reset();
                 return;
         }
-		
+
         float3 seed = make_float3(idx.x, idx.y, info.time);
         Reservoir <LightInfo> merged(2.0 * seed);
 
@@ -545,7 +547,7 @@ extern "C" __global__ void __raygen__spatial_reuse()
         float denominator = t_merged * Z;
         merged.W = (denominator > 0.0f) ? merged.w/denominator : 0.0f;
         *current = merged;
-        
+
         // Compute shading
         LightInfo resampled = current->data;
         float3 Ld_resampled = direct_unoccluded(sh, resampled);
@@ -560,6 +562,78 @@ extern "C" __global__ void __raygen__spatial_reuse()
 extern "C" __global__ void __raygen__secondary()
 {
 	const uint3 idx = optixGetLaunchIndex();
+	int32_t local_index = idx.x + idx.y * info.secondary.resolution.x;
+
+	int32_t block_cycle = info.samples % 16;
+	int32_t x = 4 * idx.x + (block_cycle % 4);
+	int32_t y = 4 * idx.y + (block_cycle / 4);
+
+	uint2 resolution = info.camera.resolution;
+	if (x >= resolution.x || y >= resolution.y)
+		return;
+
+	// TODO: cache after dierct lighting stage?
+	// or after G-buffer stage?
+	SurfaceHit sh;
+        if (!load_surface_hit(sh, make_uint3(x, y, 1))) {
+		// Null direction implies invalid hit
+		info.secondary.wi[local_index] = make_float3(0);
+                return;
+        }
+
+	float3 wi;
+        float pdf;
+        Shading out;
+
+        float3 seed = make_float3(idx.x, idx.y, info.time);
+        float3 brdf = eval(sh, wi, pdf, out, seed);
+
+	if (pdf <= 0.0f) {
+		info.secondary.wi[local_index] = make_float3(0);
+		return;
+	}
+
+	// Trace secondary ray
+	Packet packet;
+	packet.miss = false;
+	packet.entering = false;
+
+	uint32_t i0;
+	uint32_t i1;
+	pack_pointer(&packet, i0, i1);
+
+	optixTrace(info.handle,
+		sh.x, wi,
+		0.0f, 1e16f, 0.0f,
+		OptixVisibilityMask(0xFF),
+		OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+		0, 1, 0, i0, i1
+	);
+
+	if (packet.miss) {
+		info.secondary.wi[local_index] = make_float3(0);
+		return;
+	}
+
+	cuda::_material m = info.materials[packet.id];
+
+	SurfaceHit secondary_sh;
+	sh.x = packet.x;
+	sh.wo = -wi;
+	sh.n = packet.n;
+	sh.entering = packet.entering;
+
+	convert_material(m, sh.mat, packet.uv);
+	// float3 indirect = Ld(sh, seed);
+	float3 indirect = brdf * Ld(sh, seed) * abs(dot(sh.n, wi)) / pdf;
+
+	info.secondary.wi[local_index] = wi; // TODO: pdf in 4th channel
+	// info.secondary.Le[local_index] = indirect;
+	info.secondary.hits[local_index] = secondary_sh;
+
+	float3 p_indirect = info.secondary.Le[local_index];
+	float3 n_indirect = (info.samples * p_indirect + indirect)/(info.samples + 1);
+	info.secondary.Le[local_index] = n_indirect;
 }
 
 // Closest hit for indirect rays
@@ -610,7 +684,7 @@ extern "C" __global__ void __closesthit__()
         e2 = hit->model * glm::vec4(e2, 0.0f);
 
         glm::vec3 glm_normal = glm::normalize(glm::cross(e1, e2));
-        
+
         float3 ng = { glm_normal.x, glm_normal.y, glm_normal.z };
         float3 wo = optixGetWorldRayDirection();
 

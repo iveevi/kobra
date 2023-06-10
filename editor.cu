@@ -1,3 +1,7 @@
+#include "implot/implot.h"
+
+#include "include/profiler.hpp"
+
 #include "editor/common.hpp"
 #include "editor/editor_viewport.cuh"
 #include "editor/inspector.hpp"
@@ -5,8 +9,6 @@
 #include "editor/scene_graph.hpp"
 #include "editor/startup.hpp"
 #include "editor/ui/material_editor.hpp"
-
-#include "include/profiler.hpp"
 
 // Forward declarations
 struct ProgressBar;
@@ -385,6 +387,8 @@ public:
                 // m_editor->m_editor_renderer->menu(options);
                 show_menu(m_editor->m_editor_renderer, options);
 
+		// TODO: show framrate somewhere here?
+
 		vk::Image image = *m_editor->m_editor_renderer->viewport_image();
 		if (image == m_old_image) {
 			// Get current window size
@@ -585,24 +589,153 @@ struct EventProfiler : public kobra::ui::ImGuiAttachment {
 			for (auto &child : frame.children)
 				count(child, counter);
 		}
-			
+
 		counter++;
 	}
 
+	// TODO: storethe frame instead so that all the labels can be shown
+	std::vector <kobra::Profiler::Frame> frames;
+	std::set <std::string> leaves;
+	double pmax = 20; // TODO: use auto scaling instead
+
+	void process_frame(const kobra::Profiler::Frame &frame, std::map <std::string, std::vector <double>> &data, std::set <std::string> &existing) {
+		// Add the frame time to the data or add time to the existing data
+		double time = frame.time/1000.0f;
+		if (existing.find(frame.name) == existing.end())
+			data[frame.name].push_back(time);
+		else
+			data[frame.name].back() += time;
+
+		// Process children
+		existing.insert(frame.name);
+		if (frame.children.size() > 0) {
+			for (auto &child : frame.children)
+				process_frame(child, data, existing);
+		}
+	}
+
+	void frame_tree(const kobra::Profiler::Frame &frame, int &id) {
+		if (frame.children.size() == 0) {
+			ImGui::Text(frame.name.c_str());
+			leaves.insert(frame.name);
+		} else {
+			ImGui::PushID(id++);
+			if (ImGui::TreeNode(frame.name.c_str())) {
+				ImGui::Indent();
+				for (auto &child : frame.children)
+					frame_tree(child, id);
+				ImGui::Unindent();
+
+				ImGui::TreePop();
+			} else {
+				leaves.insert(frame.name);
+			}
+
+			ImGui::PopID();
+		}
+	}
+
 	void render() override {
+		constexpr int32_t MAX_FRAMES = 25;
+
+		// TODO: record every X frames?
+		// TODO: option to pause the profiler
+		// TODO: option to show line graph of frame times instead of bar graph
+
 		ImGui::Begin("Profiler");
 
-		int counter = 0;
-		while (kobra::Profiler::one().size()) {
+		ImVec2 size = ImGui::GetContentRegionAvail();
+
+		// Frame times in a bar graph
+		// No x axis, just the frame times
+		ImGui::BeginChild("Frame times", ImVec2(size.x * 0.7, 0), true);
+
+		ImPlot::SetNextAxesLimits(0, MAX_FRAMES, 0, std::min(pmax, 100.0), ImGuiCond_Always);
+		ImPlot::BeginPlot("Frame times");
+		// ImPlot::SetupLegend(false);
+		ImPlot::SetupLegend(ImPlotLocation_NorthWest, false);
+
+		// Only take first frame
+		if (kobra::Profiler::one().size()) {
 			kobra::Profiler::Frame frame = kobra::Profiler::one().pop();
-			render_frame(frame);
-			count(frame, counter);
+			frames.push_back(frame);
+
+			// Clear the remaining profiler frames
+			while (kobra::Profiler::one().size())
+				kobra::Profiler::one().pop();
 		}
 
-		if (counter == 0)
-			ImGui::Text("No events");
-		else
-			ImGui::Text("Recorded %d total events", counter);
+		// Remove old frames
+		if (frames.size() > MAX_FRAMES)
+			frames.erase(frames.begin());
+
+		std::map <std::string, std::vector <double>> data;
+		for (auto &frame : frames) {
+			std::set <std::string> existing;
+			process_frame(frame, data, existing);
+		}
+
+		// std::cout << "Data size: " << data.size() << std::endl;
+		// for (auto &pair : data) {
+		// 	std::cout << pair.first << ": " << pair.second.size() << std::endl;
+		// }
+
+		if (data.size() > 0) {
+			// Convert the data to ImPlot format
+			std::vector <const char *> labels;
+			std::vector <double> values;
+
+			int32_t size = -1;
+			for (auto &pair : data) {
+				if (leaves.find(pair.first) == leaves.end())
+					continue;
+
+				labels.push_back(pair.first.c_str());
+				values.insert(values.end(), pair.second.begin(), pair.second.end());
+				assert(size == -1 || size == pair.second.size());
+				size = pair.second.size();
+			}
+
+			if (size > 0) {
+				ImPlot::PlotBarGroups(
+					labels.data(),
+					values.data(),
+					labels.size(),
+					values.size()/labels.size(),
+					0.5f, 1.0f,
+					ImPlotBarGroupsFlags_Stacked
+				);
+			}
+
+			// TODO: put legend on the side as a scrollable list (with checkboxes...)
+			// TODO: expanding the legend should expand the graph (avoid double counting)
+		}
+
+		ImPlot::EndPlot();
+		ImGui::EndChild();
+
+		// Manual legend
+		if (data.size() > 0) {
+			ImGui::SameLine();
+			ImGui::BeginChild("Legend", ImVec2(0, 0), true);
+
+			int32_t id = 0;
+			leaves.clear();
+			frame_tree(frames[0], id);
+
+			ImGui::EndChild();
+		}
+
+		// while (kobra::Profiler::one().size()) {
+		// 	kobra::Profiler::Frame frame = kobra::Profiler::one().pop();
+		// 	render_frame(frame);
+		// 	count(frame, counter);
+		// }
+		//
+		// if (counter == 0)
+		// 	ImGui::Text("No events");
+		// else
+		// 	ImGui::Text("Recorded %d total events", counter);
 
 		ImGui::End();
 	}

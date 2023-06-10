@@ -302,9 +302,13 @@ void EditorViewport::prerender_raytrace(const std::vector <Entity> &entities,
                 mamba->direct_initial_sbt.hitgroupRecordStrideInBytes = sizeof(optix::Record <Hit>);
                 mamba->direct_initial_sbt.hitgroupRecordCount = common_rtx.records.size();
 
-                mamba->direct_temporal_sbt.hitgroupRecordBase = cuda::make_buffer_ptr(common_rtx.records);
-                mamba->direct_temporal_sbt.hitgroupRecordStrideInBytes = sizeof(optix::Record <Hit>);
-                mamba->direct_temporal_sbt.hitgroupRecordCount = common_rtx.records.size();
+                // mamba->direct_temporal_sbt.hitgroupRecordBase = cuda::make_buffer_ptr(common_rtx.records);
+                // mamba->direct_temporal_sbt.hitgroupRecordStrideInBytes = sizeof(optix::Record <Hit>);
+                // mamba->direct_temporal_sbt.hitgroupRecordCount = common_rtx.records.size();
+                
+		mamba->secondary_sbt.hitgroupRecordBase = cuda::make_buffer_ptr(common_rtx.records);
+                mamba->secondary_sbt.hitgroupRecordStrideInBytes = sizeof(optix::Record <Hit>);
+                mamba->secondary_sbt.hitgroupRecordCount = common_rtx.records.size();
 
                 // Path tracer hit SBT
                 for (auto &record : common_rtx.records)
@@ -1160,6 +1164,7 @@ static void show_mode_submenu(RenderState *render_state, const _submenu_args &ar
                         
 			if (ImGui::Checkbox("Render Probes", &mamba->render_probes));
 			if (ImGui::Checkbox("Render Auxiliary Info", &mamba->render_probe_aux));
+			if (ImGui::Checkbox("Show Indirect Lighting", &mamba->indirect_lighting));
                 }
 
                 ImGui::EndMenu();

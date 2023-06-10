@@ -50,6 +50,7 @@ Mamba::Mamba(const OptixDeviceContext &context)
                 OPTIX_DESC_RAYGEN (module, "__raygen__direct_primary"),
                 OPTIX_DESC_RAYGEN (module, "__raygen__temporal_reuse"),
                 OPTIX_DESC_RAYGEN (module, "__raygen__spatial_reuse"),
+                OPTIX_DESC_RAYGEN (module, "__raygen__secondary"),
                 OPTIX_DESC_HIT    (module, "__closesthit__"),
                 OPTIX_DESC_MISS   (module, "__miss__"),
         };
@@ -59,6 +60,7 @@ Mamba::Mamba(const OptixDeviceContext &context)
                 &raygen_direct_primary,
                 &raygen_direct_temporal,
                 &raygen_direct_spatial,
+		&raygen_secondary,
                 &closest_hit,
                 &miss,
         };
@@ -78,8 +80,15 @@ Mamba::Mamba(const OptixDeviceContext &context)
                 miss,
         }, pipeline_compile_options, pipeline_link_options);
 
-        // Create shader binding table
+	secondary_ppl = optix::link_optix_pipeline(context, {
+		raygen_secondary,
+		closest_hit,
+		miss,
+	}, pipeline_compile_options, pipeline_link_options);
+
+        // Create shader binding tables
         direct_initial_sbt = {};
+	secondary_sbt = {};
 
         // Ray generation
         CUdeviceptr dev_direct_initial_raygen_record;
@@ -99,6 +108,13 @@ Mamba::Mamba(const OptixDeviceContext &context)
         CUDA_CHECK(cudaMalloc((void **) &dev_direct_spatial_raygen_record, sizeof(optix::Record <void>)));
         CUDA_CHECK(cudaMemcpy((void *) dev_direct_spatial_raygen_record, &direct_spatial_raygen_record, sizeof(optix::Record <void>), cudaMemcpyHostToDevice));
 
+	CUdeviceptr dev_secondary_raygen_record;
+
+	optix::Record <void> secondary_raygen_record;
+	OPTIX_CHECK(optixSbtRecordPackHeader(raygen_secondary, &secondary_raygen_record));
+	CUDA_CHECK(cudaMalloc((void **) &dev_secondary_raygen_record, sizeof(optix::Record <void>)));
+	CUDA_CHECK(cudaMemcpy((void *) dev_secondary_raygen_record, &secondary_raygen_record, sizeof(optix::Record <void>), cudaMemcpyHostToDevice));
+
         // Miss
         CUdeviceptr dev_miss_record;
 
@@ -107,6 +123,7 @@ Mamba::Mamba(const OptixDeviceContext &context)
         CUDA_CHECK(cudaMalloc((void **) &dev_miss_record, sizeof(optix::Record <void>)));
         CUDA_CHECK(cudaMemcpy((void *) dev_miss_record, &miss_record, sizeof(optix::Record <void>), cudaMemcpyHostToDevice));
 
+	// Set up shader binding tables
         direct_initial_sbt.raygenRecord = dev_direct_initial_raygen_record;
         direct_initial_sbt.missRecordBase = dev_miss_record;
         direct_initial_sbt.missRecordStrideInBytes = sizeof(optix::Record <void>);
@@ -115,10 +132,15 @@ Mamba::Mamba(const OptixDeviceContext &context)
         direct_initial_sbt.hitgroupRecordStrideInBytes = 0;
         direct_initial_sbt.hitgroupRecordCount = 0;
 
-        // std::memcpy(&direct_temporal_sbt, &direct_initial_sbt, sizeof(OptixShaderBindingTable));
-        // direct_temporal_sbt.raygenRecord = dev_direct_temporal_raygen_record;
+	secondary_sbt.raygenRecord = dev_secondary_raygen_record;
+	secondary_sbt.missRecordBase = dev_miss_record;
+	secondary_sbt.missRecordStrideInBytes = sizeof(optix::Record <void>);
+	secondary_sbt.missRecordCount = 1;
+	secondary_sbt.hitgroupRecordBase = 0;
+	secondary_sbt.hitgroupRecordStrideInBytes = 0;
+	secondary_sbt.hitgroupRecordCount = 0;
 
-        // Setup parameters
+        // Initialize launch parameters
         launch_info = {};
         launch_info.io = optix_io_create();
         launch_info.direct.reservoirs = 0;
@@ -129,6 +151,7 @@ Mamba::Mamba(const OptixDeviceContext &context)
         launch_info.indirect.raster_aux = 0;
         launch_info.secondary.hits = 0;
 	launch_info.secondary.wi = 0;
+	launch_info.secondary.Le = 0;
 	launch_info.secondary.caustic_hits = 0;
 	launch_info.secondary.caustic_wi = 0;
 
@@ -437,9 +460,13 @@ struct FinalGather {
 	bool render_probes;
 	float *raster;
 
+	float3 *secondary_Le;
+	bool enable_secondary_Le;
+
 	Sky sky;
 
         vk::Extent2D extent;
+        vk::Extent2D secondary_extent;
 };
 
 	__device__
@@ -492,9 +519,18 @@ void final_gather(FinalGather info)
 	if (info.render_probes)
 		covered_color = make_float3(info.raster[index]);
 
-        info.color[index] = make_float4(color + 0.25f * covered_color, 1.0f);
-	// if (index == 0)
-	// 	printf("LUT size is %d\n", info.table->luts[0].counter);
+	int32_t x_4 = x / 4;
+	int32_t y_4 = y / 4;
+
+	int32_t secondary_index = x_4 + y_4 * info.secondary_extent.width;
+	bool secondary_in_bounds = (secondary_index >= 0 && secondary_index < info.secondary_extent.width * info.secondary_extent.height);
+
+	float3 secondary_Le = make_float3(0);
+	if (secondary_in_bounds && info.enable_secondary_Le)
+		secondary_Le = info.secondary_Le[secondary_index];
+
+	// Assign final color
+        info.color[index] = make_float4(color + secondary_Le + 0.25f * covered_color, 1.0f);
 }
 
 // Rendering function
@@ -507,7 +543,9 @@ void Mamba::render(EditorViewport *ev,
 
         const Camera &camera = render_info.camera;
         const Transform &camera_transform = render_info.camera_transform;
-        const vk::Extent2D &extent = ev->extent;
+
+	vk::Extent2D extent = ev->extent;
+	vk::Extent2D secondary_extent = { extent.width/4 + 1, extent.height/4 + 1 };
 
         // TODO: pass common rtx instead of ev..
 
@@ -549,7 +587,6 @@ void Mamba::render(EditorViewport *ev,
 
 		// Secondary ray buffers
 		// TODO: resize method for the structs...
-		vk::Extent2D secondary_extent = { new_extent.width/4 + 1, new_extent.height/4 + 1 };
 		launch_info.secondary.resolution = { secondary_extent.width, secondary_extent.height };
 
 		if (launch_info.secondary.hits != 0)
@@ -564,11 +601,16 @@ void Mamba::render(EditorViewport *ev,
 		if (launch_info.secondary.caustic_wi != 0)
 			CUDA_CHECK(cudaFree((void *) launch_info.secondary.caustic_wi));
 
+		if (launch_info.secondary.Le != 0)
+			CUDA_CHECK(cudaFree((void *) launch_info.secondary.Le));
+
 		launch_info.secondary.hits = cuda::alloc <cuda::SurfaceHit> (secondary_extent.width * secondary_extent.height);
 		launch_info.secondary.caustic_hits = cuda::alloc <cuda::SurfaceHit> (secondary_extent.width * secondary_extent.height);
 
 		launch_info.secondary.wi = cuda::alloc <float3> (secondary_extent.width * secondary_extent.height);
 		launch_info.secondary.caustic_wi = cuda::alloc <float3> (secondary_extent.width * secondary_extent.height);
+
+		launch_info.secondary.Le = cuda::alloc <float3> (secondary_extent.width * secondary_extent.height);
         }
 
         // Configure launch parameters
@@ -667,6 +709,18 @@ void Mamba::render(EditorViewport *ev,
         }
 
 	// Secondary rays
+	{
+		KOBRA_PROFILE_CUDA_TASK("Secondary Rays");
+		OPTIX_CHECK(
+			optixLaunch(secondary_ppl, 0,
+				dev_launch_info,
+				sizeof(MambaLaunchInfo),
+				&secondary_sbt, secondary_extent.width, secondary_extent.height, 1
+			)
+		);
+
+		CUDA_SYNC_CHECK();
+	}
 
         // TODO: more advanced parallelization
         uint block_size = 256;
@@ -718,8 +772,11 @@ void Mamba::render(EditorViewport *ev,
 	info.table = launch_info.indirect.probes;
 	info.render_probes = render_probes;
 	info.raster = render_probe_aux ? launch_info.indirect.raster_aux : launch_info.indirect.raster;
+	info.secondary_Le = launch_info.secondary.Le;
+	info.enable_secondary_Le = indirect_lighting;
 	info.sky = launch_info.sky;
         info.extent = extent;
+	info.secondary_extent = secondary_extent;
 
 	{
 		KOBRA_PROFILE_CUDA_TASK("Final Gather");

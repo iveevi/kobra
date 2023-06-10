@@ -86,6 +86,7 @@ struct MambaLaunchInfo {
 	struct {
 		cuda::SurfaceHit *hits;
 		float3 *wi;
+		float3 *Le;
 		
 		cuda::SurfaceHit *caustic_hits;
 		float3 *caustic_wi;

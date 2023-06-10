@@ -22,10 +22,13 @@ struct Mamba {
         OptixModule module = 0;
 
         OptixPipeline direct_ppl = 0;
+        OptixPipeline secondary_ppl = 0;
 
         OptixProgramGroup raygen_direct_primary = 0;
         OptixProgramGroup raygen_direct_temporal = 0;
         OptixProgramGroup raygen_direct_spatial = 0;
+        
+	OptixProgramGroup raygen_secondary = 0;
 
         OptixProgramGroup closest_hit = 0;
         OptixProgramGroup miss = 0;
@@ -33,6 +36,8 @@ struct Mamba {
         OptixShaderBindingTable direct_initial_sbt = {};
         OptixShaderBindingTable direct_temporal_sbt = {};
         OptixShaderBindingTable direct_spatial_sbt = {};
+
+	OptixShaderBindingTable secondary_sbt = {};
 
         // Kernel parameters
         MambaLaunchInfo launch_info = {};
@@ -53,6 +58,7 @@ struct Mamba {
         bool spatial_reuse = false;
 	bool render_probes = false;
 	bool render_probe_aux = false;
+	bool indirect_lighting = false;
 
         // Constructor
         Mamba(const OptixDeviceContext &);
