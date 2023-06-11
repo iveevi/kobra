@@ -95,12 +95,12 @@ float3 ray_at(uint3 idx)
         float v = 2.0f * float(idx.y) / float(axis.resolution.y) - 1.0f;
 	return normalize(u * axis.U - v * axis.V + axis.W);
 }
+        
+constexpr float ENVIRONMENT_DISTANCE = 1000.0f;
 
 __device__
 float sample_light(LightInfo &light_info, float3 &seed)
 {
-        constexpr float ENVIRONMENT_DISTANCE = 1000.0f;
-
         uint total = info.area.count + info.sky.enabled;
         if (total == 0)
                 return -1.0f;
@@ -563,6 +563,10 @@ extern "C" __global__ void __raygen__secondary()
 {
 	const uint3 idx = optixGetLaunchIndex();
 	int32_t local_index = idx.x + idx.y * info.secondary.resolution.x;
+        
+	if (idx.x + idx.y == 0) {
+                optix_io_write_str(&info.io, "Hiii, from the secondary raygen! ");
+        }
 
 	int32_t block_cycle = info.samples % 16;
 	int32_t x = 4 * idx.x + (block_cycle % 4);
@@ -590,8 +594,15 @@ extern "C" __global__ void __raygen__secondary()
 
 	if (pdf <= 0.0f) {
 		info.secondary.wi[local_index] = make_float3(0);
+		info.secondary.hits[local_index].x = make_float3(0);
+		info.secondary.hits[local_index].n = make_float3(0);
+		info.secondary.hits[local_index].wo = make_float3(0);
 		return;
 	}
+	
+	if (idx.x + idx.y == 0) {
+                optix_io_write_str(&info.io, "Valid ray! ");
+        }
 
 	// Trace secondary ray
 	Packet packet;
@@ -611,29 +622,50 @@ extern "C" __global__ void __raygen__secondary()
 	);
 
 	if (packet.miss) {
-		info.secondary.wi[local_index] = make_float3(0);
+                info.secondary.Le[local_index] = make_float3(sky_at(info.sky, wi))/pdf;
+		info.secondary.wi[local_index] = wi;
+		info.secondary.hits[local_index].x = ENVIRONMENT_DISTANCE * wi;
+		info.secondary.hits[local_index].n = make_float3(0);
+		info.secondary.hits[local_index].wo = make_float3(0);
 		return;
 	}
+	
+	if (idx.x + idx.y == 0) {
+                optix_io_write_str(&info.io, "Hit surface! ");
+        }
 
 	cuda::_material m = info.materials[packet.id];
 
 	SurfaceHit secondary_sh;
-	sh.x = packet.x;
-	sh.wo = -wi;
-	sh.n = packet.n;
-	sh.entering = packet.entering;
+	secondary_sh.x = packet.x;
+	secondary_sh.wo = -wi;
+	secondary_sh.n = packet.n;
+	secondary_sh.entering = packet.entering;
 
-	convert_material(m, sh.mat, packet.uv);
+	convert_material(m, secondary_sh.mat, packet.uv);
 	// float3 indirect = Ld(sh, seed);
-	float3 indirect = brdf * Ld(sh, seed) * abs(dot(sh.n, wi)) / pdf;
+	float3 indirect = Ld(secondary_sh, seed) * abs(dot(secondary_sh.n, wi))/pdf;
 
 	info.secondary.wi[local_index] = wi; // TODO: pdf in 4th channel
 	// info.secondary.Le[local_index] = indirect;
-	info.secondary.hits[local_index] = secondary_sh;
 
-	float3 p_indirect = info.secondary.Le[local_index];
-	float3 n_indirect = (info.samples * p_indirect + indirect)/(info.samples + 1);
-	info.secondary.Le[local_index] = n_indirect;
+	// float3 p_indirect = info.secondary.Le[local_index];
+	// float3 n_indirect = (info.samples * p_indirect + indirect)/(info.samples + 1);
+	info.secondary.Le[local_index] = indirect;
+
+	// info.secondary.hits[local_index] = secondary_sh;
+	info.secondary.hits[local_index].x = secondary_sh.x;
+	info.secondary.hits[local_index].n = secondary_sh.n;
+	info.secondary.hits[local_index].wo = secondary_sh.wo;
+	
+	if (idx.x + idx.y == 0) {
+                optix_io_write_str(&info.io, "Wrote information! wo =");
+		optix_io_write_int(&info.io, 100 * secondary_sh.wo.x);
+		optix_io_write_str(&info.io, ", ");
+		optix_io_write_int(&info.io, 100 * secondary_sh.wo.y);
+		optix_io_write_str(&info.io, ", ");
+		optix_io_write_int(&info.io, 100 * secondary_sh.wo.z);
+        }
 }
 
 // Closest hit for indirect rays

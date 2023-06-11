@@ -58,7 +58,12 @@ struct Mamba {
         bool spatial_reuse = false;
 	bool render_probes = false;
 	bool render_probe_aux = false;
-	bool indirect_lighting = false;
+	
+	struct {
+		bool direct_lighting = true;
+		bool indirect_lighting = true;
+		bool irradiance = false;
+	} options;
 
         // Constructor
         Mamba(const OptixDeviceContext &);

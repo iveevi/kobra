@@ -3,14 +3,14 @@
 // Engine headers
 #include "include/cuda/math.cuh"
 #include "include/cuda/error.cuh"
+#include "include/cuda/alloc.cuh"
 
 // TODO: probe.cuh
 // Irradiance probe
 struct IrradianceProbe {
         constexpr static int size = 6;
 
-        // Layed out using octahedral projection
-        float3 values[size * size];
+        float3 Le[size * size];
         float pdfs[size * size];
         float depth[size * size];
 
@@ -23,13 +23,13 @@ struct IrradianceProbe {
 	// NOTE: Direction is expected to be in local space
 
 	// Octahedral projection
-	__forceinline__ __device__
-	float2 to_oct(float3 v) const {
-		float3 r = v / (abs(v.x) + abs(v.y) + abs(v.z));
-		// float2 s = make_float2(r.x + r.y, r.x - r.y);
-		float2 s = make_float2(r);
-		return (s + 1.0f) / 2.0f;
-	}
+	// __forceinline__ __device__
+	// float2 to_oct(float3 v) const {
+	// 	float3 r = v / (abs(v.x) + abs(v.y) + abs(v.z));
+	// 	// float2 s = make_float2(r.x + r.y, r.x - r.y);
+	// 	float2 s = make_float2(r);
+	// 	return (s + 1.0f) / 2.0f;
+	// }
 
 	// Disk projection
 	__forceinline__ __device__
@@ -38,9 +38,40 @@ struct IrradianceProbe {
 		float theta = atan2f(s.y, s.x);
 		if (theta < 0.0f)
 			theta += 2.0f * M_PI;
-		float rp = pow(s.x * s.x + s.y * s.y, 0.3f);
+		// float rp = pow(s.x * s.x + s.y * s.y, 0.3f);
+		float rp = sqrt(s.x * s.x + s.y * s.y);
 		return make_float2(theta/(2.0f * M_PI), rp);
 	}
+
+	__forceinline__ __device__
+	int32_t to_index(float2 uv) {
+		int32_t x = uv.x * size;
+		int32_t y = uv.y * size;
+		// values[0] = make_float3(x, y, 0.0f);
+		return clamp(y * size + x, 0, size * size - 1);
+	}
+
+	// Reconstruct local direction from index
+	__forceinline__ __device__
+	float3 from_index(int32_t index) {
+		int32_t x = index % size;
+		int32_t y = index / size;
+		float2 uv = clamp(make_float2(x, y) / size, 0.0f, 1.0f);
+		return from_uv(uv);
+	}
+
+	// Reconstruct local direction from uv
+	__forceinline__ __device__
+	float3 from_uv(float2 uv) {
+		// TODO: center middle of cell
+		float theta = 2 * uv.x * M_PI;
+		float x = uv.y * cos(theta);
+		float y = uv.y * sin(theta);
+		float z = sqrt(1.0f - x * x - y * y);
+		return make_float3(x, y, z);
+	}
+
+	// TODO: method to convert to spherical harmonics
 };
 
 // A single level-node of the irradiance probe LUT
@@ -62,7 +93,7 @@ struct IrradianceProbeLUT {
 	static void alloc(IrradianceProbeLUT *lut) {
 		lut->level = 0;
 		lut->size = 10.0f;
-		lut->resolution = lut->size/25.0f;
+		lut->resolution = lut->size/20.0f;
 		lut->center = make_float3(0.0f, 0.0f, 0.0f);
 
 		for (int i = 0; i < MAX_REFS; i++) {
@@ -121,7 +152,8 @@ struct IrradianceProbeLUT {
         // TODO: try double hashing instead?
         // NOTE: linear probing would be more cache friendly, but double hashing
         // leads to better distribution
-        static constexpr int32_t MAX_TRIES = (1 << 2);
+        // static constexpr int32_t MAX_TRIES = (1 << 2);
+        static constexpr int32_t MAX_TRIES = (1 << 1);
 
 	// TODO: analyze how well it is able to cover surfaces with higher number of tries..
 	__forceinline__ __device__
@@ -203,18 +235,101 @@ struct IrradianceProbeLUT {
 
 		return index;
 	}
+
+	__forceinline__ __device__
+	int32_t full_lookup(float3 x) {
+		// Check all 27 neighboring cells as well
+		int32_t result = lookup(x, -1);
+		if (result == -1) {
+			for (int32_t ni = 0; ni < 27; ni++) {
+				result = lookup(x, ni);
+				if (result != -1)
+					break;
+			}
+		}
+
+		return result;
+	}
+
+	// Get the closest (N = 4) probes
+	// NOTE: Indices are assumed to be null before calling this function (e.g. -1)
+	template<int32_t N = 4>
+	__forceinline__ __device__
+	void closest(float3 x, int32_t indices[N], float distances[N]) {
+		// Make sure x is inside the grid (or near the surface)
+		if (!contains(x, true))
+			return;
+
+		// First is the closest, etc.
+		// float closest[N] = { FLT_MAX };
+
+		for (int32_t i = 0; i < MAX_TRIES; i++) {
+			int32_t j = double_hash(hash(x), i) % MAX_REFS;
+			int32_t ref = refs[j];
+			if (ref == -1)
+				break;
+
+			float dist = length(positions[j] - x);
+
+			// Insertion sort
+			for (int32_t k = 0; k < N; k++) {
+				if (dist < distances[k]) {
+					for (int32_t l = N - 1; l > k; l--) {
+						distances[l] = distances[l - 1];
+						indices[l] = indices[l - 1];
+					}
+
+					distances[k] = dist;
+					indices[k] = j;
+					break;
+				}
+			}
+		}
+
+		// Also check all 27 neighboring cells
+		for (int32_t ni = 0; ni < 27; ni++) {
+			for (int32_t i = 0; i < MAX_TRIES; i++) {
+				int32_t j = double_hash(neighboring_hash(x, ni), i) % MAX_REFS;
+				int32_t ref = refs[j];
+				if (ref == -1)
+					break;
+
+				float dist = length(positions[j] - x);
+
+				// Insertion sort
+				for (int32_t k = 0; k < N; k++) {
+					if (dist < distances[k]) {
+						for (int32_t l = N - 1; l > k; l--) {
+							distances[l] = distances[l - 1];
+							indices[l] = indices[l - 1];
+						}
+
+						distances[k] = dist;
+						indices[k] = j;
+						break;
+					}
+				}
+			}
+		}
+	}
 };
 
 // Table of all irradiance probes and LUTs
 struct IrradianceProbeTable {
-        constexpr static int MAX_PROBES = 1 << 20;
-	constexpr static int MAX_LUTS = 1 << 8;
+        static constexpr int MAX_PROBES = 1 << 20;
+	static constexpr int MAX_LUTS = 1 << 8;
 
         IrradianceProbe *probes = nullptr;
         int32_t counter = 0;
 
 	IrradianceProbeLUT *luts = nullptr;
 	int32_t lut_counter = 0;
+
+        // float3 *values = nullptr;
+        // float *pdfs = nullptr;
+        // float *depth = nullptr;
+
+	static constexpr int32_t STRIDE = IrradianceProbe::size * IrradianceProbe::size;
 
 	IrradianceProbeTable() {
 		probes = new IrradianceProbe[MAX_PROBES];
@@ -223,6 +338,16 @@ struct IrradianceProbeTable {
 		luts = new IrradianceProbeLUT[MAX_LUTS];
 		IrradianceProbeLUT::alloc(&luts[0]);
 		lut_counter++;
+
+		// Allocate memory for all probes
+		int32_t size = MAX_PROBES * IrradianceProbe::size * IrradianceProbe::size;
+		// values = new float3[size];
+		// pdfs = new float[size];
+		// depth = new float[size];
+
+		printf("Size of IrradianceProbeTable: %d\n", sizeof(IrradianceProbeTable));
+		printf("Size of probes: %d/%d\n", sizeof(IrradianceProbe) * MAX_PROBES, sizeof(IrradianceProbe));
+		printf("Size of luts: %d/%d\n", sizeof(IrradianceProbeLUT) * MAX_LUTS, sizeof(IrradianceProbeLUT));
 	}
 
 	IrradianceProbeTable device_copy() const {
@@ -236,7 +361,49 @@ struct IrradianceProbeTable {
 		CUDA_CHECK(cudaMemcpy(table.luts, luts, sizeof(IrradianceProbeLUT) * MAX_LUTS, cudaMemcpyHostToDevice));
 		table.lut_counter = lut_counter;
 
+		// Allocate memory for all locks
+		// std::vector <uint32_t> lock_sources { MAX_PROBES * STRIDE, 0 };
+		// uint32_t *dev_lock_sources = kobra::cuda::make_buffer(lock_sources);
+		uint32_t *dev_lock_sources = nullptr;
+		CUDA_CHECK(cudaMalloc(&dev_lock_sources, sizeof(uint32_t) * MAX_PROBES * STRIDE));
+		CUDA_CHECK(cudaMemset(dev_lock_sources, 0, sizeof(uint32_t) * MAX_PROBES * STRIDE));
+
+		std::vector <uint32_t *> host_locks { MAX_PROBES * STRIDE, 0 };
+		for (int32_t i = 0; i < MAX_PROBES * STRIDE; i++)
+			host_locks[i] = dev_lock_sources + i;
+
+		CUDA_CHECK(cudaMalloc(&table.locks, sizeof(uint32_t *) * MAX_PROBES * STRIDE));
+		CUDA_CHECK(cudaMemcpy(table.locks, host_locks.data(), sizeof(uint32_t *) * MAX_PROBES * STRIDE, cudaMemcpyHostToDevice));
+
+		// int32_t size = MAX_PROBES * STRIDE;
+		// CUDA_CHECK(cudaMalloc(&table.values, sizeof(float3) * size));
+		// CUDA_CHECK(cudaMemcpy(table.values, values, sizeof(float3) * size, cudaMemcpyHostToDevice));
+		//
+		// CUDA_CHECK(cudaMalloc(&table.pdfs, sizeof(float) * size));
+		// CUDA_CHECK(cudaMemcpy(table.pdfs, pdfs, sizeof(float) * size, cudaMemcpyHostToDevice));
+		//
+		// CUDA_CHECK(cudaMalloc(&table.depth, sizeof(float) * size));
+		// CUDA_CHECK(cudaMemcpy(table.depth, depth, sizeof(float) * size, cudaMemcpyHostToDevice));
+
 		return table;
+	}
+
+	uint32_t **locks = nullptr;
+
+	// Locking
+	__forceinline__ __device__
+	void lock(uint32_t index) {
+		uint32_t *lock = locks[index];
+		while (atomicCAS(lock, 0, 1) != 0) {
+			printf("Waiting for lock, current value: %d\n", *lock);
+		}
+	}
+
+	__forceinline__ __device__
+	void unlock(uint32_t index) {
+		uint32_t *lock = locks[index];
+		atomicExch(lock, 0);
+		printf("Unlocking, current value: %d\n", *lock);
 	}
 
 	__forceinline__ __device__

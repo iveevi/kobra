@@ -978,6 +978,8 @@ void EditorViewport::render(const RenderInfo &render_info,
                 break;
 
         case RenderState::eMamba:
+		// TODO: ideally should blit first, so that rendering can be done in parallel
+		// But also needs some way to force a sync before the bli
                 prerender_raytrace(entities, &td, md);
                 render_gbuffer(render_info, entities, &td, md);
                 mamba->render(this, render_info, entities, md);
@@ -1151,6 +1153,8 @@ static void show_mode_submenu(RenderState *render_state, const _submenu_args &ar
 
                 if (render_state->mode == RenderState::eMamba) {
                         auto *mamba = args.mamba;
+			
+			if (ImGui::Checkbox("Direct Lighting", &mamba->options.direct_lighting));
 
                         if (ImGui::Checkbox("Temporal Reuse", &mamba->temporal_reuse)) {
                                 std::cout << "Temporal reuse: " << mamba->temporal_reuse << std::endl;
@@ -1164,7 +1168,12 @@ static void show_mode_submenu(RenderState *render_state, const _submenu_args &ar
                         
 			if (ImGui::Checkbox("Render Probes", &mamba->render_probes));
 			if (ImGui::Checkbox("Render Auxiliary Info", &mamba->render_probe_aux));
-			if (ImGui::Checkbox("Show Indirect Lighting", &mamba->indirect_lighting));
+
+			if (ImGui::Checkbox("Show Indirect Lighting", &mamba->options.indirect_lighting))
+				mamba->options.irradiance = mamba->options.indirect_lighting ? false : mamba->options.irradiance;
+
+			if (ImGui::Checkbox("Show Irradiance", &mamba->options.irradiance))
+				mamba->options.indirect_lighting = mamba->options.irradiance ? false : mamba->options.indirect_lighting;
                 }
 
                 ImGui::EndMenu();

@@ -144,6 +144,7 @@ int main()
         delete startup;
 
         // g_application.project = "scene";
+        // g_application.project = "/home/venki/documents/kobra/GI Example/";
         if (g_application.project.empty())
                 return 0;
 

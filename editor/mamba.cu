@@ -284,7 +284,7 @@ void probe_allocation(ProbeAllocationInfo info)
 		}
 	}
 
-	if (misses < 0.8 * 16 * 16)
+	if (misses < 0.9 * 16 * 16)
 		return;
 
 	// If all are misses, then use middle
@@ -350,13 +350,14 @@ struct IrradiaceProbeRasterInfo {
 	IrradianceProbeTable *table;
 	float *raster;
 
-	float *raster_aux;
+	float3 *raster_aux;
 	bool enable_aux;
 
 	cudaSurfaceObject_t position_surface;
 	vk::Extent2D extent;
 };
 
+// TODO: cache closest 4 probes per pixel... (as long as within lut->resolution)
 __global__
 void raster_probes(IrradiaceProbeRasterInfo info)
 {
@@ -411,7 +412,7 @@ void raster_probes(IrradiaceProbeRasterInfo info)
 		}
 
 		float v = 0;
-		float aux_v = 0;
+		float3 aux_v = make_float3(0.0f);
 
 		if (closest_index != -1) {
 			int32_t probe_index = closest_index;
@@ -432,11 +433,22 @@ void raster_probes(IrradiaceProbeRasterInfo info)
 					float2 s = probe->to_disk(wi);
 
 					constexpr int32_t size = IrradianceProbe::size;
-					int32_t ix = s.x * size;
-					int32_t iy = s.y * size;
-					int32_t index = ix + iy * size;
+					// int32_t ix = s.x * size;
+					// int32_t iy = s.y * size;
 
-					aux_v = (ix + iy) % 2;
+					int32_t index = probe->to_index(s);
+					assert(index >= 0 && index < size * size);
+
+					aux_v = probe->pdfs[index] > 0 ? probe->Le[index]/probe->pdfs[index] : make_float3(0.0f);
+
+					// float3 wo = probe->from_index(index);
+					// aux_v = onb.local(wo) * 0.5f + 0.5f;
+
+					// int32_t ix = index % size;
+					// int32_t iy = index / size;
+					//
+					// int32_t mod = (ix + iy) % 2;
+					// aux_v = make_float3(mod, 0, 1 - mod);
 				}
 			}
 		}
@@ -446,6 +458,103 @@ void raster_probes(IrradiaceProbeRasterInfo info)
 	}
 }
 
+// Process/gather secondary rays
+struct SecondaryGatherInfo {
+	IrradianceProbeTable *table;
+
+	cudaSurfaceObject_t position;
+	cudaSurfaceObject_t normal;
+	cudaSurfaceObject_t uv;
+	cudaSurfaceObject_t index;
+
+	cuda::SurfaceHit *hits;
+	float3 *wi;
+	float3 *Le;
+
+	vk::Extent2D secondary_extent;
+	vk::Extent2D extent;
+	int32_t samples;
+};
+
+__global__
+void secondary_gather(SecondaryGatherInfo info)
+{
+	int32_t index = threadIdx.x + blockIdx.x * blockDim.x;
+
+	int32_t x = index % info.secondary_extent.width;
+	int32_t y = index / info.secondary_extent.width;
+
+	int32_t block_cycle = info.samples % 16;
+	int32_t true_x = 4 * x + (block_cycle % 4);
+	int32_t true_y = 4 * y + (block_cycle / 4);
+
+	if (x >= info.secondary_extent.width || y >= info.secondary_extent.height)
+		return;
+
+	if (true_x >= info.extent.width || true_y >= info.extent.height)
+		return;
+
+	// Fetch data
+	cuda::SurfaceHit secondary_hit = info.hits[index];
+	float3 wi = info.wi[index];
+	float3 Le = info.Le[index];
+
+	// TODO: insert/update method
+	IrradianceProbeLUT *lut = &info.table->luts[0];
+
+	// TODO: verify with index surface...
+	float4 raw_position;
+	float4 raw_normal;
+	int32_t raw_index;
+
+	surf2Dread(&raw_position, info.position, true_x * sizeof(float4), info.extent.height - (true_y + 1));
+	surf2Dread(&raw_normal, info.normal, true_x * sizeof(float4), info.extent.height - (true_y + 1));
+	surf2Dread(&raw_index, info.index, true_x * sizeof(int32_t), info.extent.height - (true_y + 1));
+	if (raw_index == -1) {
+		info.Le[index] = make_float3(0);
+		return;
+	}
+
+	float3 position = make_float3(raw_position);
+	float3 normal = make_float3(raw_normal);
+
+	// float radius = lut->resolution;
+	int32_t result = lut->full_lookup(position);
+	if (result == -1) {
+		info.Le[index] = make_float3(0);
+		return;
+	}
+
+	cuda::ONB onb = cuda::ONB::from_normal(normal);
+	float3 local_wi = normalize(onb.inv_local(wi));
+
+	int32_t probe_index = lut->refs[result];
+	IrradianceProbe *probe = &info.table->probes[probe_index];
+	float2 uv = probe->to_disk(local_wi);
+	int32_t pi = probe->to_index(uv);
+
+	// TODO: convolve with surface normal...
+	// TODO: spread to neighbors as well...
+	// probe->Le[pi] = Le * abs(local_wi.z);
+	// assert(!isnan(Le.x) && !isnan(Le.y) && !isnan(Le.z));
+	Le = Le;
+
+	// info.table->lock(probe_index);
+
+	atomicAdd(&probe->Le[pi].x, Le.x);
+	atomicAdd(&probe->Le[pi].y, Le.y);
+	atomicAdd(&probe->Le[pi].z, Le.z);
+	atomicAdd(&probe->pdfs[pi], 1);
+
+	// probe->Le[pi] = Le;
+	// info.table->unlock(probe_index);
+
+	float distance = length(position - secondary_hit.x);
+	atomicExch(&probe->depth[pi], distance);
+}
+
+// Final illumination gather
+// TODO: ignore dedicated direct lighting... add it to the probes (but resample)
 struct FinalGather {
         float4 *color;
         float3 *direct;
@@ -453,23 +562,42 @@ struct FinalGather {
 
 	CameraAxis axis;
 
-        cudaSurfaceObject_t index_surface;
-        cudaSurfaceObject_t position_surface;
+        cudaSurfaceObject_t index;
+        cudaSurfaceObject_t position;
+        cudaSurfaceObject_t normal;
 
 	IrradianceProbeTable *table;
-	bool render_probes;
+
 	float *raster;
+	float3 *raster_aux;
+	bool render_probes;
+	bool enable_aux;
 
 	float3 *secondary_Le;
-	bool enable_secondary_Le;
+	float3 *secondary_wi;
+	cuda::SurfaceHit *secondary_hits;
+
+	bool indirect_lighting;
+	bool irradiance;
 
 	Sky sky;
 
         vk::Extent2D extent;
         vk::Extent2D secondary_extent;
+
+	// Options (flags)
+	bool direct_lighting;
 };
 
-	__device__
+__forceinline__ __device__
+float3 cleanse(float3 in)
+{
+        if (isnan(in.x) || isnan(in.y) || isnan(in.z))
+                return make_float3(0.0f);
+        return in;
+}
+
+__forceinline__ __device__
 float3 ray_at(const CameraAxis &axis, uint3 idx)
 {
         idx.y = axis.resolution.y - (idx.y + 1);
@@ -489,9 +617,14 @@ void final_gather(FinalGather info)
         if (x >= info.extent.width || y >= info.extent.height)
                 return;
 
-	// Get index
+	// Fetch surface data
+	float4 raw_position;
+	float4 raw_normal;
 	int32_t raw_index;
-	surf2Dread(&raw_index, info.index_surface, x * sizeof(int32_t), (info.extent.height - (y + 1)));
+
+	surf2Dread(&raw_position, info.position, x * sizeof(float4), (info.extent.height - (y + 1)));
+	surf2Dread(&raw_normal, info.normal, x * sizeof(float4), (info.extent.height - (y + 1)));
+	surf2Dread(&raw_index, info.index, x * sizeof(int32_t), (info.extent.height - (y + 1)));
 
 	if (raw_index == -1) {
 		uint3 idx = make_uint3(x, y, 0);
@@ -499,16 +632,12 @@ void final_gather(FinalGather info)
 		return;
 	}
 
-	// Get position
-	float4 raw_position;
-	surf2Dread(&raw_position, info.position_surface, x * sizeof(float4), (info.extent.height - (y + 1)));
 	float3 position = make_float3(raw_position);
+	float3 normal = make_float3(raw_normal);
 
-        // float4 &color = info.color[index];
-
+	// TODO: flags for direct and sobel
         bool border = (info.sobel[index] > 0.7f);
-        float3 color = 1 * info.direct[index] + 0 * border;
-        // color = make_float4(1 * info.direct[index] + 0 * border, 1.0f);
+        float3 color = info.direct_lighting * info.direct[index] + 0 * border;
 
         int x_16 = x / 16;
         int y_16 = y / 16;
@@ -516,8 +645,12 @@ void final_gather(FinalGather info)
 	IrradianceProbeLUT *lut = &info.table->luts[0];
 
 	float3 covered_color = make_float3(0);
-	if (info.render_probes)
-		covered_color = make_float3(info.raster[index]);
+	if (info.render_probes) {
+		if (info.enable_aux)
+			covered_color = info.raster_aux[index];
+		else
+			covered_color = make_float3(info.raster[index]);
+	}
 
 	int32_t x_4 = x / 4;
 	int32_t y_4 = y / 4;
@@ -526,11 +659,60 @@ void final_gather(FinalGather info)
 	bool secondary_in_bounds = (secondary_index >= 0 && secondary_index < info.secondary_extent.width * info.secondary_extent.height);
 
 	float3 secondary_Le = make_float3(0);
-	if (secondary_in_bounds && info.enable_secondary_Le)
+	if (secondary_in_bounds && info.indirect_lighting) {
 		secondary_Le = info.secondary_Le[secondary_index];
+	} else if (info.irradiance) {
+		IrradianceProbeLUT *lut = &info.table->luts[0];
+
+		constexpr int32_t N = 8;
+		int32_t closest[N] = { -1, -1, -1, -1 };
+		float distance[N] = { FLT_MAX, FLT_MAX, FLT_MAX, FLT_MAX };
+
+		lut->closest <N> (position, closest, distance);
+
+		if (closest[0] != -1) {
+			// int32_t probe_index = lut->refs[closest[0]];
+			// IrradianceProbe *probe = &info.table->probes[probe_index];
+			// secondary_Le = make_float3(1 - length(probe->position - position)/(2 * lut->resolution));
+
+			float3 sum = make_float3(0);
+			float sum_w = 0;
+			int32_t count = 0;
+
+			for (int i = 0; i < N; i++) {
+				if (closest[i] == -1)
+					break;
+
+				int32_t probe_index = lut->refs[closest[i]];
+				IrradianceProbe *probe = &info.table->probes[probe_index];
+				// sum += probe->Le[probe->to_index(probe->to_disk(position))];
+
+				int32_t SIZE = IrradianceProbe::size * IrradianceProbe::size;
+
+				float w = exp(-distance[i] * distance[i] / (2 * lut->resolution * lut->resolution));
+				sum_w += w;
+
+				cuda::ONB onb = cuda::ONB::from_normal(probe->normal);
+				for (int j = 0; j < SIZE; j++) {
+					float3 wo = probe->from_index(j);
+					wo = onb.local(wo);
+					float geometric = abs(dot(wo, normal));
+
+					float3 Le = probe->Le[j];
+					float n = probe->pdfs[j];
+					// sum += (n > 0) ? w * geometric * cleanse(probe->Le[i])/(probe->pdfs[i] * float(SIZE)) : make_float3(0);
+					sum += (n > 0) ? w * cleanse(probe->Le[i])/(probe->pdfs[i] * float(SIZE)) : make_float3(0);
+				}
+
+				count++;
+			}
+
+			secondary_Le = sum/(sum_w * float(count));
+		}
+	}
 
 	// Assign final color
-        info.color[index] = make_float4(color + secondary_Le + 0.25f * covered_color, 1.0f);
+        info.color[index] = make_float4(color + secondary_Le + covered_color, 1.0f);
 }
 
 // Rendering function
@@ -583,7 +765,7 @@ void Mamba::render(EditorViewport *ev,
 
                 launch_info.indirect.sobel = cuda::alloc <float> (size);
 		launch_info.indirect.raster = cuda::alloc <float> (size);
-		launch_info.indirect.raster_aux = cuda::alloc <float> (size);
+		launch_info.indirect.raster_aux = cuda::alloc <float3> (size);
 
 		// Secondary ray buffers
 		// TODO: resize method for the structs...
@@ -708,6 +890,10 @@ void Mamba::render(EditorViewport *ev,
                 CUDA_SYNC_CHECK();
         }
 
+        // TODO: more advanced parallelization
+        uint block_size = 256;
+        uint blocks = (extent.width * extent.height + 255) / 256;
+
 	// Secondary rays
 	{
 		KOBRA_PROFILE_CUDA_TASK("Secondary Rays");
@@ -722,9 +908,26 @@ void Mamba::render(EditorViewport *ev,
 		CUDA_SYNC_CHECK();
 	}
 
-        // TODO: more advanced parallelization
-        uint block_size = 256;
-        uint blocks = (extent.width * extent.height + 255) / 256;
+	// Gather and process secondary ray information
+	{
+		KOBRA_PROFILE_CUDA_TASK("Gather Secondary Rays");
+
+		SecondaryGatherInfo gather_info;
+		gather_info.table = launch_info.indirect.probes;
+		gather_info.position = launch_info.position;
+		gather_info.normal = launch_info.normal;
+		gather_info.uv = launch_info.uv;
+		gather_info.index = launch_info.index;
+		gather_info.hits = launch_info.secondary.hits;
+		gather_info.wi = launch_info.secondary.wi;
+		gather_info.Le = launch_info.secondary.Le;
+		gather_info.secondary_extent = secondary_extent;
+		gather_info.extent = extent;
+		gather_info.samples = launch_info.samples;
+
+		secondary_gather <<< blocks, block_size >>> (gather_info);
+		CUDA_SYNC_CHECK();
+	}
 
         // Final gather
 	{
@@ -766,17 +969,24 @@ void Mamba::render(EditorViewport *ev,
         info.color = ev->common_rtx.dev_color;
         info.direct = launch_info.direct.Le;
 	info.axis = launch_info.camera;
-	info.index_surface = launch_info.index;
-        info.position_surface = launch_info.position;
+        info.position = launch_info.position;
+        info.normal = launch_info.normal;
+	info.index = launch_info.index;
         info.sobel = launch_info.indirect.sobel;
 	info.table = launch_info.indirect.probes;
+	info.raster = launch_info.indirect.raster;
+	info.raster_aux = launch_info.indirect.raster_aux;
 	info.render_probes = render_probes;
-	info.raster = render_probe_aux ? launch_info.indirect.raster_aux : launch_info.indirect.raster;
+	info.enable_aux = render_probe_aux;
 	info.secondary_Le = launch_info.secondary.Le;
-	info.enable_secondary_Le = indirect_lighting;
+	info.secondary_wi = launch_info.secondary.wi;
+	info.secondary_hits = launch_info.secondary.hits;
+	info.indirect_lighting = options.indirect_lighting;
+	info.irradiance = options.irradiance;
 	info.sky = launch_info.sky;
         info.extent = extent;
 	info.secondary_extent = secondary_extent;
+	info.direct_lighting = options.direct_lighting;
 
 	{
 		KOBRA_PROFILE_CUDA_TASK("Final Gather");
