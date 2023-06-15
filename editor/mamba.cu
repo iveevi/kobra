@@ -195,154 +195,8 @@ void sobel_normal(cudaSurfaceObject_t normal_surface, float *sobel_target, vk::E
         }
 }
 
-struct ProbeAllocationInfo {
-        cudaSurfaceObject_t index_surface;
-        cudaSurfaceObject_t position_surface;
-	cudaSurfaceObject_t normal_surface;
-        float *sobel;
-	float *raster;
-
-	IrradianceProbeTable *table;
-
-        vk::Extent2D extent;
-};
-
 __global__
-void probe_allocation(ProbeAllocationInfo info)
-{
-        // TODO: use block parallelization
-        // i.e. sync threads in block, then use atomicAdd
-
-        int index = threadIdx.x + blockIdx.x * blockDim.x;
-
-        // Each thread goes through 16x16 block to allocate probes
-        // int x = (index % info.extent.width) / 16;
-        // int y = (index / info.extent.width) / 16;
-        int x = index % (info.extent.width/16);
-        int y = index / (info.extent.width/16);
-
-        // if (x >= (info.extent.width / 16 + 1) || y >= (info.extent.height / 16 + 1))
-        //         return;
-        if (x >= (info.extent.width/16) || y >= (info.extent.height/16))
-                return;
-
-        int x2 = x * 16;
-        int y2 = y * 16;
-
-	int32_t best_index = -1;
-	int32_t misses = 0;
-
-	int32_t best_distance = 0;
-
-	int32_t x_best = x2 + 8;
-	int32_t y_best = y2 + 8;
-
-        // TODO: shared memory: project existing probes onto 16x16 block
-        // TODO: need to check if block has invalid regions
-	// TODO: floodfill parallelized...
-	for (int i = 0; i < 16; i++) {
-		for (int j = 0; j < 16; j++) {
-			int x3 = x2 + i;
-			int y3 = y2 + j;
-
-			if (x3 < 0 || x3 >= info.extent.width || y3 < 0 || y3 >= info.extent.height)
-				continue;
-
-			int32_t n_index = y3 * info.extent.width + x3;
-			if (info.raster[n_index] != 0)
-				continue;
-
-			// Search for the closest
-			// int N = 16;
-			int N = 4;
-
-			int32_t distance = 0;
-			for (int k = -N; k <= N; k++) {
-				for (int l = -N; l <= N; l++) {
-					int x4 = x3 + k;
-					int y4 = y3 + l;
-
-					if (x4 < 0 || x4 >= info.extent.width || y4 < 0 || y4 >= info.extent.height)
-						continue;
-
-					int32_t n_index2 = y4 * info.extent.width + x4;
-					if (info.raster[n_index2] == 0)
-						continue;
-
-					distance = max(abs(k) + abs(l), distance);
-				}
-			}
-
-			if (distance > best_distance) {
-				best_distance = distance;
-				best_index = n_index;
-				x_best = x3;
-				y_best = y3;
-			}
-
-			misses++;
-		}
-	}
-
-	if (misses < 0.9 * 16 * 16)
-		return;
-
-	// If all are misses, then use middle
-	// TODO: use a special heuristic for allocating in the first frame ish
-	if (misses == 16 * 16) {
-		x_best = x2 + 8;
-		y_best = y2 + 8;
-	}
-
-        // For now lazily allocate at the central position of the block
-        int x3 = x_best;
-        int y3 = y_best;
-
-	if (x3 < 0 || x3 >= info.extent.width || y3 < 0 || y3 >= info.extent.height)
-		return;
-
-        y3 = info.extent.height - (y3 + 1);
-
-        int32_t raw_index;
-        surf2Dread(&raw_index, info.index_surface, x3 * sizeof(int32_t), y3);
-        if (raw_index == -1)
-                return;
-
-        float4 raw_position;
-        surf2Dread(&raw_position, info.position_surface, x3 * sizeof(float4), y3);
-        float3 position = make_float3(raw_position);
-
-	float4 raw_normal;
-	surf2Dread(&raw_normal, info.normal_surface, x3 * sizeof(float4), y3);
-	float3 normal = make_float3(raw_normal);
-
-        float radius = 0.01f;
-
-	// Allocate probe on the table
-	// TODO: iterate through LUTs
-
-	IrradianceProbeLUT *lut = &info.table->luts[0];
-	if (!lut->contains(position))
-		return;
-
-	uint32_t hash = lut->hash(position);
-	int32_t success = lut->request(position);
-	if (success == -1)
-		return;
-
-	// Allocate the probe
-	int32_t probe_index = info.table->next();
-	if (probe_index == -1)
-		return;
-
-	IrradianceProbe *probe = &info.table->probes[probe_index];
-
-	*probe = {};
-	probe->position = position;
-	probe->normal = normal;
-
-	lut->refs[success] = probe_index;
-}
+void probe_allocation(ProbeAllocationInfo);
 
 // Raster probes for allocating probes at a later stage
 // TODO: store raster results into uint8_t or something very compact
@@ -361,6 +215,22 @@ struct IrradiaceProbeRasterInfo {
 __global__
 void raster_probes(IrradiaceProbeRasterInfo info)
 {
+	// Color wheel for auxilary data
+	constexpr float3 COLOR_WHEEL[12] = {
+		float3 { 0.910, 0.490, 0.490 },
+		float3 { 0.910, 0.700, 0.490 },
+		float3 { 0.910, 0.910, 0.490 },
+		float3 { 0.700, 0.910, 0.490 },
+		float3 { 0.490, 0.910, 0.490 },
+		float3 { 0.490, 0.910, 0.700 },
+		float3 { 0.490, 0.910, 0.910 },
+		float3 { 0.490, 0.700, 0.910 },
+		float3 { 0.490, 0.490, 0.910 },
+		float3 { 0.700, 0.490, 0.910 },
+		float3 { 0.910, 0.490, 0.910 },
+		float3 { 0.910, 0.490, 0.700 }
+	};
+
 	int32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	int32_t stride = blockDim.x * gridDim.x;
 
@@ -378,12 +248,36 @@ void raster_probes(IrradiaceProbeRasterInfo info)
 		surf2Dread(&raw_position, info.position_surface, x * sizeof(float4), info.extent.height - (y + 1));
 		float3 position = make_float3(raw_position);
 
+		// First retrieve the lower level LUT
+		int32_t result = lookup_L2(lut, position);
+		if (result == -1)
+			continue;
+
+		assert(result >= 0 && result < MAX_REFS);
+
+		// TODO: neighbnoring lower level LUTs?
+		int32_t lut_index = lut->refs[result];
+
+		// assert(lut_index >= 0 && lut_index < info.table->counter);
+		// TODO: this is a fail safe... find the real fix
+		if (lut_index < 0 || lut_index >= info.table->counter) {
+			printf("[!] BAD LUT INDEX: %d\n", lut_index);
+			continue;
+		}
+
+		IrradianceProbeLUT *nlut = &info.table->luts[lut_index];
+
 		float closest = FLT_MAX;
 		int32_t closest_index = -1;
 
-		int32_t result = lut->lookup(position, -1);
-		if (result != -1) {
-			int32_t probe_index = lut->refs[result];
+		int32_t result2 = nlut->lookup(position, -1);
+		if (result2 != -1) {
+			// printf("Hash hit: %d\n", result2);
+			assert(result2 >= 0 && result2 < MAX_REFS);
+
+			int32_t probe_index = nlut->refs[result2];
+			assert(probe_index >= 0 && probe_index < info.table->counter);
+
 			IrradianceProbe *probe = &info.table->probes[probe_index];
 			float3 diff = position - probe->position;
 			float dist = length(diff);
@@ -394,13 +288,14 @@ void raster_probes(IrradiaceProbeRasterInfo info)
 			}
 		}
 
+
 		// Also consider neighboring probes
 		for (int ni = 0; ni < 27; ni++) {
-			int32_t result = lut->lookup(position, ni);
+			int32_t result = nlut->lookup(position, ni);
 			if (result == -1)
 				continue;
 
-			int32_t probe_index = lut->refs[result];
+			int32_t probe_index = nlut->refs[result];
 			IrradianceProbe *probe = &info.table->probes[probe_index];
 			float3 diff = position - probe->position;
 			float dist = length(diff);
@@ -412,7 +307,8 @@ void raster_probes(IrradiaceProbeRasterInfo info)
 		}
 
 		float v = 0;
-		float3 aux_v = make_float3(0.0f);
+		float3 aux_v = make_float3(lut_index % 2);
+		// float3 aux_v = make_float3(2.0f * length(position - nlut->center)/lut->size);
 
 		if (closest_index != -1) {
 			int32_t probe_index = closest_index;
@@ -420,7 +316,7 @@ void raster_probes(IrradiaceProbeRasterInfo info)
 			float3 diff = position - probe->position;
 
 			cuda::ONB onb = cuda::ONB::from_normal(probe->normal);
-			float3 local = onb.inv_local(diff)/lut->resolution;
+			float3 local = onb.inv_local(diff)/nlut->resolution;
 			local.z = 0;
 			float dist = length(local);
 
@@ -433,22 +329,18 @@ void raster_probes(IrradiaceProbeRasterInfo info)
 					float2 s = probe->to_disk(wi);
 
 					constexpr int32_t size = IrradianceProbe::size;
-					// int32_t ix = s.x * size;
-					// int32_t iy = s.y * size;
+					int32_t ix = s.x * size;
+					int32_t iy = s.y * size;
 
 					int32_t index = probe->to_index(s);
 					assert(index >= 0 && index < size * size);
 
-					aux_v = probe->pdfs[index] > 0 ? probe->Le[index]/probe->pdfs[index] : make_float3(0.0f);
-
-					// float3 wo = probe->from_index(index);
-					// aux_v = onb.local(wo) * 0.5f + 0.5f;
-
-					// int32_t ix = index % size;
-					// int32_t iy = index / size;
-					//
-					// int32_t mod = (ix + iy) % 2;
+					// aux_v = probe->pdfs[index] > 0 ? probe->Le[index]/probe->pdfs[index] : make_float3(0.0f);
+					int32_t mod = (ix + iy) % 2;
 					// aux_v = make_float3(mod, 0, 1 - mod);
+
+					float3 color = COLOR_WHEEL[probe_index % 12];
+					aux_v = color * (0.5f + 0.5f * mod);
 				}
 			}
 		}
@@ -687,6 +579,9 @@ void final_gather(FinalGather info)
 				IrradianceProbe *probe = &info.table->probes[probe_index];
 				// sum += probe->Le[probe->to_index(probe->to_disk(position))];
 
+				// if (dot(normal, probe->normal) < 0.4f)
+				// 	continue;
+
 				int32_t SIZE = IrradianceProbe::size * IrradianceProbe::size;
 
 				float w = exp(-distance[i] * distance[i] / (2 * lut->resolution * lut->resolution));
@@ -910,23 +805,23 @@ void Mamba::render(EditorViewport *ev,
 
 	// Gather and process secondary ray information
 	{
-		KOBRA_PROFILE_CUDA_TASK("Gather Secondary Rays");
-
-		SecondaryGatherInfo gather_info;
-		gather_info.table = launch_info.indirect.probes;
-		gather_info.position = launch_info.position;
-		gather_info.normal = launch_info.normal;
-		gather_info.uv = launch_info.uv;
-		gather_info.index = launch_info.index;
-		gather_info.hits = launch_info.secondary.hits;
-		gather_info.wi = launch_info.secondary.wi;
-		gather_info.Le = launch_info.secondary.Le;
-		gather_info.secondary_extent = secondary_extent;
-		gather_info.extent = extent;
-		gather_info.samples = launch_info.samples;
-
-		secondary_gather <<< blocks, block_size >>> (gather_info);
-		CUDA_SYNC_CHECK();
+		// KOBRA_PROFILE_CUDA_TASK("Gather Secondary Rays");
+		//
+		// SecondaryGatherInfo gather_info;
+		// gather_info.table = launch_info.indirect.probes;
+		// gather_info.position = launch_info.position;
+		// gather_info.normal = launch_info.normal;
+		// gather_info.uv = launch_info.uv;
+		// gather_info.index = launch_info.index;
+		// gather_info.hits = launch_info.secondary.hits;
+		// gather_info.wi = launch_info.secondary.wi;
+		// gather_info.Le = launch_info.secondary.Le;
+		// gather_info.secondary_extent = secondary_extent;
+		// gather_info.extent = extent;
+		// gather_info.samples = launch_info.samples;
+		//
+		// secondary_gather <<< blocks, block_size >>> (gather_info);
+		// CUDA_SYNC_CHECK();
 	}
 
         // Final gather
@@ -960,9 +855,11 @@ void Mamba::render(EditorViewport *ev,
         probe_info.extent = extent;
 
 	{
+		// printf("[START] --------------------->\n");
 		KOBRA_PROFILE_CUDA_TASK("Irradiance Probe Allocation");
 		probe_allocation <<< blocks, block_size >>> (probe_info);
 		CUDA_SYNC_CHECK();
+		// printf("<--------------------- [END]\n");
 	}
 
         FinalGather info;

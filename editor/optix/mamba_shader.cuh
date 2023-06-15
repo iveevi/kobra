@@ -94,6 +94,21 @@ struct MambaLaunchInfo {
 		uint2 resolution;
 	} secondary;
 
+	// Raytracing results
+	float3 *direct_wi;
+	float3 *secondary_wi;  // 1/4 resolution
+	float3 *ternary_wi;    // 1/16 resolution
+
+	float3 *direct_Le;
+	float3 *secondary_Le;  // 1/4 resolution
+	float3 *ternary_Le;    // 1/16 resolution
+
+	cuda::SurfaceHit *direct_hit;
+	cuda::SurfaceHit *secondary_hit;  // 1/4 resolution
+	cuda::SurfaceHit *ternary_hit;    // 1/16 resolution
+
+	uint2 tracing_resolution;
+
         // Extra options
         struct {
                 bool temporal;

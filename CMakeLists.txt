@@ -136,6 +136,7 @@ add_executable(editor
         editor/editor_viewport.cu
         editor/inspector.cpp
         editor/mamba.cu
+        editor/mamba_kernels.cu
         editor/material_preview.cpp
         editor/scene_graph.cpp
         editor/shaders.cpp
@@ -216,7 +217,6 @@ file(GLOB_RECURSE OPTIX_SHADERS
 )
 
 add_library(optix_shaders OBJECT ${OPTIX_SHADERS})
-
 set_target_properties(optix_shaders PROPERTIES COMPILE_FLAGS "-optix-ir -lineinfo")
 
 # Fake target to copy shader outputs to bin folder

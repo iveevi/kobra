@@ -75,8 +75,9 @@ struct IrradianceProbe {
 };
 
 // A single level-node of the irradiance probe LUT
+static constexpr int32_t MAX_REFS = (1 << 15) - 1;
+
 struct IrradianceProbeLUT {
-       constexpr static int MAX_REFS = (1 << 15) - 1;
 
 	// Cell properties
         float resolution;
@@ -85,29 +86,56 @@ struct IrradianceProbeLUT {
 
         int32_t level = 0;
 	int32_t counter = 0;
+	bool initialized = false;
 
-	int32_t refs[MAX_REFS];
-	uint32_t hashes[MAX_REFS];
-	float3 positions[MAX_REFS];
+	// int32_t refs[MAX_REFS];
+	// uint32_t hashes[MAX_REFS];
+	// float3 positions[MAX_REFS];
+	// int32_t signal_ready[MAX_REFS];
 
+	int32_t *refs = nullptr;
+	uint32_t *hashes = nullptr;
+	float3 *positions = nullptr;
+	int32_t *signal_ready = nullptr;
+
+	static constexpr float RESOLUTION_DIVISION = 20.0f;
+	static constexpr float L1 = 10.0f;
+	static constexpr float L2 = L1 * RESOLUTION_DIVISION;
+
+	// TODO: leave these methods outside...
 	static void alloc(IrradianceProbeLUT *lut) {
-		lut->level = 0;
-		lut->size = 10.0f;
-		lut->resolution = lut->size/20.0f;
+		lut->level = 2;
+		lut->size = L2;
+		lut->resolution = L2/RESOLUTION_DIVISION;
 		lut->center = make_float3(0.0f, 0.0f, 0.0f);
-
-		for (int i = 0; i < MAX_REFS; i++) {
-			lut->refs[i] = -1;
-			lut->hashes[i] = 0xFFFFFFFF;
-		}
+		// for (int i = 0; i < MAX_REFS; i++) {
+		// 	lut->refs[i] = -1;
+		// 	lut->hashes[i] = 0xFFFFFFFF;
+		// 	lut->signal_ready[i] = 0;
+		// }
+		lut->initialized = true;
 	}
 
 	__forceinline__ __device__
 	static void alloc(IrradianceProbeLUT *lut, int level, float size, float3 center) {
 		lut->level = level;
 		lut->size = size;
-		lut->resolution = size/powf(MAX_REFS, 1.0f/3.0f);
+		lut->resolution = size/RESOLUTION_DIVISION;
 		lut->center = center;
+
+		int32_t minus_counter = 0;
+		for (int i = 0; i < MAX_REFS; i++) {
+			// lut->refs[i] = -1;
+			// lut->hashes[i] = 0xFFFFFFFF;
+			// lut->signal_ready[i] = 0;
+
+			minus_counter += (lut->refs[i] == -1);
+		}
+
+		// TODO: memset initialize in the host...
+
+		printf("Verifying alloc: %d\n", minus_counter);
+		lut->initialized = true;
 	}
 
 	__forceinline__ __device__
@@ -116,6 +144,24 @@ struct IrradianceProbeLUT {
 		float3 max = center + make_float3(size/2.0f + neighbor * resolution);
 		return (x.x >= min.x && x.y >= min.y && x.z >= min.z)
 			&& (x.x <= max.x && x.y <= max.y && x.z <= max.z);
+	}
+
+	__forceinline__ __device__
+	float3 local_center(float3 x) const {
+		// Find index, then give the center of the corresponding cell
+		float cdx = x.x - center.x + size/2.0f;
+		float cdy = x.y - center.y + size/2.0f;
+		float cdz = x.z - center.z + size/2.0f;
+
+		int32_t ix = (int32_t) (cdx / resolution);
+		int32_t iy = (int32_t) (cdy / resolution);
+		int32_t iz = (int32_t) (cdz / resolution);
+
+		float cx = center.x + (ix + 0.5f) * resolution - size/2.0f;
+		float cy = center.y + (iy + 0.5f) * resolution - size/2.0f;
+		float cz = center.z + (iz + 0.5f) * resolution - size/2.0f;
+
+		return make_float3(cx, cy, cz);
 	}
 
         __forceinline__ __device__
@@ -173,35 +219,36 @@ struct IrradianceProbeLUT {
 
 	// Allocating new reference
 	// TODO: cuckoo hashing; if there is an infinite loop, then kick out the oldest (LRU)
-	__forceinline__ __device__
-	int32_t request(float3 x) {
-		// TODO: return index if already allocated
-
-		uint32_t h = hash(x);
-		int32_t success = -1;
-
-		int32_t i = 0;
-		int32_t old = INT_MAX;
-
-		while (i < MAX_TRIES) {
-			int32_t j = double_hash(h, i) % MAX_REFS;
-			old = atomicCAS(&refs[j], -1, h);
-			if (old == -1) {
-				success = j;
-				break;
-			}
-
-			i++;
-		}
-
-		if (old == -1) {
-			hashes[success] = h;
-			positions[success] = x;
-			atomicAdd(&counter, 1);
-		}
-
-		return success;
-	}
+	// __forceinline__ __device__
+	// int32_t request(float3 x) {
+	// 	// TODO: return index if already allocated
+	//
+	// 	uint32_t h = hash(x);
+	// 	int32_t success = -1;
+	//
+	// 	int32_t i = 0;
+	// 	int32_t old = INT_MAX;
+	//
+	// 	while (i < MAX_TRIES) {
+	// 		int32_t j = double_hash(h, i) % MAX_REFS;
+	// 		old = atomicCAS(&refs[j], -1, h);
+	// 		if (old == -1) {
+	// 			success = j;
+	// 			break;
+	// 		}
+	//
+	// 		i++;
+	// 	}
+	//
+	// 	if (old == -1) {
+	// 		hashes[success] = h;
+	// 		// TODO: store center of the cell instead of the position
+	// 		positions[success] = x;
+	// 		atomicAdd(&counter, 1);
+	// 	}
+	//
+	// 	return success;
+	// }
 
 	// Find the nearest reference to the given position
 	// TODO: return the distance to the nearest reference
@@ -317,7 +364,7 @@ struct IrradianceProbeLUT {
 // Table of all irradiance probes and LUTs
 struct IrradianceProbeTable {
         static constexpr int MAX_PROBES = 1 << 20;
-	static constexpr int MAX_LUTS = 1 << 8;
+	static constexpr int MAX_LUTS = 1 << 10;
 
         IrradianceProbe *probes = nullptr;
         int32_t counter = 0;
@@ -329,14 +376,40 @@ struct IrradianceProbeTable {
         // float *pdfs = nullptr;
         // float *depth = nullptr;
 
+	// Linearlized array of LUT data
+	static constexpr int32_t LUT_DATA_SIZE = MAX_REFS * MAX_LUTS;
+
+	float3 *positions;
+	int32_t *refs;
+	int32_t *signal_ready;
+	uint32_t *hashes;
+
 	static constexpr int32_t STRIDE = IrradianceProbe::size * IrradianceProbe::size;
 
 	IrradianceProbeTable() {
+		// TODO: make obselete...
 		probes = new IrradianceProbe[MAX_PROBES];
+
+		// Allocate LUT data
+		positions = new float3[LUT_DATA_SIZE];
+		refs = new int32_t[LUT_DATA_SIZE];
+		signal_ready = new int32_t[LUT_DATA_SIZE];
+		hashes = new uint32_t[LUT_DATA_SIZE];
+
+		std::fill(refs, refs + LUT_DATA_SIZE, -1);
+		std::fill(signal_ready, signal_ready + LUT_DATA_SIZE, 0);
+		std::fill(hashes, hashes + LUT_DATA_SIZE, 0xFFFFFFFF);
 
 		// Allocate top level LUT upon front
 		luts = new IrradianceProbeLUT[MAX_LUTS];
-		IrradianceProbeLUT::alloc(&luts[0]);
+		for (int i = 0; i < MAX_LUTS; i++) {
+			luts[i].refs = refs + i * MAX_REFS;
+			luts[i].positions = positions + i * MAX_REFS;
+			luts[i].signal_ready = signal_ready + i * MAX_REFS;
+			luts[i].hashes = hashes + i * MAX_REFS;
+		}
+
+		// IrradianceProbeLUT::alloc(&luts[0]);
 		lut_counter++;
 
 		// Allocate memory for all probes
@@ -348,6 +421,13 @@ struct IrradianceProbeTable {
 		printf("Size of IrradianceProbeTable: %d\n", sizeof(IrradianceProbeTable));
 		printf("Size of probes: %d/%d\n", sizeof(IrradianceProbe) * MAX_PROBES, sizeof(IrradianceProbe));
 		printf("Size of luts: %d/%d\n", sizeof(IrradianceProbeLUT) * MAX_LUTS, sizeof(IrradianceProbeLUT));
+
+		for (int i = 0; i < 10; i++) {
+			int32_t *addr = luts[i].refs;
+			int32_t offset = addr - (int32_t *) refs;
+			int32_t re_index = offset/MAX_REFS;
+			printf("LUT%d := Offset: %d, re_index: %d (%d)\n", i, offset, re_index, sizeof(int32_t) * MAX_REFS);
+		}
 	}
 
 	IrradianceProbeTable device_copy() const {
@@ -357,53 +437,49 @@ struct IrradianceProbeTable {
 		CUDA_CHECK(cudaMemcpy(table.probes, probes, sizeof(IrradianceProbe) * MAX_PROBES, cudaMemcpyHostToDevice));
 		table.counter = counter;
 
+		// Copy LUT data
+		CUDA_CHECK(cudaMalloc(&table.positions, sizeof(float3) * LUT_DATA_SIZE));
+		CUDA_CHECK(cudaMemcpy(table.positions, positions, sizeof(float3) * LUT_DATA_SIZE, cudaMemcpyHostToDevice));
+
+		CUDA_CHECK(cudaMalloc(&table.refs, sizeof(int32_t) * LUT_DATA_SIZE));
+		CUDA_CHECK(cudaMemcpy(table.refs, refs, sizeof(int32_t) * LUT_DATA_SIZE, cudaMemcpyHostToDevice));
+
+		CUDA_CHECK(cudaMalloc(&table.signal_ready, sizeof(int32_t) * LUT_DATA_SIZE));
+		CUDA_CHECK(cudaMemcpy(table.signal_ready, signal_ready, sizeof(int32_t) * LUT_DATA_SIZE, cudaMemcpyHostToDevice));
+
+		CUDA_CHECK(cudaMalloc(&table.hashes, sizeof(uint32_t) * LUT_DATA_SIZE));
+		CUDA_CHECK(cudaMemcpy(table.hashes, hashes, sizeof(uint32_t) * LUT_DATA_SIZE, cudaMemcpyHostToDevice));
+
+		printf("Allocated probes at %p\n", table.probes);
+		printf("Allocated LUT positions at %p\n", table.positions);
+		printf("Allocated LUT refs at %p\n", table.refs);
+		printf("Allocated LUT signal_ready at %p\n", table.signal_ready);
+		printf("Allocated LUT hashes at %p\n", table.hashes);
+
+		// Allocate memory for all LUTs
+
+		// Proxy structures
+		std::vector <IrradianceProbeLUT> dev_luts { MAX_LUTS };
+		for (int i = 0; i < MAX_LUTS; i++) {
+			dev_luts[i].refs = table.refs + i * MAX_REFS;
+			dev_luts[i].signal_ready = table.signal_ready + i * MAX_REFS;
+			dev_luts[i].positions = table.positions + i * MAX_REFS;
+			dev_luts[i].hashes = table.hashes + i * MAX_REFS;
+		}
+
+		// Allocate top level up front
+		IrradianceProbeLUT::alloc(&dev_luts[0]);
+
 		CUDA_CHECK(cudaMalloc(&table.luts, sizeof(IrradianceProbeLUT) * MAX_LUTS));
-		CUDA_CHECK(cudaMemcpy(table.luts, luts, sizeof(IrradianceProbeLUT) * MAX_LUTS, cudaMemcpyHostToDevice));
-		table.lut_counter = lut_counter;
+		CUDA_CHECK(cudaMemcpy(table.luts, dev_luts.data(), sizeof(IrradianceProbeLUT) * MAX_LUTS, cudaMemcpyHostToDevice));
 
-		// Allocate memory for all locks
-		// std::vector <uint32_t> lock_sources { MAX_PROBES * STRIDE, 0 };
-		// uint32_t *dev_lock_sources = kobra::cuda::make_buffer(lock_sources);
-		uint32_t *dev_lock_sources = nullptr;
-		CUDA_CHECK(cudaMalloc(&dev_lock_sources, sizeof(uint32_t) * MAX_PROBES * STRIDE));
-		CUDA_CHECK(cudaMemset(dev_lock_sources, 0, sizeof(uint32_t) * MAX_PROBES * STRIDE));
+		// CUDA_CHECK(cudaMalloc(&table.luts, sizeof(IrradianceProbeLUT) * MAX_LUTS));
+		// CUDA_CHECK(cudaMemcpy(table.luts, luts, sizeof(IrradianceProbeLUT) * MAX_LUTS, cudaMemcpyHostToDevice));
+		// table.luts = kobra::cuda::make_buffer(dev_luts);
 
-		std::vector <uint32_t *> host_locks { MAX_PROBES * STRIDE, 0 };
-		for (int32_t i = 0; i < MAX_PROBES * STRIDE; i++)
-			host_locks[i] = dev_lock_sources + i;
-
-		CUDA_CHECK(cudaMalloc(&table.locks, sizeof(uint32_t *) * MAX_PROBES * STRIDE));
-		CUDA_CHECK(cudaMemcpy(table.locks, host_locks.data(), sizeof(uint32_t *) * MAX_PROBES * STRIDE, cudaMemcpyHostToDevice));
-
-		// int32_t size = MAX_PROBES * STRIDE;
-		// CUDA_CHECK(cudaMalloc(&table.values, sizeof(float3) * size));
-		// CUDA_CHECK(cudaMemcpy(table.values, values, sizeof(float3) * size, cudaMemcpyHostToDevice));
-		//
-		// CUDA_CHECK(cudaMalloc(&table.pdfs, sizeof(float) * size));
-		// CUDA_CHECK(cudaMemcpy(table.pdfs, pdfs, sizeof(float) * size, cudaMemcpyHostToDevice));
-		//
-		// CUDA_CHECK(cudaMalloc(&table.depth, sizeof(float) * size));
-		// CUDA_CHECK(cudaMemcpy(table.depth, depth, sizeof(float) * size, cudaMemcpyHostToDevice));
+		table.lut_counter = 1;
 
 		return table;
-	}
-
-	uint32_t **locks = nullptr;
-
-	// Locking
-	__forceinline__ __device__
-	void lock(uint32_t index) {
-		uint32_t *lock = locks[index];
-		while (atomicCAS(lock, 0, 1) != 0) {
-			printf("Waiting for lock, current value: %d\n", *lock);
-		}
-	}
-
-	__forceinline__ __device__
-	void unlock(uint32_t index) {
-		uint32_t *lock = locks[index];
-		atomicExch(lock, 0);
-		printf("Unlocking, current value: %d\n", *lock);
 	}
 
 	__forceinline__ __device__
@@ -440,3 +516,211 @@ inline IrradianceProbeTable *alloc_table()
 
 	return device_table;
 }
+
+// Table lookup methods
+__forceinline__ __device__
+int32_t request_L1(IrradianceProbeLUT *lut, float3 x)
+{
+	// TODO: asser that lut level is 1
+        constexpr int32_t MAX_TRIES = (1 << 1);
+
+	uint32_t h = lut->hash(x);
+	int32_t success = -1;
+
+	int32_t i = 0;
+	int32_t old = INT_MAX;
+
+	// TODO: methods
+	while (i < MAX_TRIES) {
+		int32_t j = lut->double_hash(h, i) % MAX_REFS;
+		old = atomicCAS(&lut->refs[j], -1, h);
+		if (old == -1) {
+			success = j;
+			break;
+		}
+
+		i++;
+	}
+
+	if (old == -1) {
+		lut->hashes[success] = h;
+		lut->positions[success] = x;
+		atomicAdd(&lut->counter, 1);
+	}
+
+	return success;
+}
+
+struct LookupL2 {
+	int32_t index;
+	int32_t success;
+};
+
+__forceinline__ __device__
+LookupL2 request_L2(IrradianceProbeLUT *lut, float3 x)
+{
+	// TODO: asser that lut level >= 2
+	// NOTE: For second level, we linearly search for an empty slot (dense)
+	uint32_t h = lut->hash(x);
+	LookupL2 result = { -1, -1 };
+
+	// Prune if not contained
+	if (!lut->contains(x))
+		return result;
+
+	int32_t i = 0;
+	int32_t old = INT_MAX;
+
+	// TODO: precompute neighbor information (hash and offset position)
+
+	// TODO: methods
+	while (i < MAX_REFS) {
+		int32_t j = (h + i) % MAX_REFS;
+		old = atomicCAS(&lut->refs[j], -1, h);
+
+		// If we found an empty slot, we are done
+		if (old == -1) {
+			printf("Found empty slot at %d\n", j);
+			result.success = j;
+			result.index = j;
+
+			// Compute center of the corresponding cell
+			// TODO: method
+			float cdx = x.x - lut->center.x + lut->size/2.0f;
+			float cdy = x.y - lut->center.y + lut->size/2.0f;
+			float cdz = x.z - lut->center.z + lut->size/2.0f;
+
+			int32_t ix = cdx / lut->resolution;
+			int32_t iy = cdy / lut->resolution;
+			int32_t iz = cdz / lut->resolution;
+
+			float3 center = make_float3(
+				lut->center.x + (ix + 0.5f) * lut->resolution - lut->size/2.0f,
+				lut->center.y + (iy + 0.5f) * lut->resolution - lut->size/2.0f,
+				lut->center.z + (iz + 0.5f) * lut->resolution - lut->size/2.0f
+			);
+
+			lut->hashes[j] = h;
+			lut->positions[j] = center;
+			atomicAdd(&lut->counter, 1);
+			atomicExch(&lut->signal_ready[j], 1);
+			printf("Set ready signal at %d\n", j);
+			break;
+		}
+
+		// Warp level synchronization
+		__syncwarp();
+
+		// Otherwise, check if the position belongs to the current cell
+		// TODO: needs to wait if the currently hashed cell is being updated...
+
+		// Wait until the ready signal is ON for the current cell
+		// int32_t counter = 0;
+		// while (lut->signal_ready[j] == 0) {
+		// 	// printf("Waiting for ready signal at %d\n", j);
+		// 	// if (counter++ % 1000 == 0)
+		// 	// 	printf("Waiting for ready signal at %d\n", j);
+		// 	uint64_t t = clock64() + 0;
+		// }
+
+		// Kernel level synchronization
+		volatile int32_t *ready = &lut->signal_ready[j];
+		while (*ready == 0) {}
+
+		float3 center = lut->positions[j];
+
+		float3 min = center - make_float3(0.5f * lut->resolution);
+		float3 max = center + make_float3(0.5f * lut->resolution);
+
+		bool bounded_max = (x.x <= max.x) && (x.y <= max.y) && (x.z <= max.z);
+		bool bounded_min = (x.x >= min.x) && (x.y >= min.y) && (x.z >= min.z);
+
+		if (bounded_max && bounded_min) {
+			result.index = j;
+			break;
+		}
+
+		// Move on
+		i++;
+	}
+
+	// if (old == -1) {
+	// 	// Compute center of the corresponding cell
+	// 	float cdx = x.x - lut->center.x + lut->size/2.0f;
+	// 	float cdy = x.y - lut->center.y + lut->size/2.0f;
+	// 	float cdz = x.z - lut->center.z + lut->size/2.0f;
+	//
+	// 	int32_t ix = cdx / lut->resolution;
+	// 	int32_t iy = cdy / lut->resolution;
+	// 	int32_t iz = cdz / lut->resolution;
+	//
+	// 	float3 center = make_float3(
+	// 		lut->center.x + (ix + 0.5f) * lut->resolution - lut->size/2.0f,
+	// 		lut->center.y + (iy + 0.5f) * lut->resolution - lut->size/2.0f,
+	// 		lut->center.z + (iz + 0.5f) * lut->resolution - lut->size/2.0f
+	// 	);
+	//
+	// 	lut->hashes[result.success] = h;
+	// 	lut->positions[result.success] = center;
+	// 	atomicAdd(&lut->counter, 1);
+	// 	atomicExch(&lut->signal_ready[result.success], 1);
+	// 	printf("Set ready signal at %d\n", result.success);
+	// }
+
+	// printf("Returning %d, %d\n", result.success, result.index);
+
+	// TODO: record the maximum number of iterations
+
+	return result;
+}
+
+__forceinline__ __device__
+int32_t lookup_L2(IrradianceProbeLUT *lut, float3 x)
+{
+	if (!lut->contains(x))
+		return -1;
+
+	uint32_t h = lut->hash(x);
+
+	int32_t i = 0;
+	int32_t index = -1;
+
+	while (i < MAX_REFS) {
+		int32_t j = (h + i) % MAX_REFS;
+
+		// If the cell is empty, return -1
+		if (lut->refs[j] == -1)
+			break;
+
+		// Otherwise, check if the position belongs to the current cell
+		float3 center = lut->positions[j];
+
+		float3 min = center - make_float3(0.5f * lut->resolution);
+		float3 max = center + make_float3(0.5f * lut->resolution);
+
+		bool bounded_max = (x.x <= max.x) && (x.y <= max.y) && (x.z <= max.z);
+		bool bounded_min = (x.x >= min.x) && (x.y >= min.y) && (x.z >= min.z);
+
+		if (bounded_max && bounded_min) {
+			index = j;
+			break;
+		}
+
+		// Move on
+		i++;
+	}
+
+	return index;
+}
+
+struct ProbeAllocationInfo {
+        cudaSurfaceObject_t index_surface;
+        cudaSurfaceObject_t position_surface;
+	cudaSurfaceObject_t normal_surface;
+        float *sobel;
+	float *raster;
+
+	IrradianceProbeTable *table;
+
+        vk::Extent2D extent;
+};

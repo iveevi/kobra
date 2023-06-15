@@ -95,7 +95,7 @@ float3 ray_at(uint3 idx)
         float v = 2.0f * float(idx.y) / float(axis.resolution.y) - 1.0f;
 	return normalize(u * axis.U - v * axis.V + axis.W);
 }
-        
+
 constexpr float ENVIRONMENT_DISTANCE = 1000.0f;
 
 __device__
@@ -563,7 +563,7 @@ extern "C" __global__ void __raygen__secondary()
 {
 	const uint3 idx = optixGetLaunchIndex();
 	int32_t local_index = idx.x + idx.y * info.secondary.resolution.x;
-        
+
 	if (idx.x + idx.y == 0) {
                 optix_io_write_str(&info.io, "Hiii, from the secondary raygen! ");
         }
@@ -599,7 +599,7 @@ extern "C" __global__ void __raygen__secondary()
 		info.secondary.hits[local_index].wo = make_float3(0);
 		return;
 	}
-	
+
 	if (idx.x + idx.y == 0) {
                 optix_io_write_str(&info.io, "Valid ray! ");
         }
@@ -629,7 +629,7 @@ extern "C" __global__ void __raygen__secondary()
 		info.secondary.hits[local_index].wo = make_float3(0);
 		return;
 	}
-	
+
 	if (idx.x + idx.y == 0) {
                 optix_io_write_str(&info.io, "Hit surface! ");
         }
@@ -657,7 +657,7 @@ extern "C" __global__ void __raygen__secondary()
 	info.secondary.hits[local_index].x = secondary_sh.x;
 	info.secondary.hits[local_index].n = secondary_sh.n;
 	info.secondary.hits[local_index].wo = secondary_sh.wo;
-	
+
 	if (idx.x + idx.y == 0) {
                 optix_io_write_str(&info.io, "Wrote information! wo =");
 		optix_io_write_int(&info.io, 100 * secondary_sh.wo.x);
@@ -666,6 +666,31 @@ extern "C" __global__ void __raygen__secondary()
 		optix_io_write_str(&info.io, ", ");
 		optix_io_write_int(&info.io, 100 * secondary_sh.wo.z);
         }
+}
+
+// Full raytracing kernel
+extern "C" __global__ void __raygen__full()
+{
+	const uint3 idx = optixGetLaunchIndex();
+
+	CameraAxis axis = info.camera;
+
+	uint32_t index = idx.x + idx.y * axis.resolution.x;
+
+	uint32_t direct_block_x = idx.x % 2;
+	uint32_t direct_block_y = idx.y % 2;
+	bool direct = (idx.x + idx.y + info.samples) % 2 == 0;
+
+	uint32_t secondary_block_x = idx.x % 4;
+	uint32_t secondary_block_y = idx.y % 4;
+	bool secondary = (idx.x + 4 * idx.y + info.samples) % 8 == 0;
+	bool ternary = (idx.x + 4 * idx.y + info.samples) % 16 == 0;
+	
+	SurfaceHit primary_sh;
+	if (!load_surface_hit(primary_sh, idx)) {
+		if (direct)
+			info.direct_wi[index] = make_float3(0);
+	}
 }
 
 // Closest hit for indirect rays
