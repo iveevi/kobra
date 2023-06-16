@@ -8,7 +8,7 @@
 // TODO: probe.cuh
 // Irradiance probe
 struct IrradianceProbe {
-        constexpr static int size = 6;
+        constexpr static int size = 5;
 
         float3 Le[size * size];
         float pdfs[size * size];
@@ -98,7 +98,7 @@ struct IrradianceProbeLUT {
 	float3 *positions = nullptr;
 	int32_t *signal_ready = nullptr;
 
-	static constexpr float RESOLUTION_DIVISION = 20.0f;
+	static constexpr float RESOLUTION_DIVISION = 25.0f;
 	static constexpr float L1 = 10.0f;
 	static constexpr float L2 = L1 * RESOLUTION_DIVISION;
 
@@ -669,7 +669,7 @@ LookupL2 request_L2(IrradianceProbeLUT *lut, float3 x)
 
 	// printf("Returning %d, %d\n", result.success, result.index);
 
-	// TODO: record the maximum number of iterations
+	// TODO: record the maximum number of iterations and then double hashing...
 
 	return result;
 }

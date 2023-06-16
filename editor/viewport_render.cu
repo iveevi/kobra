@@ -1166,8 +1166,8 @@ static void show_mode_submenu(RenderState *render_state, const _submenu_args &ar
                                 mamba->manual_reset = true;
                         }
                         
-			if (ImGui::Checkbox("Render Probes", &mamba->render_probes));
-			if (ImGui::Checkbox("Render Auxiliary Info", &mamba->render_probe_aux));
+			if (ImGui::Checkbox("Render Probes", &mamba->options.render_probes));
+			if (ImGui::Checkbox("Render Probe Radiance", &mamba->options.render_probe_radiance));
 
 			if (ImGui::Checkbox("Show Indirect Lighting", &mamba->options.indirect_lighting))
 				mamba->options.irradiance = mamba->options.indirect_lighting ? false : mamba->options.irradiance;

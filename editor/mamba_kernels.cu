@@ -49,7 +49,8 @@ void probe_allocation(ProbeAllocationInfo info)
 
 			// Search for the closest
 			// int N = 16;
-			int N = 4;
+			// int N = 4;
+			int N = 2;
 
 			int32_t distance = 0;
 			for (int k = -N; k <= N; k++) {
@@ -79,7 +80,7 @@ void probe_allocation(ProbeAllocationInfo info)
 		}
 	}
 
-	if (misses < 0.9 * 16 * 16)
+	if (misses < 0.4 * 16 * 16)
 		return;
 
 	// If all are misses, then use middle

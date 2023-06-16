@@ -95,6 +95,7 @@ struct Editor : public kobra::BaseApp {
 		std::queue <std::string> capture_requests;
 		kobra::BufferData capture_buffer = nullptr;
 		std::vector <uint8_t> capture_data;
+		std::vector <glm::vec4> raw_capture_data;
 		std::string current_capture_path;
 	} m_input;
 
@@ -651,7 +652,7 @@ struct EventProfiler : public kobra::ui::ImGuiAttachment {
 		// No x axis, just the frame times
 		ImGui::BeginChild("Frame times", ImVec2(size.x * 0.7, 0), true);
 
-		ImPlot::SetNextAxesLimits(0, MAX_FRAMES, 0, std::min(pmax, 100.0), ImGuiCond_Always);
+		ImPlot::SetNextAxesLimits(0, MAX_FRAMES, 0, 32.0f, ImGuiCond_Always);
 		ImPlot::BeginPlot("Frame times");
 		// ImPlot::SetupLegend(false);
 		ImPlot::SetupLegend(ImPlotLocation_NorthWest, false);
@@ -1095,7 +1096,7 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 
 				// TODO: get the format in order to compute
 				// size...
-				int size = sizeof(uint32_t) * viewport_image.extent.width
+				int size = sizeof(glm::vec4) * viewport_image.extent.width
 					* viewport_image.extent.height;
 
 				m_input.capture_buffer = kobra::BufferData(
@@ -1127,12 +1128,26 @@ void Editor::record(const vk::raii::CommandBuffer &cmd,
 			sync_queue.push({
 				"Capture Viewport Image",
 				[&]() {
-					m_input.capture_data.resize(m_input.capture_buffer.size);
-					m_input.capture_buffer.download(m_input.capture_data);
+					int pixels = viewport_image.extent.width * viewport_image.extent.height;
+					m_input.raw_capture_data.resize(pixels);
+					m_input.capture_buffer.download(m_input.raw_capture_data);
 
 					// Convert from BGRA to RGBA
-					for (int i = 0; i < m_input.capture_data.size(); i += 4)
-						std::swap(m_input.capture_data[i], m_input.capture_data[i + 2]);
+					// for (int i = 0; i < pixels; i++)
+					// 	std::swap(m_input.raw_capture_data[i].r, m_input.raw_capture_data[i].b);
+
+					m_input.capture_data.resize(4 * pixels);
+					for (int i = 0; i < 4 * pixels; i += 4) {
+						glm::vec4 color = m_input.raw_capture_data[i/4];
+						int8_t r = color.r * 255;
+						int8_t g = color.g * 255;
+						int8_t b = color.b * 255;
+						int8_t a = color.a * 255;
+						m_input.capture_data[i + 0] = r;
+						m_input.capture_data[i + 1] = g;
+						m_input.capture_data[i + 2] = b;
+						m_input.capture_data[i + 3] = a;
+					}
 
 					std::string path = m_input.current_capture_path;
 					RawImage {

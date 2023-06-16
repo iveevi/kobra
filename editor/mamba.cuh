@@ -56,13 +56,14 @@ struct Mamba {
 	// TODO: wrapper struct
         bool temporal_reuse = false;
         bool spatial_reuse = false;
-	bool render_probes = false;
-	bool render_probe_aux = false;
 	
 	struct {
-		bool direct_lighting = true;
-		bool indirect_lighting = true;
-		bool irradiance = false;
+		bool direct_lighting = false;
+		bool indirect_lighting = false;
+		bool irradiance = true;
+	
+		bool render_probes = false;
+		bool render_probe_radiance = false;
 	} options;
 
         // Constructor

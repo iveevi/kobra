@@ -164,55 +164,6 @@ float sample_light(LightInfo &light_info, float3 &seed)
 }
 
 __device__
-float3 Ld(const SurfaceHit &sh, float3 &seed)
-{
-        LightInfo light_info;
-
-        float light_pdf = sample_light(light_info, seed);
-        if (light_pdf < 0.0f)
-                return make_float3(0.0f);
-
-        float3 direction = normalize(light_info.position - sh.x);
-        float3 origin = sh.x;
-
-        uint i0 = 0;
-        uint i1 = 0;
-
-        Packet packet;
-        packet.miss = false;
-
-        // TODO: skip if 0 pdf in BRFD sampling...
-        pack_pointer(&packet, i0, i1);
-
-        optixTrace(
-                info.handle,
-                origin, direction,
-                0.0f, length(light_info.position - origin) - 1e-3f, 0.0f,
-                OptixVisibilityMask(0xFF),
-                OPTIX_RAY_FLAG_DISABLE_ANYHIT
-                | OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT
-                | OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT,
-                0, 1, 0, i0, i1
-        );
-
-        float3 out_radiance = sh.mat.emission;
-        if (packet.miss && length(out_radiance) < 1e-3f) {
-                float3 wi = normalize(light_info.position - origin);
-                float R = length(light_info.position - origin);
-
-                float3 brdf = cleanse(cuda::brdf(sh, wi, sh.mat.type));
-
-                float ldotn = light_info.sky ? 1.0f : abs(dot(light_info.normal, wi));
-                float ndotwi = abs(dot(sh.n, wi));
-                float falloff = light_info.sky ? 1.0f : (R * R) + 1e-3f;
-
-                out_radiance = brdf * light_info.emission * ldotn * ndotwi/(light_pdf * falloff);
-        }
-
-        return out_radiance;
-}
-
-__device__
 bool load_surface_hit(SurfaceHit &sh, const uint3 &idx)
 {
         const uint2 resolution = info.camera.resolution;
@@ -558,6 +509,56 @@ extern "C" __global__ void __raygen__spatial_reuse()
         direct.previous[index] = *current;
 }
 
+__device__
+float3 Ld(const SurfaceHit &sh, float3 &seed, float3 &Le, float3 &wi, float &R)
+{
+        LightInfo light_info;
+
+        float light_pdf = sample_light(light_info, seed);
+        if (light_pdf < 0.0f)
+                return make_float3(0.0f);
+
+        float3 direction = normalize(light_info.position - sh.x);
+        float3 origin = sh.x;
+
+        uint i0 = 0;
+        uint i1 = 0;
+
+        Packet packet;
+        packet.miss = false;
+
+        // TODO: skip if 0 pdf in BRFD sampling...
+        pack_pointer(&packet, i0, i1);
+
+        optixTrace(
+                info.handle,
+                origin, direction,
+                0.0f, length(light_info.position - origin) - 1e-3f, 0.0f,
+                OptixVisibilityMask(0xFF),
+                OPTIX_RAY_FLAG_DISABLE_ANYHIT
+                | OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT
+                | OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT,
+                0, 1, 0, i0, i1
+        );
+
+        float3 out_radiance = sh.mat.emission;
+        if (packet.miss && length(out_radiance) < 1e-3f) {
+                wi = normalize(light_info.position - origin);
+                R = length(light_info.position - origin);
+
+                float3 brdf = cleanse(cuda::brdf(sh, wi, sh.mat.type));
+
+                float ldotn = light_info.sky ? 1.0f : abs(dot(light_info.normal, wi));
+                float ndotwi = abs(dot(sh.n, wi));
+                float falloff = light_info.sky ? 1.0f : (R * R) + 1e-3f;
+
+                out_radiance = brdf * light_info.emission * ldotn * ndotwi/(light_pdf * falloff);
+		Le = light_info.emission;
+        }
+
+        return out_radiance;
+}
+
 // Secondary rays
 extern "C" __global__ void __raygen__secondary()
 {
@@ -643,20 +644,29 @@ extern "C" __global__ void __raygen__secondary()
 	secondary_sh.entering = packet.entering;
 
 	convert_material(m, secondary_sh.mat, packet.uv);
-	// float3 indirect = Ld(sh, seed);
-	float3 indirect = Ld(secondary_sh, seed) * abs(dot(secondary_sh.n, wi))/pdf;
+
+	float3 Le = make_float3(0.0);
+	float3 Le_wi = make_float3(0.0);
+	float Le_depth = 0.0;
+
+	float3 indirect = Ld(sh, seed, Le, Le_wi, Le_depth);
+	// float3 indirect = Ld(secondary_sh, seed) * abs(dot(secondary_sh.n, wi))/pdf;
 
 	info.secondary.wi[local_index] = wi; // TODO: pdf in 4th channel
 	// info.secondary.Le[local_index] = indirect;
 
 	// float3 p_indirect = info.secondary.Le[local_index];
 	// float3 n_indirect = (info.samples * p_indirect + indirect)/(info.samples + 1);
+	info.secondary.Ld[local_index] = Le;
+	info.secondary.Ld_wi[local_index] = Le_wi;
+	info.secondary.Ld_depth[local_index] = Le_depth;
 	info.secondary.Le[local_index] = indirect;
 
 	// info.secondary.hits[local_index] = secondary_sh;
 	info.secondary.hits[local_index].x = secondary_sh.x;
 	info.secondary.hits[local_index].n = secondary_sh.n;
 	info.secondary.hits[local_index].wo = secondary_sh.wo;
+	info.secondary.hits[local_index].mat  = secondary_sh.mat;
 
 	if (idx.x + idx.y == 0) {
                 optix_io_write_str(&info.io, "Wrote information! wo =");
